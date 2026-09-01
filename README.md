@@ -4,9 +4,9 @@
 
 This is a standalone Next.js web client for the [Redux backend](https://github.com/ReduxISU/Redux), independent of the existing [Redux_GUI](https://github.com/ReduxISU/Redux_GUI) — the same relationship [Redux_VR](https://github.com/ReduxISU/Redux_VR) already has to the backend. It's being built to match a new design (a faceted catalog/browse experience with a Home page and a Problem Detail page), with its own repo per director request rather than as an addition to `Redux_GUI`.
 
-## Status: planning — no application code yet
+## Status: scaffolding in place — catalog UI not built yet
 
-This repo currently has no `package.json` and no Next.js scaffolding. The plan is to build the visual/interaction shell first (layout, routing, components against placeholder data), then wire it up to the real Redux backend plus a small local overlay for the handful of tag categories the backend doesn't support yet.
+Next.js scaffolding is complete and verified working (`npm install`, `npm run build`, and `npm run lint` all pass) — but the actual catalog UI described below hasn't been built yet. `pages/index.js` is currently just a placeholder page. The plan is to build the visual/interaction shell next (layout, routing, components against placeholder data), then wire it up to the real Redux backend plus a small local overlay for the handful of tag categories the backend doesn't support yet.
 
 ## Planned Features
 
@@ -18,12 +18,12 @@ This repo currently has no `package.json` and no Next.js scaffolding. The plan i
 
 ## Setup and Run
 
-**Not yet functional.** The instructions below describe the intended setup once scaffolding lands, mirroring `Redux_GUI`'s conventions for consistency across the org's frontends.
+These instructions work today and will start a real dev server — but until the catalog UI is built, what you'll see is the placeholder page mentioned above, not the features described earlier in this README.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/en/download) (matching `Redux_GUI`'s requirement, currently Node 26+)
-- The [Redux backend](https://github.com/ReduxISU/Redux) running — this frontend has no data of its own
+- [Node.js](https://nodejs.org/en/download) 24 or newer (Active LTS as of when this was set — see `package.json`'s `engines` field)
+- The [Redux backend](https://github.com/ReduxISU/Redux) running, once you get to building against real data — the placeholder page doesn't call it yet
 
 ### Local development
 
@@ -36,7 +36,7 @@ npm run dev
 
 ### Environment variables
 
-The app needs one environment variable, `REDUX_BASE_URL`, telling it which Redux backend to talk to. Here's exactly how to set it up:
+The app needs one environment variable, `REDUX_BASE_URL`, telling it which Redux backend to talk to. (Note: the code that actually reads this — the API proxy — hasn't been built yet, so setting this up won't change what the placeholder page shows today. Set it up now anyway; it's one less step later.) Here's exactly how to set it up:
 
 1. **Copy the example file** in the project root to create your own local copy:
 
