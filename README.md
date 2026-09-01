@@ -25,18 +25,11 @@ These instructions work today and will start a real dev server — but until the
 - [Node.js](https://nodejs.org/en/download) 24 or newer (Active LTS as of when this was set — see `package.json`'s `engines` field)
 - The [Redux backend](https://github.com/ReduxISU/Redux) running, once you get to building against real data — the placeholder page doesn't call it yet
 
-### Local development
-
-```bash
-git clone https://github.com/ReduxISU/Redux_Frontend.git
-cd Redux_Frontend
-npm install
-npm run dev
-```
-
 ### Environment variables
 
-The app needs one environment variable, `REDUX_BASE_URL`, telling it which Redux backend to talk to. (Note: the code that actually reads this — the API proxy — hasn't been built yet, so setting this up won't change what the placeholder page shows today. Set it up now anyway; it's one less step later.) Here's exactly how to set it up:
+The app needs one environment variable, `REDUX_BASE_URL`, telling it which Redux backend to talk to. **This applies no matter how you run the app** — local dev, a production build, or Docker all read the same value, just supplied a different way for each (see each section below). (Note: the code that actually reads this — the API proxy — hasn't been built yet, so setting this up won't change what the placeholder page shows today. Set it up now anyway; it's one less step later.)
+
+For local dev and production builds, here's exactly how to set it up:
 
 1. **Copy the example file** in the project root to create your own local copy:
 
@@ -50,7 +43,9 @@ The app needs one environment variable, `REDUX_BASE_URL`, telling it which Redux
    - The **default** line points at the **live production Redux backend** — real data, and you don't need to run anything else. If you just want to see the app working, leave this as-is and skip to step 3.
    - A **commented-out local option** below it, for when you're also running the [Redux backend](https://github.com/ReduxISU/Redux) yourself (e.g. its devcontainer on port `27000`). Only use this if you know you need it — if you're not sure, use the default.
 
-3. **Save the file and run `npm run dev`.** Next.js automatically loads `.env.local` — no other configuration step is needed, and you don't need to restart anything except the dev server if it was already running when you created the file.
+3. **Save the file.** Next.js automatically loads `.env.local` for both `npm run dev` and `npm run build`/`npm start` — no other configuration step is needed, and you don't need to restart anything except the dev server if it was already running when you created the file.
+
+Docker doesn't use `.env.local` at all — it's passed in as a `-e` flag on `docker run` instead, shown in the Docker section below.
 
 **Common mistakes to avoid:**
 - The file must be named exactly `.env.local` (not `.env.example.local`, not `.env`) — Next.js only auto-loads specific filenames, and `.env.local` is the one meant for your own machine.
@@ -58,7 +53,20 @@ The app needs one environment variable, `REDUX_BASE_URL`, telling it which Redux
 - Don't remove the trailing slash (`/`) at the end of the URL.
 - If pages load but show no data, this is almost always the first thing to check: open `.env.local` and confirm `REDUX_BASE_URL` is set to one of the two provided values (uncommented, not both).
 
+### Local development
+
+Needs `REDUX_BASE_URL` set up per "Environment variables" above.
+
+```bash
+git clone https://github.com/ReduxISU/Redux_Frontend.git
+cd Redux_Frontend
+npm install
+npm run dev
+```
+
 ### Production build
+
+Also needs `REDUX_BASE_URL` set up per "Environment variables" above.
 
 ```bash
 npm run build
@@ -67,10 +75,12 @@ npm start
 
 ### Docker
 
+`REDUX_BASE_URL` is supplied at container start, not via `.env.local`:
+
 ```bash
 npm run build
 docker build -t redux_frontend .
-docker run -it --rm -p 3000:3000 --name redux_frontend redux_frontend
+docker run -it --rm -p 3000:3000 -e REDUX_BASE_URL=https://redux.isu.edu/api/redux/ --name redux_frontend redux_frontend
 ```
 
 ## Related repositories
