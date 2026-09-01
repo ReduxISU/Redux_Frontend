@@ -13,20 +13,11 @@ const nextCoreWebVitals = require("eslint-config-next/core-web-vitals");
 const importX = require("eslint-plugin-import-x");
 const prettier = require("eslint-config-prettier");
 
-const nextConfigs = Array.isArray(nextCoreWebVitals)
-  ? nextCoreWebVitals
-  : [nextCoreWebVitals];
+const nextConfigs = Array.isArray(nextCoreWebVitals) ? nextCoreWebVitals : [nextCoreWebVitals];
 
 module.exports = [
   {
-    ignores: [
-      "node_modules/**",
-      ".next/**",
-      "out/**",
-      "build/**",
-      "public/**",
-      "next-env.d.ts",
-    ],
+    ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "public/**", "next-env.d.ts"],
   },
 
   js.configs.recommended,
