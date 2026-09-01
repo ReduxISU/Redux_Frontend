@@ -5,13 +5,15 @@ on:
   push:
     branches: [main, production]
 
-# No `packages: write` here, deliberately. This workflow only builds and tests (report-only,
-# `soft: true`) — it never publishes an image. Redux_GUI's copy of this file carries that permission
-# because the same repo also has a publish.yml that needs it; this repo has no publish workflow, and
-# won't until the frontend is confirmed production-ready.
+# `packages: write` is required here even though this repo has no publish step of its own: the
+# reusable ci.yml job in Redux_Build_System requests it (for the future `rbs push`), and a reusable
+# workflow can only narrow the permissions its caller grants, never widen them. Omitting it here
+# doesn't skip publishing — it makes the whole job fail to start (startup_failure) because the
+# called job can't get a permission the caller withheld. See ci.yml's own header comment.
 permissions:
   contents: read
   pull-requests: write
+  packages: write
 
 concurrency:
   group: rbs-${{ github.ref }}
