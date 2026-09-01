@@ -28,7 +28,7 @@
 // color value doesn't belong in a file that states that constraint about
 // itself. A theme module is exactly where a color palette belongs.
 
-import { createTheme, alpha } from "@mui/material/styles";
+import { alpha, createTheme } from "@mui/material/styles";
 
 // Semantic color name (as stored in each data/taxonomy.js facet's
 // `accentColor` field) -> real color. Values are Tailwind CSS v3 "-400"
@@ -154,8 +154,7 @@ const theme = createTheme({
     borderRadius: 12,
   },
   typography: {
-    fontFamily:
-      '"Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontFamily: '"Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     // Typography scale (T07 done-when). Conceptual name -> MUI variant:
     //   page title            -> h1     ("Home", "3-SAT")
     //   section title         -> h2     ("Overview", "Solvers")
@@ -267,8 +266,7 @@ const theme = createTheme({
           // certificate text (T16c/T16d).
           props: { variant: "mono" },
           style: {
-            fontFamily:
-              '"JetBrains Mono", "Fira Code", Consolas, "Courier New", monospace',
+            fontFamily: '"JetBrains Mono", "Fira Code", Consolas, "Courier New", monospace',
             fontSize: "0.8125rem",
             letterSpacing: 0,
           },

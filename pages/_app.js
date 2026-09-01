@@ -1,5 +1,5 @@
-import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
+import { ThemeProvider } from "@mui/material/styles";
 import "../styles/globals.css";
 import theme from "../components/theme";
 
