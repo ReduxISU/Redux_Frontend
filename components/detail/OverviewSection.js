@@ -78,10 +78,12 @@ function AdditionalDetailsCard({ overview }) {
 /**
  * @param {Object} props
  * @param {Object} props.problem A data/fixtures.js-shaped FixtureProblem.
+ * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
+ *   Forwarded straight through to SectionShell — see T18 (#27).
  */
-export default function OverviewSection({ problem }) {
+export default function OverviewSection({ problem, dragHandleProps }) {
   return (
-    <SectionShell sectionKey="overview" title="Overview">
+    <SectionShell sectionKey="overview" title="Overview" dragHandleProps={dragHandleProps}>
       <Box
         sx={{
           display: "flex",

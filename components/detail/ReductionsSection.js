@@ -103,8 +103,10 @@ function CanvasCard({ title }) {
 /**
  * @param {Object} props
  * @param {Object} props.problem A data/fixtures.js-shaped FixtureProblem.
+ * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
+ *   Forwarded straight through to SectionShell — see T18 (#27).
  */
-export default function ReductionsSection({ problem }) {
+export default function ReductionsSection({ problem, dragHandleProps }) {
   const { to, from } = problem.reductions;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [fromExpanded, setFromExpanded] = useState(true);
@@ -121,7 +123,12 @@ export default function ReductionsSection({ problem }) {
   const fromBodyId = "reductions-from-body";
 
   return (
-    <SectionShell sectionKey="reductions" title="Reductions" summary={summary}>
+    <SectionShell
+      sectionKey="reductions"
+      title="Reductions"
+      summary={summary}
+      dragHandleProps={dragHandleProps}
+    >
       {!hasAny && (
         <Typography variant="body2" sx={{ color: "text.secondary" }}>
           No reductions declared for this problem.

@@ -74,8 +74,10 @@ const INSTANCE_TEXTAREA_ID = "solvers-instance-input";
 /**
  * @param {Object} props
  * @param {Object} props.problem A data/fixtures.js-shaped FixtureProblem.
+ * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
+ *   Forwarded straight through to SectionShell — see T18 (#27).
  */
-export default function SolversSection({ problem }) {
+export default function SolversSection({ problem, dragHandleProps }) {
   const solvers = problem.solvers ?? [];
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = solvers[selectedIndex];
@@ -84,7 +86,12 @@ export default function SolversSection({ problem }) {
   const summary = `${solvers.length} ${noun}`;
 
   return (
-    <SectionShell sectionKey="solvers" title="Solvers" summary={summary}>
+    <SectionShell
+      sectionKey="solvers"
+      title="Solvers"
+      summary={summary}
+      dragHandleProps={dragHandleProps}
+    >
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="overline" sx={{ color: "text.secondary" }}>
