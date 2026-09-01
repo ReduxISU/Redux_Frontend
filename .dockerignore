@@ -1,0 +1,5 @@
+node_modules
+.next
+ai_documentation
+mockup_images
+npm-debug.log
