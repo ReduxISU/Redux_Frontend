@@ -1,14 +1,5 @@
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  padding: 0;
-  margin: 0;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
+/* T07 (#11): box-sizing/margin reset, the anchor-tag reset, and the page's
+ * background (including its warm top-edge glow) all moved into
+ * components/theme.js's MuiCssBaseline override, which now applies
+ * CssBaseline globally (see pages/_app.js) and covers all of this. Nothing
+ * currently left for this file to hold. */
