@@ -165,7 +165,12 @@ export const FIXTURE_PROBLEMS = [
       { name: "Brute Force", type: "exact", complexityBucket: "exponential" },
     ],
     visualizations: [
-      { name: "Branch and Bound Tree", type: "searchTree", caption: "Search tree over include/exclude decisions per item; pruned branches shown greyed out." },
+      {
+        name: "Branch and Bound Tree",
+        type: "searchTree",
+        caption:
+          "Search tree over include/exclude decisions per item; pruned branches shown greyed out.",
+      },
     ],
     verifier: {
       certificateDescription: "A subset of item indices.",
@@ -193,7 +198,11 @@ export const FIXTURE_PROBLEMS = [
     },
     solvers: [{ name: "Brute Force", type: "exact", complexityBucket: "exponential" }],
     visualizations: [
-      { name: "Clause Graph", type: "bipartiteFactorGraph", caption: "Clause groups with exactly-one-true highlighting per clause." },
+      {
+        name: "Clause Graph",
+        type: "bipartiteFactorGraph",
+        caption: "Clause groups with exactly-one-true highlighting per clause.",
+      },
     ],
     verifier: {
       certificateDescription: "A satisfying truth assignment: a boolean array of length n.",
@@ -340,7 +349,11 @@ export const FIXTURE_PROBLEMS = [
     },
     solvers: [{ name: "Backtracking", type: "exact", complexityBucket: "exponential" }],
     visualizations: [
-      { name: "Circuit Diagram", type: "logicGateSchematic", caption: "Gate-level circuit with the current input assignment propagated through it." },
+      {
+        name: "Circuit Diagram",
+        type: "logicGateSchematic",
+        caption: "Gate-level circuit with the current input assignment propagated through it.",
+      },
     ],
     verifier: {
       certificateDescription: "An assignment to every circuit input.",
@@ -373,7 +386,12 @@ export const FIXTURE_PROBLEMS = [
       { name: "Branch and Bound", type: "exact", complexityBucket: "exponential" },
     ],
     visualizations: [
-      { name: "Clique Graph", type: "nodeLinkDiagram", caption: "Candidate clique vertices highlighted; edges within the candidate set drawn bold." },
+      {
+        name: "Clique Graph",
+        type: "nodeLinkDiagram",
+        caption:
+          "Candidate clique vertices highlighted; edges within the candidate set drawn bold.",
+      },
     ],
     verifier: {
       certificateDescription: "A set of k vertices.",
@@ -406,9 +424,21 @@ export const FIXTURE_PROBLEMS = [
       reductionCost: [],
       visualizationType: ["voronoiMap"],
     },
-    solvers: [{ name: "Divide and Conquer", type: "exact", complexityBucket: "polynomial", bigO: "O(n log n)" }],
+    solvers: [
+      {
+        name: "Divide and Conquer",
+        type: "exact",
+        complexityBucket: "polynomial",
+        bigO: "O(n log n)",
+      },
+    ],
     visualizations: [
-      { name: "Point Plot", type: "voronoiMap", caption: "Points plotted in the plane with the closest pair highlighted and its connecting segment drawn." },
+      {
+        name: "Point Plot",
+        type: "voronoiMap",
+        caption:
+          "Points plotted in the plane with the closest pair highlighted and its connecting segment drawn.",
+      },
     ],
     // Deliberately no verifier -- see the status-icon note below.
     verifier: null,
@@ -417,7 +447,8 @@ export const FIXTURE_PROBLEMS = [
   {
     name: "Convex Hull",
     slug: "convex-hull",
-    oneLiner: "Given a set of points in the plane, what is the smallest convex polygon containing all of them?",
+    oneLiner:
+      "Given a set of points in the plane, what is the smallest convex polygon containing all of them?",
     tags: {
       problemType: ["computationalGeometry"],
       computationalModel: "turingMachines",
@@ -430,9 +461,20 @@ export const FIXTURE_PROBLEMS = [
     },
     // Single badge per row in every category -- this is the mockup's own
     // example of that layout case (T12 done-when).
-    solvers: [{ name: "Divide and Conquer", type: "exact", complexityBucket: "polynomial", bigO: "O(n log n)" }],
+    solvers: [
+      {
+        name: "Divide and Conquer",
+        type: "exact",
+        complexityBucket: "polynomial",
+        bigO: "O(n log n)",
+      },
+    ],
     visualizations: [
-      { name: "Hull Plot", type: "nodeLinkDiagram", caption: "Input points with the computed hull boundary drawn as a closed polygon." },
+      {
+        name: "Hull Plot",
+        type: "nodeLinkDiagram",
+        caption: "Input points with the computed hull boundary drawn as a closed polygon.",
+      },
     ],
     verifier: {
       certificateDescription: "An ordered list of hull vertices.",
@@ -457,7 +499,11 @@ export const FIXTURE_PROBLEMS = [
     },
     solvers: [{ name: "Backtracking", type: "exact", complexityBucket: "exponential" }],
     visualizations: [
-      { name: "Fill Search Tree", type: "searchTree", caption: "Cell-by-cell assignment search with constraint-violating branches pruned." },
+      {
+        name: "Fill Search Tree",
+        type: "searchTree",
+        caption: "Cell-by-cell assignment search with constraint-violating branches pruned.",
+      },
     ],
     verifier: {
       certificateDescription: "A completed grid.",
@@ -485,7 +531,12 @@ export const FIXTURE_PROBLEMS = [
       { name: "Greedy", type: "heuristic", complexityBucket: "polynomial" },
     ],
     visualizations: [
-      { name: "Coloring Diagram", type: "nodeLinkDiagram", caption: "Vertices shaded by assigned color; conflicting adjacent pairs, if any, outlined in red." },
+      {
+        name: "Coloring Diagram",
+        type: "nodeLinkDiagram",
+        caption:
+          "Vertices shaded by assigned color; conflicting adjacent pairs, if any, outlined in red.",
+      },
     ],
     verifier: {
       certificateDescription: "A color assignment per vertex.",
@@ -550,11 +601,25 @@ export const FIXTURE_PROBLEMS = [
     solvers: [
       { name: "Trial Division", type: "exact", complexityBucket: "exponential" },
       { name: "Quadratic Sieve", type: "numerical", complexityBucket: "exponential" },
-      { name: "Shor's Algorithm", type: "quantum", complexityBucket: "polynomial", bigO: "O((log N)³)" },
+      {
+        name: "Shor's Algorithm",
+        type: "quantum",
+        complexityBucket: "polynomial",
+        bigO: "O((log N)³)",
+      },
     ],
     visualizations: [
-      { name: "Factor Tree", type: "searchTree", caption: "Recursive factor search with each branch's remaining cofactor." },
-      { name: "Shor's Algorithm Circuit", type: "quantumCircuit", caption: "Quantum phase-estimation circuit used to find the period underlying the factorization." },
+      {
+        name: "Factor Tree",
+        type: "searchTree",
+        caption: "Recursive factor search with each branch's remaining cofactor.",
+      },
+      {
+        name: "Shor's Algorithm Circuit",
+        type: "quantumCircuit",
+        caption:
+          "Quantum phase-estimation circuit used to find the period underlying the factorization.",
+      },
     ],
     verifier: {
       certificateDescription: "A factor d.",
@@ -586,7 +651,12 @@ export const FIXTURE_PROBLEMS = [
       { name: "Genetic Algorithm", type: "heuristic", complexityBucket: "exponential" },
     ],
     visualizations: [
-      { name: "Schedule Chart", type: "ganttChart", caption: "Per-machine timeline of scheduled operations for the current best-found schedule." },
+      {
+        name: "Schedule Chart",
+        type: "ganttChart",
+        caption:
+          "Per-machine timeline of scheduled operations for the current best-found schedule.",
+      },
     ],
     verifier: {
       certificateDescription: "A start time for every operation.",
@@ -600,7 +670,9 @@ export const FIXTURE_PROBLEMS = [
 // eventual `index: Map<problemName, tags>`. Consumers that only need the
 // facet data for filtering/badges should read `.tags` off the value; the
 // Detail page (T19, Phase 1 only) reads the rest directly.
-export const FIXTURE_CATALOG_INDEX = new Map(FIXTURE_PROBLEMS.map((problem) => [problem.name, problem]));
+export const FIXTURE_CATALOG_INDEX = new Map(
+  FIXTURE_PROBLEMS.map((problem) => [problem.name, problem]),
+);
 
 // Mirrors the { index, loading, error } shape useCatalogIndex() will return
 // (T23 done-when), so pages/index.js's eventual swap to the real hook is a
@@ -610,7 +682,9 @@ export function useFixtureCatalogIndex() {
 }
 
 /** Slug -> FixtureProblem, for pages/[problem].js's route param lookup. */
-export const FIXTURE_PROBLEMS_BY_SLUG = new Map(FIXTURE_PROBLEMS.map((problem) => [problem.slug, problem]));
+export const FIXTURE_PROBLEMS_BY_SLUG = new Map(
+  FIXTURE_PROBLEMS.map((problem) => [problem.slug, problem]),
+);
 
 export function getFixtureProblemBySlug(slug) {
   return FIXTURE_PROBLEMS_BY_SLUG.get(slug) ?? null;
