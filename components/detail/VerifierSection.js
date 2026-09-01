@@ -36,15 +36,17 @@ const CERTIFICATE_INPUT_ID_PREFIX = "verifier-certificate-input";
  *   optional field populated; most problems have just the two required
  *   fields, and Closest Pair of Points has `verifier: null` entirely and
  *   deliberately (the fixture's own "incomplete problem" example).
+ * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
+ *   Forwarded straight through to SectionShell — see T18 (#27).
  */
-export default function VerifierSection({ problem }) {
+export default function VerifierSection({ problem, dragHandleProps }) {
   const verifier = problem.verifier;
   const [certificateValue, setCertificateValue] = useState(verifier?.exampleCertificate ?? "");
   const inputId = `${CERTIFICATE_INPUT_ID_PREFIX}-${problem.slug}`;
 
   if (!verifier) {
     return (
-      <SectionShell sectionKey="verifier" title="Verifier">
+      <SectionShell sectionKey="verifier" title="Verifier" dragHandleProps={dragHandleProps}>
         <Typography variant="body1" sx={{ color: "text.secondary" }}>
           No verifier declared for this problem.
         </Typography>
@@ -53,7 +55,7 @@ export default function VerifierSection({ problem }) {
   }
 
   return (
-    <SectionShell sectionKey="verifier" title="Verifier">
+    <SectionShell sectionKey="verifier" title="Verifier" dragHandleProps={dragHandleProps}>
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="overline" sx={{ color: "text.secondary" }}>

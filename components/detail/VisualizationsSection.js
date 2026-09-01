@@ -66,8 +66,10 @@ function TypeBadge({ typeKey }) {
 /**
  * @param {Object} props
  * @param {Object} props.problem A data/fixtures.js-shaped FixtureProblem.
+ * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
+ *   Forwarded straight through to SectionShell — see T18 (#27).
  */
-export default function VisualizationsSection({ problem }) {
+export default function VisualizationsSection({ problem, dragHandleProps }) {
   const visualizations = problem.visualizations ?? [];
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = visualizations[selectedIndex];
@@ -78,6 +80,7 @@ export default function VisualizationsSection({ problem }) {
       sectionKey="visualizations"
       title="Visualizations"
       summary={`${visualizations.length} ${noun}`}
+      dragHandleProps={dragHandleProps}
     >
       {visualizations.length === 0 ? (
         <Typography variant="body2" sx={{ color: "text.secondary" }}>

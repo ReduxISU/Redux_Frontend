@@ -17,10 +17,13 @@
 // The drag grip is a separate DOM element from the chevron button and
 // carries no click handler of its own (issue body: "the single most common
 // bug in this kind of component" is a grip that also toggles collapse).
-// It's a static affordance for now — actual drag-to-reorder is wired up by
-// whichever task assembles the Detail page (T21) across multiple
-// SectionShell instances; this component only has to guarantee the grip
-// and the toggle never share a click target.
+// Wired up as a real @dnd-kit drag activator by T18 (#27,
+// components/ProblemDetailLayout.js): that component passes an optional
+// `dragHandleProps` (`{ attributes, listeners }`, straight from
+// `useSortable()`), spread onto this same grip Box rather than adding a
+// second grip element. With no `dragHandleProps` (e.g. any standalone
+// rendering of a section outside the drag context) the grip stays the
+// static, `aria-hidden` affordance it always was.
 //
 // Accessibility: unlike FacetSidebar's facet groups (a sidebar nav list,
 // nothing on that page needs them in the heading outline), a Problem Detail
@@ -56,8 +59,11 @@ import { useState } from "react";
  *   ("3 visualizations"). Omitted entirely for Overview and Verifier.
  * @param {React.ReactNode} props.children The section body, shown when
  *   expanded.
+ * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
+ *   From T18's `useSortable()`, spread onto the grip so it becomes the real
+ *   drag activator. Omitted, the grip stays decorative (`aria-hidden`).
  */
-export default function SectionShell({ sectionKey, title, summary, children }) {
+export default function SectionShell({ sectionKey, title, summary, children, dragHandleProps }) {
   const [expanded, setExpanded] = useState(true);
   const toggleId = `section-${sectionKey}-toggle`;
   const bodyId = `section-${sectionKey}-body`;
@@ -68,7 +74,13 @@ export default function SectionShell({ sectionKey, title, summary, children }) {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.75 }}>
         <Box
           id={gripId}
-          aria-hidden="true"
+          {...(dragHandleProps
+            ? {
+                ...dragHandleProps.attributes,
+                ...dragHandleProps.listeners,
+                "aria-label": `Drag to reorder the ${title} section`,
+              }
+            : { "aria-hidden": "true" })}
           sx={{
             display: "flex",
             alignItems: "center",
