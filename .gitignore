@@ -1,3 +1,7 @@
+# Internal planning docs — not published to the repo
+ARCHITECTURE.md
+TAXONOMY_REFERENCE.md
+
 # Dependency directories
 node_modules/
 npm-debug.log*
