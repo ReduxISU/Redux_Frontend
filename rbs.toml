@@ -1,0 +1,15 @@
+# Redux Build System pipeline config. See github.com/ReduxISU/Redux_Build_System.
+engine = "npm"
+
+[artifact]
+image = "ghcr.io/reduxisu/redux_frontend"
+port = 3000
+# Cheaper and less ambiguous than "/": a static route that answers as soon as the server is up,
+# without depending on React rendering.
+health-path = "/api/health"
+
+# No [integration] section yet — there is no test suite to run (tests/e2e/ doesn't exist). Add it
+# once real integration tests land.
+#
+# No [push] section yet — deploying (ghcr.io publish) is deliberately deferred until the frontend
+# is production-ready. Add this alongside a publish workflow when that happens, not before.
