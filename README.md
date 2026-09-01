@@ -34,7 +34,29 @@ npm install
 npm run dev
 ```
 
-The app will need a `REDUX_BASE_URL` environment variable pointing at a running Redux backend instance (see `.env.example`, once added).
+### Environment variables
+
+The app needs one environment variable, `REDUX_BASE_URL`, telling it which Redux backend to talk to. Here's exactly how to set it up:
+
+1. **Copy the example file** in the project root to create your own local copy:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+   (On Windows PowerShell: `Copy-Item .env.example .env.local`)
+
+2. **Open `.env.local`** in a text editor. You'll see two options, already explained in comments inside the file:
+   - The **default** line points at the **live production Redux backend** — real data, and you don't need to run anything else. If you just want to see the app working, leave this as-is and skip to step 3.
+   - A **commented-out local option** below it, for when you're also running the [Redux backend](https://github.com/ReduxISU/Redux) yourself (e.g. its devcontainer on port `27000`). Only use this if you know you need it — if you're not sure, use the default.
+
+3. **Save the file and run `npm run dev`.** Next.js automatically loads `.env.local` — no other configuration step is needed, and you don't need to restart anything except the dev server if it was already running when you created the file.
+
+**Common mistakes to avoid:**
+- The file must be named exactly `.env.local` (not `.env.example.local`, not `.env`) — Next.js only auto-loads specific filenames, and `.env.local` is the one meant for your own machine.
+- `.env.local` is intentionally in `.gitignore` — it should never be committed. If `git status` shows it as a new file, something's wrong; stop and ask before committing it.
+- Don't remove the trailing slash (`/`) at the end of the URL.
+- If pages load but show no data, this is almost always the first thing to check: open `.env.local` and confirm `REDUX_BASE_URL` is set to one of the two provided values (uncommented, not both).
 
 ### Production build
 
