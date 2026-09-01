@@ -1,6 +1,6 @@
-# Internal planning docs — not published to the repo
-ARCHITECTURE.md
-TAXONOMY_REFERENCE.md
+# Internal planning docs and design reference — not published to the repo
+ai_documentation/
+mockup_images/
 
 # Dependency directories
 node_modules/
