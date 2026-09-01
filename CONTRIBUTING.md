@@ -25,6 +25,29 @@ By submitting a contribution (pull request, patch, or code submission), you conf
 
 ---
 
+## Branching Strategy
+
+### `main`
+- **Branch name:** `main`
+- This is the default branch, and where day-to-day pull requests land.
+- Branch off `main` for your work, and open your pull request back into `main`.
+- Direct pushes are blocked by a GitHub ruleset. Everyone goes through a pull request.
+- Merging requires **1 approving review**. There is currently no required status check gating the merge — the CI workflow runs on every pull request, but it's report-only and won't block you.
+
+### `production`
+- **Branch name:** `production`
+- This is what's actually deployed. It is **never** the target of a pull request — it only moves forward when the project owner deliberately promotes finished work from `main`.
+- As of this writing, `production` has no GitHub ruleset configured, so it isn't technically protected against a direct push, force-push, or deletion. Treat it as off-limits by convention regardless: don't push to it, don't target it with a pull request, and don't rely on GitHub to stop you if you try.
+
+### Workflow
+
+1. **Branch off `main`** for your change.
+2. **Open a pull request** back into `main`.
+3. **Get 1 approving review.** A reviewer other than yourself needs to approve before you can merge.
+4. **Periodically**, the project owner promotes reviewed work from `main` into `production` to deploy it.
+
+---
+
 ## How to Contribute
 
 ### 1. Fork the repository
