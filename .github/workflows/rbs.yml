@@ -5,10 +5,13 @@ on:
   push:
     branches: [main, production]
 
+# No `packages: write` here, deliberately. This workflow only builds and tests (report-only,
+# `soft: true`) — it never publishes an image. Redux_GUI's copy of this file carries that permission
+# because the same repo also has a publish.yml that needs it; this repo has no publish workflow, and
+# won't until the frontend is confirmed production-ready.
 permissions:
   contents: read
   pull-requests: write
-  packages: write
 
 concurrency:
   group: rbs-${{ github.ref }}
