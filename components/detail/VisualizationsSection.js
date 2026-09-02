@@ -15,6 +15,12 @@
 // Only 3-SAT's fixture entries carry `stepLabel`/`stepNarration` — every
 // other problem's visualizations only have `{ name, type, caption }`, so
 // both are rendered conditionally rather than assumed present.
+//
+// T28 (#37): the rail-plus-pane split stacks below `md` (900px) -- same
+// breakpoint components/detail/OverviewSection.js already uses for its own
+// two-card split, and the width pages/index.js switches the Home sidebar
+// into a drawer at, kept consistent rather than picking a third number. The
+// rail's fixed width only applies at `md` and up; stacked, it's full width.
 
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import SkipNextIcon from "@mui/icons-material/SkipNext";
@@ -91,7 +97,7 @@ export default function VisualizationsSection({ problem, dragHandleProps }) {
           No visualizations declared for this problem.
         </Typography>
       ) : (
-        <Box sx={{ display: "flex", gap: 2 }}>
+        <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 2 }}>
           <Box
             component="ul"
             role="listbox"
@@ -100,7 +106,7 @@ export default function VisualizationsSection({ problem, dragHandleProps }) {
               listStyle: "none",
               m: 0,
               p: 0,
-              width: 220,
+              width: { xs: "100%", md: 220 },
               flexShrink: 0,
               maxHeight: RAIL_MAX_HEIGHT,
               overflowY: "auto",
