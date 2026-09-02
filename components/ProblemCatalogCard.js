@@ -26,6 +26,15 @@
 // deriveComplexityClasses() (data/taxonomy.js) already produced into that
 // array -- 2 or 3 badges on one row is expected, not special-cased (#6 item
 // 7, 2026-09-01 follow-up, supersedes the original quantum-slot rule).
+//
+// #70: BASE_BADGE_FACET_KEYS (complexityClass/solverType/problemType) always
+// render, same as before. Any OTHER taxonomy facet gets its own row added
+// on top, but only once `matchedTags` says a filter for it is active --
+// pages/index.js only ever shows problems matching every active facet
+// selection (matchesSelectedFacets), so a card that's on screen at all
+// already has a tag for that facet worth showing. Rows use the same
+// TagRow/Chip-variant treatment either way, so an added row looks exactly
+// like a default one whose filter is selected (issue body).
 
 import CheckIcon from "@mui/icons-material/Check";
 import Box from "@mui/material/Box";
@@ -38,17 +47,11 @@ import StatusIcon, { isProblemComplete } from "./StatusIcon";
 
 const EMPTY_SET = new Set();
 
-// Row order per the issue body. `chipFamily` is the theme.js Chip-variant
-// family name (components/theme.js's "three card badge families (T07
-// done-when, T12/#16)") -- deliberately not the same string as `facetKey`
-// (data/taxonomy.js's facet is "complexityClass", the chip family is
-// "complexity"), so each row is mapped to its family explicitly rather than
-// built by concatenating the taxonomy facet key.
-const BADGE_ROWS = [
-  { facetKey: "complexityClass", chipFamily: "complexity" },
-  { facetKey: "solverType", chipFamily: "solverType" },
-  { facetKey: "problemType", chipFamily: "problemType" },
-];
+// Row order per the issue body. Each row's Chip-variant family is now just
+// its own facetKey (theme.js's per-facet chip variants, #70) -- so a facet
+// outside this base list can reuse the exact same TagRow with no extra
+// mapping.
+const BASE_BADGE_FACET_KEYS = ["complexityClass", "solverType", "problemType"];
 
 const TAXONOMY_BY_KEY = new Map(TAXONOMY.map((facet) => [facet.key, facet]));
 
@@ -59,7 +62,19 @@ function optionLabel(facetKey, optionKey) {
   return option?.label ?? optionKey;
 }
 
-function TagRow({ facetKey, chipFamily, tagKeys, matchedKeys }) {
+// data/taxonomy.js's own shape-contract note (see pages/index.js's header
+// comment): every facet except computationalModel stores its problem-level
+// tag as an array even when `multiValued: false`. Normalizing here rather
+// than special-casing computationalModel lets every facet, base or added,
+// go through one TagRow.
+function tagValueAsArray(tagValue) {
+  if (Array.isArray(tagValue)) {
+    return tagValue;
+  }
+  return tagValue == null ? [] : [tagValue];
+}
+
+function TagRow({ facetKey, tagKeys, matchedKeys }) {
   if (!tagKeys || tagKeys.length === 0) {
     return null;
   }
@@ -71,7 +86,7 @@ function TagRow({ facetKey, chipFamily, tagKeys, matchedKeys }) {
           <Chip
             key={optionKey}
             size="small"
-            variant={matched ? `${chipFamily}Filled` : `${chipFamily}Outlined`}
+            variant={matched ? `${facetKey}Filled` : `${facetKey}Outlined`}
             icon={matched ? <CheckIcon /> : undefined}
             label={optionLabel(facetKey, optionKey)}
           />
@@ -87,13 +102,24 @@ function TagRow({ facetKey, chipFamily, tagKeys, matchedKeys }) {
  *   (name, slug, tags.<facetKey>[]).
  * @param {Object} [props.matchedTags] `{ [facetKey]: Set<optionKey> }` --
  *   which of this card's own tags match the currently active filters, in the
- *   same `Set`-valued shape FacetSidebar's `selected` prop already uses. The
- *   card only ever reads this prop; it never looks at filter state itself
- *   (issue body, "The matched-tag treatment"), which keeps it reusable and
- *   easy to test.
+ *   same `Set`-valued shape FacetSidebar's `selected` prop already uses --
+ *   now for every taxonomy facet, not just the three rendered by default
+ *   (#70), since a non-empty set for any other facet is also what triggers
+ *   this card to add that facet's own row. The card only ever reads this
+ *   prop; it never looks at filter state itself (issue body, "The
+ *   matched-tag treatment"), which keeps it reusable and easy to test.
  */
 export default function ProblemCatalogCard({ problem, matchedTags = {} }) {
   const complete = isProblemComplete(problem);
+
+  // #70: a facet outside the base three gets a row added only once a filter
+  // for it is active (a non-empty matched set) -- every card on screen
+  // already matches every active facet selection (pages/index.js's
+  // matchesSelectedFacets), so there's always a real tag to show.
+  const extraFacetKeys = TAXONOMY.map((facet) => facet.key).filter(
+    (facetKey) =>
+      !BASE_BADGE_FACET_KEYS.includes(facetKey) && (matchedTags[facetKey]?.size ?? 0) > 0,
+  );
 
   return (
     <Paper
@@ -135,12 +161,19 @@ export default function ProblemCatalogCard({ problem, matchedTags = {} }) {
       </Box>
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        {BADGE_ROWS.map(({ facetKey, chipFamily }) => (
+        {BASE_BADGE_FACET_KEYS.map((facetKey) => (
           <TagRow
             key={facetKey}
             facetKey={facetKey}
-            chipFamily={chipFamily}
-            tagKeys={problem.tags?.[facetKey]}
+            tagKeys={tagValueAsArray(problem.tags?.[facetKey])}
+            matchedKeys={matchedTags[facetKey] ?? EMPTY_SET}
+          />
+        ))}
+        {extraFacetKeys.map((facetKey) => (
+          <TagRow
+            key={facetKey}
+            facetKey={facetKey}
+            tagKeys={tagValueAsArray(problem.tags?.[facetKey])}
             matchedKeys={matchedTags[facetKey] ?? EMPTY_SET}
           />
         ))}
