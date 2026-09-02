@@ -32,6 +32,7 @@ import FacetSidebar from "../components/FacetSidebar";
 import NavBar from "../components/NavBar";
 import ProblemGrid from "../components/ProblemGrid";
 import SearchBar from "../components/SearchBar";
+import { thinScrollbarSx } from "../components/theme";
 import { FIXTURE_PROBLEMS } from "../data/fixtures";
 import { TAXONOMY } from "../data/taxonomy";
 
@@ -43,7 +44,10 @@ import { TAXONOMY } from "../data/taxonomy";
 // doesn't render anyway.
 const CARD_BADGE_FACETS = ["complexityClass", "solverType", "problemType"];
 
-const SIDEBAR_WIDTH = 280;
+// #68: 280 was too narrow -- the longest option labels ("Algebra and Number
+// Theory", "Logical/Functional Models") wrapped to a second line against
+// their checkbox + count. Widened so every option renders on one line.
+const SIDEBAR_WIDTH = 340;
 
 function buildEmptySelection() {
   const selection = {};
@@ -187,7 +191,19 @@ export default function Home() {
         </Box>
 
         <Box sx={{ flex: 1, minHeight: 0, display: "flex", gap: 4 }}>
-          <Box sx={{ width: SIDEBAR_WIDTH, flexShrink: 0, overflowY: "auto" }}>
+          {/* #68: the one scrollbar for the whole filter panel -- expanded
+              facet groups render every option in full (FacetSidebar no
+              longer caps/scrolls internally), so this is the only way the
+              sidebar scrolls. */}
+          <Box
+            sx={{
+              width: SIDEBAR_WIDTH,
+              flexShrink: 0,
+              overflowY: "auto",
+              pr: 1,
+              ...thinScrollbarSx,
+            }}
+          >
             <FacetSidebar
               facetOptions={facetOptions}
               selected={selected}

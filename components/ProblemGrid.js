@@ -38,6 +38,7 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import ProblemCatalogCard from "./ProblemCatalogCard";
+import { thinScrollbarSx } from "./theme";
 
 const DESKTOP_COLUMN_COUNT = 3;
 
@@ -79,6 +80,8 @@ export default function ProblemGrid({
         rowGap: 1.25,
         columnGap: 2,
         pb: 1,
+        pr: 1,
+        ...thinScrollbarSx,
       }}
     >
       {problems.map((problem) => (
