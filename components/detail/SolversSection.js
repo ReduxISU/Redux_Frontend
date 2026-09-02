@@ -20,6 +20,11 @@
 // available" message instead — same spirit as this project's documented
 // "Assignment Table" visualizationType gap. See this task's PR for the
 // decision writeup.
+//
+// T28 (#37): the solver-list-plus-detail-pane split stacks below `md`
+// (900px), same breakpoint components/detail/VisualizationsSection.js's
+// identically-shaped rail/pane split uses. The rail's fixed width only
+// applies at `md` and up; stacked, it's full width.
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -130,11 +135,16 @@ export default function SolversSection({ problem, dragHandleProps }) {
           />
         </Paper>
 
-        <Box sx={{ display: "flex", gap: 2 }}>
+        <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 2 }}>
           {solvers.length === 0 ? (
             <Typography
               variant="body2"
-              sx={{ width: 260, flexShrink: 0, color: "text.secondary", fontStyle: "italic" }}
+              sx={{
+                width: { xs: "100%", md: 260 },
+                flexShrink: 0,
+                color: "text.secondary",
+                fontStyle: "italic",
+              }}
             >
               No solvers declared for this problem.
             </Typography>
@@ -147,7 +157,7 @@ export default function SolversSection({ problem, dragHandleProps }) {
                 listStyle: "none",
                 m: 0,
                 p: 0,
-                width: 260,
+                width: { xs: "100%", md: 260 },
                 flexShrink: 0,
                 maxHeight: RAIL_MAX_HEIGHT,
                 overflowY: "auto",

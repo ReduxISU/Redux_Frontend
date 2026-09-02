@@ -34,9 +34,22 @@
 //               "no problems in the catalog" and "no problems match your
 //               filters" are different situations a visitor shouldn't have
 //               to guess between.
+//
+// T30 (#39): `id="home-subtitle"`/`id="home-result-count"` added to the two
+// dynamic-text Typography elements below so tests/e2e/home.spec.js can read
+// the real, currently-displayed counts (never a hardcoded one, per that
+// issue's done-when) instead of scraping for a number inside less specific
+// text.
 
+import CloseIcon from "@mui/icons-material/Close";
+import TuneIcon from "@mui/icons-material/Tune";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Drawer from "@mui/material/Drawer";
+import IconButton from "@mui/material/IconButton";
+import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useMemo, useState } from "react";
 import ActiveFilterChips from "../components/ActiveFilterChips";
 import ErrorBanner from "../components/ErrorBanner";
@@ -53,6 +66,28 @@ import { useCatalogIndex } from "../hooks/useCatalogIndex";
 // Theory", "Logical/Functional Models") wrapped to a second line against
 // their checkbox + count. Widened so every option renders on one line.
 const SIDEBAR_WIDTH = 340;
+
+// T28 (#37): below this width the sidebar can't hold a fixed 340px column
+// next to a usable results area (at 768px, 340px + even a single comfortable
+// card column doesn't fit), so it moves behind a "Filters" drawer instead --
+// same breakpoint components/detail/OverviewSection.js already uses to
+// stack its two side-by-side cards, kept consistent rather than picking a
+// second, unrelated number. `md` is MUI's 900px default.
+//
+// This has to be a real JS media query (useMediaQuery below), not just a
+// CSS `display` toggle: FacetSidebar's checkbox/toggle ids are static
+// (`facet-${key}-option-${key}`, ground rule 4), so mounting both the fixed
+// column and the drawer's copy at once -- one merely hidden with
+// `display: none` -- would put two elements with the same id in the DOM
+// simultaneously, invalid HTML and exactly the kind of collision that rule
+// exists to prevent. Gating which one actually *mounts* keeps it to one.
+const SIDEBAR_BREAKPOINT = "md";
+
+// MUI's Drawer (built on Modal) already provides everything the "narrow
+// widths" issue asks of it: Escape closes it, focus is trapped inside while
+// open, and focus returns to the trigger button on close -- so none of that
+// is custom code here, just configuration.
+const FILTERS_DRAWER_ID = "home-filters-drawer";
 
 // Same-origin proxy base lib/redux/index.js's own JSDoc documents (keeps
 // the real backend origin server-side, pages/api/redux/[...path].js).
@@ -152,6 +187,14 @@ function toCardProblem(result, completeness) {
 export default function Home() {
   const [selected, setSelected] = useState(buildEmptySelection);
   const [searchValue, setSearchValue] = useState("");
+  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
+
+  const theme = useTheme();
+  // Defaults to `false` (narrow) on the server and on first client render,
+  // matching Next.js SSR having no real viewport to measure -- see the
+  // SIDEBAR_BREAKPOINT comment above for why this has to gate mounting
+  // rather than just CSS visibility.
+  const isWideLayout = useMediaQuery(theme.breakpoints.up(SIDEBAR_BREAKPOINT));
 
   const { index, completeness, loading, error } = useCatalogIndex(API_BASE_URL);
   const { results, facetOptions, matchedTags } = useCatalogFilters(index, {
@@ -159,8 +202,8 @@ export default function Home() {
     searchValue,
   });
 
-  const filtersActive =
-    searchValue.trim().length > 0 || Object.values(selected).some((options) => options.size > 0);
+  const activeFilterCount = Object.values(selected).reduce((sum, options) => sum + options.size, 0);
+  const filtersActive = searchValue.trim().length > 0 || activeFilterCount > 0;
 
   const problems = useMemo(
     () => results.map((result) => toCardProblem(result, completeness)),
@@ -203,7 +246,7 @@ export default function Home() {
           <Typography variant="h1" component="h1">
             Home
           </Typography>
-          <Typography variant="body1" sx={{ color: "text.secondary", mt: 0.5 }}>
+          <Typography id="home-subtitle" variant="body1" sx={{ color: "text.secondary", mt: 0.5 }}>
             {buildSubtitleText({ loading, error, catalogSize: index.size })}
           </Typography>
         </Box>
@@ -229,31 +272,101 @@ export default function Home() {
             itself as soon as a request succeeds. */}
         {error ? <ErrorBanner /> : null}
 
+        {/* T28 (#37): the drawer trigger only exists below SIDEBAR_BREAKPOINT
+            -- above it the fixed sidebar column is already visible, so a
+            button that opens a drawer holding a second copy of it would be
+            redundant chrome with nothing to do. */}
+        {!isWideLayout && (
+          <Box>
+            <Button
+              id="home-filters-drawer-trigger"
+              variant="outlined"
+              startIcon={<TuneIcon fontSize="small" />}
+              aria-haspopup="dialog"
+              aria-controls={FILTERS_DRAWER_ID}
+              aria-expanded={filtersDrawerOpen}
+              onClick={() => setFiltersDrawerOpen(true)}
+            >
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </Button>
+          </Box>
+        )}
+
+        <Drawer
+          anchor="left"
+          open={filtersDrawerOpen && !isWideLayout}
+          onClose={() => setFiltersDrawerOpen(false)}
+          slotProps={{
+            paper: {
+              id: FILTERS_DRAWER_ID,
+              role: "dialog",
+              "aria-modal": true,
+              "aria-label": "Filter problems",
+              sx: {
+                width: { xs: "85vw", sm: 360 },
+                maxWidth: 360,
+                p: 2.5,
+                overflowY: "auto",
+                ...thinScrollbarSx,
+              },
+            },
+          }}
+        >
+          <Box
+            sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}
+          >
+            <Typography variant="h2" component="h2" sx={{ fontSize: "1.0625rem" }}>
+              Filters
+            </Typography>
+            <IconButton
+              id="home-filters-drawer-close"
+              aria-label="Close filters"
+              onClick={() => setFiltersDrawerOpen(false)}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+          <FacetSidebar
+            facetOptions={facetOptions}
+            selected={selected}
+            onChange={handleFacetChange}
+            onClearFilters={handleClearAll}
+            loading={loading}
+          />
+        </Drawer>
+
         <Box sx={{ flex: 1, minHeight: 0, display: "flex", gap: 4 }}>
           {/* #68: the one scrollbar for the whole filter panel -- expanded
               facet groups render every option in full (FacetSidebar no
               longer caps/scrolls internally), so this is the only way the
-              sidebar scrolls. */}
-          <Box
-            sx={{
-              width: SIDEBAR_WIDTH,
-              flexShrink: 0,
-              overflowY: "auto",
-              pr: 1,
-              ...thinScrollbarSx,
-            }}
-          >
-            <FacetSidebar
-              facetOptions={facetOptions}
-              selected={selected}
-              onChange={handleFacetChange}
-              onClearFilters={handleClearAll}
-              loading={loading}
-            />
-          </Box>
+              sidebar scrolls.
+              T28 (#37): only mounted at/above SIDEBAR_BREAKPOINT -- the
+              Drawer above is the narrow-width equivalent, and only one of
+              the two is ever mounted at a time (see isWideLayout's comment),
+              so there's never two copies of the same filter controls (and
+              their duplicate ids) in the DOM together. */}
+          {isWideLayout && (
+            <Box
+              sx={{
+                width: SIDEBAR_WIDTH,
+                flexShrink: 0,
+                overflowY: "auto",
+                pr: 1,
+                ...thinScrollbarSx,
+              }}
+            >
+              <FacetSidebar
+                facetOptions={facetOptions}
+                selected={selected}
+                onChange={handleFacetChange}
+                onClearFilters={handleClearAll}
+                loading={loading}
+              />
+            </Box>
+          )}
 
           <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 1.5 }}>
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            <Typography id="home-result-count" variant="body2" sx={{ color: "text.secondary" }}>
               {buildResultCountText({ loading, error, count: problems.length, filtersActive })}
             </Typography>
             <Box sx={{ flex: 1, minHeight: 0 }}>
