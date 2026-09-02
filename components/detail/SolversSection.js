@@ -10,16 +10,20 @@
 // 3-SAT's DPLL entry does), that result is shown statically next to the
 // disabled Run button, standing in for "the same canned result every time."
 //
-// Known gap, not fabricated: data/fixtures.js's FixtureProblem shape has no
-// instanceFormat/example/default-instance field for any problem — the
-// mockup's CNF-specific "PASTE AN INSTANCE" text was hand-drawn for 3-SAT
-// and was never added to the fixture data contract (T09). Inventing
-// plausible-looking format text here would fabricate data this component
-// has no real source for, and wouldn't even make sense for a non-SAT
-// problem like Knapsack. So this block degrades to a plain "not yet
-// available" message instead — same spirit as this project's documented
-// "Assignment Table" visualizationType gap. See this task's PR for the
-// decision writeup.
+// T35 (#93): the instance box is real and editable now. It pre-fills with
+// the problem's declared `defaultInstance` (a required backend field; all
+// 50 problems supply a runnable one) and its value is owned by
+// components/ProblemDetailLayout.js, not by this section, because the
+// Verifier section shows the same single value. See that file's header for
+// why. Run stays disabled regardless: turning it on is T37 (#95).
+//
+// The format block above the box shows the problem's `instanceFormat`,
+// prose with an embedded example. Only 18 of the 50 problems declare one
+// today, so the block says so plainly for the rest rather than inventing
+// format text. That never disables the box: the instance itself is always
+// available even when the prose describing it is not. (This replaces an
+// older note here claiming no instance field existed anywhere in the data
+// at all, which was wrong, see #92.)
 //
 // T28 (#37): the solver-list-plus-detail-pane split stacks below `md`
 // (900px), same breakpoint components/detail/VisualizationsSection.js's
@@ -84,10 +88,22 @@ const INSTANCE_TEXTAREA_ID = "solvers-instance-input";
 /**
  * @param {Object} props
  * @param {Object} props.problem A data/fixtures.js-shaped FixtureProblem.
+ * @param {string} [props.instanceValue] The shared problem instance, owned
+ *   by components/ProblemDetailLayout.js (T35/#93). Empty string when the
+ *   problem declares no instance.
+ * @param {(next: string) => void} [props.onInstanceChange] Called with the
+ *   new text whenever the visitor edits the box. The Verifier section's own
+ *   instance input is bound to the same value, so an edit here shows up
+ *   there too.
  * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
  *   Forwarded straight through to SectionShell — see T18 (#27).
  */
-export default function SolversSection({ problem, dragHandleProps }) {
+export default function SolversSection({
+  problem,
+  instanceValue = "",
+  onInstanceChange,
+  dragHandleProps,
+}) {
   const solvers = problem.solvers ?? [];
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = solvers[selectedIndex];
@@ -105,11 +121,33 @@ export default function SolversSection({ problem, dragHandleProps }) {
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="overline" sx={{ color: "text.secondary" }}>
-            Paste an instance — matches instanceFormat below
+            Paste an instance
           </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
-            Instance format not yet available for this problem.
-          </Typography>
+          {problem.instanceFormat ? (
+            // Same presentation the Verifier section gives certificateFormat
+            // (a mono block in a padded panel), since these two fields are
+            // the same kind of thing: prose with an embedded example.
+            <Box
+              component="pre"
+              sx={{
+                mt: 1.5,
+                mb: 0,
+                p: 1.5,
+                borderRadius: 1,
+                backgroundColor: "background.default",
+                overflowX: "auto",
+              }}
+            >
+              <Typography variant="mono" component="code" sx={{ whiteSpace: "pre-wrap" }}>
+                {problem.instanceFormat}
+              </Typography>
+            </Box>
+          ) : (
+            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+              Instance format not yet documented for this problem. The instance below is still the
+              problem&apos;s own declared example.
+            </Typography>
+          )}
           <Box component="label" htmlFor={INSTANCE_TEXTAREA_ID} sx={{ display: "block", mt: 1.5 }}>
             <Typography variant="body2" sx={{ color: "text.secondary", mb: 0.5 }}>
               Instance
@@ -119,7 +157,8 @@ export default function SolversSection({ problem, dragHandleProps }) {
             id={INSTANCE_TEXTAREA_ID}
             component="textarea"
             rows={2}
-            readOnly
+            value={instanceValue}
+            onChange={(event) => onInstanceChange?.(event.target.value)}
             placeholder="No default instance declared for this problem yet."
             sx={{
               width: "100%",

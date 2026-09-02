@@ -14,6 +14,15 @@
 // Per the ratified naming convention this section's title is always the
 // generic "Verifier" — never problem-prefixed — so it's hardcoded by this
 // component's caller-facing contract, not derived from `problem.name`.
+//
+// T35 (#93): this section now also shows the problem instance the
+// certificate is being checked against. Verifying a certificate against a
+// different instance than the one that was solved is a silent, meaningless
+// error, so there is exactly one instance value on the page: it lives in
+// components/ProblemDetailLayout.js and both this section and the Solvers
+// section render their own input bound to it. Editing either updates both.
+// See that file's header for the full decision. Verify stays disabled:
+// turning it on is T37 (#95).
 
 import CancelIcon from "@mui/icons-material/Cancel";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -27,6 +36,10 @@ import SectionShell from "./SectionShell";
 
 const CERTIFICATE_INPUT_ID_PREFIX = "verifier-certificate-input";
 
+// Distinct from SolversSection's own "solvers-instance-input" (ground rule
+// 4): the two inputs share a value, never an id.
+const INSTANCE_INPUT_ID = "verifier-instance-input";
+
 /**
  * @param {Object} props
  * @param {Object} props.problem A data/fixtures.js-shaped FixtureProblem.
@@ -36,10 +49,22 @@ const CERTIFICATE_INPUT_ID_PREFIX = "verifier-certificate-input";
  *   optional field populated; most problems have just the two required
  *   fields, and Closest Pair of Points has `verifier: null` entirely and
  *   deliberately (the fixture's own "incomplete problem" example).
+ * @param {string} [props.instanceValue] The shared problem instance, owned
+ *   by components/ProblemDetailLayout.js (T35/#93). Empty string when the
+ *   problem declares no instance.
+ * @param {(next: string) => void} [props.onInstanceChange] Called with the
+ *   new text whenever the visitor edits the instance here. The Solvers
+ *   section's input is bound to the same value, so an edit here shows up
+ *   there too.
  * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
  *   Forwarded straight through to SectionShell — see T18 (#27).
  */
-export default function VerifierSection({ problem, dragHandleProps }) {
+export default function VerifierSection({
+  problem,
+  instanceValue = "",
+  onInstanceChange,
+  dragHandleProps,
+}) {
   const verifier = problem.verifier;
   const [certificateValue, setCertificateValue] = useState(verifier?.exampleCertificate ?? "");
   const inputId = `${CERTIFICATE_INPUT_ID_PREFIX}-${problem.slug}`;
@@ -83,7 +108,28 @@ export default function VerifierSection({ problem, dragHandleProps }) {
 
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="overline" sx={{ color: "text.secondary" }}>
-            Check a Certificate — matches the format above
+            Check a Certificate
+          </Typography>
+
+          <Box component="label" htmlFor={INSTANCE_INPUT_ID} sx={{ display: "block", mt: 1.5 }}>
+            <Typography variant="body2" sx={{ color: "text.secondary", mb: 0.5 }}>
+              Problem instance
+            </Typography>
+          </Box>
+          <TextField
+            id={INSTANCE_INPUT_ID}
+            fullWidth
+            multiline
+            minRows={2}
+            size="small"
+            value={instanceValue}
+            onChange={(event) => onInstanceChange?.(event.target.value)}
+            placeholder="No default instance declared for this problem yet."
+            slotProps={{ htmlInput: { sx: { fontFamily: monoFontFamily } } }}
+          />
+          <Typography variant="body2" sx={{ mt: 0.5, color: "text.secondary" }}>
+            This is the same instance the Solvers section shows. Editing it in either place changes
+            both, so a certificate is always checked against the instance that was solved.
           </Typography>
 
           <Box
