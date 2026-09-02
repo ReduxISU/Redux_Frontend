@@ -41,10 +41,11 @@ function optionLabel(facetKey, optionKey) {
   return option?.label ?? optionKey;
 }
 
-// No pre-built Chip variant exists for solverComplexity (theme.js's
-// BADGE_FAMILIES only covers complexityClass/solverType/problemType for
-// card badges) -- same plain-pill pattern components/ActiveFilterChips.js
-// already uses for its facet-colored chips.
+// Deliberately not the theme.js `solverComplexityOutlined`/`Filled` Chip
+// variant (#70) -- this badge is a static declared-complexity label on the
+// Problem Detail page, not a filterable card tag, so it stays the same
+// plain-pill pattern components/ActiveFilterChips.js already uses for its
+// facet-colored chips.
 function ComplexityBucketBadge({ bucketKey }) {
   const facet = TAXONOMY_BY_KEY.get("solverComplexity");
   const accentColor = getFacetAccentColor(facet?.accentColor);

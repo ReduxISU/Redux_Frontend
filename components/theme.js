@@ -29,6 +29,7 @@
 // itself. A theme module is exactly where a color palette belongs.
 
 import { alpha, createTheme } from "@mui/material/styles";
+import { TAXONOMY } from "../data/taxonomy";
 
 // Semantic color name (as stored in each data/taxonomy.js facet's
 // `accentColor` field) -> real color. Values are Tailwind CSS v3 "-400"
@@ -73,28 +74,29 @@ export function getFacetAccentColor(colorName) {
   return FACET_ACCENT_COLORS[colorName] ?? FALLBACK_ACCENT;
 }
 
-// --- The three card badge families (T07 done-when, T12/#16) --------------
+// --- Per-facet card badge / tag-row chip families (T07 done-when, T12/#16,
+// #70) -----------------------------------------------------------------
 //
-// Complexity, Solver Type and Problem Type badges each get their own MUI
-// Chip variant, in both states the mockup shows: outlined by default,
-// filled (solid background + white text) when the tag matches an active
-// filter. Consumers pick the state: `variant={matched ? "complexityFilled"
-// : "complexityOutlined"}`. The leading checkmark on a matched badge is
-// content (an icon), not styling, so T12 renders it — this file only makes
-// the filled state look right once it's there.
-const BADGE_FAMILIES = {
-  complexity: "amber",
-  solverType: "salmon-red",
-  problemType: "blue",
-};
-
+// Every data/taxonomy.js facet gets its own MUI Chip variant pair, keyed by
+// the facet's own `key`: outlined by default, filled (solid background +
+// white text) when the tag matches an active filter. Consumers pick the
+// state: `variant={matched ? "complexityClassFilled" :
+// "complexityClassOutlined"}`. The leading checkmark on a matched badge is
+// content (an icon), not styling, so ProblemCatalogCard renders it — this
+// file only makes the filled state look right once it's there.
+//
+// #70: originally only complexityClass/solverType/problemType (the three
+// facets ProblemCatalogCard renders by default) had variants here. Widened
+// to every facet so a card can add a tag row for ANY facet once a filter for
+// it is active, with the exact same filled/checkmark/bold treatment as the
+// three default rows.
 function buildChipVariants() {
   const variants = [];
-  for (const [family, colorName] of Object.entries(BADGE_FAMILIES)) {
-    const base = FACET_ACCENT_COLORS[colorName];
-    const strong = FACET_ACCENT_COLORS_STRONG[colorName];
-    const outlinedVariant = `${family}Outlined`;
-    const filledVariant = `${family}Filled`;
+  for (const facet of TAXONOMY) {
+    const base = FACET_ACCENT_COLORS[facet.accentColor];
+    const strong = FACET_ACCENT_COLORS_STRONG[facet.accentColor];
+    const outlinedVariant = `${facet.key}Outlined`;
+    const filledVariant = `${facet.key}Filled`;
 
     variants.push({
       props: { variant: outlinedVariant },

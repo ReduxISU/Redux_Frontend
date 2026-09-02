@@ -36,14 +36,6 @@ import { thinScrollbarSx } from "../components/theme";
 import { FIXTURE_PROBLEMS } from "../data/fixtures";
 import { TAXONOMY } from "../data/taxonomy";
 
-// The three facets ProblemCatalogCard actually renders badges for -- the
-// only keys its own `matchedTags` prop needs (components/ProblemCatalogCard.js
-// BADGE_ROWS). Slicing these out of `selected` keeps the prop's meaning
-// ("what should highlight on a card") distinct from the sidebar's full
-// 8-facet selection state, even though a card ignores any extra key it
-// doesn't render anyway.
-const CARD_BADGE_FACETS = ["complexityClass", "solverType", "problemType"];
-
 // #68: 280 was too narrow -- the longest option labels ("Algebra and Number
 // Theory", "Logical/Functional Models") wrapped to a second line against
 // their checkbox + count. Widened so every option renders on one line.
@@ -124,13 +116,12 @@ export default function Home() {
     });
   }, [selected, searchValue]);
 
-  const matchedTags = useMemo(() => {
-    const tags = {};
-    for (const facetKey of CARD_BADGE_FACETS) {
-      tags[facetKey] = selected[facetKey] ?? new Set();
-    }
-    return tags;
-  }, [selected]);
+  // #70: passed straight through, not sliced to a fixed subset of facets --
+  // `selected` is already `{ [facetKey]: Set<optionKey> }`, exactly the
+  // shape ProblemCatalogCard's `matchedTags` prop wants, and a card now adds
+  // a row for ANY facet with an active selection, not only the three it
+  // renders by default.
+  const matchedTags = selected;
 
   const handleFacetChange = (facetKey, nextSet) => {
     setSelected((prev) => ({ ...prev, [facetKey]: nextSet }));
