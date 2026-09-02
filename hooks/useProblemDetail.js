@@ -72,10 +72,15 @@ function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
 
+// `className` is carried alongside the display name because live Run
+// (T37/#95) needs it: ProblemProvider/solve is keyed by the solver's class
+// name ("CliqueBruteForce"), which is what allSolvers lists, not by the
+// human-readable solverName ("Clique Brute Force Solver") the UI shows.
 function buildSolvers(solverClassNames, info) {
   return (solverClassNames ?? []).map((className) => {
     const solverInfo = info[className] ?? {};
     return {
+      className,
       name: solverInfo.solverName ?? className,
       type: SOLVER_TYPE_MAP[solverInfo.solverType],
       complexityBucket: SOLVER_COMPLEXITY_MAP[solverInfo.complexityBucket],
@@ -104,6 +109,9 @@ function buildVerifier(verifierClassNames, info, problemInfo) {
 
   const verifierInfo = info[firstVerifierClassName] ?? {};
   return {
+    // Same reason as buildSolvers' className: ProblemProvider/verify is
+    // keyed by the verifier class name (T37/#95).
+    className: firstVerifierClassName,
     certificateDescription: verifierInfo.verifierDefinition ?? "",
     certificateFormat: problemInfo.certificateFormat || "",
     exampleCertificate: verifierInfo.certificate || undefined,

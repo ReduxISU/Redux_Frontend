@@ -4,18 +4,33 @@
 // instance" block (format description + pre-filled input), a left rail of
 // declared solvers, and a right detail pane with a canned Run.
 //
-// v1 scope (ground rule 5): Run is present but `disabled` and produces no
-// live output — wiring `requestSolvedInstance()` live is explicitly out of
-// v1. Where the fixture already supplies a canned runtime/result (only
-// 3-SAT's DPLL entry does), that result is shown statically next to the
-// disabled Run button, standing in for "the same canned result every time."
+// T37 (#95): Run is live. It calls `requestSolvedInstance()` with the
+// selected solver's class name and the shared instance, and the answer
+// replaces the declared runtime/result rows underneath. Before this task it
+// was a real `disabled` button producing nothing, per ground rule 5, and
+// this is the task that lifts that for the Solvers section.
+//
+// Three things that took more care than the call itself:
+//
+//   - Staleness. A brute-force solver can run for the full 60 seconds the
+//     proxy allows, and the solver rail is right there to click during it.
+//     Selecting a different solver clears the run, and the result is also
+//     tagged with the solver and the instance it came from, so an answer
+//     can never be shown next to a solver that did not produce it.
+//   - The declared display path stays. A problem whose data carries a
+//     runtime and a result still shows them before anything has been run
+//     (#95: "do not remove the declared-data display path").
+//   - Runtime. The Redux API returns the solved instance and nothing else:
+//     no runtime figure at all. So a live result shows the round trip this
+//     browser measured, labelled as exactly that, rather than presenting a
+//     network-inclusive number as if it were the solver's own running time.
 //
 // T35 (#93): the instance box is real and editable now. It pre-fills with
 // the problem's declared `defaultInstance` (a required backend field; all
 // 50 problems supply a runnable one) and its value is owned by
 // components/ProblemDetailLayout.js, not by this section, because the
 // Verifier section shows the same single value. See that file's header for
-// why. Run stays disabled regardless: turning it on is T37 (#95).
+// why.
 //
 // The format block above the box shows the problem's `instanceFormat`,
 // prose with an embedded example. Only 18 of the 50 problems declare one
@@ -38,7 +53,16 @@ import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { TAXONOMY } from "../../data/taxonomy";
+import {
+  COMPUTE_CANCELLED,
+  COMPUTE_DONE,
+  COMPUTE_FAILED,
+  COMPUTE_RUNNING,
+  useComputeRequest,
+} from "../../hooks/useComputeRequest";
+import { REDUX_API_BASE_URL, requestSolvedInstance } from "../../lib/redux";
 import { getFacetAccentColor, thinScrollbarSx } from "../theme";
+import ComputeStatus from "./ComputeStatus";
 import SectionShell from "./SectionShell";
 
 // #71: fixed rail height so a problem with many declared solvers scrolls
@@ -85,6 +109,24 @@ function ComplexityBucketBadge({ bucketKey }) {
 
 const INSTANCE_TEXTAREA_ID = "solvers-instance-input";
 
+// One prefix for every id ComputeStatus renders inside this section, so the
+// Solvers status region and the Verifier's can never collide (ground rule
+// 4).
+const RUN_ID_PREFIX = "solvers-run";
+
+// The API returns the solved instance as a bare JSON string, but a future
+// solver returning something structured should still render rather than
+// print "[object Object]".
+function formatSolverOutput(value) {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "";
+  return JSON.stringify(value, null, 2);
+}
+
+function formatSeconds(milliseconds) {
+  return `${(milliseconds / 1000).toFixed(2)}s`;
+}
+
 /**
  * @param {Object} props
  * @param {Object} props.problem A data/fixtures.js-shaped FixtureProblem.
@@ -110,6 +152,62 @@ export default function SolversSection({
 
   const noun = solvers.length === 1 ? "solver" : "solvers";
   const summary = `${solvers.length} ${noun}`;
+
+  const run = useComputeRequest({ subject: "instance" });
+
+  const trimmedInstance = instanceValue.trim();
+  const canRun = Boolean(selected?.className) && trimmedInstance !== "";
+
+  // A result is only ever shown next to the solver that produced it. The
+  // selection handler below already clears the run, so this is the second
+  // of two guards rather than the only one -- worth having, because the
+  // rail is not the only thing that can change which solver `selected`
+  // points at (a problem whose solver list changes underneath this
+  // component would too).
+  const liveResult =
+    run.status === COMPUTE_DONE && run.result?.solverClassName === selected?.className
+      ? run.result
+      : null;
+  const instanceChangedSinceRun = Boolean(liveResult) && liveResult.instance !== instanceValue;
+
+  function handleSelectSolver(index) {
+    if (index === selectedIndex) return;
+    // Drops any in-flight request and clears the pane, so nothing from the
+    // previous solver survives the switch.
+    run.reset();
+    setSelectedIndex(index);
+  }
+
+  function handleRun() {
+    if (!canRun) return;
+    const solver = selected;
+    run.start(async (signal) => {
+      const output = await requestSolvedInstance(
+        REDUX_API_BASE_URL,
+        solver.className,
+        instanceValue,
+        signal,
+      );
+      return {
+        output,
+        solverClassName: solver.className,
+        solverName: solver.name,
+        instance: instanceValue,
+      };
+    });
+  }
+
+  const solverName = selected?.name ?? "this solver";
+  let announcement = "";
+  if (run.status === COMPUTE_RUNNING) {
+    announcement = `Running ${solverName}. This can take up to a minute.`;
+  } else if (run.status === COMPUTE_DONE) {
+    announcement = `${solverName} finished in ${formatSeconds(run.elapsedMs)}.`;
+  } else if (run.status === COMPUTE_FAILED) {
+    announcement = `${solverName} did not run. ${run.failure?.headline ?? ""}`;
+  } else if (run.status === COMPUTE_CANCELLED) {
+    announcement = `Run cancelled.`;
+  }
 
   return (
     <SectionShell
@@ -217,7 +315,7 @@ export default function SolversSection({
                       type="button"
                       role="option"
                       aria-selected={isSelected}
-                      onClick={() => setSelectedIndex(index)}
+                      onClick={() => handleSelectSolver(index)}
                       sx={(theme) => ({
                         display: "flex",
                         flexDirection: "column",
@@ -284,12 +382,69 @@ export default function SolversSection({
                 <Button
                   id="solvers-run-button"
                   variant="contained"
-                  disabled
+                  disabled={!canRun || run.isRunning}
+                  onClick={handleRun}
                   sx={{ alignSelf: "flex-start" }}
                 >
                   Run
                 </Button>
-                {selected.runtime || selected.result ? (
+                {!canRun && (
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                    {selected.className
+                      ? "Add a problem instance above to run this solver."
+                      : "This solver cannot be run: the catalog did not say which backend solver it is."}
+                  </Typography>
+                )}
+
+                <ComputeStatus
+                  idPrefix={RUN_ID_PREFIX}
+                  status={run.status}
+                  announcement={announcement}
+                  failure={run.failure}
+                  onCancel={run.cancel}
+                  busyLabel={`Running ${solverName}`}
+                />
+
+                {liveResult ? (
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                      Result from {liveResult.solverName}:
+                    </Typography>
+                    <Box
+                      id="solvers-run-output"
+                      component="pre"
+                      sx={{
+                        m: 0,
+                        p: 1.5,
+                        borderRadius: 1,
+                        backgroundColor: "background.default",
+                        overflowX: "auto",
+                      }}
+                    >
+                      <Typography variant="mono" component="code" sx={{ whiteSpace: "pre-wrap" }}>
+                        {formatSolverOutput(liveResult.output)}
+                      </Typography>
+                    </Box>
+                    {/* Not "Runtime": the Redux API reports no runtime for a
+                        solve, so this is the browser's own measurement of the
+                        whole round trip and is labelled as that rather than
+                        passed off as the solver's running time (#95: "leave
+                        it blank rather than fabricating a value"). */}
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                      Round trip: {formatSeconds(run.elapsedMs)}, network time included. Redux does
+                      not report the solver&apos;s own runtime.
+                    </Typography>
+                    {instanceChangedSinceRun && (
+                      <Typography variant="body2" sx={{ color: "warning.light" }}>
+                        The instance has been edited since this ran. Run again to solve the instance
+                        currently in the box.
+                      </Typography>
+                    )}
+                  </Box>
+                ) : selected.runtime || selected.result ? (
+                  // The declared-data path, untouched by T37 (#95): a problem
+                  // whose data carries a runtime and a result shows them
+                  // until a live run replaces them.
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
                     {selected.runtime && (
                       <Typography variant="body2">
@@ -309,9 +464,15 @@ export default function SolversSection({
                     )}
                   </Box>
                 ) : (
-                  <Typography variant="body2" sx={{ color: "text.secondary", fontStyle: "italic" }}>
-                    Not yet run.
-                  </Typography>
+                  run.status !== COMPUTE_RUNNING &&
+                  run.status !== COMPUTE_FAILED && (
+                    <Typography
+                      variant="body2"
+                      sx={{ color: "text.secondary", fontStyle: "italic" }}
+                    >
+                      Not yet run.
+                    </Typography>
+                  )
                 )}
               </Box>
             )}
