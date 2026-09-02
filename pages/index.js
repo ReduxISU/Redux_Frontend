@@ -7,22 +7,13 @@
 // and ProblemGrid's matchedTags together (issue body: "Filter state lives
 // here and flows down").
 //
-// Reads data/fixtures.js's FIXTURE_PROBLEMS directly -- Shell-phase sample
-// data (12 problems), not the real ~59-problem backend catalog. Every count
-// shown (subtitle, result count, sidebar option counts) is computed from it
-// rather than hardcoded, so nothing here needs to change once T25 swaps
-// this for the real useCatalogIndex() data.
-//
-// Filtering: AND across facets, OR within a facet's own selected options,
-// search substring-ANDed in on top. Matching is driven by each tag's actual
-// runtime shape (Array.isArray), not data/taxonomy.js's `multiValued` flag:
-// that file's own shape-contract comment documents that solverComplexity,
-// reductionType, reductionCost and visualizationType are all stored as
-// arrays at the problem level (aggregated across a problem's several
-// solver/reduction/visualization instances) despite being `multiValued:
-// false` -- only computationalModel is truly a bare string. Keying off
-// `multiValued` instead would silently break OR-matching for those four
-// facets. See this task's handback summary.
+// T25 (#34): reads the real backend via useCatalogIndex() (T23/#32) +
+// useCatalogFilters() (T24/#33) instead of data/fixtures.js's sample set.
+// Filtering/counting logic itself now lives in useCatalogFilters -- this
+// file only assembles filter state, the loading/error/empty presentation
+// (#5's settled banner decision, quoted below), and the card-shaped objects
+// ProblemGrid/ProblemCatalogCard need that useCatalogFilters's plain
+// `{name, tags}` results don't carry (see toCardProblem below).
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -33,13 +24,27 @@ import NavBar from "../components/NavBar";
 import ProblemGrid from "../components/ProblemGrid";
 import SearchBar from "../components/SearchBar";
 import { thinScrollbarSx } from "../components/theme";
-import { FIXTURE_PROBLEMS } from "../data/fixtures";
 import { TAXONOMY } from "../data/taxonomy";
+import { useCatalogFilters } from "../hooks/useCatalogFilters";
+import { useCatalogIndex } from "../hooks/useCatalogIndex";
 
 // #68: 280 was too narrow -- the longest option labels ("Algebra and Number
 // Theory", "Logical/Functional Models") wrapped to a second line against
 // their checkbox + count. Widened so every option renders on one line.
 const SIDEBAR_WIDTH = 340;
+
+// Same-origin proxy base lib/redux/index.js's own JSDoc documents (keeps
+// the real backend origin server-side, pages/api/redux/[...path].js).
+const API_BASE_URL = "/api/redux/";
+
+// #5's settled decision (ratified 2026-08-31): a reachable-but-empty
+// catalog reads "0 problems" with no banner; only a genuinely unreachable
+// backend gets this message, full width beneath the search bar. Written
+// with a period rather than the decision comment's own em dash, per this
+// project's no-em-dash rule -- flagged as a decision in this task's
+// handback summary since the ratified copy itself used one.
+const BACKEND_UNREACHABLE_MESSAGE =
+  "Couldn't reach the Redux backend. The catalog can't load right now.";
 
 function buildEmptySelection() {
   const selection = {};
@@ -47,45 +52,6 @@ function buildEmptySelection() {
     selection[facet.key] = new Set();
   }
   return selection;
-}
-
-// A problem matches a facet's active selection if ANY selected option is
-// present in its tag value for that facet -- whether that tag value is one
-// array (OR across the array) or a single string (plain equality). A facet
-// with nothing selected imposes no constraint.
-function matchesSelectedFacets(problem, selected) {
-  for (const facet of TAXONOMY) {
-    const selectedOptions = selected[facet.key];
-    if (!selectedOptions || selectedOptions.size === 0) {
-      continue;
-    }
-    const tagValue = problem.tags[facet.key];
-    const matches = Array.isArray(tagValue)
-      ? tagValue.some((optionKey) => selectedOptions.has(optionKey))
-      : selectedOptions.has(tagValue);
-    if (!matches) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// Sidebar option counts, computed once against the full fixture set rather
-// than the currently-filtered results -- "how many problems if I add this
-// filter," the common faceted-search convention. TASKLIST.md's T14 entry
-// doesn't settle this either way; see this task's handback summary.
-function buildFacetOptions(problems) {
-  const facetOptions = {};
-  for (const facet of TAXONOMY) {
-    facetOptions[facet.key] = facet.options.map((option) => {
-      const count = problems.filter((problem) => {
-        const tagValue = problem.tags[facet.key];
-        return Array.isArray(tagValue) ? tagValue.includes(option.key) : tagValue === option.key;
-      }).length;
-      return { key: option.key, label: option.label, count };
-    });
-  }
-  return facetOptions;
 }
 
 function formatResultCount(count, filtersActive) {
@@ -97,31 +63,51 @@ function formatResultCount(count, filtersActive) {
   return `${count} ${noun} ${verb} your filters`;
 }
 
+// Id-safe stand-in for the fixture-only `slug` field ProblemCatalogCard uses
+// for its own `key`/`id` -- not a routing target. Card navigation itself
+// targets the real problem's display name (`/${encodeURIComponent(name)}`),
+// matching how T26 (#35)'s pages/[problem].js resolves the route param
+// against the real backend, which has no slug concept of its own.
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
+// useCatalogFilters's `results` are plain `{name, tags}` pairs (T24/#33's
+// own header: it doesn't know about slugs or completeness). This assembles
+// the rest of what ProblemCatalogCard/StatusIcon need: an id-safe slug, and
+// presence-only stand-ins for StatusIcon's solvers/visualizations/verifier
+// length/null checks, sourced from useCatalogIndex's `completeness` map
+// (T25/#34's addition to T23) rather than the fixture's full detail arrays,
+// which the catalog-index hook never fetches.
+function toCardProblem(result, completeness) {
+  const flags = completeness.get(result.name) ?? {};
+  return {
+    name: result.name,
+    slug: slugify(result.name),
+    tags: result.tags,
+    solvers: flags.hasSolver ? [true] : [],
+    visualizations: flags.hasVisualization ? [true] : [],
+    verifier: flags.hasVerifier ? {} : null,
+  };
+}
+
 export default function Home() {
   const [selected, setSelected] = useState(buildEmptySelection);
   const [searchValue, setSearchValue] = useState("");
 
-  const facetOptions = useMemo(() => buildFacetOptions(FIXTURE_PROBLEMS), []);
+  const { index, completeness, loading, error } = useCatalogIndex(API_BASE_URL);
+  const { results, facetOptions, matchedTags } = useCatalogFilters(index, {
+    selected,
+    searchValue,
+  });
 
   const filtersActive =
     searchValue.trim().length > 0 || Object.values(selected).some((options) => options.size > 0);
 
-  const filteredProblems = useMemo(() => {
-    const query = searchValue.trim().toLowerCase();
-    return FIXTURE_PROBLEMS.filter((problem) => {
-      if (query && !problem.name.toLowerCase().includes(query)) {
-        return false;
-      }
-      return matchesSelectedFacets(problem, selected);
-    });
-  }, [selected, searchValue]);
-
-  // #70: passed straight through, not sliced to a fixed subset of facets --
-  // `selected` is already `{ [facetKey]: Set<optionKey> }`, exactly the
-  // shape ProblemCatalogCard's `matchedTags` prop wants, and a card now adds
-  // a row for ANY facet with an active selection, not only the three it
-  // renders by default.
-  const matchedTags = selected;
+  const problems = useMemo(
+    () => results.map((result) => toCardProblem(result, completeness)),
+    [results, completeness],
+  );
 
   const handleFacetChange = (facetKey, nextSet) => {
     setSelected((prev) => ({ ...prev, [facetKey]: nextSet }));
@@ -160,8 +146,9 @@ export default function Home() {
             Home
           </Typography>
           <Typography variant="body1" sx={{ color: "text.secondary", mt: 0.5 }}>
-            {FIXTURE_PROBLEMS.length} catalogued problems across complexity classes, solvers, and
-            visualizations.
+            {loading
+              ? "Loading the problem catalog…"
+              : `${index.size} catalogued problems across complexity classes, solvers, and visualizations.`}
           </Typography>
         </Box>
 
@@ -180,6 +167,21 @@ export default function Home() {
             onClearAll={handleClearAll}
           />
         </Box>
+
+        {/* #5's settled decision: full width, beneath the search bar,
+            above the sidebar-and-results row, not dismissible -- it clears
+            itself as soon as a request succeeds. */}
+        {error ? (
+          <Box
+            id="catalog-error-banner"
+            role="alert"
+            sx={{ px: 2, py: 1.5, borderRadius: 2, bgcolor: "error.dark" }}
+          >
+            <Typography variant="body2" sx={{ color: "error.contrastText" }}>
+              {BACKEND_UNREACHABLE_MESSAGE}
+            </Typography>
+          </Box>
+        ) : null}
 
         <Box sx={{ flex: 1, minHeight: 0, display: "flex", gap: 4 }}>
           {/* #68: the one scrollbar for the whole filter panel -- expanded
@@ -205,10 +207,14 @@ export default function Home() {
 
           <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 1.5 }}>
             <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              {formatResultCount(filteredProblems.length, filtersActive)}
+              {loading ? "Loading…" : formatResultCount(problems.length, filtersActive)}
             </Typography>
             <Box sx={{ flex: 1, minHeight: 0 }}>
-              <ProblemGrid problems={filteredProblems} matchedTags={matchedTags} />
+              <ProblemGrid
+                problems={problems}
+                matchedTags={matchedTags}
+                emptyMessage={loading ? "Loading problems…" : "No problems match your filters."}
+              />
             </Box>
           </Box>
         </Box>

@@ -64,8 +64,19 @@ export default async function handler(req, res) {
   }
 
   res.status(upstream.status);
+  // Node's fetch (undici) transparently decompresses a gzip/br response body before
+  // upstream.arrayBuffer() below ever sees it -- so forwarding the upstream
+  // content-encoding/content-length headers verbatim lies to the browser about what
+  // res.end() actually sends: it claims a still-compressed body of the original
+  // (compressed) byte length, which is neither. Chromium then fails every such
+  // response with ERR_CONTENT_DECODING_FAILED. Dropping both lets Node recompute a
+  // correct content-length for the plain body we actually send.
   for (const [key, value] of upstream.headers) {
-    if (!["transfer-encoding", "connection"].includes(key.toLowerCase())) {
+    if (
+      !["transfer-encoding", "connection", "content-encoding", "content-length"].includes(
+        key.toLowerCase(),
+      )
+    ) {
       res.setHeader(key, value);
     }
   }

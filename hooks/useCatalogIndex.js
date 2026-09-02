@@ -9,14 +9,24 @@
 // -----------------------------------------------------------------------
 // Shape contract (read data/fixtures.js's header before changing either side)
 // -----------------------------------------------------------------------
-// Returns `{ index, loading, error }`. `index` is a `Map<problemName, tags>`
-// where `tags` matches data/fixtures.js's `FixtureProblem.tags` shape
-// exactly, key for key: every facet key from data/taxonomy.js's TAXONOMY
-// array, valued as an array of option keys (or, for computationalModel
-// only, a single option-key string — the one facet that's genuinely
-// single-valued per problem). A value with no known real or overlay value is
-// omitted from its array rather than appearing as a bare "Unclassified"
-// entry, matching fixtures.js's own convention and this issue's done-when.
+// Returns `{ index, completeness, loading, error }`. `index` is a
+// `Map<problemName, tags>` where `tags` matches data/fixtures.js's
+// `FixtureProblem.tags` shape exactly, key for key: every facet key from
+// data/taxonomy.js's TAXONOMY array, valued as an array of option keys (or,
+// for computationalModel only, a single option-key string — the one facet
+// that's genuinely single-valued per problem). A value with no known real or
+// overlay value is omitted from its array rather than appearing as a bare
+// "Unclassified" entry, matching fixtures.js's own convention and this
+// issue's done-when.
+//
+// `completeness` is a same-keyed `Map<problemName, {hasSolver,
+// hasVisualization, hasVerifier}>` — added by T25 (#34) so Home's cards can
+// drive components/StatusIcon.js's isProblemComplete() rule from real
+// declared-item presence, since `tags` alone can't: a solver/visualization
+// with a backend type this hook doesn't map to a taxonomy option is still a
+// declared item for completeness purposes even though it contributes
+// nothing to `tags`. Deliberately a second Map rather than extra keys on
+// `tags` itself, so the shape contract above stays exact.
 //
 // The Map is keyed by the real backend's human-readable `problemName`
 // (e.g. "Clique", "3SAT", "Deutsch Jozsa"), NOT the raw class/reflection
@@ -92,6 +102,7 @@ import {
   requestAllInfo,
   requestAllProblems,
   requestAllSolvers,
+  requestAllVerifiers,
   requestAllVisualizations,
   requestReductionGraph,
 } from "../lib/redux";
@@ -188,6 +199,28 @@ function buildProblemTags(
 }
 
 /**
+ * Presence-only signal for StatusIcon's isProblemComplete() rule (at least
+ * one declared solver, visualization and verifier) — deliberately raw
+ * declared-item counts, not the tags object above. A solver/visualization
+ * whose backend-reported type has no entry in SOLVER_TYPE_MAP /
+ * mergeVisualStyle's own fallback is still a declared solver/visualization
+ * for completeness purposes even though it contributes nothing to `tags`.
+ * @returns {{hasSolver: boolean, hasVisualization: boolean, hasVerifier: boolean}}
+ */
+function buildCompleteness(
+  problemCode,
+  solversByProblem,
+  visualizationsByProblem,
+  verifiersByProblem,
+) {
+  return {
+    hasSolver: (solversByProblem[problemCode]?.length ?? 0) > 0,
+    hasVisualization: (visualizationsByProblem[problemCode]?.length ?? 0) > 0,
+    hasVerifier: (verifiersByProblem[problemCode]?.length ?? 0) > 0,
+  };
+}
+
+/**
  * Fetches the whole catalog and builds `Map<problemName, tags>` — see file
  * header for the exact shape contract this must satisfy against
  * data/fixtures.js.
@@ -199,10 +232,16 @@ function buildProblemTags(
  * the empty Map it started as, never a crash (#5).
  *
  * @param {string} url Base API URL, e.g. `/api/redux/`.
- * @returns {{index: Map<string, Object>, loading: boolean, error: Error|null}}
+ * @returns {{
+ *   index: Map<string, Object>,
+ *   completeness: Map<string, {hasSolver: boolean, hasVisualization: boolean, hasVerifier: boolean}>,
+ *   loading: boolean,
+ *   error: Error|null,
+ * }}
  */
 export function useCatalogIndex(url) {
   const [index, setIndex] = useState(new Map());
+  const [completeness, setCompleteness] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -214,20 +253,28 @@ export function useCatalogIndex(url) {
       setError(null);
 
       try {
-        const [problemCodes, info, solversByProblem, visualizationsByProblem, reductionGraph] =
-          await Promise.all([
-            requestAllProblems(url),
-            requestAllInfo(url),
-            requestAllSolvers(url),
-            requestAllVisualizations(url),
-            requestReductionGraph(url),
-          ]);
+        const [
+          problemCodes,
+          info,
+          solversByProblem,
+          visualizationsByProblem,
+          verifiersByProblem,
+          reductionGraph,
+        ] = await Promise.all([
+          requestAllProblems(url),
+          requestAllInfo(url),
+          requestAllSolvers(url),
+          requestAllVisualizations(url),
+          requestAllVerifiers(url),
+          requestReductionGraph(url),
+        ]);
 
         if (cancelled) return;
 
         const reductionEdgesByProblem = indexReductionEdgesByProblem(reductionGraph ?? {});
 
         const map = new Map();
+        const completenessMap = new Map();
         for (const problemCode of problemCodes ?? []) {
           const { problemName, tags } = buildProblemTags(
             problemCode,
@@ -237,9 +284,19 @@ export function useCatalogIndex(url) {
             reductionEdgesByProblem,
           );
           map.set(problemName, tags);
+          completenessMap.set(
+            problemName,
+            buildCompleteness(
+              problemCode,
+              solversByProblem ?? {},
+              visualizationsByProblem ?? {},
+              verifiersByProblem ?? {},
+            ),
+          );
         }
 
         setIndex(map);
+        setCompleteness(completenessMap);
       } catch (caughtError) {
         if (!cancelled) setError(caughtError);
       } finally {
@@ -252,5 +309,5 @@ export function useCatalogIndex(url) {
     };
   }, [url]);
 
-  return { index, loading, error };
+  return { index, completeness, loading, error };
 }
