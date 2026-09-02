@@ -58,14 +58,12 @@ import { useProblemDetail } from "../hooks/useProblemDetail";
 const API_BASE_URL = "/api/redux/";
 
 // Badge row order per the mockup (NP-Complete, NP, Boolean Logic): complexity
-// badges first, then problem type. Same chip-family naming as
-// ProblemCatalogCard's BADGE_ROWS (components/theme.js's BADGE_FAMILIES) so
+// badges first, then problem type. Chip variant is keyed straight off
+// facetKey (`${facetKey}Outlined`), same as ProblemCatalogCard's TagRow
+// (components/theme.js registers one outlined/filled pair per facet.key) so
 // the colors match the card the visitor clicked through from — but always
 // outlined here, since a detail page has no "matched active filter" concept.
-const BADGE_ROWS = [
-  { facetKey: "complexityClass", chipFamily: "complexity" },
-  { facetKey: "problemType", chipFamily: "problemType" },
-];
+const BADGE_FACET_KEYS = ["complexityClass", "problemType"];
 
 const TAXONOMY_BY_KEY = new Map(TAXONOMY.map((facet) => [facet.key, facet]));
 
@@ -205,12 +203,12 @@ export default function ProblemDetail() {
             {problem.oneLiner}
           </Typography>
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1.5 }}>
-            {BADGE_ROWS.flatMap(({ facetKey, chipFamily }) =>
+            {BADGE_FACET_KEYS.flatMap((facetKey) =>
               (problem.tags[facetKey] ?? []).map((optionKey) => (
                 <Chip
                   key={`${facetKey}-${optionKey}`}
                   size="small"
-                  variant={`${chipFamily}Outlined`}
+                  variant={`${facetKey}Outlined`}
                   label={optionLabel(facetKey, optionKey)}
                 />
               )),

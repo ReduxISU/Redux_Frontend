@@ -34,16 +34,17 @@ test("sections collapse and expand", async ({ page }) => {
   const toggle = page.locator("#section-overview-toggle");
   const body = page.locator("#section-overview-body");
 
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(body).toBeVisible();
-
-  await toggle.click();
+  // Sections default to collapsed (components/detail/SectionShell.js).
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await expect(body).toBeHidden();
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(body).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(body).toBeHidden();
 });
 
 test("sections can be reordered using the keyboard", async ({ page }) => {
