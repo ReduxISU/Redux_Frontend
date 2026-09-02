@@ -170,13 +170,59 @@ const EASE_DELIBERATE = "cubic-bezier(0.22, 0.85, 0.18, 1)"; // unhurried, no ov
 // ">" on the right. From vertical, the upper arm swings to -45deg (top end
 // up and to the left, a "\") and the lower arm continues round to -135deg
 // (down and to the left, a "/"), giving a 90 degree chevron.
-const ARM_LENGTH = 56;
-const ARM_THICKNESS = 10;
+//
+// Everything here is in `em` against TYPE_SIZE below, not pixels. The ">"
+// is sized to the REDUX letters beside it, and that type size is a clamp on
+// the viewport, so a fixed-pixel glyph would only match the text at one
+// screen width and drift at every other. In em the whole lockup scales as
+// one thing.
+
+// Keeps the em values below to three decimals. They are derived from each
+// other, and CSS lengths carrying fifteen significant figures are unreadable
+// in devtools for no gain at these sizes (a thousandth of an em is well
+// under a tenth of a pixel here).
+function round3(value) {
+  return Math.round(value * 1000) / 1000;
+}
+
+// The single type size the lockup is built from. Set on the wrapper so the
+// wordmark takes it directly and every em below resolves against it.
+const TYPE_SIZE = "clamp(2rem, 11vw, 3.75rem)";
+
+// Cap height as a fraction of the font size. REDUX is all caps, so this,
+// not the font size, is how tall the text actually looks, and matching it
+// is what makes the ">" read as the same height as the letters.
+//
+// Measured from the rendered ink rather than taken from a font's metrics
+// table, because the font in components/theme.js's stack that actually
+// renders is not necessarily the first one named: Inter is not installed on
+// the project machine, so "Segoe UI" is what draws this today, at 0.703.
+// (Note that `document.fonts.check("Inter")` answers true regardless, so it
+// is no help in telling which one won.) The stack's other members sit
+// between 0.70 and 0.73, so any of them lands within a few percent of this
+// and the glyph stays visually matched wherever it renders.
+//
+// How the glyph is then lined up with the letters is a separate matter, and
+// is done by baseline alignment rather than by this number: see the row's
+// own comment below.
+const CAP_HEIGHT_EM = 0.703;
+
+// Thickness of an arm, matched to the stem width of REDUX at weight 700
+// (measured the same way, 0.172em), so the arrow looks drawn with the same
+// pen as the text.
+//
+// Deliberately NOT scaled down alongside the height. The glyph used to be
+// 90px tall with a 10px stroke, and shrinking it to the cap height while
+// keeping that 9:1 proportion would have halved the stroke to about 5px,
+// leaving a spindly arrow next to bold letters. The old 10px was matched to
+// the text, not to the glyph, and the text has not changed size: only the
+// height needed to come down.
+const ARM_THICKNESS = 0.172;
 const UPPER_ARM_ANGLE = -45;
 const LOWER_ARM_ANGLE = -135;
 // Half the thickness, which is also the radius of the rounded cap on each
 // end of an arm. Named because the joint below is built out of it.
-const ARM_CAP_RADIUS = ARM_THICKNESS / 2;
+const ARM_CAP_RADIUS = round3(ARM_THICKNESS / 2);
 // Where each arm rotates, measured from the bottom of its box.
 //
 // This is what stops the ">" looking like two bars laid on top of each
@@ -188,17 +234,31 @@ const ARM_CAP_RADIUS = ARM_THICKNESS / 2;
 // which is precisely the shape a round line join draws. The two arms then
 // have one continuous outline and read as one piece.
 //
-// The arms are ARM_CAP_RADIUS taller than ARM_LENGTH to pay for it, so the
-// pivot still sits ARM_LENGTH from the far end and the glyph keeps the same
-// outside dimensions as before.
-const ARM_BOX_HEIGHT = ARM_LENGTH + ARM_CAP_RADIUS;
-const ARM_PIVOT = `50% calc(100% - ${ARM_CAP_RADIUS}px)`;
-// A 45 degree arm reaches ARM_LENGTH / sqrt(2) in each direction from the
-// vertex, plus the thickness of the bar itself.
-const ARM_REACH = Math.round(ARM_LENGTH * 0.7071);
-const GLYPH_WIDTH = ARM_REACH + ARM_THICKNESS;
-const GLYPH_HEIGHT = ARM_REACH * 2 + ARM_THICKNESS;
-const UNDERLINE_THICKNESS = 10;
+// Worked backwards from the target height rather than forwards from an arm
+// length, because the height is the thing being matched to the text. A 45
+// degree arm reaches ARM_LENGTH / sqrt(2) in each direction from the vertex,
+// so the glyph stands (2 * reach + thickness) tall; setting that equal to
+// the cap height and solving gives the reach, and the arm length follows.
+const GLYPH_HEIGHT = CAP_HEIGHT_EM;
+const ARM_REACH = round3((GLYPH_HEIGHT - ARM_THICKNESS) / 2);
+const ARM_LENGTH = round3(ARM_REACH * Math.SQRT2);
+const GLYPH_WIDTH = round3(ARM_REACH + ARM_THICKNESS);
+// The arms are ARM_CAP_RADIUS taller than ARM_LENGTH to pay for the joint
+// above, so the pivot still sits ARM_LENGTH from the far end and the glyph
+// keeps the outside dimensions worked out here.
+const ARM_BOX_HEIGHT = round3(ARM_LENGTH + ARM_CAP_RADIUS);
+const ARM_PIVOT = `50% calc(100% - ${ARM_CAP_RADIUS}em)`;
+// Same thickness as an arm, so the underline reads as the same stroke.
+const UNDERLINE_THICKNESS = ARM_THICKNESS;
+// The gap between the wordmark's line box and the top of the underline.
+// Small, because the row above already carries Inter's descender space
+// (the baseline sits at 0.864em, so there is 0.136em of empty line box
+// under the letters before this gap even starts).
+const UNDERLINE_GAP = 0.09;
+// The space between the ">" and the R. In em for the same reason as
+// everything else here: a fixed pixel gap that suited a 90px-tall glyph
+// swamps one sized to the text.
+const GLYPH_TEXT_GAP = 0.18;
 
 // --- Keyframes ----------------------------------------------------------
 
@@ -223,7 +283,7 @@ const tiltLeft = keyframes({
 const emergeFromBar = keyframes({
   from: {
     clipPath: "inset(-30% 100% -30% 0)",
-    transform: "translateX(-20px)",
+    transform: "translateX(-0.22em)",
     opacity: 0,
   },
   to: {
@@ -468,8 +528,28 @@ export default function StartupSplash({ ready, bootId }) {
         />
       </noscript>
 
-      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "stretch" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 2, sm: 3 } }}>
+      {/* The one font-size for the whole lockup. Every em in the geometry
+          above resolves against this, so the ">" and the underline track
+          the wordmark at any viewport width instead of only matching it at
+          one. */}
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "stretch",
+          fontSize: TYPE_SIZE,
+        }}
+      >
+        {/* Baseline, not centre. The glyph is exactly cap height and its
+            ink runs to its own bottom edge, and an empty flex item takes
+            its baseline from that bottom edge, so aligning baselines sets
+            the arrow down on the same line the letters stand on and its top
+            lands on their cap line. Centring instead would align it to the
+            line box, and the caps are not centred in that box: on the font
+            actually rendering here that left the arrow about 4px high at
+            60px type. Doing it this way needs no per-font fudge factor and
+            stays correct if the font stack changes. */}
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: `${GLYPH_TEXT_GAP}em` }}>
           {/* The ">" prompt. Both arms are absolutely positioned so they
               pivot about the same point, the vertex on the right: see
               ARM_PIVOT for why that point is the centre of the rounded cap
@@ -479,8 +559,10 @@ export default function StartupSplash({ ready, bootId }) {
             sx={{
               position: "relative",
               flexShrink: 0,
-              width: GLYPH_WIDTH,
-              height: GLYPH_HEIGHT,
+              width: `${GLYPH_WIDTH}em`,
+              // Exactly the cap height of the letters beside it, sat on
+              // their baseline by the row's baseline alignment above.
+              height: `${GLYPH_HEIGHT}em`,
             }}
           >
             {/* Upper arm: grows (step 2), then tilts (step 3). The rotation
@@ -490,10 +572,10 @@ export default function StartupSplash({ ready, bootId }) {
             <Box
               sx={{
                 position: "absolute",
-                left: `calc(100% - ${ARM_THICKNESS}px)`,
-                top: `calc(50% - ${ARM_LENGTH}px)`,
-                width: ARM_THICKNESS,
-                height: ARM_BOX_HEIGHT,
+                left: `calc(100% - ${ARM_THICKNESS}em)`,
+                top: `calc(50% - ${ARM_LENGTH}em)`,
+                width: `${ARM_THICKNESS}em`,
+                height: `${ARM_BOX_HEIGHT}em`,
                 transformOrigin: ARM_PIVOT,
                 animation: `${tiltLeft} ${STEPS.tilt.duration}ms ${EASE_SNAP} ${STEPS.tilt.delay}ms both`,
               }}
@@ -518,10 +600,10 @@ export default function StartupSplash({ ready, bootId }) {
             <Box
               sx={{
                 position: "absolute",
-                left: `calc(100% - ${ARM_THICKNESS}px)`,
-                top: `calc(50% - ${ARM_LENGTH}px)`,
-                width: ARM_THICKNESS,
-                height: ARM_BOX_HEIGHT,
+                left: `calc(100% - ${ARM_THICKNESS}em)`,
+                top: `calc(50% - ${ARM_LENGTH}em)`,
+                width: `${ARM_THICKNESS}em`,
+                height: `${ARM_BOX_HEIGHT}em`,
                 transformOrigin: ARM_PIVOT,
                 animation: `${rotateDownIntoPrompt} ${STEPS.duplicate.duration}ms ${EASE_SWEEP} ${STEPS.duplicate.delay}ms both`,
               }}
@@ -543,7 +625,8 @@ export default function StartupSplash({ ready, bootId }) {
             component="span"
             sx={(theme) => ({
               color: theme.palette.text.primary,
-              fontSize: "clamp(2rem, 11vw, 3.75rem)",
+              // Inherited from the wrapper (TYPE_SIZE) rather than set here,
+              // so the wordmark and the geometry above cannot drift apart.
               fontWeight: 700,
               lineHeight: 1,
               letterSpacing: "0.28em",
@@ -562,8 +645,8 @@ export default function StartupSplash({ ready, bootId }) {
             the title, underlining both. */}
         <Box
           sx={{
-            marginTop: `${UNDERLINE_THICKNESS + 8}px`,
-            height: UNDERLINE_THICKNESS,
+            marginTop: `${UNDERLINE_GAP}em`,
+            height: `${UNDERLINE_THICKNESS}em`,
             transformOrigin: "0% 50%",
             animation: `${underlineSweep} ${STEPS.underline.duration}ms ${EASE_DELIBERATE} ${STEPS.underline.delay}ms both`,
           }}
