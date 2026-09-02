@@ -159,3 +159,54 @@ export function pickNarrowingOption(options, catalogSize, { excludeFacetKey } = 
   }
   return candidate;
 }
+
+// --- T39 (#97): helpers for the live Run and Verify specs ----------------
+
+/**
+ * Opens one named problem's detail page directly by URL and waits for its
+ * H1 to appear (which only happens once useProblemDetail's fetch has
+ * settled -- pages/[problem].js renders bare chrome until then).
+ *
+ * Deliberately different from `gotoFirstProblemDetail` above: the live
+ * compute specs are pinned to one named problem on purpose (see
+ * tests/e2e/live-compute.spec.js's header for why), so they cannot use the
+ * "whichever problem comes first" navigation the rest of the suite does.
+ */
+export async function gotoProblemDetail(page, problemName, { expect }) {
+  await page.goto(`/${encodeURIComponent(problemName)}`);
+  await expect(page.getByRole("heading", { level: 1, name: problemName })).toBeVisible({
+    timeout: 20_000,
+  });
+}
+
+/**
+ * Expands one detail-page section by its key ("solvers", "verifier", ...),
+ * if it isn't already expanded. Sections default to collapsed
+ * (components/detail/SectionShell.js).
+ */
+export async function expandSection(page, sectionKey, { expect }) {
+  const toggle = page.locator(`#section-${sectionKey}-toggle`);
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
+
+/**
+ * Selects a solver in the Solvers rail by its displayed name rather than by
+ * its position, and confirms it really is the selected one.
+ *
+ * The by-name part is this issue's own done-when ("no test depends on which
+ * solver the catalog happens to return first"). The rail selects index 0 on
+ * mount, so a test that just pressed Run would silently be testing whatever
+ * solver the backend happened to list first, which for many problems is an
+ * exponential brute force.
+ */
+export async function selectSolverByName(page, solverName, { expect }) {
+  // `role="option"` takes its accessible name from its contents, which here
+  // is the solver name plus its solver-type chip -- so this is a substring
+  // match on purpose, not an exact one.
+  const option = page.getByRole("option", { name: solverName });
+  await option.click();
+  await expect(option).toHaveAttribute("aria-selected", "true");
+}
