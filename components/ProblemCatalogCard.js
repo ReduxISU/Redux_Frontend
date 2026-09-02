@@ -3,15 +3,22 @@
 // T12 (#16) — one card in the Home page grid: problem name, status icon, and
 // three rows of derived tag badges (Complexity, Solver Type, Problem Type).
 //
-// The whole card is a link to the problem's detail page (`/${problem.slug}`,
-// ARCHITECTURE.md's top-level route structure) -- but only when the problem
-// is complete. #6 item 4 (2026-08-31) ratifies that an incomplete problem's
-// detail page must not be reachable at all, so #16's 2026-08-31 comment
-// requires an incomplete card to render as genuinely non-interactive: not a
-// link, not a tab stop, visibly distinct -- not a link that swallows the
-// click. isProblemComplete() (components/StatusIcon.js) is the one place
+// The whole card is a link to the problem's detail page -- but only when the
+// problem is complete. #6 item 4 (2026-08-31) ratifies that an incomplete
+// problem's detail page must not be reachable at all, so #16's 2026-08-31
+// comment requires an incomplete card to render as genuinely non-interactive:
+// not a link, not a tab stop, visibly distinct -- not a link that swallows
+// the click. isProblemComplete() (components/StatusIcon.js) is the one place
 // that predicate lives; this file imports it rather than re-deriving "has a
 // solver/visualization/verifier" on its own.
+//
+// T25 (#34): the link target is `/${encodeURIComponent(problem.name)}`, not
+// `/${problem.slug}` -- the real backend has no slug concept, and T26
+// (#35)'s pages/[problem].js resolves its route param against the real
+// problem's display name (Next.js decodes the segment automatically before
+// the match, so no manual decoding is needed on that end either). `slug`
+// itself is kept, but only as the id-safe basis for this card's own
+// `key`/`id` (see toCardProblem in pages/index.js), never for routing.
 //
 // No visual reference exists for the non-interactive treatment: both Home
 // mockups predate the 2026-08-31 amendment that introduced the rule. The
@@ -125,7 +132,9 @@ export default function ProblemCatalogCard({ problem, matchedTags = {} }) {
     <Paper
       id={`problem-card-${problem.slug}`}
       aria-label={problem.name}
-      {...(complete ? { component: Link, href: `/${problem.slug}` } : { component: "div" })}
+      {...(complete
+        ? { component: Link, href: `/${encodeURIComponent(problem.name)}` }
+        : { component: "div" })}
       sx={{
         display: "block",
         p: 2,
