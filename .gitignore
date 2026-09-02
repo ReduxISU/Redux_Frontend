@@ -7,6 +7,13 @@ mockup_images/
 # unpublished like the planning docs it points at.
 /CLAUDE.md
 
+# Local automation harness: the scheduled headless runner, its prompt, and its run logs.
+# Deliberately machine-local. It drives this one checkout, its logs carry raw session output,
+# and its commit/push/PR step is a local override of CLAUDE.md's hand-back rule that should
+# never look like published project policy. (The `logs` pattern further down already covered
+# .automation/logs/; this covers the scripts too.)
+/.automation/
+
 # Dependency directories
 node_modules/
 npm-debug.log*
