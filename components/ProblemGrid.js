@@ -14,9 +14,13 @@
 // Column count is a named constant, not a literal repeated across
 // properties, so T28 (#37) -- which owns the narrow-width breakpoints and
 // whether/how this becomes responsive -- has one place to change rather
-// than a hunt through this file. Phase 1 is desktop-only; going to 2 and
-// then 1 column at narrower widths is explicitly T28's call, not this
-// task's, so no breakpoint object is added here.
+// than a hunt through this file.
+//
+// T28 (#37): 1 column below `sm` (600px), 2 from `sm` up through `md`
+// (600-1199px, which covers both the 768px and 1024px reference widths --
+// at 1024 the sidebar is back to its fixed 340px column per pages/index.js,
+// so 2 columns fit the remaining width better than 3 would), 3 at `lg`
+// (1200px) and up.
 //
 // Owns its own vertical scroll (`overflowY: "auto"`) rather than leaving it
 // to an ancestor, because the mockup's results column scrolls independently
@@ -40,7 +44,7 @@ import Typography from "@mui/material/Typography";
 import ProblemCatalogCard from "./ProblemCatalogCard";
 import { thinScrollbarSx } from "./theme";
 
-const DESKTOP_COLUMN_COUNT = 3;
+const COLUMN_COUNT_BY_BREAKPOINT = { xs: 1, sm: 2, lg: 3 };
 
 /**
  * @param {Object} props
@@ -73,7 +77,12 @@ export default function ProblemGrid({
         height: "100%",
         overflowY: "auto",
         display: "grid",
-        gridTemplateColumns: `repeat(${DESKTOP_COLUMN_COUNT}, minmax(0, 1fr))`,
+        gridTemplateColumns: Object.fromEntries(
+          Object.entries(COLUMN_COUNT_BY_BREAKPOINT).map(([breakpoint, count]) => [
+            breakpoint,
+            `repeat(${count}, minmax(0, 1fr))`,
+          ]),
+        ),
         alignItems: "start",
         // #69: row gap trimmed independently of column gap -- the issue is
         // specifically about vertical space between cards, not horizontal.

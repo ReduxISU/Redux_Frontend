@@ -86,7 +86,15 @@ export default function VerifierSection({ problem, dragHandleProps }) {
             Check a Certificate — matches the format above
           </Typography>
 
-          <Box sx={{ mt: 1.5, display: "flex", gap: 1.5, alignItems: "flex-start" }}>
+          <Box
+            sx={{
+              mt: 1.5,
+              display: "flex",
+              flexDirection: { xs: "column", sm: "row" },
+              gap: 1.5,
+              alignItems: { xs: "stretch", sm: "flex-start" },
+            }}
+          >
             <Box component="label" htmlFor={inputId} sx={visuallyHiddenSx}>
               Certificate to check
             </Box>
