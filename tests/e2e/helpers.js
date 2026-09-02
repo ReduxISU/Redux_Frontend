@@ -12,12 +12,44 @@
 // interactive element gets a unique id.
 
 /**
+ * Stops the Home page's startup animation from playing, before any page
+ * script runs.
+ *
+ * Every spec other than the splash's own wants this. The overlay is a real
+ * full-screen element while it plays, so a click aimed at a card or a
+ * checkbox underneath it would either be intercepted or silently skip the
+ * animation instead, and every one of those specs would pay the animation's
+ * running time for no coverage. tests/e2e/splash.spec.js deliberately does
+ * NOT call this.
+ *
+ * Asks for reduced motion rather than pre-seeding storage. Since T43 (#65)
+ * gained its per-server-boot gate, suppressing the splash through storage
+ * would mean writing the current server's boot id, and a spec has no way to
+ * know that id before the first page load -- it only arrives with the HTML.
+ * `prefers-reduced-motion` is the app's own first-class way of never showing
+ * the overlay (StartupSplash.js checks it before the first paint), so this
+ * uses real behaviour instead of a test-only hook in production code.
+ *
+ * The trade-off: these specs now run with reduced motion on, so MUI's own
+ * transitions are shortened or dropped under them too. That makes them
+ * faster and less timing-dependent, and nothing outside splash.spec.js
+ * asserts on animation, but it does mean they exercise the reduced-motion
+ * presentation rather than the default one.
+ */
+export async function skipStartupSplash(page) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+}
+
+/**
  * Navigates to Home and waits for the initial catalog fetch to settle
  * (loading text gone from #home-result-count -- see pages/index.js's own
  * T30 comment on that id). Doesn't assert anything about the *result* --
  * callers check for cards, an empty state, or the error banner themselves.
+ *
+ * T43 (#65): also skips the startup animation, see skipStartupSplash.
  */
 export async function gotoHomeAndWaitForLoad(page, { expect }) {
+  await skipStartupSplash(page);
   await page.goto("/");
   await expect(page.locator("#home-result-count")).not.toContainText("Loading", {
     timeout: 20_000,
