@@ -170,13 +170,21 @@ export default function Home() {
           </Typography>
         </Box>
 
-        <SearchBar value={searchValue} onChange={setSearchValue} />
+        {/* #69: search bar and the "Filtering by" row share one tight
+            inner gap, separate from the outer section gap above/below this
+            block. ActiveFilterChips renders null when nothing is selected
+            (#19), so this Box collapses to just the search bar and no gap
+            is spent on it -- the only vertical space filtering adds is the
+            chips row's own height, not a second full section gap. */}
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+          <SearchBar value={searchValue} onChange={setSearchValue} />
 
-        <ActiveFilterChips
-          selected={selected}
-          onRemove={handleRemoveChip}
-          onClearAll={handleClearAll}
-        />
+          <ActiveFilterChips
+            selected={selected}
+            onRemove={handleRemoveChip}
+            onClearAll={handleClearAll}
+          />
+        </Box>
 
         <Box sx={{ flex: 1, minHeight: 0, display: "flex", gap: 4 }}>
           <Box sx={{ width: SIDEBAR_WIDTH, flexShrink: 0, overflowY: "auto" }}>

@@ -74,7 +74,10 @@ export default function ProblemGrid({
         display: "grid",
         gridTemplateColumns: `repeat(${DESKTOP_COLUMN_COUNT}, minmax(0, 1fr))`,
         alignItems: "start",
-        gap: 2,
+        // #69: row gap trimmed independently of column gap -- the issue is
+        // specifically about vertical space between cards, not horizontal.
+        rowGap: 1.25,
+        columnGap: 2,
         pb: 1,
       }}
     >
