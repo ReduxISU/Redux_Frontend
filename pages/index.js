@@ -57,6 +57,7 @@ import FacetSidebar from "../components/FacetSidebar";
 import NavBar from "../components/NavBar";
 import ProblemGrid from "../components/ProblemGrid";
 import SearchBar from "../components/SearchBar";
+import StartupSplash from "../components/StartupSplash";
 import { thinScrollbarSx } from "../components/theme";
 import { TAXONOMY } from "../data/taxonomy";
 import { useCatalogFilters } from "../hooks/useCatalogFilters";
@@ -229,6 +230,16 @@ export default function Home() {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+      {/* T43 (#65): the startup animation. Mounted alongside the real page
+          rather than in place of it -- everything below renders and loads
+          normally underneath while the overlay plays on top, so a visitor
+          using a screen reader (the overlay is aria-hidden), a visitor who
+          has asked for reduced motion, and a return visit within the same
+          session all get Home exactly as they would if this component
+          weren't here. `ready` is the catalog fetch settling, either way:
+          see the component's own header for why that, and not a probe of
+          /api/health, is the backend signal it fades on. */}
+      <StartupSplash ready={!loading} />
       <NavBar />
       <Box
         component="main"

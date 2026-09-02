@@ -11,13 +11,49 @@
 // own done-when), matching this project's ground rule 4 that every
 // interactive element gets a unique id.
 
+// T43 (#65). The sessionStorage key components/StartupSplash.js writes once
+// it has played, kept in step with that file by hand (a spec can't import
+// the component itself -- it's a React/MUI module, and Playwright runs in
+// Node).
+const SPLASH_SESSION_KEY = "redux-startup-splash-shown";
+
+/**
+ * Marks the Home page's startup animation as already seen for this browser
+ * context, before any page script runs, so it never plays.
+ *
+ * Every spec other than the splash's own wants this. The overlay is a real
+ * full-screen element while it plays, so a click aimed at a card or a
+ * checkbox underneath it would either be intercepted or silently skip the
+ * animation instead, and every one of those specs would pay the animation's
+ * running time for no coverage. tests/e2e/splash.spec.js deliberately does
+ * NOT call this.
+ */
+export async function skipStartupSplash(page) {
+  await page.addInitScript(
+    (key) => {
+      try {
+        window.sessionStorage.setItem(key, "1");
+      } catch {
+        // Nothing to do -- the app tolerates sessionStorage being
+        // unavailable too (see StartupSplash.js), the splash just plays.
+      }
+    },
+    // Playwright serialises this argument into the browser, so the key has
+    // to be passed in rather than closed over.
+    SPLASH_SESSION_KEY,
+  );
+}
+
 /**
  * Navigates to Home and waits for the initial catalog fetch to settle
  * (loading text gone from #home-result-count -- see pages/index.js's own
  * T30 comment on that id). Doesn't assert anything about the *result* --
  * callers check for cards, an empty state, or the error banner themselves.
+ *
+ * T43 (#65): also skips the startup animation, see skipStartupSplash.
  */
 export async function gotoHomeAndWaitForLoad(page, { expect }) {
+  await skipStartupSplash(page);
   await page.goto("/");
   await expect(page.locator("#home-result-count")).not.toContainText("Loading", {
     timeout: 20_000,
