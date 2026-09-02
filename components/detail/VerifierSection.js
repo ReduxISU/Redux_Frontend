@@ -185,13 +185,18 @@ const disabledActionButtonSx = {
 
 // Standard visually-hidden clip pattern (same as components/SearchBar.js) --
 // the label needs to exist for screen readers without displacing the
-// visible input.
+// visible input. Width/height/margin are unit strings, not bare numbers:
+// MUI's `sx` reinterprets a bare number for a sizing prop as a percentage
+// (`1` -> `100%`) and for a spacing prop as a multiple of the theme spacing
+// unit (`-1` -> `-8px`) -- either one silently turns this into a full-size
+// box that's clipped from view but still counted in the page's scrollable
+// area (T33/#42 caught this as a real, if tiny, horizontal-overflow bug).
 const visuallyHiddenSx = {
   position: "absolute",
-  width: 1,
-  height: 1,
+  width: "1px",
+  height: "1px",
   padding: 0,
-  margin: -1,
+  margin: "-1px",
   overflow: "hidden",
   clip: "rect(0, 0, 0, 0)",
   whiteSpace: "nowrap",
