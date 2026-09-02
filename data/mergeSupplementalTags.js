@@ -33,8 +33,8 @@
 // so it gets its own function (mergeVisualStyle) with its own key space.
 // Same three-step precedence, same file, because both are the same seam.
 
-import { UNCLASSIFIED, deriveComplexityClasses } from "./taxonomy";
 import { SUPPLEMENTAL_TAGS, SUPPLEMENTAL_VISUAL_STYLE } from "./supplementalTags";
+import { deriveComplexityClasses, UNCLASSIFIED } from "./taxonomy";
 
 function firstNonEmptyArray(...arrays) {
   for (const array of arrays) {
@@ -81,9 +81,10 @@ export function mergeSupplementalTags(problemName, realTags = {}) {
 
   const derivedComplexityClass = deriveComplexityClasses(
     realTags.complexityClass,
-    overlay.complexityClass ?? []
+    overlay.complexityClass ?? [],
   );
-  const complexityClass = derivedComplexityClass.length > 0 ? derivedComplexityClass : [UNCLASSIFIED];
+  const complexityClass =
+    derivedComplexityClass.length > 0 ? derivedComplexityClass : [UNCLASSIFIED];
 
   return { problemType, computationalModel, complexityClass };
 }
@@ -103,5 +104,7 @@ export function mergeSupplementalTags(problemName, realTags = {}) {
  * @returns {string}
  */
 export function mergeVisualStyle(visualizationName, realVisualStyle) {
-  return firstDefined(realVisualStyle, SUPPLEMENTAL_VISUAL_STYLE[visualizationName]) ?? UNCLASSIFIED;
+  return (
+    firstDefined(realVisualStyle, SUPPLEMENTAL_VISUAL_STYLE[visualizationName]) ?? UNCLASSIFIED
+  );
 }
