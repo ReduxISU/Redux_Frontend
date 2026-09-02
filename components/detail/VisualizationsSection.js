@@ -175,13 +175,23 @@ export default function VisualizationsSection({ problem, dragHandleProps }) {
                 borderColor: "divider",
               }}
             >
-              <IconButton id="visualizations-scrubber-previous" size="small" disabled>
+              <IconButton
+                id="visualizations-scrubber-previous"
+                size="small"
+                disabled
+                aria-label="Previous step"
+              >
                 <SkipPreviousIcon fontSize="small" />
               </IconButton>
-              <IconButton id="visualizations-scrubber-play" size="small" disabled>
+              <IconButton id="visualizations-scrubber-play" size="small" disabled aria-label="Play">
                 <PlayArrowIcon fontSize="small" />
               </IconButton>
-              <IconButton id="visualizations-scrubber-next" size="small" disabled>
+              <IconButton
+                id="visualizations-scrubber-next"
+                size="small"
+                disabled
+                aria-label="Next step"
+              >
                 <SkipNextIcon fontSize="small" />
               </IconButton>
               <Box
