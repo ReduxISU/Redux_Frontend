@@ -3,12 +3,20 @@
 // T43 (#65): the one-time startup animation on the Home page. Original
 // idea from Corbin Hay.
 //
-// Seven steps, in the order the issue lists them: a blank screen, a bar
-// grows up from flat ground, the bar angles to the left, the REDUX title
-// emerges from the bar moving right, the bar duplicates and the copy
-// rotates down so the two form a ">" prompt, a thick underline grows from
-// the left of the ">" rightward to the right edge of the title, and then
-// the whole screen fades out to the Home page underneath.
+// Seven steps: a blank screen, a horizontal line draws itself in, the REDUX
+// wordmark slides right out of that line a letter at a time, the line
+// travels left into the place the arrow occupies, it folds down into a ">"
+// prompt, a thick underline grows from the left of the ">" rightward to the
+// right edge of the title, and then the whole screen fades out to the Home
+// page underneath.
+//
+// The line and the arrow are the same object throughout. The two arms of
+// the ">" start life lying on top of each other pointing left (LINE_ANGLE),
+// which is what the "line" in steps 2 to 4 actually is, and the fold is
+// them opening symmetrically to +/-45 degrees off that. Nothing appears,
+// disappears or is duplicated: one shape moves and changes pose, which is
+// what lets the sequence read as a single continuous idea rather than a
+// series of separate tricks.
 //
 // -----------------------------------------------------------------------
 // Why this is all CSS and no requestAnimationFrame
@@ -26,12 +34,13 @@
 //     (the bar shooting up out of the ground, the tilt landing) overshoot
 //     slightly and settle rather than arriving exactly on target.
 //   - Strictly sequential steps: every step starts before the previous one
-//     has finished. The title starts emerging at 830ms while the tilt is
-//     still running to 980ms; the underline starts at 1590ms while the
-//     title is still settling to 1690ms. The overlap is what makes it read
-//     as one movement instead of a seven-slide slideshow.
-//   - Uniform durations: they range from 400ms (the tilt, which wants to be
-//     quick) to 1040ms (the underline, which wants to be deliberate).
+//     has finished. The wordmark starts sliding out at 560ms while the line
+//     is still drawing to 680ms; the fold starts at 1560ms while the line is
+//     still travelling to 1720ms. The overlap is what makes it read as one
+//     movement instead of a seven-slide slideshow.
+//   - Uniform durations: they range from 420ms (the shift, which wants to be
+//     quick) to 900ms (the title and the underline, which want to be
+//     deliberate).
 //
 // The finished logo then sits still for SETTLE_MS before anything fades.
 // Without that beat the last step's easing runs straight into the fade and
@@ -109,16 +118,18 @@ const SPLASH_BOOT_KEY = "redux-startup-splash-boot";
 // overlay starts playing. Overlaps between them are deliberate (see the
 // header). Recorded as a decision on #65.
 const STEPS = {
-  // Step 2: the bar grows from nothing to full height.
-  grow: { delay: 160, duration: 560 },
-  // Step 3: the bar angles to the left. The quickest step by some way.
-  tilt: { delay: 580, duration: 400 },
-  // Step 4: the title emerges from the bar, moving right.
-  title: { delay: 830, duration: 860 },
-  // Step 5: the copy rotates down into the second arm of the ">".
-  duplicate: { delay: 1050, duration: 640 },
-  // Step 6: the underline grows left to right. The slowest step.
-  underline: { delay: 1590, duration: 1040 },
+  // Step 2: the horizontal line draws itself in, leftward from the point the
+  // wordmark will come out of.
+  draw: { delay: 160, duration: 520 },
+  // Step 3: REDUX slides right out of the line, a letter at a time.
+  title: { delay: 560, duration: 900 },
+  // Step 4: the line travels left into the place the arrow occupies. The
+  // quickest step by some way.
+  shift: { delay: 1300, duration: 420 },
+  // Step 5: the line folds into the ">".
+  fold: { delay: 1560, duration: 560 },
+  // Step 6: the underline grows left to right.
+  underline: { delay: 1980, duration: 900 },
 };
 
 // Step 6 finishes last, so the animation's own length is its end.
@@ -142,9 +153,9 @@ const SETTLE_MS = 650;
 //
 // Two totals worth knowing, both longer than the first pass at this:
 //   - Ordinary case, backend answers during the animation:
-//     2630 + 650 + 900 = about 4.2 seconds.
+//     2880 + 650 + 900 = about 4.4 seconds.
 //   - Worst case, backend never answers and the hold runs out:
-//     2630 + 650 + 2500 + 900 = about 6.7 seconds.
+//     2880 + 650 + 2500 + 900 = about 6.9 seconds.
 const MAX_HOLD_MS = 2500;
 
 // Step 7: the fade out to the Home page. Deliberately unhurried, so the
@@ -157,8 +168,8 @@ const FADE_MS = 900;
 // --- Easing -------------------------------------------------------------
 // Named rather than inlined so the same intent is reused, and so the
 // "nothing here is linear" claim above is checkable at a glance.
-const EASE_LAUNCH = "cubic-bezier(0.16, 1.22, 0.32, 1.04)"; // shoots up, overshoots, settles
-const EASE_SNAP = "cubic-bezier(0.34, 1.3, 0.5, 1)"; // quick, small overshoot on landing
+const EASE_LAUNCH = "cubic-bezier(0.16, 1.22, 0.32, 1.04)"; // shoots out, overshoots, settles
+const EASE_SNAP = "cubic-bezier(0.34, 1.3, 0.5, 1)"; // quick, small overshoot on arrival
 const EASE_EMERGE = "cubic-bezier(0.16, 1, 0.3, 1)"; // fast out of the gate, long soft landing
 const EASE_SWEEP = "cubic-bezier(0.6, 0.02, 0.24, 1.03)"; // accelerates into the sweep, eases out
 const EASE_DELIBERATE = "cubic-bezier(0.22, 0.85, 0.18, 1)"; // unhurried, no overshoot
@@ -260,45 +271,69 @@ const UNDERLINE_GAP = 0.09;
 // swamps one sized to the text.
 const GLYPH_TEXT_GAP = 0.18;
 
+// The pose both arms hold for steps 2 to 4: lying flat, pointing left from
+// the vertex. Superimposed at this angle the two of them are visually one
+// horizontal line, and the fold is simply each one leaving it in a different
+// direction, 45 degrees either side. -90 rather than +90 because an arm is
+// drawn as an upright bar rotating about its bottom end, so negative swings
+// its far end to the left.
+const LINE_ANGLE = -90;
+
+// How far right the line sits during steps 2 and 3, before it travels left
+// into place, measured from where it finally rests.
+//
+// It is exactly the distance from the vertex to the wordmark's left edge, so
+// during those steps the vertex sits precisely on the edge the letters come
+// out of. That is what makes the wordmark look like it is being pushed out
+// of the line rather than merely appearing next to it, and it is why this is
+// derived rather than dialled in by eye: the two have to agree exactly or
+// the letters emerge from thin air a few pixels off the end of the line.
+const LINE_START_OFFSET = round3(GLYPH_TEXT_GAP + ARM_CAP_RADIUS);
+
 // --- Keyframes ----------------------------------------------------------
 
-// Step 2. Scaled from the bottom edge, so it grows up out of flat ground
-// rather than expanding from its middle.
-const growFromGround = keyframes({
+// Step 2. Scaled along the bar's own length from the vertex end, so with the
+// arms lying flat the line draws itself outward from the point the wordmark
+// will come out of, rather than expanding from its middle or fading in.
+const drawLine = keyframes({
   from: { transform: "scaleY(0)" },
   to: { transform: "scaleY(1)" },
 });
 
-// Step 3.
-const tiltLeft = keyframes({
-  from: { transform: "rotate(0deg)" },
+// Step 4. The line's journey left into the place the arrow occupies.
+const shiftIntoPlace = keyframes({
+  from: { transform: `translateX(${LINE_START_OFFSET}em)` },
+  to: { transform: "translateX(0)" },
+});
+
+// Step 5, one arm each. Both leave the same flat pose in opposite
+// directions, which is the fold.
+const foldUpper = keyframes({
+  from: { transform: `rotate(${LINE_ANGLE}deg)` },
   to: { transform: `rotate(${UPPER_ARM_ANGLE}deg)` },
 });
 
-// Step 4. The clip is what makes the letters look like they are coming out
-// from behind the bar instead of just fading in on the spot: the wordmark
-// is revealed left to right while it also slides right. The negative insets
-// on the other three sides keep the clip off the glyphs themselves, which
-// overhang their line box slightly at this letter-spacing.
-const emergeFromBar = keyframes({
-  from: {
-    clipPath: "inset(-30% 100% -30% 0)",
-    transform: "translateX(-0.22em)",
-    opacity: 0,
-  },
-  to: {
-    clipPath: "inset(-30% -12% -30% 0)",
-    transform: "translateX(0)",
-    opacity: 1,
-  },
+const foldLower = keyframes({
+  from: { transform: `rotate(${LINE_ANGLE}deg)` },
+  to: { transform: `rotate(${LOWER_ARM_ANGLE}deg)` },
 });
 
-// Step 5. Starts life sitting exactly on top of the first arm (that is what
-// makes it read as a duplicate of it) and sweeps down and round.
-const rotateDownIntoPrompt = keyframes({
-  "0%": { transform: `rotate(${UPPER_ARM_ANGLE}deg)`, opacity: 0 },
-  "12%": { opacity: 1 },
-  "100%": { transform: `rotate(${LOWER_ARM_ANGLE}deg)`, opacity: 1 },
+// Step 3. The wordmark starts one full word-width to the left, entirely
+// behind the clip its wrapper holds, and slides right into place.
+//
+// The letters therefore arrive one at a time, last to first: the clip's edge
+// sits at the wordmark's left edge, so as the word travels right the letter
+// nearest its trailing edge crosses first. X clears the line, then U, D, E
+// and finally R. That order is not scripted anywhere and there are no
+// per-letter elements to stagger; it falls out of sliding a word out of a
+// slot, which is also why it stays correct if the wordmark is ever
+// re-spaced or re-lettered.
+//
+// -100% is the element's own width, so this is one word-width regardless of
+// the type size the clamp lands on.
+const emergeFromLine = keyframes({
+  from: { transform: "translateX(-100%)" },
+  to: { transform: "translateX(0)" },
 });
 
 // Step 6.
@@ -563,12 +598,19 @@ export default function StartupSplash({ ready, bootId }) {
               // Exactly the cap height of the letters beside it, sat on
               // their baseline by the row's baseline alignment above.
               height: `${GLYPH_HEIGHT}em`,
+              // Above the wordmark, so the letters slide out from behind the
+              // line's end rather than over the top of it.
+              zIndex: 1,
+              // Step 4, the travel left. On the container rather than on the
+              // arms because it has to move both of them together, and each
+              // arm's own transform is already spoken for by its rotation.
+              animation: `${shiftIntoPlace} ${STEPS.shift.duration}ms ${EASE_SNAP} ${STEPS.shift.delay}ms both`,
             }}
           >
-            {/* Upper arm: grows (step 2), then tilts (step 3). The rotation
-                and the growth are on two nested elements rather than one
-                because an element only has one `transform` to animate, and
-                these two want different delays, durations and curves. */}
+            {/* Upper arm: draws in (step 2), then folds up (step 5). The
+                rotation and the growth are on two nested elements rather than
+                one because an element only has one `transform` to animate,
+                and these two want different delays, durations and curves. */}
             <Box
               sx={{
                 position: "absolute",
@@ -577,7 +619,7 @@ export default function StartupSplash({ ready, bootId }) {
                 width: `${ARM_THICKNESS}em`,
                 height: `${ARM_BOX_HEIGHT}em`,
                 transformOrigin: ARM_PIVOT,
-                animation: `${tiltLeft} ${STEPS.tilt.duration}ms ${EASE_SNAP} ${STEPS.tilt.delay}ms both`,
+                animation: `${foldUpper} ${STEPS.fold.duration}ms ${EASE_SWEEP} ${STEPS.fold.delay}ms both`,
               }}
             >
               <Box
@@ -590,13 +632,16 @@ export default function StartupSplash({ ready, bootId }) {
                   // the box, so the bar emerges from the point the whole
                   // glyph is built around.
                   transformOrigin: ARM_PIVOT,
-                  animation: `${growFromGround} ${STEPS.grow.duration}ms ${EASE_LAUNCH} ${STEPS.grow.delay}ms both`,
+                  animation: `${drawLine} ${STEPS.draw.duration}ms ${EASE_LAUNCH} ${STEPS.draw.delay}ms both`,
                 })}
               />
             </Box>
 
-            {/* Lower arm: the duplicate (step 5). Already full height, since
-                what it copies is the finished upper arm. */}
+            {/* Lower arm. Lies exactly on top of the upper one for steps 2 to
+                4, which is what makes the two of them look like a single
+                line, then folds the other way in step 5. It draws in on the
+                same keyframe, delay and curve as the upper arm, so the line
+                they jointly form grows as one stroke. */}
             <Box
               sx={{
                 position: "absolute",
@@ -605,7 +650,7 @@ export default function StartupSplash({ ready, bootId }) {
                 width: `${ARM_THICKNESS}em`,
                 height: `${ARM_BOX_HEIGHT}em`,
                 transformOrigin: ARM_PIVOT,
-                animation: `${rotateDownIntoPrompt} ${STEPS.duplicate.duration}ms ${EASE_SWEEP} ${STEPS.duplicate.delay}ms both`,
+                animation: `${foldLower} ${STEPS.fold.duration}ms ${EASE_SWEEP} ${STEPS.fold.delay}ms both`,
               }}
             >
               <Box
@@ -614,30 +659,51 @@ export default function StartupSplash({ ready, bootId }) {
                   height: "100%",
                   borderRadius: 999,
                   backgroundColor: theme.palette.primary.main,
+                  transformOrigin: ARM_PIVOT,
+                  animation: `${drawLine} ${STEPS.draw.duration}ms ${EASE_LAUNCH} ${STEPS.draw.delay}ms both`,
                 })}
               />
             </Box>
           </Box>
 
-          {/* Step 4. Real live text in the app's own font, the same wordmark
-              components/NavBar.js renders, at splash size. */}
+          {/* Step 3. Real live text in the app's own font, the same wordmark
+              components/NavBar.js renders, at splash size.
+
+              The slot the letters come out of. The clip and the movement have
+              to be on two elements: clip-path is applied in an element's own
+              coordinates and then transformed along with it, so a clip on the
+              moving element would travel with the word and never reveal
+              anything. This one stays put at the wordmark's left edge, which
+              is exactly where the line's vertex is parked, and the child
+              slides out through it.
+
+              The negative insets on the other three sides keep the clip off
+              the glyphs themselves, which overhang their line box slightly at
+              this letter-spacing. */}
           <Box
-            component="span"
-            sx={(theme) => ({
-              color: theme.palette.text.primary,
-              // Inherited from the wrapper (TYPE_SIZE) rather than set here,
-              // so the wordmark and the geometry above cannot drift apart.
-              fontWeight: 700,
-              lineHeight: 1,
-              letterSpacing: "0.28em",
-              // Letter-spacing adds a trailing gap after the X; pulling it
-              // back keeps the underline ending at the glyph, not at the gap.
-              marginRight: "-0.28em",
-              whiteSpace: "nowrap",
-              animation: `${emergeFromBar} ${STEPS.title.duration}ms ${EASE_EMERGE} ${STEPS.title.delay}ms both`,
-            })}
+            sx={{
+              clipPath: "inset(-30% -12% -30% 0)",
+            }}
           >
-            REDUX
+            <Box
+              component="span"
+              sx={(theme) => ({
+                display: "inline-block",
+                color: theme.palette.text.primary,
+                // Inherited from the wrapper (TYPE_SIZE) rather than set here,
+                // so the wordmark and the geometry above cannot drift apart.
+                fontWeight: 700,
+                lineHeight: 1,
+                letterSpacing: "0.28em",
+                // Letter-spacing adds a trailing gap after the X; pulling it
+                // back keeps the underline ending at the glyph, not at the gap.
+                marginRight: "-0.28em",
+                whiteSpace: "nowrap",
+                animation: `${emergeFromLine} ${STEPS.title.duration}ms ${EASE_EMERGE} ${STEPS.title.delay}ms both`,
+              })}
+            >
+              REDUX
+            </Box>
           </Box>
         </Box>
 

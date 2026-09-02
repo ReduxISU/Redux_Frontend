@@ -23,12 +23,12 @@ const SPLASH = "#home-startup-splash";
 
 // Long enough to cover the animation, the settle beat, the maximum hold and
 // the fade with room to spare (StartupSplash.js's own STEPS, SETTLE_MS,
-// MAX_HOLD_MS and FADE_MS come to about 6.7 seconds in the worst case),
+// MAX_HOLD_MS and FADE_MS come to about 6.9 seconds in the worst case),
 // short enough that a splash which genuinely never leaves still fails the
 // test rather than hanging it.
 const SPLASH_LIFETIME_MS = 12_000;
 
-// Shorter than the animation's own preset length (about 2.6 seconds), so a
+// Shorter than the animation's own preset length (about 2.9 seconds), so a
 // test asserting the overlay is gone inside this window is proving the skip
 // did something and not just outwaiting the animation. Longer than the fade
 // a skip still has to play out (FADE_MS, 900ms).
