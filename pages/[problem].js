@@ -28,16 +28,26 @@
 // direct URL, not just hidden from the card grid (TASKLIST.md's T13 entry:
 // "the detail page is not accessible (by URL either)"). So a name that
 // resolves to a real but incomplete problem renders the same not-found
-// state as an unknown name, rather than a half-declared page. A backend
-// error is folded into the same not-found state for now -- T29 (#38) is
-// where a dedicated error banner (#5) gets built site-wide.
+// state as an unknown name, rather than a half-declared page.
+//
+// T29 (#38): a backend error used to fold into that same not-found state
+// (see this file's earlier revision) -- as of this task it doesn't. A
+// fetch failure and "this name genuinely isn't a real problem" are
+// different situations (one says try again later, the other says check the
+// URL), and #5's site-wide banner decision applies here exactly as it does
+// on Home: BackendUnreachable below renders ErrorBanner instead of
+// asserting a "not found" claim the page has no actual basis for while the
+// backend is unreachable. Checked before the not-found branch so a real
+// fetch failure never gets misreported as "no such problem."
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
+import LinearProgress from "@mui/material/LinearProgress";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import Breadcrumb from "../components/Breadcrumb";
+import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
 import ProblemDetailLayout from "../components/ProblemDetailLayout";
 import { isProblemComplete } from "../components/StatusIcon";
@@ -66,12 +76,40 @@ function optionLabel(facetKey, optionKey) {
   return option?.label ?? optionKey;
 }
 
-function PageShell({ children }) {
+// T29 (#38): `loading` renders a thin indeterminate bar under NavBar --
+// this page's own longstanding "render just the chrome rather than guessing"
+// choice (see the ProblemDetail component below) already avoids showing any
+// wrong content while a fetch is in flight; this only adds a quiet signal
+// that something's happening, without changing what that choice guesses.
+function PageShell({ children, loading = false }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <NavBar />
+      {loading && <LinearProgress aria-label="Loading problem" />}
       {children}
     </Box>
+  );
+}
+
+// T29 (#38): distinct from NotFound -- see this file's header comment for
+// why a fetch failure doesn't get folded into "no such problem" any more.
+function BackendUnreachable() {
+  return (
+    <PageShell>
+      <Box
+        component="main"
+        sx={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+          px: { xs: 3, sm: 5 },
+          py: 4,
+        }}
+      >
+        <ErrorBanner />
+      </Box>
+    </PageShell>
   );
 }
 
@@ -115,7 +153,7 @@ export default function ProblemDetail() {
   const router = useRouter();
   const { problem: routeProblemName } = router.query;
 
-  const { problem, loading } = useProblemDetail(
+  const { problem, loading, error } = useProblemDetail(
     API_BASE_URL,
     typeof routeProblemName === "string" ? routeProblemName : null,
   );
@@ -126,7 +164,19 @@ export default function ProblemDetail() {
   // briefly shows the not-found state for a name that's actually valid, and
   // the page never briefly shows a wrong/empty detail view either.
   if (!router.isReady || loading) {
-    return <PageShell />;
+    // `loading={router.isReady}`: this branch is only reached when the
+    // router isn't ready yet OR the fetch is in flight -- passing
+    // router.isReady through means the progress bar shows in exactly the
+    // second case (a real fetch actually happening), not during the
+    // pre-hydration moment where nothing's known well enough yet to say
+    // "loading" truthfully.
+    return <PageShell loading={router.isReady} />;
+  }
+
+  // T29 (#38): checked before the not-found branch -- see this file's
+  // header comment for why a fetch failure isn't "no such problem."
+  if (error) {
+    return <BackendUnreachable />;
   }
 
   if (!problem || !isProblemComplete(problem)) {

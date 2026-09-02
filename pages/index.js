@@ -15,6 +15,26 @@
 // ProblemGrid/ProblemCatalogCard need that useCatalogFilters's plain
 // `{name, tags}` results don't carry (see toCardProblem below).
 //
+// T29 (#38): the loading/error/empty presentation this file's own header
+// above already called out is where this task's work lands. Three states
+// this page can be in, distinctly worded rather than any of them collapsing
+// into another:
+//   - loading:  subtitle/result-count text says so (never a number that's
+//               about to change), FacetSidebar's counts and ProblemGrid's
+//               cards both render as skeletons instead of real-looking-but-
+//               about-to-be-wrong content (see those components' own T29
+//               comments).
+//   - error:    the backend is unreachable -- ErrorBanner (#5), and the
+//               subtitle/result-count/grid all say so too, rather than
+//               reading like a real "0 results" state once loading flips to
+//               false with an empty index.
+//   - empty:    backend reachable, genuinely zero problems either in the
+//               whole catalog or matching the active filters -- two
+//               different messages (buildGridEmptyMessage below), since
+//               "no problems in the catalog" and "no problems match your
+//               filters" are different situations a visitor shouldn't have
+//               to guess between.
+//
 // T30 (#39): `id="home-subtitle"`/`id="home-result-count"` added to the two
 // dynamic-text Typography elements below so tests/e2e/home.spec.js can read
 // the real, currently-displayed counts (never a hardcoded one, per that
@@ -32,6 +52,7 @@ import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useMemo, useState } from "react";
 import ActiveFilterChips from "../components/ActiveFilterChips";
+import ErrorBanner from "../components/ErrorBanner";
 import FacetSidebar from "../components/FacetSidebar";
 import NavBar from "../components/NavBar";
 import ProblemGrid from "../components/ProblemGrid";
@@ -72,15 +93,6 @@ const FILTERS_DRAWER_ID = "home-filters-drawer";
 // the real backend origin server-side, pages/api/redux/[...path].js).
 const API_BASE_URL = "/api/redux/";
 
-// #5's settled decision (ratified 2026-08-31): a reachable-but-empty
-// catalog reads "0 problems" with no banner; only a genuinely unreachable
-// backend gets this message, full width beneath the search bar. Written
-// with a period rather than the decision comment's own em dash, per this
-// project's no-em-dash rule -- flagged as a decision in this task's
-// handback summary since the ratified copy itself used one.
-const BACKEND_UNREACHABLE_MESSAGE =
-  "Couldn't reach the Redux backend. The catalog can't load right now.";
-
 function buildEmptySelection() {
   const selection = {};
   for (const facet of TAXONOMY) {
@@ -96,6 +108,52 @@ function formatResultCount(count, filtersActive) {
   }
   const verb = count === 1 ? "matches" : "match";
   return `${count} ${noun} ${verb} your filters`;
+}
+
+// Home's H1 subtitle. Distinct wording per state (see this file's T29
+// comment above) -- in particular, never a bare "0 catalogued problems"
+// while `error` is set, which would read as a real empty-catalog result
+// rather than the connectivity failure ErrorBanner is already explaining a
+// few lines below it.
+function buildSubtitleText({ loading, error, catalogSize }) {
+  if (loading) {
+    return "Loading the problem catalog…";
+  }
+  if (error) {
+    return "The catalog can't load right now.";
+  }
+  return `${catalogSize} catalogued problems across complexity classes, solvers, and visualizations.`;
+}
+
+// The small result-count line directly above the grid. Same reasoning as
+// buildSubtitleText -- `error` gets its own wording rather than falling
+// through to formatResultCount(0, ...), which would read as "0 problems
+// match your filters" even when no filters are active and the real problem
+// is that nothing loaded at all.
+function buildResultCountText({ loading, error, count, filtersActive }) {
+  if (loading) {
+    return "Loading…";
+  }
+  if (error) {
+    return "Can't show results right now.";
+  }
+  return formatResultCount(count, filtersActive);
+}
+
+// ProblemGrid's empty-state message once loading has finished and the
+// backend is reachable -- distinguishes a genuinely empty catalog (issue
+// body: "Empty catalog... Write the wording for that state") from filters
+// that happen to match nothing, since a first-time visitor with no filters
+// selected seeing "no problems match your filters" would have no filters to
+// blame.
+function buildGridEmptyMessage({ error, filtersActive }) {
+  if (error) {
+    return "No problems to show right now.";
+  }
+  if (filtersActive) {
+    return "No problems match your filters.";
+  }
+  return "No problems in the catalog yet.";
 }
 
 // Id-safe stand-in for the fixture-only `slug` field ProblemCatalogCard uses
@@ -189,9 +247,7 @@ export default function Home() {
             Home
           </Typography>
           <Typography id="home-subtitle" variant="body1" sx={{ color: "text.secondary", mt: 0.5 }}>
-            {loading
-              ? "Loading the problem catalog…"
-              : `${index.size} catalogued problems across complexity classes, solvers, and visualizations.`}
+            {buildSubtitleText({ loading, error, catalogSize: index.size })}
           </Typography>
         </Box>
 
@@ -214,17 +270,7 @@ export default function Home() {
         {/* #5's settled decision: full width, beneath the search bar,
             above the sidebar-and-results row, not dismissible -- it clears
             itself as soon as a request succeeds. */}
-        {error ? (
-          <Box
-            id="catalog-error-banner"
-            role="alert"
-            sx={{ px: 2, py: 1.5, borderRadius: 2, bgcolor: "error.dark" }}
-          >
-            <Typography variant="body2" sx={{ color: "error.contrastText" }}>
-              {BACKEND_UNREACHABLE_MESSAGE}
-            </Typography>
-          </Box>
-        ) : null}
+        {error ? <ErrorBanner /> : null}
 
         {/* T28 (#37): the drawer trigger only exists below SIDEBAR_BREAKPOINT
             -- above it the fixed sidebar column is already visible, so a
@@ -285,6 +331,7 @@ export default function Home() {
             selected={selected}
             onChange={handleFacetChange}
             onClearFilters={handleClearAll}
+            loading={loading}
           />
         </Drawer>
 
@@ -313,19 +360,21 @@ export default function Home() {
                 selected={selected}
                 onChange={handleFacetChange}
                 onClearFilters={handleClearAll}
+                loading={loading}
               />
             </Box>
           )}
 
           <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 1.5 }}>
             <Typography id="home-result-count" variant="body2" sx={{ color: "text.secondary" }}>
-              {loading ? "Loading…" : formatResultCount(problems.length, filtersActive)}
+              {buildResultCountText({ loading, error, count: problems.length, filtersActive })}
             </Typography>
             <Box sx={{ flex: 1, minHeight: 0 }}>
               <ProblemGrid
                 problems={problems}
                 matchedTags={matchedTags}
-                emptyMessage={loading ? "Loading problems…" : "No problems match your filters."}
+                loading={loading}
+                emptyMessage={buildGridEmptyMessage({ error, filtersActive })}
               />
             </Box>
           </Box>

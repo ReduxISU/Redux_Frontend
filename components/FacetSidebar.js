@@ -19,6 +19,17 @@
 //   selected:     { [facetKey]: Set<optionKey> }
 //   onChange(facetKey, nextSelectedSet)
 //   onClearFilters()
+//
+// T29 (#38): `loading` (default false) swaps each option's real `count` for
+// a skeleton bar. Every facet's own option list is static (data/taxonomy.js,
+// not the backend) so the checkboxes and labels themselves render
+// immediately either way -- only the per-option counts are backend-derived
+// and start at 0 for everything while useCatalogIndex's index Map is still
+// empty. Rendering those real zeros during the fetch would be exactly the
+// "loading state briefly shows a wrong count" bug T29's done-when warns
+// about (every option would flash "(0)" and then jump to its real count),
+// so this replaces the count text with a placeholder of about the same
+// width instead of a number that's about to be wrong.
 
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import Box from "@mui/material/Box";
@@ -27,12 +38,13 @@ import Checkbox from "@mui/material/Checkbox";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import FormGroup from "@mui/material/FormGroup";
+import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { TAXONOMY } from "../data/taxonomy";
 import { getFacetAccentColor } from "./theme";
 
-function FacetFilterGroup({ facet, options, selected, onChange }) {
+function FacetFilterGroup({ facet, options, selected, onChange, loading }) {
   const [expanded, setExpanded] = useState(true);
   const toggleId = `facet-${facet.key}-toggle`;
   const listId = `facet-${facet.key}-options`;
@@ -160,7 +172,7 @@ function FacetFilterGroup({ facet, options, selected, onChange }) {
             return (
               <FormControlLabel
                 key={optionKey}
-                sx={{ mx: 0, opacity: count === 0 ? 0.5 : 1 }}
+                sx={{ mx: 0, opacity: !loading && count === 0 ? 0.5 : 1 }}
                 control={
                   <Checkbox
                     id={optionId}
@@ -180,9 +192,18 @@ function FacetFilterGroup({ facet, options, selected, onChange }) {
                 label={
                   <Typography variant="body2" component="span">
                     {optionLabel}{" "}
-                    <Box component="span" sx={{ color: "text.secondary" }}>
-                      ({count})
-                    </Box>
+                    {loading ? (
+                      <Skeleton
+                        component="span"
+                        variant="text"
+                        width={22}
+                        sx={{ display: "inline-block", verticalAlign: "middle" }}
+                      />
+                    ) : (
+                      <Box component="span" sx={{ color: "text.secondary" }}>
+                        ({count})
+                      </Box>
+                    )}
                   </Typography>
                 }
               />
@@ -199,6 +220,7 @@ export default function FacetSidebar({
   selected = {},
   onChange,
   onClearFilters,
+  loading = false,
 }) {
   const sidebarFacets = TAXONOMY.filter((facet) => facet.sidebar);
 
@@ -216,6 +238,7 @@ export default function FacetSidebar({
             options={facetOptions[facet.key] ?? []}
             selected={selected[facet.key] ?? new Set()}
             onChange={(next) => onChange(facet.key, next)}
+            loading={loading}
           />
         </Box>
       ))}
