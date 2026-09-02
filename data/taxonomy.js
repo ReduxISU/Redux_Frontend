@@ -292,3 +292,18 @@ export const REDUCTION_TYPE_MAP = {
   ComponentDesign: "componentDesign",
   Unclassified: undefined,
 };
+
+// SolverComplexityBucket (backend) -> Solver Complexity option key (frontend).
+// Direct map, same convention as the others above. The backend enum only
+// covers 3 of the 8 ratified buckets (TAXONOMY_REFERENCE.md §6) — Constant,
+// Logarithmic, Linear, Log-linear and Quadratic have no backend member yet,
+// so solvers that are actually one of those are over-bucketed into
+// Polynomial today. Sidebar checkboxes for the missing 5 legitimately show
+// (0) until the backend enum is extended; that's correct behavior, not a bug
+// in this map.
+export const SOLVER_COMPLEXITY_MAP = {
+  Polynomial: "polynomial",
+  Exponential: "exponential",
+  Factorial: "factorial",
+  Unclassified: undefined,
+};
