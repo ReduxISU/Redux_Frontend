@@ -8,8 +8,37 @@ port = 3000
 # without depending on React rendering.
 health-path = "/api/health"
 
-# No [integration] section yet — there is no test suite to run (tests/e2e/ doesn't exist). Add it
-# once real integration tests land.
-#
+# T32 (#41): tests/e2e/ (T30/#39) now exists, so `rbs integration-test` has something to run.
+# `rbs` starts the artifact this file's own [artifact] section builds, waits for it to answer
+# [artifact] health-path, then runs `command` on the runner itself (not inside the artifact
+# container) with RBS_BASE_URL pointing at it. `command` is a plain string handed to whatever shell
+# the host has, so it deliberately does NOT try to rename that into PLAYWRIGHT_BASE_URL inline here
+# (`VAR=value cmd` is POSIX-only and breaks on Windows) -- playwright.config.js reads RBS_BASE_URL
+# directly instead (see that file's own header comment) and skips starting its own `next dev` server
+# once it's set, so this doesn't fight the already-running container for port 3000.
+[integration]
+command = "npm run test:e2e"
+# No explicit `timeout` override -- verified by hand (`rbs integration-test`, real container, real
+# redux-api service) that the full suite settles in well under the 180s default, readiness included.
+
+# The artifact is a same-origin proxy in front of the real Redux backend (lib/redux/index.js) --
+# without a real backend behind it during the test run, every test would just exercise the
+# no-backend error path. Started before the artifact, reachable at its own name on the throwaway
+# network rbs creates.
+[[integration.services]]
+name = "redux-api"
+image = "ghcr.io/reduxisu/redux:latest"
+port = 27000
+# Redux has no dedicated /health route; this is the one Redux_Build_System's own docs point at,
+# since its first call is what forces the assembly scan that actually builds the problem registry --
+# a plain "is something listening" check would report ready before that's done.
+health-path = "/Navigation/Batch/allProblems"
+
+# The artifact's own REDUX_BASE_URL (pages/api/redux/[...path].js), pointed at the service above by
+# its rbs-assigned network name rather than the public https://redux.isu.edu/ this repo's .env.example
+# defaults local dev to.
+[integration.env]
+REDUX_BASE_URL = "http://redux-api:27000/"
+
 # No [push] section yet — deploying (ghcr.io publish) is deliberately deferred until the frontend
 # is production-ready. Add this alongside a publish workflow when that happens, not before.

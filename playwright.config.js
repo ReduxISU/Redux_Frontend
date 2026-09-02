@@ -5,18 +5,29 @@
 // gives `npm run test:e2e` (already wired up in package.json) something to
 // actually run.
 //
-// PLAYWRIGHT_BASE_URL lets this point at an already-running instance
-// instead of starting its own dev server -- T32 (#41) is expected to set it
-// when `rbs.toml`'s `[integration]` section runs these tests against a
-// built container rather than `next dev`, so `webServer` below is skipped
-// entirely in that case rather than fighting the container for port 3000.
-// Locally, with no override, `npm run test:e2e` starts `next dev` itself
-// and waits for it to answer `/api/health` (pages/api/health.js) before any
-// spec runs.
+// PLAYWRIGHT_BASE_URL / RBS_BASE_URL let this point at an already-running
+// instance instead of starting its own dev server. T32 (#41) wires
+// `rbs.toml`'s `[integration]` section to run `npm run test:e2e` against a
+// container `rbs integration-test` already built and started -- `rbs` hands
+// that container's address to the test command as `RBS_BASE_URL` (Redux_
+// Build_System's own docs/onboarding.md), not a Playwright-specific name,
+// so this reads that directly rather than the `[integration].command` string
+// needing to rename it into `PLAYWRIGHT_BASE_URL` itself. That renaming was
+// tried first and dropped: `command` is a plain string `rbs` runs through
+// whatever shell the host has, and `VAR=value cmd` (the POSIX way to do it)
+// silently isn't valid on Windows -- reading RBS_BASE_URL here instead needs
+// no shell-specific syntax in rbs.toml at all. PLAYWRIGHT_BASE_URL is kept
+// too, for pointing this at some other already-running instance by hand
+// without going through rbs.
+// Either way, `webServer` below is skipped entirely rather than fighting the
+// already-running instance for port 3000. With neither set (the plain local
+// case), `npm run test:e2e` starts `next dev` itself and waits for it to
+// answer `/api/health` (pages/api/health.js) before any spec runs.
 
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+const externalBaseURL = process.env.PLAYWRIGHT_BASE_URL ?? process.env.RBS_BASE_URL;
+const baseURL = externalBaseURL ?? "http://localhost:3000";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -29,7 +40,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: process.env.PLAYWRIGHT_BASE_URL
+  webServer: externalBaseURL
     ? undefined
     : {
         command: "npm run dev",
