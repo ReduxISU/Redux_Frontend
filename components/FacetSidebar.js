@@ -45,7 +45,7 @@ import { TAXONOMY } from "../data/taxonomy";
 import { getFacetAccentColor } from "./theme";
 
 function FacetFilterGroup({ facet, options, selected, onChange, loading }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const toggleId = `facet-${facet.key}-toggle`;
   const listId = `facet-${facet.key}-options`;
   const selectedCount = selected.size;

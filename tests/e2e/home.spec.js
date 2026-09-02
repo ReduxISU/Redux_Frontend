@@ -10,6 +10,7 @@
 
 import { expect, test } from "./fixtures";
 import {
+  expandFacetGroup,
   gotoHomeAndWaitForLoad,
   pickNarrowingOption,
   readFacetOptions,
@@ -52,6 +53,7 @@ test("ticking a filter narrows the results and updates the count", async ({ page
   const options = await readFacetOptions(page);
   const option = pickNarrowingOption(options, catalogSize);
 
+  await expandFacetGroup(page, option.facetKey);
   await page.locator(`#${option.id}`).check();
 
   await expect(page.locator("#home-result-count")).toContainText(String(option.count));
@@ -67,6 +69,7 @@ test("filters across two categories narrow rather than widen", async ({ page }) 
   const options = await readFacetOptions(page);
   const first = pickNarrowingOption(options, catalogSize);
 
+  await expandFacetGroup(page, first.facetKey);
   await page.locator(`#${first.id}`).check();
   await expect(page.locator("#home-result-count")).toContainText(String(first.count));
   const afterFirst = await readResultCount(page);
@@ -77,6 +80,7 @@ test("filters across two categories narrow rather than widen", async ({ page }) 
   // header comment), so `options` read before checking the first box is
   // still valid for picking the second one.
   const second = pickNarrowingOption(options, catalogSize, { excludeFacetKey: first.facetKey });
+  await expandFacetGroup(page, second.facetKey);
   await page.locator(`#${second.id}`).check();
   await expect(page.locator(`#${second.id}`)).toBeChecked();
 
@@ -97,6 +101,7 @@ test("chips appear for active filters, and Clear all empties everything", async 
   const options = await readFacetOptions(page);
   const option = pickNarrowingOption(options, catalogSize);
 
+  await expandFacetGroup(page, option.facetKey);
   await page.locator(`#${option.id}`).check();
 
   const removeButton = page.locator(

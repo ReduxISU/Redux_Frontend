@@ -59,7 +59,14 @@ const COLUMN_COUNT_BY_BREAKPOINT = { xs: 1, sm: 2, lg: 3 };
 const SKELETON_CARD_COUNT = 6;
 
 const gridContainerSx = {
-  height: "100%",
+  // maxHeight, not height: a filtered-down result set should shrink to fit
+  // its own cards rather than always claiming the full height of its flex
+  // parent (pages/index.js's results column) and leaving dead space below
+  // the last row where the unfiltered grid's remaining cards used to be.
+  // Capping at 100% (of that parent's own bounded, flex:1 height) keeps the
+  // scroll-independently-of-the-sidebar behavior this file's header comment
+  // describes for the case that still needs it -- more results than fit.
+  maxHeight: "100%",
   overflowY: "auto",
   display: "grid",
   gridTemplateColumns: Object.fromEntries(

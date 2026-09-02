@@ -97,6 +97,19 @@ export async function reorderFirstSectionWithKeyboard(page) {
 }
 
 /**
+ * Expands a sidebar facet group by its facet key, if it isn't already
+ * expanded. Facet groups default to collapsed (components/FacetSidebar.js),
+ * so any test that needs to click one of a group's checkboxes must open the
+ * group first -- exactly what a real visitor would do.
+ */
+export async function expandFacetGroup(page, facetKey) {
+  const toggle = page.locator(`#facet-${facetKey}-toggle`);
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+}
+
+/**
  * Every sidebar facet checkbox currently on the page, with its real
  * server-computed count (components/FacetSidebar.js's own `data-count`,
  * T30's addition -- read as a DOM attribute, not parsed back out of the

@@ -64,7 +64,7 @@ import { useState } from "react";
  *   drag activator. Omitted, the grip stays decorative (`aria-hidden`).
  */
 export default function SectionShell({ sectionKey, title, summary, children, dragHandleProps }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const toggleId = `section-${sectionKey}-toggle`;
   const bodyId = `section-${sectionKey}-body`;
   const gripId = `section-${sectionKey}-grip`;
