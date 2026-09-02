@@ -6,23 +6,31 @@
 //
 // Route sits at the top level (`/{slug}`, not `/catalog/{slug}`) per
 // ARCHITECTURE.md's Directory / Route Structure section — this project's
-// only job is the catalog. Resolves against data/fixtures.js's `slug`
-// field, not the raw display name: ProblemCatalogCard already links to
-// `/${problem.slug}` (e.g. "/3-sat"), so matching on slug is what makes a
-// card's own link actually land here.
+// only job is the catalog.
 //
-// No getStaticProps/getStaticPaths — same plain-fixture-import pattern as
-// pages/index.js. useRouter().query.problem resolves once the router is
-// ready; nothing here fetches data server-side (T26 is the real-data
-// wiring task; this page stays a one-line swap away from it per T09's
-// fixture-shape contract).
+// T26 (#35) real-data wiring: the route segment is the problem's real
+// display name (e.g. "3SAT" resolves against Navigation/Batch/allInfo's
+// `problemName` field via useProblemDetail), not a fixture-only `slug` --
+// the real backend has no slug concept (confirmed: no field on IProblem
+// resembles one). Next.js decodes the route segment automatically, so a
+// name with spaces or punctuation arrives here already readable; nothing
+// further needs decoding. ProblemCatalogCard's own link generation
+// (currently `/${problem.slug}` against fixture data) is T25's concern, not
+// this page's -- until T25 lands, Home's card links and this resolution
+// step are built from two different data sources, a known transient gap
+// (see this task's handback summary).
+//
+// No getStaticProps/getStaticPaths. useRouter().query.problem resolves once
+// the router is ready; useProblemDetail then fetches client-side.
 //
 // Per #6 item 4 / components/StatusIcon.js's isProblemComplete(): an
 // "incomplete" (grey-status) problem's detail page is unreachable by
 // direct URL, not just hidden from the card grid (TASKLIST.md's T13 entry:
-// "the detail page is not accessible (by URL either)"). So a slug that
-// resolves to a real but incomplete fixture renders the same not-found
-// state as an unknown slug, rather than a half-declared page.
+// "the detail page is not accessible (by URL either)"). So a name that
+// resolves to a real but incomplete problem renders the same not-found
+// state as an unknown name, rather than a half-declared page. A backend
+// error is folded into the same not-found state for now -- T29 (#38) is
+// where a dedicated error banner (#5) gets built site-wide.
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -33,8 +41,11 @@ import Breadcrumb from "../components/Breadcrumb";
 import NavBar from "../components/NavBar";
 import ProblemDetailLayout from "../components/ProblemDetailLayout";
 import { isProblemComplete } from "../components/StatusIcon";
-import { getFixtureProblemBySlug } from "../data/fixtures";
 import { TAXONOMY } from "../data/taxonomy";
+import { useProblemDetail } from "../hooks/useProblemDetail";
+
+// Same same-origin proxy base lib/redux/index.js's own JSDoc documents.
+const API_BASE_URL = "/api/redux/";
 
 // Badge row order per the mockup (NP-Complete, NP, Boolean Logic): complexity
 // badges first, then problem type. Same chip-family naming as
@@ -102,16 +113,21 @@ function NotFound() {
 
 export default function ProblemDetail() {
   const router = useRouter();
-  const { problem: slug } = router.query;
+  const { problem: routeProblemName } = router.query;
 
-  // Before the router hydrates, `query` is empty on every route — render
-  // just the chrome rather than guessing, so a fast unknown-slug flash never
-  // briefly shows the not-found state for a slug that's actually valid.
-  if (!router.isReady) {
+  const { problem, loading } = useProblemDetail(
+    API_BASE_URL,
+    typeof routeProblemName === "string" ? routeProblemName : null,
+  );
+
+  // Before the router hydrates, `query` is empty on every route, and while
+  // useProblemDetail's fetch is still in flight — render just the chrome
+  // rather than guessing in either case, so a fast unknown-name flash never
+  // briefly shows the not-found state for a name that's actually valid, and
+  // the page never briefly shows a wrong/empty detail view either.
+  if (!router.isReady || loading) {
     return <PageShell />;
   }
-
-  const problem = typeof slug === "string" ? getFixtureProblemBySlug(slug) : null;
 
   if (!problem || !isProblemComplete(problem)) {
     return <NotFound />;
