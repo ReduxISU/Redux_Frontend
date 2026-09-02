@@ -24,12 +24,12 @@
 // Only the `tags` object nested in each entry is the part T23's
 // `useCatalogIndex()` must reproduce exactly -- that hook returns
 // `{ index, loading, error }`, where `index` is a `Map<problemName, tags>`
-// built from the 5 real-backend-derived facets (complexityClass, solverType,
-// reductionCost, visualizationType, solverComplexity) plus the 4 fully-gap
-// facets merged in via `mergeSupplementalTags` (problemType,
-// computationalModel, reductionType) and the quantum half of complexityClass
-// -- see the overlay-field-count note below for why that list has 5 members,
-// not 4. T25 depends on swapping `FIXTURE_CATALOG_INDEX` for the real
+// built from the 6 real-backend-derived facets (complexityClass, solverType,
+// reductionCost, reductionType, visualizationType, solverComplexity) plus
+// the 3 fully-gap facets merged in via `mergeSupplementalTags` (problemType,
+// computationalModel) and the quantum half of complexityClass -- see the
+// overlay-field-count note below for why that list has 4 members now, not
+// 5 or 4-as-originally-written. T25 depends on swapping `FIXTURE_CATALOG_INDEX` for the real
 // `useCatalogIndex()` return value being a one-line change in pages/index.js,
 // so `tags` must stay exactly this shape: every facet key from
 // `data/taxonomy.js`'s `TAXONOMY` array, valued as either a single option
@@ -53,31 +53,35 @@
 // T23 does not need to reproduce this part of the shape.
 //
 // -----------------------------------------------------------------------
-// DECISION: five overlay fields, not four
+// DECISION: four overlay fields, not five (not four the original way either)
 // -----------------------------------------------------------------------
 // Issue #13's own "Done when" list says "one of the four supplemental
 // overlay fields," and TASKLIST.md's T22 write-up and ARCHITECTURE.md's
 // directory-tree comment for supplementalTags.js/mergeSupplementalTags.js
-// both also say "4 gap fields." That count is stale: it predates the
-// 2026-08-31 addition of the conceptual `visualStyle` field (issue #6,
-// conflict C4). ARCHITECTURE.md's "The taxonomy gap" section (last touched
-// 2026-09-01, the most recently corrected version of this count) and
-// TAXONOMY_REFERENCE.md §9 both explicitly call visualStyle "a fifth
-// overlay field" / "the fifth overlay field alongside the four backend-gap
-// fields." The real, merged `data/taxonomy.js` (T06, PR #45) confirms this
-// reading: its `visualizationType` facet's options are already the
-// conceptual vocabulary (Node-Link Diagram, Bipartite Factor Graph, BDD,
-// ...), not the backend's renderer enum, sourced -- per that file's own
-// comment -- from the visualStyle overlay.
+// both also say "4 gap fields." That count was stale once already: it
+// predated the 2026-08-31 addition of the conceptual `visualStyle` field
+// (issue #6, conflict C4), which made it five (problemType,
+// computationalModel, reductionType, the quantum half of complexityClass,
+// visualStyle). It is stale again, differently, as of 2026-09-02: Reduction
+// Type was retargeted to ReduxISU/Redux#396's real `ReductionType` field
+// (Restriction/LocalReplacement/ComponentDesign, TAXONOMY_REFERENCE.md §7)
+// rather than requesting a new backend field for the vocabulary originally
+// ratified -- see issue #31. That makes reductionType a real-backend-derived
+// facet, not an overlay one, dropping the count back to four: problemType,
+// computationalModel, the quantum half of complexityClass, and visualStyle.
 //
-// So the count is: 3 fully-gap fields with zero backend counterpart
-// (problemType, computationalModel, reductionType), + the quantum half of
-// complexityClass (partial overlay onto an otherwise-real backend field),
-// + visualStyle (partial overlay onto visualizationType) = 5 overlay
-// concepts in all. This fixture is built against that reading. Whoever
-// picks up T22/T23 should treat "four" in the issue body and in
-// mergeSupplementalTags.js's own doc-comment as the stale figure and update
-// it to five, rather than reproducing it forward.
+// So the count is: 2 fully-gap fields with zero backend counterpart
+// (problemType, computationalModel), + the quantum half of complexityClass
+// (partial overlay onto an otherwise-real backend field), + visualStyle
+// (partial overlay onto visualizationType) = 4 overlay concepts in all.
+// reductionType joins reductionCost, solverType, solverComplexity and
+// visualizationType as a facet with a translation map
+// (data/taxonomy.js's REDUCTION_TYPE_MAP) but no overlay entry. This
+// fixture is built against that reading. Whoever picks up T22/T23 should
+// treat "four" or "five" in the issue body and in mergeSupplementalTags.js's
+// own doc-comment as the stale figure (depending on when it was written)
+// and update it to four-as-defined-here, rather than reproducing an earlier
+// count forward.
 //
 // (None of the 12 sample problems below are QuantumOracle-classified, so
 // none of them exercise the quantum half of complexityClass -- that part of
@@ -152,7 +156,9 @@ export const FIXTURE_PROBLEMS = [
       complexityClass: ["npComplete", "np", "npHard"],
       solverType: ["exact"],
       solverComplexity: ["polynomial", "exponential"],
-      reductionType: ["karp"],
+      // Matches the real backend's Subset Sum -> Knapsack reduction
+      // (FengReduction.cs), which is ReductionType.Restriction.
+      reductionType: ["restriction"],
       reductionCost: ["linear"],
       visualizationType: ["searchTree"],
     },
@@ -177,7 +183,7 @@ export const FIXTURE_PROBLEMS = [
       certificateFormat: "certificate = [i1, i2, …, ik]",
     },
     reductions: {
-      to: [{ target: "Subset Sum", cost: "linear", type: "karp" }],
+      to: [{ target: "Subset Sum", cost: "linear", type: "restriction" }],
       from: [],
     },
   },
@@ -192,7 +198,10 @@ export const FIXTURE_PROBLEMS = [
       complexityClass: ["npComplete", "np", "npHard"],
       solverType: ["exact"],
       solverComplexity: ["exponential"],
-      reductionType: ["karp"],
+      // Gadget-per-clause construction (each 3-literal clause becomes a
+      // small fixed circuit enforcing "exactly one true"), which is
+      // ReductionType.ComponentDesign, not a plain relabeling.
+      reductionType: ["componentDesign"],
       reductionCost: ["linear"],
       visualizationType: ["bipartiteFactorGraph"],
     },
@@ -210,7 +219,7 @@ export const FIXTURE_PROBLEMS = [
     },
     reductions: {
       to: [],
-      from: [{ source: "3-SAT", cost: "linear", type: "karp" }],
+      from: [{ source: "3-SAT", cost: "linear", type: "componentDesign" }],
     },
   },
   {
@@ -230,7 +239,14 @@ export const FIXTURE_PROBLEMS = [
       complexityClass: ["npComplete", "np", "npHard"],
       solverType: ["exact", "heuristic", "automatedReasoning"],
       solverComplexity: ["exponential"],
-      reductionType: ["karp"],
+      // Union of this problem's 5 reduces-to + 2 reduces-from edges' proof
+      // techniques below (TAXONOMY_REFERENCE.md §7, issue #31) -- localReplacement
+      // from the SAT->3SAT/Circuit-SAT->3SAT direction (per-clause/per-gate
+      // substitution), componentDesign from the gadget-heavy 3SAT->Clique/
+      // VertexCover/SubsetSum/HamiltonianCycle direction, except
+      // 3SAT->IntegerProgramming which matches the real backend's
+      // KarpIntProgStandard.cs (LocalReplacement).
+      reductionType: ["componentDesign", "localReplacement"],
       // Union of this problem's own reduces-to (linear, quadratic, quadratic,
       // cubic, higherPolynomial) and reduces-from (linear, linear) costs.
       reductionCost: ["linear", "quadratic", "cubic", "higherPolynomial"],
@@ -320,15 +336,15 @@ export const FIXTURE_PROBLEMS = [
       // Order matches the mockup; VERTEX COVER is the one shown as
       // "(shown above)" in the mockup's default selection.
       to: [
-        { target: "Vertex Cover", cost: "linear", type: "karp" },
-        { target: "Clique", cost: "quadratic", type: "karp" },
-        { target: "Subset Sum", cost: "quadratic", type: "karp" },
-        { target: "Integer Programming", cost: "cubic", type: "karp" },
-        { target: "Hamiltonian Cycle", cost: "higherPolynomial", type: "karp" },
+        { target: "Vertex Cover", cost: "linear", type: "componentDesign" },
+        { target: "Clique", cost: "quadratic", type: "componentDesign" },
+        { target: "Subset Sum", cost: "quadratic", type: "componentDesign" },
+        { target: "Integer Programming", cost: "cubic", type: "localReplacement" },
+        { target: "Hamiltonian Cycle", cost: "higherPolynomial", type: "componentDesign" },
       ],
       from: [
-        { source: "General CNF-SAT", cost: "linear", type: "karp" },
-        { source: "Circuit-SAT", cost: "linear", type: "karp" },
+        { source: "General CNF-SAT", cost: "linear", type: "localReplacement" },
+        { source: "Circuit-SAT", cost: "linear", type: "localReplacement" },
       ],
     },
   },
@@ -343,7 +359,10 @@ export const FIXTURE_PROBLEMS = [
       complexityClass: ["npComplete", "np", "npHard"],
       solverType: ["exact"],
       solverComplexity: ["exponential"],
-      reductionType: ["karp"],
+      // Cook-Levin: each gate becomes a local clause gadget --
+      // ReductionType.LocalReplacement, matching 3-SAT's own reduces-from
+      // entry for this same edge below.
+      reductionType: ["localReplacement"],
       reductionCost: ["linear"],
       visualizationType: ["logicGateSchematic"],
     },
@@ -360,9 +379,9 @@ export const FIXTURE_PROBLEMS = [
       certificateFormat: "certificate = [in1, in2, …, ink]",
     },
     // Cook-Levin: Circuit-SAT reduces to 3-SAT -- matches 3-SAT's own
-    // reduces-from entry above (both say Linear).
+    // reduces-from entry above (both say Linear, both say LocalReplacement).
     reductions: {
-      to: [{ target: "3-SAT", cost: "linear", type: "karp" }],
+      to: [{ target: "3-SAT", cost: "linear", type: "localReplacement" }],
       from: [],
     },
   },
@@ -377,7 +396,9 @@ export const FIXTURE_PROBLEMS = [
       complexityClass: ["npComplete", "np", "npHard"],
       solverType: ["exact"],
       solverComplexity: ["exponential"],
-      reductionType: ["karp"],
+      // Matches 3-SAT's own reduces-to entry for this edge --
+      // ReductionType.ComponentDesign (clause-to-triangle gadgets).
+      reductionType: ["componentDesign"],
       reductionCost: ["quadratic"],
       visualizationType: ["nodeLinkDiagram"],
     },
@@ -400,7 +421,7 @@ export const FIXTURE_PROBLEMS = [
     // Textbook 3-SAT -> Clique reduction; matches 3-SAT's reduces-to entry.
     reductions: {
       to: [],
-      from: [{ source: "3-SAT", cost: "quadratic", type: "karp" }],
+      from: [{ source: "3-SAT", cost: "quadratic", type: "componentDesign" }],
     },
   },
   {
@@ -522,7 +543,9 @@ export const FIXTURE_PROBLEMS = [
       complexityClass: ["npComplete", "np", "npHard"],
       solverType: ["exact", "heuristic"],
       solverComplexity: ["exponential", "polynomial"],
-      reductionType: ["karp"],
+      // Same relabeling family as the real backend's GraphColoringToCliqueCover.cs
+      // (ReductionType.Restriction).
+      reductionType: ["restriction"],
       reductionCost: ["linear"],
       visualizationType: ["nodeLinkDiagram"],
     },
@@ -543,7 +566,7 @@ export const FIXTURE_PROBLEMS = [
       certificateFormat: "certificate = [c(v1), c(v2), …, c(vn)]",
     },
     reductions: {
-      to: [{ target: "Clique", cost: "linear", type: "karp" }],
+      to: [{ target: "Clique", cost: "linear", type: "restriction" }],
       from: [],
     },
   },
@@ -557,7 +580,9 @@ export const FIXTURE_PROBLEMS = [
       complexityClass: ["npComplete", "np", "npHard"],
       solverType: ["exact"],
       solverComplexity: ["exponential"],
-      reductionType: ["karp"],
+      // Matches 3-SAT's own reduces-to entry for this edge --
+      // ReductionType.ComponentDesign (per-clause/per-variable edge gadgets).
+      reductionType: ["componentDesign"],
       reductionCost: ["higherPolynomial"],
       // No declared visualization -- see the status-icon note below.
       visualizationType: [],
@@ -570,10 +595,10 @@ export const FIXTURE_PROBLEMS = [
       certificateDescription: "An ordered list of vertices forming the cycle.",
       certificateFormat: "certificate = [v1, v2, …, vn]",
     },
-    // Matches 3-SAT's own reduces-to entry (Higher Poly.).
+    // Matches 3-SAT's own reduces-to entry (Higher Poly., ComponentDesign).
     reductions: {
       to: [],
-      from: [{ source: "3-SAT", cost: "higherPolynomial", type: "karp" }],
+      from: [{ source: "3-SAT", cost: "higherPolynomial", type: "componentDesign" }],
     },
   },
   {

@@ -138,16 +138,24 @@ export const TAXONOMY = [
     label: "Reduction Type",
     accentColor: "violet",
     sidebar: true,
-    // Tier 1, mutually exclusive (TAXONOMY_REFERENCE.md §7).
+    // Retargeted 2026-09-02 (issue #31, comment thread on #7): the
+    // 2026-08-31 meeting's ratified vocabulary (Karp (Many-One), Cook
+    // (Turing), L/AP-Reductions, Parsimonious, Randomized, Parameterized,
+    // Fine-Grained) was checked against Redux's real 20 reductions before
+    // this facet was wired up for real -- every one of them is a classical
+    // Karp reduction, so that vocabulary would show Karp: 20, everything
+    // else: 0. Retargeted to the real backend's `ReductionType` enum
+    // instead: Garey & Johnson's proof-technique taxonomy
+    // (TAXONOMY_REFERENCE.md §7), which splits genuinely on the same 20
+    // reductions (Restriction: 8, LocalReplacement: 5, ComponentDesign: 7).
+    // Real-backend-derived once ReduxISU/Redux#396 merges (REDUCTION_TYPE_MAP
+    // below) -- unlike the other backend-gap facets, this one needs no
+    // supplementalTags.js overlay entry.
     multiValued: false,
     options: [
-      { key: "karp", label: "Karp (Many-One)" },
-      { key: "cook", label: "Cook (Turing)" },
-      { key: "lApReductions", label: "L/AP-Reductions" },
-      { key: "parsimonious", label: "Parsimonious" },
-      { key: "randomized", label: "Randomized" },
-      { key: "parameterized", label: "Parameterized" },
-      { key: "fineGrained", label: "Fine-Grained" },
+      { key: "restriction", label: "Restriction" },
+      { key: "localReplacement", label: "Local Replacement" },
+      { key: "componentDesign", label: "Component Design" },
     ],
   },
   {
@@ -270,5 +278,17 @@ export const REDUCTION_COST_MAP = {
   Quadratic: "quadratic",
   Cubic: "cubic",
   HigherPolynomial: "higherPolynomial",
+  Unclassified: undefined,
+};
+
+// ReductionType (backend) -> Reduction Type option key (frontend). Direct
+// map, same convention as REDUCTION_COST_MAP. Targets the proof-technique
+// vocabulary ReduxISU/Redux#396 actually built, not the reduction-
+// complexity-theory vocabulary originally ratified — see the reductionType
+// facet's own comment above, TAXONOMY_REFERENCE.md §7, and issue #31.
+export const REDUCTION_TYPE_MAP = {
+  Restriction: "restriction",
+  LocalReplacement: "localReplacement",
+  ComponentDesign: "componentDesign",
   Unclassified: undefined,
 };
