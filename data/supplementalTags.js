@@ -1,9 +1,9 @@
 // data/supplementalTags.js
 //
 // T03 (issue #7). THE hand-authored overlay: values for the tag categories the
-// real Redux backend has no field for yet. mergeSupplementalTags.js (T18/#22,
-// not yet built) will read this file and prefer a real backend value over
-// what's here whenever one exists -- this file only fills the gap.
+// real Redux backend has no field for yet. mergeSupplementalTags.js (T22/#31)
+// reads this file and prefers a real backend value over what's here whenever
+// one exists -- this file only fills the gap.
 //
 // -----------------------------------------------------------------------
 // Source and freshness
