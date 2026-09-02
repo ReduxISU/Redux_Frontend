@@ -51,6 +51,22 @@
 // item overview was moved...". SECTION_ANNOUNCEMENTS below overrides them
 // with text naming the real section title instead.
 //
+// --- Decision: the problem instance is one shared value, owned here --------
+// T35 (#93). Solvers and Verifier both need a problem instance, and this
+// component holds the single copy of it. Both sections render their own
+// editable input bound to that one value, so editing either updates both.
+//
+// Ratified on #93 by the project owner: verifying a certificate against a
+// different instance than the one that was solved is a silent, meaningless
+// error, and two independent inputs allow exactly that with no signal to
+// the user. One value makes it impossible. Both sections still get their
+// own control because sections are independently collapsible (and default
+// to collapsed) and drag-reorderable, so a single control living inside
+// one section can be hidden, or can sit below the section that needs it.
+// This component is the right owner because it already holds section-order
+// state and already renders both sections from SECTIONS. pages/[problem].js
+// passes only `problem` and stays that way.
+//
 // --- No persistence ---------------------------------------------------------
 // `order` is plain component-local useState. No localStorage, no URL
 // params — per the issue body and TASKLIST.md's T18 entry ("do not add
@@ -86,11 +102,15 @@ import VisualizationsSection from "./detail/VisualizationsSection";
 // Default order per the ratified "move Reduce pane below Verify" decision
 // (TASKLIST.md T18 entry) — Reductions goes last deliberately, not by
 // omission.
+//
+// `usesInstance` marks the two sections that take the shared problem
+// instance (T35/#93, see header) -- the other three are rendered with
+// `problem` alone, exactly as before.
 const SECTIONS = [
   { key: "overview", title: "Overview", Component: OverviewSection },
   { key: "visualizations", title: "Visualizations", Component: VisualizationsSection },
-  { key: "solvers", title: "Solvers", Component: SolversSection },
-  { key: "verifier", title: "Verifier", Component: VerifierSection },
+  { key: "solvers", title: "Solvers", Component: SolversSection, usesInstance: true },
+  { key: "verifier", title: "Verifier", Component: VerifierSection, usesInstance: true },
   { key: "reductions", title: "Reductions", Component: ReductionsSection },
 ];
 
@@ -160,6 +180,25 @@ function SortableSection({ id, children }) {
  */
 export default function ProblemDetailLayout({ problem }) {
   const [order, setOrder] = useState(DEFAULT_ORDER);
+
+  // The shared problem instance (T35/#93), pre-filled from the problem's
+  // real declared `defaultInstance`.
+  const [instance, setInstance] = useState(problem.defaultInstance ?? "");
+
+  // Re-seed the box when the page switches to a different problem, so one
+  // problem's instance can never be left sitting in another's input. In
+  // practice pages/[problem].js unmounts this component while the next
+  // problem is loading, which would reset the state anyway, but that is a
+  // side effect of how the loading state happens to be rendered rather
+  // than something this component should depend on. React's documented
+  // "adjust state when a prop changes" pattern, not an effect: it settles
+  // during the same render instead of flashing the previous problem's
+  // instance for a frame first.
+  const [instanceProblemName, setInstanceProblemName] = useState(problem.name);
+  if (instanceProblemName !== problem.name) {
+    setInstanceProblemName(problem.name);
+    setInstance(problem.defaultInstance ?? "");
+  }
 
   // PointerSensor covers mouse; TouchSensor adds mobile/tablet support
   // (both ported from Redux_GUI). KeyboardSensor is new here — see file
@@ -242,10 +281,13 @@ export default function ProblemDetailLayout({ problem }) {
         <SortableContext items={order} strategy={verticalListSortingStrategy}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {order.map((key) => {
-              const { Component } = SECTIONS_BY_KEY.get(key);
+              const { Component, usesInstance } = SECTIONS_BY_KEY.get(key);
+              const instanceProps = usesInstance
+                ? { instanceValue: instance, onInstanceChange: setInstance }
+                : null;
               return (
                 <SortableSection key={key} id={key}>
-                  <Component problem={problem} />
+                  <Component problem={problem} {...instanceProps} />
                 </SortableSection>
               );
             })}

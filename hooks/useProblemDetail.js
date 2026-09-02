@@ -165,6 +165,18 @@ function buildProblem(problemCode, info, batches, codeToName) {
       source: problemInfo.source || undefined,
       contributedBy: contributors.length > 0 ? contributors.join(", ") : undefined,
     },
+    // T35 (#93): the instance the Solvers and Verifier sections show, and
+    // the prose format describing it, both straight off allInfo. Kept as
+    // their own top-level fields rather than folded into `overview`: the
+    // Overview mapping has its own instanceFormat-then-problemDefinition
+    // fallback chain for a different purpose (see this file's header), and
+    // the Solvers format block needs to be able to change without
+    // disturbing it. `defaultInstance` is a required IProblem member and
+    // all 50 problems supply one (verified against the live API
+    // 2026-09-02), but a missing one is still normalized to "" here rather
+    // than assumed away, so the input below it is always a string.
+    defaultInstance: problemInfo.defaultInstance || "",
+    instanceFormat: problemInfo.instanceFormat || "",
     solvers: buildSolvers(solversByProblem[problemCode], info),
     visualizations: buildVisualizations(visualizationsByProblem[problemCode], info),
     verifier: buildVerifier(verifiersByProblem[problemCode], info, problemInfo),

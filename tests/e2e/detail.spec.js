@@ -4,6 +4,9 @@
 // reaches the detail page, sections collapse/expand, sections can be
 // reordered with the keyboard, and "Reset to default" restores the order.
 //
+// T35 (#93) added the last test: the Solvers and Verifier sections show one
+// shared, editable problem instance.
+//
 // Never names a specific problem -- every test opens whichever problem the
 // live catalog happens to put first (helpers.js's gotoFirstProblemDetail),
 // same "don't hardcode catalog contents" reasoning as home.spec.js.
@@ -68,4 +71,34 @@ test("Reset to default restores the canonical section order", async ({ page }) =
   await page.locator("#detail-layout-reset").click();
 
   await expect(status).toHaveText(DEFAULT_LAYOUT_STATUS);
+});
+
+// T35 (#93). Both sections render their own input bound to a single value
+// owned by components/ProblemDetailLayout.js, so a certificate can never be
+// checked against a different instance than the one that was solved. Reads
+// whatever instance the live backend declares for this problem rather than
+// asserting a literal, same reasoning as the rest of this file.
+test("Solvers and Verifier share one editable problem instance", async ({ page }) => {
+  await gotoFirstProblemDetail(page, { expect });
+
+  await page.locator("#section-solvers-toggle").click();
+  await page.locator("#section-verifier-toggle").click();
+
+  const solversInstance = page.locator("#solvers-instance-input");
+  const verifierInstance = page.locator("#verifier-instance-input");
+
+  // Pre-filled from the problem's declared defaultInstance, which every
+  // problem in the catalog supplies today.
+  const declaredInstance = await solversInstance.inputValue();
+  expect(declaredInstance).not.toBe("");
+  await expect(verifierInstance).toHaveValue(declaredInstance);
+
+  await solversInstance.fill(`${declaredInstance} edited-in-solvers`);
+  await expect(verifierInstance).toHaveValue(`${declaredInstance} edited-in-solvers`);
+
+  await verifierInstance.fill(`${declaredInstance} edited-in-verifier`);
+  await expect(solversInstance).toHaveValue(`${declaredInstance} edited-in-verifier`);
+
+  // Ground rule 5: this task leaves both actions inert.
+  await expect(page.locator("#solvers-run-button")).toBeDisabled();
 });
