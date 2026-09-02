@@ -14,6 +14,12 @@
 // (#5's settled banner decision, quoted below), and the card-shaped objects
 // ProblemGrid/ProblemCatalogCard need that useCatalogFilters's plain
 // `{name, tags}` results don't carry (see toCardProblem below).
+//
+// T30 (#39): `id="home-subtitle"`/`id="home-result-count"` added to the two
+// dynamic-text Typography elements below so tests/e2e/home.spec.js can read
+// the real, currently-displayed counts (never a hardcoded one, per that
+// issue's done-when) instead of scraping for a number inside less specific
+// text.
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -145,7 +151,7 @@ export default function Home() {
           <Typography variant="h1" component="h1">
             Home
           </Typography>
-          <Typography variant="body1" sx={{ color: "text.secondary", mt: 0.5 }}>
+          <Typography id="home-subtitle" variant="body1" sx={{ color: "text.secondary", mt: 0.5 }}>
             {loading
               ? "Loading the problem catalog…"
               : `${index.size} catalogued problems across complexity classes, solvers, and visualizations.`}
@@ -206,7 +212,7 @@ export default function Home() {
           </Box>
 
           <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 1.5 }}>
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            <Typography id="home-result-count" variant="body2" sx={{ color: "text.secondary" }}>
               {loading ? "Loading…" : formatResultCount(problems.length, filtersActive)}
             </Typography>
             <Box sx={{ flex: 1, minHeight: 0 }}>

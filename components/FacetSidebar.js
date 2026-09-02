@@ -168,6 +168,13 @@ function FacetFilterGroup({ facet, options, selected, onChange }) {
                     size="small"
                     checked={selected.has(optionKey)}
                     onChange={() => toggleOption(optionKey)}
+                    // T30 (#39): a machine-readable count, so a Playwright
+                    // spec can pick "an option with a nonzero count" without
+                    // parsing it back out of the rendered "(N)" label text --
+                    // the done-when wants tests keyed to stable attributes,
+                    // not text scraping, and the label's own wording is
+                    // free to change without breaking that.
+                    slotProps={{ input: { "data-count": count } }}
                   />
                 }
                 label={

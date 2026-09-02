@@ -199,7 +199,12 @@ export default function ProblemDetailLayout({ problem }) {
         }}
       >
         <DragIndicatorIcon aria-hidden="true" fontSize="small" sx={{ color: "text.secondary" }} />
+        {/* T30 (#39): id added so tests/e2e/detail.spec.js can read the
+            current order back out of real page text (this line is the only
+            place it's rendered as text) rather than reimplementing "what
+            order are the sections in" via a separate DOM query. */}
         <Typography
+          id="detail-layout-status"
           variant="body2"
           component="span"
           sx={{ color: "text.secondary", flex: 1, minWidth: 0 }}
