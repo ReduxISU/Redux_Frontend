@@ -11,15 +11,9 @@
 // own done-when), matching this project's ground rule 4 that every
 // interactive element gets a unique id.
 
-// T43 (#65). The sessionStorage key components/StartupSplash.js writes once
-// it has played, kept in step with that file by hand (a spec can't import
-// the component itself -- it's a React/MUI module, and Playwright runs in
-// Node).
-const SPLASH_SESSION_KEY = "redux-startup-splash-shown";
-
 /**
- * Marks the Home page's startup animation as already seen for this browser
- * context, before any page script runs, so it never plays.
+ * Stops the Home page's startup animation from playing, before any page
+ * script runs.
  *
  * Every spec other than the splash's own wants this. The overlay is a real
  * full-screen element while it plays, so a click aimed at a card or a
@@ -27,21 +21,23 @@ const SPLASH_SESSION_KEY = "redux-startup-splash-shown";
  * animation instead, and every one of those specs would pay the animation's
  * running time for no coverage. tests/e2e/splash.spec.js deliberately does
  * NOT call this.
+ *
+ * Asks for reduced motion rather than pre-seeding storage. Since T43 (#65)
+ * gained its per-server-boot gate, suppressing the splash through storage
+ * would mean writing the current server's boot id, and a spec has no way to
+ * know that id before the first page load -- it only arrives with the HTML.
+ * `prefers-reduced-motion` is the app's own first-class way of never showing
+ * the overlay (StartupSplash.js checks it before the first paint), so this
+ * uses real behaviour instead of a test-only hook in production code.
+ *
+ * The trade-off: these specs now run with reduced motion on, so MUI's own
+ * transitions are shortened or dropped under them too. That makes them
+ * faster and less timing-dependent, and nothing outside splash.spec.js
+ * asserts on animation, but it does mean they exercise the reduced-motion
+ * presentation rather than the default one.
  */
 export async function skipStartupSplash(page) {
-  await page.addInitScript(
-    (key) => {
-      try {
-        window.sessionStorage.setItem(key, "1");
-      } catch {
-        // Nothing to do -- the app tolerates sessionStorage being
-        // unavailable too (see StartupSplash.js), the splash just plays.
-      }
-    },
-    // Playwright serialises this argument into the browser, so the key has
-    // to be passed in rather than closed over.
-    SPLASH_SESSION_KEY,
-  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
 }
 
 /**

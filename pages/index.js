@@ -185,7 +185,33 @@ function toCardProblem(result, completeness) {
   };
 }
 
-export default function Home() {
+// T43 (#65). The startup animation plays once per server process rather
+// than once per browser tab, so a reload does not replay it and a restart
+// does. That means the client has to know which server process answered it,
+// which is what this passes down.
+//
+// It has to arrive with the initial HTML rather than from a fetch the page
+// makes after mounting: StartupSplash decides whether to play in a layout
+// effect, before the browser paints, precisely so a visitor who should not
+// see the overlay never gets a frame of it. An id that showed up one round
+// trip later would be too late to make that decision with.
+//
+// The cost is that Home is server-rendered per request instead of statically
+// optimised. It already fetches its catalog client-side, so there is no data
+// waiting to be done here and the added work per request is generating one
+// short string. Recorded as a decision on #65.
+export async function getServerSideProps() {
+  const { SERVER_BOOT_ID } = await import("../lib/serverBootId");
+  return { props: { serverBootId: SERVER_BOOT_ID } };
+}
+
+/**
+ * @param {Object} props
+ * @param {string} props.serverBootId Identifies the server process that
+ *   handled this request, from getServerSideProps above. StartupSplash uses
+ *   it to tell a restart apart from a reload.
+ */
+export default function Home({ serverBootId }) {
   const [selected, setSelected] = useState(buildEmptySelection);
   const [searchValue, setSearchValue] = useState("");
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
@@ -238,8 +264,10 @@ export default function Home() {
           session all get Home exactly as they would if this component
           weren't here. `ready` is the catalog fetch settling, either way:
           see the component's own header for why that, and not a probe of
-          /api/health, is the backend signal it fades on. */}
-      <StartupSplash ready={!loading} />
+          /api/health, is the backend signal it fades on. `bootId` is what
+          makes it play once per server start rather than once per tab --
+          see getServerSideProps above. */}
+      <StartupSplash ready={!loading} bootId={serverBootId} />
       <NavBar />
       <Box
         component="main"

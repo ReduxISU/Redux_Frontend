@@ -26,12 +26,17 @@
 //     (the bar shooting up out of the ground, the tilt landing) overshoot
 //     slightly and settle rather than arriving exactly on target.
 //   - Strictly sequential steps: every step starts before the previous one
-//     has finished. The title starts emerging at 620ms while the tilt is
-//     still running to 730ms; the underline starts at 1180ms while the
-//     title is still settling to 1260ms. The overlap is what makes it read
+//     has finished. The title starts emerging at 830ms while the tilt is
+//     still running to 980ms; the underline starts at 1590ms while the
+//     title is still settling to 1690ms. The overlap is what makes it read
 //     as one movement instead of a seven-slide slideshow.
-//   - Uniform durations: they range from 300ms (the tilt, which wants to be
-//     quick) to 780ms (the underline, which wants to be deliberate).
+//   - Uniform durations: they range from 400ms (the tilt, which wants to be
+//     quick) to 1040ms (the underline, which wants to be deliberate).
+//
+// The finished logo then sits still for SETTLE_MS before anything fades.
+// Without that beat the last step's easing runs straight into the fade and
+// the animation reads as if it were cut off at the end rather than arriving
+// somewhere.
 //
 // Timing is a first pass and a judgment call, not something that can be
 // verified mechanically. Expect to tune the numbers in STEPS with the
@@ -71,8 +76,8 @@
 // is mounted underneath the whole time, so a screen reader user reads the
 // site normally while this plays purely visually. It is skippable by click,
 // spacebar or Escape, it honours `prefers-reduced-motion` by never showing
-// at all, and it plays once per session rather than on every navigation
-// back to Home.
+// at all, and it plays once per server start rather than on every
+// navigation back to Home or every reload (see SPLASH_BOOT_KEY below).
 //
 // If scripting fails outright, the <noscript> rule below removes the
 // overlay so the page underneath is still there. (Without JavaScript this
@@ -83,10 +88,20 @@ import { keyframes } from "@emotion/react";
 import Box from "@mui/material/Box";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 
-// sessionStorage key for "this browser tab has already seen the splash".
-// tests/e2e/helpers.js sets the same key to skip the animation for specs
-// that aren't about it; keep the two in step if this is ever renamed.
-const SPLASH_SESSION_KEY = "redux-startup-splash-shown";
+// localStorage key holding the server boot id (lib/serverBootId.js) this
+// browser last played the splash for.
+//
+// localStorage rather than sessionStorage, and a boot id rather than a bare
+// "seen" flag, because the question being answered changed: not "has this
+// tab seen it" but "has this browser seen it since the server last
+// started". sessionStorage would replay on every new tab and forget on
+// every browser restart, neither of which has anything to do with the
+// server starting up.
+//
+// The practical consequence is worth being clear about: on a server that
+// stays up for weeks, nobody who has already visited sees the animation
+// again for weeks, and that is the intent rather than a side effect.
+const SPLASH_BOOT_KEY = "redux-startup-splash-boot";
 
 // --- Timing -------------------------------------------------------------
 //
@@ -95,34 +110,49 @@ const SPLASH_SESSION_KEY = "redux-startup-splash-shown";
 // header). Recorded as a decision on #65.
 const STEPS = {
   // Step 2: the bar grows from nothing to full height.
-  grow: { delay: 120, duration: 420 },
+  grow: { delay: 160, duration: 560 },
   // Step 3: the bar angles to the left. The quickest step by some way.
-  tilt: { delay: 430, duration: 300 },
+  tilt: { delay: 580, duration: 400 },
   // Step 4: the title emerges from the bar, moving right.
-  title: { delay: 620, duration: 640 },
+  title: { delay: 830, duration: 860 },
   // Step 5: the copy rotates down into the second arm of the ">".
-  duplicate: { delay: 780, duration: 480 },
+  duplicate: { delay: 1050, duration: 640 },
   // Step 6: the underline grows left to right. The slowest step.
-  underline: { delay: 1180, duration: 780 },
+  underline: { delay: 1590, duration: 1040 },
 };
 
 // Step 6 finishes last, so the animation's own length is its end.
 const ANIMATION_MS = STEPS.underline.delay + STEPS.underline.duration;
 
+// The beat after the last step lands, before anything starts fading. The
+// logo is finished and completely still for this long. Short enough that it
+// reads as the end of a movement rather than as the page having stopped
+// doing anything, which is roughly where a still frame starts to worry
+// people. Runs whether or not the catalog has arrived, so the ending looks
+// the same on a fast backend as on a slow one.
+const SETTLE_MS = 650;
+
 // How long the overlay will hold past the end of the animation waiting for
 // the catalog, before giving up and fading into T29's loading state anyway.
 // 2500ms is roughly the cold-start cost of the six batch endpoints
-// hooks/useCatalogIndex.js requests through the proxy on a slow connection,
-// and it keeps the worst case a visitor can ever sit through (animation +
-// hold + fade) just under five seconds. Past that a splash stops reading as
-// a splash and starts reading as a hung page. Recorded as a decision on
-// #65, along with the step timings above and the fade below.
+// hooks/useCatalogIndex.js requests through the proxy on a slow connection.
+// Past that a splash stops reading as a splash and starts reading as a hung
+// page. Recorded as a decision on #65, along with the step timings above,
+// the settle beat and the fade below.
+//
+// Two totals worth knowing, both longer than the first pass at this:
+//   - Ordinary case, backend answers during the animation:
+//     2630 + 650 + 900 = about 4.2 seconds.
+//   - Worst case, backend never answers and the hold runs out:
+//     2630 + 650 + 2500 + 900 = about 6.7 seconds.
 const MAX_HOLD_MS = 2500;
 
-// Step 7: the fade out to the Home page. Long enough to read as a
-// deliberate hand-off rather than a cut, short enough not to hold up a
-// visitor who has just pressed Escape to get past it.
-const FADE_MS = 420;
+// Step 7: the fade out to the Home page. Deliberately unhurried, so the
+// overlay dissolves into the page rather than being switched off. A skip
+// still pays this in full, which is the one argument against a fade this
+// long, but Escape at least starts it immediately rather than waiting for
+// the animation to finish first.
+const FADE_MS = 900;
 
 // --- Easing -------------------------------------------------------------
 // Named rather than inlined so the same intent is reused, and so the
@@ -144,6 +174,25 @@ const ARM_LENGTH = 56;
 const ARM_THICKNESS = 10;
 const UPPER_ARM_ANGLE = -45;
 const LOWER_ARM_ANGLE = -135;
+// Half the thickness, which is also the radius of the rounded cap on each
+// end of an arm. Named because the joint below is built out of it.
+const ARM_CAP_RADIUS = ARM_THICKNESS / 2;
+// Where each arm rotates, measured from the bottom of its box.
+//
+// This is what stops the ">" looking like two bars laid on top of each
+// other. Pivoting on the bottom *edge* leaves each arm's rounded cap
+// hanging past the joint at a different angle, so the outline of the vertex
+// has a step in it where one cap emerges from behind the other. Pivoting on
+// the *centre of the cap* instead puts both caps on the same circle: their
+// union is a single disc of this radius centred exactly on the vertex,
+// which is precisely the shape a round line join draws. The two arms then
+// have one continuous outline and read as one piece.
+//
+// The arms are ARM_CAP_RADIUS taller than ARM_LENGTH to pay for it, so the
+// pivot still sits ARM_LENGTH from the far end and the glyph keeps the same
+// outside dimensions as before.
+const ARM_BOX_HEIGHT = ARM_LENGTH + ARM_CAP_RADIUS;
+const ARM_PIVOT = `50% calc(100% - ${ARM_CAP_RADIUS}px)`;
 // A 45 degree arm reaches ARM_LENGTH / sqrt(2) in each direction from the
 // vertex, plus the thickness of the bar itself.
 const ARM_REACH = Math.round(ARM_LENGTH * 0.7071);
@@ -218,12 +267,16 @@ const idleBreath = keyframes({
 //            this state for "done" in a layout effect, before the browser
 //            paints, so neither one ever flashes the overlay.
 //   playing  steps 1 to 6.
-//   holding  the animation has finished and the catalog has not arrived.
+//   settling the finished logo, held still for SETTLE_MS. Always runs, and
+//            always for the same length, so the ending does not depend on
+//            how quickly the backend answered.
+//   holding  the settle beat is over and the catalog still has not arrived.
 //   fading   step 7, the fade out. Also where a skip jumps straight to.
 //   done     unmounted.
 const PHASES = {
   pending: "pending",
   playing: "playing",
+  settling: "settling",
   holding: "holding",
   fading: "fading",
   done: "done",
@@ -240,24 +293,27 @@ function prefersReducedMotion() {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
 
-// sessionStorage throws rather than returning null in a few configurations
-// (Safari's old private mode, cookie-blocking policies). Falling back to
-// "not seen yet" there means the worst case is the animation playing again
-// on a return to Home, which is a great deal better than the page not
-// rendering.
-function readSessionFlag(key) {
+// localStorage throws rather than returning null in a few configurations
+// (Safari's old private mode, cookie-blocking policies). Returning null
+// there means the stored id can never match, so the animation plays on
+// every load in those browsers. That is the wrong end of the trade to be
+// on, but the alternatives are worse: refusing to play at all would punish
+// a whole class of visitor for a storage policy, and there is nowhere else
+// to remember this without setting a cookie the site does not otherwise
+// need.
+function readStoredBootId() {
   try {
-    return window.sessionStorage.getItem(key) !== null;
+    return window.localStorage.getItem(SPLASH_BOOT_KEY);
   } catch {
-    return false;
+    return null;
   }
 }
 
-function writeSessionFlag(key) {
+function writeStoredBootId(bootId) {
   try {
-    window.sessionStorage.setItem(key, "1");
+    window.localStorage.setItem(SPLASH_BOOT_KEY, bootId);
   } catch {
-    // Nothing to do: see readSessionFlag.
+    // Nothing to do: see readStoredBootId.
   }
 }
 
@@ -268,35 +324,57 @@ function writeSessionFlag(key) {
  * @param {boolean} props.ready Whether the catalog fetch has settled, either
  *   way. pages/index.js passes `!loading` from useCatalogIndex; see this
  *   file's header for why that is the whole backend signal.
+ * @param {string} [props.bootId] Identifies the server process that served
+ *   this page (lib/serverBootId.js, delivered by pages/index.js's
+ *   getServerSideProps). The animation plays when this differs from the one
+ *   this browser last played for, which is to say once per server start.
+ *   Absent, the animation does not play at all: without an id there is no
+ *   way to tell a restart from a reload, and playing on every single load
+ *   is the worse of the two mistakes.
  */
-export default function StartupSplash({ ready }) {
+export default function StartupSplash({ ready, bootId }) {
   const [phase, setPhase] = useState(PHASES.pending);
 
   const skip = useCallback(() => {
     setPhase((current) =>
-      current === PHASES.playing || current === PHASES.holding ? PHASES.fading : current,
+      current === PHASES.playing || current === PHASES.settling || current === PHASES.holding
+        ? PHASES.fading
+        : current,
     );
   }, []);
 
   useIsomorphicLayoutEffect(() => {
-    // Decided on #65 and not up for re-litigation: reduced motion skips the
-    // animation entirely rather than playing a shortened version of it, and
-    // the splash is a once-per-session thing rather than a once-per-visit-to-
-    // Home thing.
-    if (prefersReducedMotion() || readSessionFlag(SPLASH_SESSION_KEY)) {
+    // Reduced motion skips the animation entirely rather than playing a
+    // shortened version of it (decided on #65).
+    if (prefersReducedMotion()) {
       setPhase(PHASES.done);
       return;
     }
-    writeSessionFlag(SPLASH_SESSION_KEY);
+    // No boot id means no way to distinguish a restart from a reload, so
+    // nothing plays. See the prop's own note above.
+    if (!bootId || readStoredBootId() === bootId) {
+      setPhase(PHASES.done);
+      return;
+    }
+    writeStoredBootId(bootId);
     setPhase(PHASES.playing);
-  }, []);
+  }, [bootId]);
 
   // Steps 1 to 6 run to their own preset length regardless of what the
   // backend is doing. Deliberately does not depend on `ready`: the catalog
   // arriving mid-animation must not restart this timer.
   useEffect(() => {
     if (phase !== PHASES.playing) return undefined;
-    const timer = setTimeout(() => setPhase(PHASES.holding), ANIMATION_MS);
+    const timer = setTimeout(() => setPhase(PHASES.settling), ANIMATION_MS);
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  // The beat on the finished logo. Runs to SETTLE_MS whatever the backend is
+  // doing, which is what stops a catalog that arrived early from cutting the
+  // ending short.
+  useEffect(() => {
+    if (phase !== PHASES.settling) return undefined;
+    const timer = setTimeout(() => setPhase(PHASES.holding), SETTLE_MS);
     return () => clearTimeout(timer);
   }, [phase]);
 
@@ -326,7 +404,12 @@ export default function StartupSplash({ ready }) {
   }, [fading]);
 
   useEffect(() => {
-    if (fading || (phase !== PHASES.playing && phase !== PHASES.holding)) return undefined;
+    if (
+      fading ||
+      (phase !== PHASES.playing && phase !== PHASES.settling && phase !== PHASES.holding)
+    ) {
+      return undefined;
+    }
 
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
@@ -387,8 +470,11 @@ export default function StartupSplash({ ready }) {
 
       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "stretch" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 2, sm: 3 } }}>
-          {/* The ">" prompt. Both arms are absolutely positioned so their
-              bottom ends sit on the same point, the vertex on the right. */}
+          {/* The ">" prompt. Both arms are absolutely positioned so they
+              pivot about the same point, the vertex on the right: see
+              ARM_PIVOT for why that point is the centre of the rounded cap
+              rather than the end of the bar, and why it matters to the
+              glyph reading as a single shape. */}
           <Box
             sx={{
               position: "relative",
@@ -407,8 +493,8 @@ export default function StartupSplash({ ready }) {
                 left: `calc(100% - ${ARM_THICKNESS}px)`,
                 top: `calc(50% - ${ARM_LENGTH}px)`,
                 width: ARM_THICKNESS,
-                height: ARM_LENGTH,
-                transformOrigin: "50% 100%",
+                height: ARM_BOX_HEIGHT,
+                transformOrigin: ARM_PIVOT,
                 animation: `${tiltLeft} ${STEPS.tilt.duration}ms ${EASE_SNAP} ${STEPS.tilt.delay}ms both`,
               }}
             >
@@ -418,7 +504,10 @@ export default function StartupSplash({ ready }) {
                   height: "100%",
                   borderRadius: 999,
                   backgroundColor: theme.palette.primary.main,
-                  transformOrigin: "50% 100%",
+                  // Grows out of the vertex itself rather than the bottom of
+                  // the box, so the bar emerges from the point the whole
+                  // glyph is built around.
+                  transformOrigin: ARM_PIVOT,
                   animation: `${growFromGround} ${STEPS.grow.duration}ms ${EASE_LAUNCH} ${STEPS.grow.delay}ms both`,
                 })}
               />
@@ -432,8 +521,8 @@ export default function StartupSplash({ ready }) {
                 left: `calc(100% - ${ARM_THICKNESS}px)`,
                 top: `calc(50% - ${ARM_LENGTH}px)`,
                 width: ARM_THICKNESS,
-                height: ARM_LENGTH,
-                transformOrigin: "50% 100%",
+                height: ARM_BOX_HEIGHT,
+                transformOrigin: ARM_PIVOT,
                 animation: `${rotateDownIntoPrompt} ${STEPS.duplicate.duration}ms ${EASE_SWEEP} ${STEPS.duplicate.delay}ms both`,
               }}
             >

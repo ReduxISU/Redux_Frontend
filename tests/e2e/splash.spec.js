@@ -9,8 +9,9 @@
 //
 // What's covered is the behaviour the issue settled and that a person can't
 // eyeball reliably: that the overlay takes itself down without help, that
-// all three skip inputs work, that it plays once per session and not on
-// every return to Home, that `prefers-reduced-motion` skips it outright,
+// all three skip inputs work, that it plays once per server start and not
+// on every reload or return to Home, that `prefers-reduced-motion` skips it
+// outright,
 // and that it never touches focus. What's deliberately NOT covered is
 // whether the motion looks organic -- that's a judgment call for the
 // project owner, and a test asserting on frame timing would be both flaky
@@ -20,21 +21,26 @@ import { expect, test } from "./fixtures";
 
 const SPLASH = "#home-startup-splash";
 
-// Long enough to cover the animation, the maximum hold and the fade with
-// room to spare (StartupSplash.js's own STEPS/MAX_HOLD_MS/FADE_MS come to
-// about 4.9 seconds in the worst case), short enough that a splash which
-// genuinely never leaves still fails the test rather than hanging it.
-const SPLASH_LIFETIME_MS = 9_000;
+// Long enough to cover the animation, the settle beat, the maximum hold and
+// the fade with room to spare (StartupSplash.js's own STEPS, SETTLE_MS,
+// MAX_HOLD_MS and FADE_MS come to about 6.7 seconds in the worst case),
+// short enough that a splash which genuinely never leaves still fails the
+// test rather than hanging it.
+const SPLASH_LIFETIME_MS = 12_000;
 
-// Shorter than the animation's own preset length, so a test asserting the
-// overlay is gone inside this window is proving the skip did something and
-// not just outwaiting the animation.
-const SKIP_MS = 1_500;
+// Shorter than the animation's own preset length (about 2.6 seconds), so a
+// test asserting the overlay is gone inside this window is proving the skip
+// did something and not just outwaiting the animation. Longer than the fade
+// a skip still has to play out (FADE_MS, 900ms).
+const SKIP_MS = 2_000;
 
 /** Navigates to Home and waits for the animation to actually be running. */
 async function gotoHomeAndWaitForSplash(page) {
   await page.goto("/");
-  await expect(page.locator(SPLASH)).toHaveAttribute("data-splash-phase", /playing|holding/);
+  await expect(page.locator(SPLASH)).toHaveAttribute(
+    "data-splash-phase",
+    /playing|settling|holding/,
+  );
 }
 
 test("the startup animation plays on first load and clears itself", async ({ page }) => {
@@ -73,15 +79,21 @@ test("clicking skips the startup animation", async ({ page }) => {
   await expect(page.locator(SPLASH)).toHaveCount(0, { timeout: SKIP_MS });
 });
 
-test("the startup animation plays once per session, not on every load", async ({ page }) => {
+test("the startup animation plays once per server start, not on every load", async ({ page }) => {
   await gotoHomeAndWaitForSplash(page);
   await page.locator(SPLASH).click();
   await expect(page.locator(SPLASH)).toHaveCount(0, { timeout: SKIP_MS });
 
-  // Same tab, same session: this is the "return to Home" case the issue
-  // rules out replaying on. A reload is the harsher version of it (a
-  // client-side navigation back to Home wouldn't even reload the app), so
-  // if the flag survives this it survives that.
+  // The server has not restarted between these two loads, so it reports the
+  // same boot id and the splash has nothing new to play for. A reload is the
+  // harsher version of the "return to Home" case the issue rules out
+  // replaying on (a client-side navigation back to Home wouldn't even reload
+  // the app), so if the gate holds here it holds for that too.
+  //
+  // What this cannot cover from inside Playwright is the other half of the
+  // rule: that restarting the server DOES play it again. That needs a server
+  // restart between two page loads, which the e2e run has no handle on -- it
+  // is pointed at an already-running instance. Verified by hand instead.
   await page.reload();
   await expect(page.locator("#home-result-count")).not.toContainText("Loading", {
     timeout: 20_000,
