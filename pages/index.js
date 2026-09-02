@@ -32,9 +32,9 @@ import FacetSidebar from "../components/FacetSidebar";
 import NavBar from "../components/NavBar";
 import ProblemGrid from "../components/ProblemGrid";
 import SearchBar from "../components/SearchBar";
+import { thinScrollbarSx } from "../components/theme";
 import { FIXTURE_PROBLEMS } from "../data/fixtures";
 import { TAXONOMY } from "../data/taxonomy";
-import { thinScrollbarSx } from "../components/theme";
 
 // The three facets ProblemCatalogCard actually renders badges for -- the
 // only keys its own `matchedTags` prop needs (components/ProblemCatalogCard.js
