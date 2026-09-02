@@ -123,6 +123,30 @@ const PAGE_BACKGROUND = "#0A0908";
 const PANEL_BACKGROUND = "#17140F"; // one step lighter than the page, per the mockup's elevated surfaces
 const HAIRLINE_BORDER = "rgba(255, 237, 213, 0.09)"; // warm-tinted hairline, used for every panel/card edge
 
+// Shared scrollbar treatment for every internally-scrolling region on the
+// Home page (#68): the sidebar's own scroll, each facet group's capped
+// option list, and the card grid. Track is transparent (matches the page
+// background it sits over, per #68's explicit requirement) and the thumb is
+// a slim, low-contrast bar rather than the browser default. Firefox
+// properties (`scrollbarWidth`/`scrollbarColor`) and the WebKit
+// pseudo-elements are both set so Chrome/Edge/Safari and Firefox match.
+const SCROLLBAR_THUMB_COLOR = "rgba(245, 241, 234, 0.22)";
+export const thinScrollbarSx = {
+  scrollbarWidth: "thin",
+  scrollbarColor: `${SCROLLBAR_THUMB_COLOR} transparent`,
+  "&::-webkit-scrollbar": {
+    width: 6,
+    height: 6,
+  },
+  "&::-webkit-scrollbar-track": {
+    background: "transparent",
+  },
+  "&::-webkit-scrollbar-thumb": {
+    backgroundColor: SCROLLBAR_THUMB_COLOR,
+    borderRadius: 999,
+  },
+};
+
 const theme = createTheme({
   palette: {
     mode: "dark",

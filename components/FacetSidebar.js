@@ -32,16 +32,6 @@ import { useState } from "react";
 import { TAXONOMY } from "../data/taxonomy";
 import { getFacetAccentColor } from "./theme";
 
-// Long lists scroll inside the group instead of pushing the rest of the
-// panel down. The mockup shows this for Problem Type (13 values, capped at
-// ~8 visible rows) — applied generically here rather than special-cased to
-// that one facet, so it also naturally covers Complexity Class (10 values
-// after absorbing Quantum Complexity Class, #6 2026-09-01) and
-// Visualization Type (12), neither of which existed in this shape when the
-// mockup was drawn. ~34px/row is an approximation (MUI doesn't expose a
-// fixed FormControlLabel row height); short lists just never reach it.
-const OPTION_LIST_MAX_HEIGHT = 8 * 34;
-
 function FacetFilterGroup({ facet, options, selected, onChange }) {
   const [expanded, setExpanded] = useState(true);
   const toggleId = `facet-${facet.key}-toggle`;
@@ -146,8 +136,17 @@ function FacetFilterGroup({ facet, options, selected, onChange }) {
         id={listId}
         sx={{
           display: expanded ? "flex" : "none",
-          maxHeight: OPTION_LIST_MAX_HEIGHT,
-          overflowY: "auto",
+          // MUI's FormGroup defaults to `flexWrap: "wrap"` (Root style, see
+          // node_modules/@mui/material/FormGroup/FormGroup.js). Combined
+          // with `flexDirection: "column"` (also the default), a long list
+          // wrapped into a second flex *column* rather than growing
+          // downward — reported in #68 as options "starting on the next
+          // column after going out of view." Forced to `nowrap` so a group
+          // always grows straight down the page instead of sideways; per
+          // #68's revised direction there's no per-group height cap or
+          // internal scroll any more; the whole panel scrolls as one
+          // (see the sidebar's own overflowY in pages/index.js).
+          flexWrap: "nowrap",
           pl: 3,
         }}
       >
