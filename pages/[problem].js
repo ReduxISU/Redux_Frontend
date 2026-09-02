@@ -53,9 +53,7 @@ import ProblemDetailLayout from "../components/ProblemDetailLayout";
 import { isProblemComplete } from "../components/StatusIcon";
 import { TAXONOMY } from "../data/taxonomy";
 import { useProblemDetail } from "../hooks/useProblemDetail";
-
-// Same same-origin proxy base lib/redux/index.js's own JSDoc documents.
-const API_BASE_URL = "/api/redux/";
+import { REDUX_API_BASE_URL } from "../lib/redux";
 
 // Badge row order per the mockup (NP-Complete, NP, Boolean Logic): complexity
 // badges first, then problem type. Chip variant is keyed straight off
@@ -152,7 +150,7 @@ export default function ProblemDetail() {
   const { problem: routeProblemName } = router.query;
 
   const { problem, loading, error } = useProblemDetail(
-    API_BASE_URL,
+    REDUX_API_BASE_URL,
     typeof routeProblemName === "string" ? routeProblemName : null,
   );
 

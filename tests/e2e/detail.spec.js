@@ -99,6 +99,13 @@ test("Solvers and Verifier share one editable problem instance", async ({ page }
   await verifierInstance.fill(`${declaredInstance} edited-in-verifier`);
   await expect(solversInstance).toHaveValue(`${declaredInstance} edited-in-verifier`);
 
-  // Ground rule 5: this task leaves both actions inert.
-  await expect(page.locator("#solvers-run-button")).toBeDisabled();
+  // T37 (#95) turned Run on, so it is enabled whenever there is an instance
+  // to run. Emptying the box has to disable it again: a Run with nothing to
+  // solve can only fail. Full coverage of the live Run and Verify paths is
+  // T39 (#97); this is the one assertion this test already owned, kept
+  // pointing at the current behaviour rather than the retired one.
+  const runButton = page.locator("#solvers-run-button");
+  await expect(runButton).toBeEnabled();
+  await solversInstance.fill("");
+  await expect(runButton).toBeDisabled();
 });

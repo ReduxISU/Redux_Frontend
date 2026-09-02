@@ -61,6 +61,7 @@ import { thinScrollbarSx } from "../components/theme";
 import { TAXONOMY } from "../data/taxonomy";
 import { useCatalogFilters } from "../hooks/useCatalogFilters";
 import { useCatalogIndex } from "../hooks/useCatalogIndex";
+import { REDUX_API_BASE_URL } from "../lib/redux";
 
 // #68: 280 was too narrow -- the longest option labels ("Algebra and Number
 // Theory", "Logical/Functional Models") wrapped to a second line against
@@ -88,10 +89,6 @@ const SIDEBAR_BREAKPOINT = "md";
 // open, and focus returns to the trigger button on close -- so none of that
 // is custom code here, just configuration.
 const FILTERS_DRAWER_ID = "home-filters-drawer";
-
-// Same-origin proxy base lib/redux/index.js's own JSDoc documents (keeps
-// the real backend origin server-side, pages/api/redux/[...path].js).
-const API_BASE_URL = "/api/redux/";
 
 function buildEmptySelection() {
   const selection = {};
@@ -196,7 +193,7 @@ export default function Home() {
   // rather than just CSS visibility.
   const isWideLayout = useMediaQuery(theme.breakpoints.up(SIDEBAR_BREAKPOINT));
 
-  const { index, completeness, loading, error } = useCatalogIndex(API_BASE_URL);
+  const { index, completeness, loading, error } = useCatalogIndex(REDUX_API_BASE_URL);
   const { results, facetOptions, matchedTags } = useCatalogFilters(index, {
     selected,
     searchValue,
