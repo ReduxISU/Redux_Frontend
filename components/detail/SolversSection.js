@@ -195,7 +195,10 @@ export default function SolversSection({ problem, dragHandleProps }) {
                     >
                       <Typography
                         variant="body2"
-                        sx={{ fontWeight: 700, color: isSelected ? "text.primary" : "text.secondary" }}
+                        sx={{
+                          fontWeight: 700,
+                          color: isSelected ? "text.primary" : "text.secondary",
+                        }}
                       >
                         {solver.name}
                       </Typography>

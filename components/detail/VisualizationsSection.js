@@ -148,7 +148,10 @@ export default function VisualizationsSection({ problem, dragHandleProps }) {
                   >
                     <Typography
                       variant="body2"
-                      sx={{ fontWeight: 600, color: isSelected ? "text.primary" : "text.secondary" }}
+                      sx={{
+                        fontWeight: 600,
+                        color: isSelected ? "text.primary" : "text.secondary",
+                      }}
                     >
                       {visualization.name}
                     </Typography>
