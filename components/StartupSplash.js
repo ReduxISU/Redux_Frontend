@@ -269,7 +269,16 @@ const UNDERLINE_GAP = 0.09;
 // The space between the ">" and the R. In em for the same reason as
 // everything else here: a fixed pixel gap that suited a 90px-tall glyph
 // swamps one sized to the text.
-const GLYPH_TEXT_GAP = 0.18;
+//
+// Set so the arrow sits in the same rhythm as the letters rather than
+// tighter than them. This is not the same number as the whitespace it
+// produces: the letters are held apart by letter-spacing plus their own
+// sidebearings, while the arrow's ink runs right to the edge of its box, so
+// an identical gap value leaves the arrow visibly closer to the R than the
+// R is to the E. Measured from the rendered pixels, 0.18em here gave 0.253em
+// of actual air against an average of 0.373em between letters; 0.30em brings
+// it into line with them.
+const GLYPH_TEXT_GAP = 0.3;
 
 // The pose both arms hold for steps 2 to 4: lying flat, pointing left from
 // the vertex. Superimposed at this angle the two of them are visually one
