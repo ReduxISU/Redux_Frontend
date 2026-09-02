@@ -34,13 +34,56 @@
 // exact wording with T29 (#38)", which hasn't been built yet -- so it's
 // exposed as an overridable `emptyMessage` prop rather than hardcoded, so
 // T29 can supply the final copy without editing this file.
+//
+// T29 (#38): `loading` (default false) swaps the grid for a fixed number of
+// skeleton cards in the same grid container instead of the `emptyMessage`
+// text -- the issue's own "Loading" done-when asks for something that
+// "shouldn't cause the layout to jump when the real content arrives," and a
+// centered text line replaced by a full card grid is exactly that kind of
+// jump. The skeleton count doesn't try to match the real eventual result
+// count (unknowable before the fetch resolves); it only has to reserve
+// roughly the right shape.
 
 import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import ProblemCatalogCard from "./ProblemCatalogCard";
 import { thinScrollbarSx } from "./theme";
 
 const DESKTOP_COLUMN_COUNT = 3;
+const SKELETON_CARD_COUNT = 6;
+
+const gridContainerSx = {
+  height: "100%",
+  overflowY: "auto",
+  display: "grid",
+  gridTemplateColumns: `repeat(${DESKTOP_COLUMN_COUNT}, minmax(0, 1fr))`,
+  alignItems: "start",
+  // #69: row gap trimmed independently of column gap -- the issue is
+  // specifically about vertical space between cards, not horizontal.
+  rowGap: 1.25,
+  columnGap: 2,
+  pb: 1,
+  pr: 1,
+  ...thinScrollbarSx,
+};
+
+// Same Paper shape/padding as ProblemCatalogCard (title + three tag rows),
+// so swapping this out for the real card once it arrives doesn't shift the
+// row's height.
+function SkeletonCard() {
+  return (
+    <Paper sx={{ p: 2, borderRadius: 3 }}>
+      <Skeleton variant="text" width="70%" height={28} sx={{ mb: 1.5 }} />
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <Skeleton variant="rounded" width="45%" height={22} />
+        <Skeleton variant="rounded" width="60%" height={22} />
+        <Skeleton variant="rounded" width="50%" height={22} />
+      </Box>
+    </Paper>
+  );
+}
 
 /**
  * @param {Object} props
@@ -50,13 +93,27 @@ const DESKTOP_COLUMN_COUNT = 3;
  * @param {Object} [props.matchedTags] `{ [facetKey]: Set<optionKey> }`,
  *   forwarded to every card unchanged (ProblemCatalogCard's own prop).
  * @param {string} [props.emptyMessage] Shown in place of the grid when
- *   `problems` is empty (ground rule 6: an empty grid, not a crash).
+ *   `problems` is empty and not loading (ground rule 6: an empty grid, not
+ *   a crash).
+ * @param {boolean} [props.loading] Shows skeleton cards instead of
+ *   `emptyMessage` while the catalog is still being fetched.
  */
 export default function ProblemGrid({
   problems,
   matchedTags = {},
   emptyMessage = "No problems match your filters.",
+  loading = false,
 }) {
+  if (loading) {
+    return (
+      <Box sx={gridContainerSx} aria-hidden="true">
+        {Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
+          <SkeletonCard key={index} />
+        ))}
+      </Box>
+    );
+  }
+
   if (problems.length === 0) {
     return (
       <Box sx={{ py: 6, textAlign: "center" }}>
@@ -68,22 +125,7 @@ export default function ProblemGrid({
   }
 
   return (
-    <Box
-      sx={{
-        height: "100%",
-        overflowY: "auto",
-        display: "grid",
-        gridTemplateColumns: `repeat(${DESKTOP_COLUMN_COUNT}, minmax(0, 1fr))`,
-        alignItems: "start",
-        // #69: row gap trimmed independently of column gap -- the issue is
-        // specifically about vertical space between cards, not horizontal.
-        rowGap: 1.25,
-        columnGap: 2,
-        pb: 1,
-        pr: 1,
-        ...thinScrollbarSx,
-      }}
-    >
+    <Box sx={gridContainerSx}>
       {problems.map((problem) => (
         <ProblemCatalogCard key={problem.slug} problem={problem} matchedTags={matchedTags} />
       ))}
