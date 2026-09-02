@@ -33,8 +33,12 @@ import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { TAXONOMY } from "../../data/taxonomy";
-import { getFacetAccentColor } from "../theme";
+import { getFacetAccentColor, thinScrollbarSx } from "../theme";
 import SectionShell from "./SectionShell";
+
+// #71: fixed list height so a problem with many declared reduction targets
+// scrolls inside the list instead of stretching the section indefinitely.
+const REDUCES_TO_MAX_HEIGHT = 220;
 
 const REDUCTION_COST_FACET = TAXONOMY.find((facet) => facet.key === "reductionCost");
 const REDUCTION_COST_LABELS = new Map(
@@ -178,12 +182,15 @@ export default function ReductionsSection({ problem, dragHandleProps }) {
             Reduces to
           </Typography>
           <Box
+            role="listbox"
+            aria-label="Reduces to"
             sx={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 0.75,
-              maxHeight: 220,
+              maxHeight: REDUCES_TO_MAX_HEIGHT,
               overflowY: "auto",
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 1.5,
+              ...thinScrollbarSx,
             }}
           >
             {to.map((reduction, index) => {
@@ -194,7 +201,8 @@ export default function ReductionsSection({ problem, dragHandleProps }) {
                   id={`reduction-to-${slugify(reduction.target)}`}
                   component="button"
                   type="button"
-                  aria-pressed={isSelected}
+                  role="option"
+                  aria-selected={isSelected}
                   onClick={() => setSelectedIndex(index)}
                   sx={(theme) => ({
                     display: "flex",
@@ -208,12 +216,17 @@ export default function ReductionsSection({ problem, dragHandleProps }) {
                     color: "inherit",
                     px: 1.5,
                     py: 1,
-                    borderRadius: 1.5,
-                    border: "1px solid",
-                    borderColor: isSelected ? "primary.main" : "divider",
+                    border: "none",
+                    borderLeft: "3px solid",
+                    borderLeftColor: isSelected ? "primary.main" : "transparent",
                     backgroundColor: isSelected
                       ? alpha(theme.palette.primary.main, 0.12)
                       : "transparent",
+                    "&:hover": {
+                      backgroundColor: isSelected
+                        ? alpha(theme.palette.primary.main, 0.12)
+                        : alpha(theme.palette.common.white, 0.04),
+                    },
                   })}
                 >
                   <Typography variant="body2">

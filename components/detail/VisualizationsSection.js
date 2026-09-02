@@ -25,10 +25,14 @@ import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { TAXONOMY, UNCLASSIFIED } from "../../data/taxonomy";
-import { getFacetAccentColor } from "../theme";
+import { getFacetAccentColor, thinScrollbarSx } from "../theme";
 import SectionShell from "./SectionShell";
 
 const VISUALIZATION_TYPE_FACET = TAXONOMY.find((facet) => facet.key === "visualizationType");
+
+// #71: fixed rail height so a problem with many declared visualizations
+// scrolls inside the rail instead of stretching the section indefinitely.
+const RAIL_MAX_HEIGHT = 320;
 
 // Falls back to the raw key (or the UNCLASSIFIED sentinel itself, e.g.
 // 3-SAT's "Assignment Table" -- a real, documented taxonomy gap, see
@@ -90,49 +94,62 @@ export default function VisualizationsSection({ problem, dragHandleProps }) {
         <Box sx={{ display: "flex", gap: 2 }}>
           <Box
             component="ul"
+            role="listbox"
+            aria-label="Visualizations"
             sx={{
               listStyle: "none",
               m: 0,
               p: 0,
               width: 220,
               flexShrink: 0,
-              maxHeight: 360,
+              maxHeight: RAIL_MAX_HEIGHT,
               overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: 1,
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 2,
+              ...thinScrollbarSx,
             }}
           >
             {visualizations.map((visualization, index) => {
               const isSelected = index === selectedIndex;
               const entryId = `visualizations-rail-entry-${index}`;
               return (
-                <Box component="li" key={entryId}>
+                <Box component="li" key={entryId} sx={{ listStyle: "none" }}>
                   <Box
                     id={entryId}
                     component="button"
                     type="button"
-                    aria-pressed={isSelected}
+                    role="option"
+                    aria-selected={isSelected}
                     onClick={() => setSelectedIndex(index)}
-                    sx={{
+                    sx={(theme) => ({
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "flex-start",
                       gap: 0.5,
                       width: "100%",
                       p: 1,
-                      borderRadius: 2,
-                      border: "1px solid",
-                      borderColor: isSelected ? "primary.main" : "divider",
-                      backgroundColor: (t) =>
-                        isSelected ? alpha(t.palette.primary.main, 0.1) : "transparent",
+                      border: "none",
+                      borderLeft: "3px solid",
+                      borderLeftColor: isSelected ? "primary.main" : "transparent",
+                      backgroundColor: isSelected
+                        ? alpha(theme.palette.primary.main, 0.1)
+                        : "transparent",
+                      "&:hover": {
+                        backgroundColor: isSelected
+                          ? alpha(theme.palette.primary.main, 0.1)
+                          : alpha(theme.palette.common.white, 0.04),
+                      },
                       color: "inherit",
                       font: "inherit",
                       textAlign: "left",
                       cursor: "pointer",
-                    }}
+                    })}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 600, color: isSelected ? "text.primary" : "text.secondary" }}
+                    >
                       {visualization.name}
                     </Typography>
                     <TypeBadge typeKey={visualization.type} />

@@ -29,8 +29,12 @@ import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { TAXONOMY } from "../../data/taxonomy";
-import { getFacetAccentColor } from "../theme";
+import { getFacetAccentColor, thinScrollbarSx } from "../theme";
 import SectionShell from "./SectionShell";
+
+// #71: fixed rail height so a problem with many declared solvers scrolls
+// inside the rail instead of stretching the section indefinitely.
+const RAIL_MAX_HEIGHT = 320;
 
 const TAXONOMY_BY_KEY = new Map(TAXONOMY.map((facet) => [facet.key, facet]));
 
@@ -127,51 +131,85 @@ export default function SolversSection({ problem, dragHandleProps }) {
         </Paper>
 
         <Box sx={{ display: "flex", gap: 2 }}>
-          <Box sx={{ width: 260, flexShrink: 0, display: "flex", flexDirection: "column", gap: 1 }}>
-            {solvers.length === 0 ? (
-              <Typography variant="body2" sx={{ color: "text.secondary", fontStyle: "italic" }}>
-                No solvers declared for this problem.
-              </Typography>
-            ) : (
-              solvers.map((solver, index) => {
+          {solvers.length === 0 ? (
+            <Typography
+              variant="body2"
+              sx={{ width: 260, flexShrink: 0, color: "text.secondary", fontStyle: "italic" }}
+            >
+              No solvers declared for this problem.
+            </Typography>
+          ) : (
+            <Box
+              component="ul"
+              role="listbox"
+              aria-label="Solvers"
+              sx={{
+                listStyle: "none",
+                m: 0,
+                p: 0,
+                width: 260,
+                flexShrink: 0,
+                maxHeight: RAIL_MAX_HEIGHT,
+                overflowY: "auto",
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 2,
+                ...thinScrollbarSx,
+              }}
+            >
+              {solvers.map((solver, index) => {
                 const solverId = `solver-${index}-toggle`;
                 const isSelected = index === selectedIndex;
                 return (
-                  <Paper
-                    key={solverId}
-                    id={solverId}
-                    component="button"
-                    type="button"
-                    onClick={() => setSelectedIndex(index)}
-                    aria-pressed={isSelected}
-                    variant="outlined"
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      gap: 0.5,
-                      p: 1.5,
-                      cursor: "pointer",
-                      textAlign: "left",
-                      font: "inherit",
-                      color: "inherit",
-                      borderColor: isSelected ? "primary.light" : "divider",
-                      backgroundColor: isSelected ? alpha("#FB923C", 0.08) : "transparent",
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {solver.name}
-                    </Typography>
-                    <Chip
-                      size="small"
-                      variant="solverTypeOutlined"
-                      label={optionLabel("solverType", solver.type)}
-                    />
-                  </Paper>
+                  <Box component="li" key={solverId} sx={{ listStyle: "none" }}>
+                    <Box
+                      id={solverId}
+                      component="button"
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => setSelectedIndex(index)}
+                      sx={(theme) => ({
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 0.5,
+                        width: "100%",
+                        p: 1.5,
+                        cursor: "pointer",
+                        textAlign: "left",
+                        font: "inherit",
+                        color: "inherit",
+                        border: "none",
+                        borderLeft: "3px solid",
+                        borderLeftColor: isSelected ? "primary.main" : "transparent",
+                        backgroundColor: isSelected
+                          ? alpha(theme.palette.primary.main, 0.14)
+                          : "transparent",
+                        "&:hover": {
+                          backgroundColor: isSelected
+                            ? alpha(theme.palette.primary.main, 0.14)
+                            : alpha(theme.palette.common.white, 0.04),
+                        },
+                      })}
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{ fontWeight: 700, color: isSelected ? "text.primary" : "text.secondary" }}
+                      >
+                        {solver.name}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        variant="solverTypeOutlined"
+                        label={optionLabel("solverType", solver.type)}
+                      />
+                    </Box>
+                  </Box>
                 );
-              })
-            )}
-          </Box>
+              })}
+            </Box>
+          )}
 
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {!selected ? (
