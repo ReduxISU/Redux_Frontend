@@ -336,10 +336,19 @@ const emergeFromLine = keyframes({
   to: { transform: "translateX(0)" },
 });
 
-// Step 6.
+// Step 6. Scale only, at full opacity throughout.
+//
+// This used to fade 0.35 -> 1 as it grew, and that fade is why the line
+// looked like two pieces joined in the middle. A partly transparent layer
+// this wide is rasterised in tiles and composited tile by tile, and the
+// blend does not land identically on both sides of a tile edge, so a hard
+// vertical seam appears about 768 device pixels along and fades out only as
+// the opacity reaches 1. Growing a fully opaque bar composites as one
+// surface and has no seam to show. The fade was doing very little anyway:
+// scaling from nothing is already the whole reveal.
 const underlineSweep = keyframes({
-  from: { transform: "scaleX(0)", opacity: 0.35 },
-  to: { transform: "scaleX(1)", opacity: 1 },
+  from: { transform: "scaleX(0)" },
+  to: { transform: "scaleX(1)" },
 });
 
 // The idle for the hold. A frozen last frame reads as a hung page within
