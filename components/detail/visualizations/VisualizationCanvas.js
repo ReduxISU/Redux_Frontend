@@ -6,20 +6,22 @@
 // no data / not yet supported (quiet, case b), versus a contract violation (a loud
 // `console.warn` plus a dev-only visible marker, case c).
 //
-// Only `graph` has a renderer today -- T49/T50 add the rest, one task per universal
-// type, the same "once per type, not once per instance" split the whole Track B design
-// is built around. Every other resolved type, and every payload this frontend doesn't
-// recognize at all, takes the quiet "not supported yet" path: that is honestly case (b),
-// not something to warn about.
+// `graph` (T48) and `booleanSatisfiability` (T49) have renderers today -- T50 adds the
+// rest, one task per universal type, the same "once per type, not once per instance"
+// split the whole Track B design is built around. Every other resolved type, and every
+// payload this frontend doesn't recognize at all, takes the quiet "not supported yet"
+// path: that is honestly case (b), not something to warn about.
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useEffect } from "react";
 import { resolveVisualizationType, validateFrame } from "../../../data/visualizationTypes";
+import BooleanSatisfiabilityRenderer from "./BooleanSatisfiabilityRenderer";
 import GraphRenderer from "./GraphRenderer";
 
 const RENDERERS = {
   graph: GraphRenderer,
+  booleanSatisfiability: BooleanSatisfiabilityRenderer,
 };
 
 function CannotRender({ idPrefix, reason, violations }) {
