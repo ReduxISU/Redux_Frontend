@@ -25,13 +25,28 @@
 // T47 (#110): step playback (play/pause/step/speed/scrub bar) is the shared
 // StepScrubber component, now driven by the real frame count a completed
 // run returns rather than a fallback of 1.
+//
+// T52 (#115): structural editing for the `booleanSatisfiability` universal
+// type. Per INTERACTIVE_LAYER_DESIGN.md §2.3, editing only ever applies to
+// the base frame (frames[0]) -- `editedClauses` below is local-preview-only
+// state, seeded from the fetched frame on first edit and cleared whenever
+// the selected visualization changes or a fresh Run replaces the frames
+// (§2.1.2: "editing previews locally; Run reconciles through the real
+// backend round trip"). Pressing Run (handleRun below) serializes any
+// pending local edit into the shared instance text via `onInstanceChange`
+// *before* triggering the shared Run action, so a diagram edit reaches
+// `/solve`/`/visualize` exactly like a textarea edit already does
+// (§2.4). `graph`/`quantumCircuit`/`recursiveSet` editing is T51/#114, not
+// this task -- selecting one of those types never turns editing on here.
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { serializeBooleanSatisfiabilityInstance } from "../../data/instanceSerializers";
 import { TAXONOMY, UNCLASSIFIED } from "../../data/taxonomy";
+import { VISUALIZATION_TYPE_MAP } from "../../data/visualizationTypes";
 import {
   COMPUTE_CANCELLED,
   COMPUTE_DONE,
@@ -47,6 +62,14 @@ import StepScrubber from "./StepScrubber";
 import VisualizationCanvas from "./visualizations/VisualizationCanvas";
 
 const VISUALIZATION_TYPE_FACET = TAXONOMY.find((facet) => facet.key === "visualizationType");
+
+// SAT3's literal-per-clause cap (VISUALIZATION_TYPE_CONTRACTS.md §3.3, this section's own
+// issue body) -- SAT itself has no cap. "3SAT" is the real backend `problemName` (per
+// data/supplementalTags.js's own header note: code "SAT3" -> problemName "3SAT"), not the
+// visualization/solver class-name spelling, so this checks the problem, not the
+// visualization, since the cap is a property of the problem's grammar, not of any one
+// visualization instance.
+const SAT3_MAX_LITERALS_PER_CLAUSE = 3;
 
 // #71: fixed rail height so a problem with many declared visualizations
 // scrolls inside the rail instead of stretching the section indefinitely.
@@ -99,8 +122,9 @@ function TypeBadge({ typeKey }) {
  * @param {string} [props.instanceValue] The shared problem instance, owned by
  *   components/ProblemDetailLayout.js (T35/#93).
  * @param {(next: string) => void} [props.onInstanceChange] Called with the new
- *   text whenever the visitor edits the instance elsewhere (Solvers' box) --
- *   this section reads the value but does not render its own copy of the box.
+ *   text whenever the visitor edits the instance elsewhere (Solvers' box), and
+ *   (T52/#115) called by this section itself, just before Run, to write a
+ *   pending diagram edit's serialized text into the shared instance.
  * @param {number} [props.runToken] The shared Run trigger (T48/#111). A change
  *   in value, not the value itself, means Run was pressed somewhere.
  * @param {() => void} [props.onRunRequest] Bumps `runToken`. Called by this
@@ -111,6 +135,7 @@ function TypeBadge({ typeKey }) {
 export default function VisualizationsSection({
   problem,
   instanceValue = "",
+  onInstanceChange,
   runToken,
   onRunRequest,
   dragHandleProps,
@@ -137,12 +162,38 @@ export default function VisualizationsSection({
       : null;
   const instanceChangedSinceRun = Boolean(liveFrames) && liveFrames.instance !== instanceValue;
 
+  // T52 (#115): which universal type the selected visualization renders as,
+  // and whether that type has editing support at all -- only
+  // `booleanSatisfiability` does today (T51/#114 covers the other three
+  // editable types, wave 2). Derived from the static backend-type map alone
+  // (not `resolveVisualizationType`, which also consults a live frame) since
+  // this needs to be known before a frame exists, to decide whether edit
+  // affordances can ever apply to this visualization.
+  const universalType = VISUALIZATION_TYPE_MAP[selected?.backendType] ?? null;
+  const isBooleanSatisfiability = universalType === "booleanSatisfiability";
+  // "3SAT" is the real backend problemName SAT3 resolves to (see the module
+  // header note) -- SAT itself has no per-clause literal cap.
+  const maxLiteralsPerClause =
+    isBooleanSatisfiability && problem.name === "3SAT" ? SAT3_MAX_LITERALS_PER_CLAUSE : undefined;
+
+  // Local-preview-only edit state for the base frame (INTERACTIVE_LAYER_DESIGN.md
+  // §2.1.2/§2.3) -- null means "no pending edit, show the fetched frame as-is".
+  // Reset (see the render-time adjustments below) whenever the selected
+  // visualization changes or a fresh Run replaces `visualize.result`.
+  const [editedClauses, setEditedClauses] = useState(null);
+  const hasPendingEdit = editedClauses !== null;
+
+  function handleClausesChange(updater) {
+    setEditedClauses((current) => updater(current ?? liveFrames?.frames?.[0]?.clauses ?? []));
+  }
+
   function handleSelectVisualization(index) {
     if (index === selectedIndex) return;
     // Drops any in-flight request and clears the pane, so nothing from the
     // previous visualization survives the switch.
     visualize.reset();
     setSelectedIndex(index);
+    setEditedClauses(null);
   }
 
   const { start: startVisualize } = visualize;
@@ -166,6 +217,27 @@ export default function VisualizationsSection({
     });
   }, [canRun, selected, instanceValue, startVisualize]);
 
+  // T52 (#115): the Run affordance's onClick, not `handleRun`/`onRunRequest`
+  // directly -- if a diagram edit is pending, it must be serialized into the
+  // shared instance *before* Run fires, so the run that follows (whichever
+  // section's Run button triggered it -- runToken is shared) acts on the
+  // edited instance. `onInstanceChange` and `onRunRequest` are both setters
+  // on the same parent (ProblemDetailLayout.js) and React batches them into
+  // one re-render, so by the time the runToken effect below (or Solvers'
+  // identical one) fires, `instanceValue` already reflects the edit -- see
+  // this task's handback summary for why this ordering is safe rather than
+  // a race.
+  function handleRunClick() {
+    if (hasPendingEdit) {
+      onInstanceChange?.(serializeBooleanSatisfiabilityInstance(editedClauses));
+    }
+    if (onRunRequest) {
+      onRunRequest();
+    } else {
+      handleRun();
+    }
+  }
+
   // Reacts to the shared Run trigger (T48/#111) rather than fetching inline
   // in the button's onClick -- see components/ProblemDetailLayout.js and
   // components/detail/SolversSection.js, which does the identical thing.
@@ -176,11 +248,12 @@ export default function VisualizationsSection({
     handleRun();
   }, [runToken, handleRun]);
 
-  // Two independent render-time step resets (React's documented "adjust
-  // state" pattern, not a useEffect): selecting a different visualization
-  // starts its playback over, and so does a freshly-completed run replacing
-  // the frames currently shown -- both can leave a stale `currentStep`
-  // pointing past the end of a differently-sized frames[].
+  // Three independent render-time resets (React's documented "adjust state"
+  // pattern, not a useEffect): selecting a different visualization starts its
+  // playback over and drops its edit state; so does a freshly-completed run
+  // replacing the frames currently shown, since §2.1.2 requires Run to
+  // replace the local preview with what the backend actually parsed back
+  // rather than leaving the pre-Run edit displayed on top of new data.
   const [stepResetKey, setStepResetKey] = useState(selectedIndex);
   if (stepResetKey !== selectedIndex) {
     setStepResetKey(selectedIndex);
@@ -190,10 +263,17 @@ export default function VisualizationsSection({
   if (lastVisualizeResult !== visualize.result) {
     setLastVisualizeResult(visualize.result);
     setCurrentStep(0);
+    if (editedClauses !== null) setEditedClauses(null);
   }
 
   const frameCount = liveFrames?.frames?.length ?? 1;
-  const currentFrame = liveFrames?.frames?.[currentStep] ?? null;
+  const fetchedFrame = liveFrames?.frames?.[currentStep] ?? null;
+  // T52 (#115): on the base frame (frames[0]) only, a pending local edit
+  // shows instead of the fetched frame -- the diagram's own preview of an
+  // edit that hasn't been sent to the backend yet (§2.1.2). Any other step
+  // is always playback-only, never edited (§2.3).
+  const isEditingStep0 = currentStep === 0 && isBooleanSatisfiability;
+  const currentFrame = isEditingStep0 && hasPendingEdit ? { clauses: editedClauses } : fetchedFrame;
 
   const visualizationName = selected?.name ?? "this visualization";
   let announcement = "";
@@ -297,7 +377,7 @@ export default function VisualizationsSection({
                 variant="outlined"
                 size="small"
                 disabled={!canRun || visualize.isRunning}
-                onClick={() => (onRunRequest ? onRunRequest() : handleRun())}
+                onClick={handleRunClick}
               >
                 Run
               </Button>
@@ -341,8 +421,16 @@ export default function VisualizationsSection({
                     instanceName={selected.name}
                     backendType={selected.backendType}
                     frame={currentFrame}
+                    editable={isEditingStep0}
+                    onClausesChange={isEditingStep0 ? handleClausesChange : undefined}
+                    maxLiteralsPerClause={maxLiteralsPerClause}
                   />
                 </Box>
+                {hasPendingEdit && (
+                  <Typography variant="body2" sx={{ color: "warning.light" }}>
+                    This diagram has unsaved edits. Press Run to send them to the backend.
+                  </Typography>
+                )}
                 {instanceChangedSinceRun && (
                   <Typography variant="body2" sx={{ color: "warning.light" }}>
                     The instance has been edited since this ran. Run again to visualize the instance

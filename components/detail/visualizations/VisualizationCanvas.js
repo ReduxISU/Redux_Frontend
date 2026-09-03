@@ -78,8 +78,24 @@ function CannotRender({ idPrefix, reason, violations }) {
  *   "GraphD3") -- `Navigation/Batch/allVisualizationTypes`, falling back to `allInfo`.
  * @param {Object|null} [props.frame] One frame (`frames[currentStep]`), or null/undefined
  *   when there's nothing to show yet (not yet run, or an empty `frames[]`).
+ * @param {boolean} [props.editable] T52 (#115): forwarded straight through to whichever
+ *   renderer is dispatched to. Only `BooleanSatisfiabilityRenderer` reads it today; the
+ *   other renderers simply ignore an unused prop, the same way they already ignore
+ *   `instanceName` when they have no use for it.
+ * @param {Function} [props.onClausesChange] Forwarded straight through -- see
+ *   `BooleanSatisfiabilityRenderer`'s own doc comment for the updater-function shape.
+ * @param {number} [props.maxLiteralsPerClause] Forwarded straight through -- SAT3's
+ *   3-literal cap.
  */
-export default function VisualizationCanvas({ idPrefix, instanceName, backendType, frame }) {
+export default function VisualizationCanvas({
+  idPrefix,
+  instanceName,
+  backendType,
+  frame,
+  editable,
+  onClausesChange,
+  maxLiteralsPerClause,
+}) {
   const universalType = resolveVisualizationType(backendType, frame);
   const Renderer = universalType ? RENDERERS[universalType] : null;
   const { valid, violations } =
@@ -122,5 +138,14 @@ export default function VisualizationCanvas({ idPrefix, instanceName, backendTyp
     );
   }
 
-  return <Renderer idPrefix={idPrefix} instanceName={instanceName} frame={frame} />;
+  return (
+    <Renderer
+      idPrefix={idPrefix}
+      instanceName={instanceName}
+      frame={frame}
+      editable={editable}
+      onClausesChange={onClausesChange}
+      maxLiteralsPerClause={maxLiteralsPerClause}
+    />
+  );
 }
