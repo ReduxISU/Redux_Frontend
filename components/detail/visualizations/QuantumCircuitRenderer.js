@@ -504,17 +504,18 @@ export default function QuantumCircuitRenderer({
       const { gateId, targetIndex } = active.data.current ?? {};
       const { wireId, columnIndex } = over.data.current ?? {};
       if (!gateId || wireId == null || columnIndex == null) return;
-      const nextGates = moveGateToCell(
+      const result = moveGateToCell(
         gates,
+        overlays,
         gateId,
         targetIndex,
         wireId,
         columnIndex,
         sortedTimes,
       );
-      onCircuitEdit?.({ type: "replaceGates", gates: nextGates });
+      onCircuitEdit?.({ type: "replaceGates", gates: result.gates, overlays: result.overlays });
     },
-    [gates, sortedTimes, onCircuitEdit],
+    [gates, overlays, sortedTimes, onCircuitEdit],
   );
 
   function openGateMenu(gate, event) {
@@ -606,8 +607,15 @@ export default function QuantumCircuitRenderer({
       setMenuError("Gate type is required");
       return;
     }
-    const result = addGateAtCell(gates, trimmed, menu.wireId, menu.columnIndex, sortedTimes);
-    onCircuitEdit?.({ type: "replaceGates", gates: result.gates });
+    const result = addGateAtCell(
+      gates,
+      overlays,
+      trimmed,
+      menu.wireId,
+      menu.columnIndex,
+      sortedTimes,
+    );
+    onCircuitEdit?.({ type: "replaceGates", gates: result.gates, overlays: result.overlays });
     closeMenu();
   }
 

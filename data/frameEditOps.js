@@ -181,12 +181,14 @@ export function applyCircuitOp(current, op) {
       };
     // T56 (#129): drag-to-retime/retarget and right-click "add gate at this cell" both
     // touch more than one gate at once (a retime can shift every later gate's `time`
-    // forward -- see components/detail/visualizations/quantumCircuitGrid.js), so the
-    // renderer computes the whole next `gates` array itself and hands it over wholesale
-    // rather than this function trying to re-derive collision/shift logic from a
-    // single-gate op descriptor.
+    // forward, and remaps overlay timeStart/timeEnd alongside it -- see
+    // components/detail/visualizations/quantumCircuitGrid.js), so the renderer computes
+    // the whole next `gates`/`overlays` pair itself and hands it over wholesale rather
+    // than this function trying to re-derive collision/shift logic from a single-gate op
+    // descriptor. `overlays` is optional -- the "reuse an existing free column" path
+    // never touches overlay times, so callers on that path can omit it.
     case "replaceGates":
-      return { ...current, gates: op.gates };
+      return { ...current, gates: op.gates, overlays: op.overlays ?? current.overlays };
     default:
       return current;
   }
