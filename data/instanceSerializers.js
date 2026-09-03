@@ -59,9 +59,11 @@ export function serializeBooleanSatisfiabilityInstance(clauses) {
  * @param {string[]} baseNodeIds The `graph` frame's node ids as of that same fetch, before
  *   any of `nodeOps` were applied -- the "known identity" this module's location step
  *   matches against (see data/spadeInstanceText.js's header).
- * @param {Array<{type: "add"|"remove"|"rename", id?: string, from?: string, to?: string}>} nodeOps
- *   Ordered edit log: `{type: "add", id}`, `{type: "remove", id}`, or
- *   `{type: "rename", from, to}`. Edge edits never appear here -- see below.
+ * @param {Array<{type: "addNode"|"removeNode"|"renameNode", id?: string, from?: string, to?: string}>} nodeOps
+ *   Ordered edit log: `{type: "addNode", id}`, `{type: "removeNode", id}`, or
+ *   `{type: "renameNode", from, to}` -- the same vocabulary `applyGraphOp`
+ *   (data/frameEditOps.js) and GraphRenderer.js's `onGraphEdit` calls use. Edge edits never
+ *   appear here -- see below.
  * @returns {{instanceText: string} | {error: string}} `error` when the current instance
  *   text can't be parsed under the generic bracket grammar at all, or when an `add` can't
  *   find a matching node-id set to add into (both real, surfaceable failures, not silent
@@ -105,10 +107,21 @@ export function serializeGraphInstance(originalInstanceText, baseNodeIds, nodeOp
 
   let currentIds = [...baseNodeIds];
   for (const op of nodeOps) {
-    if (op.type === "rename") {
+    // T53 (#116) fix: these three op-type strings previously read "rename"/"remove"/"add",
+    // which never matched anything a caller actually sends -- GraphRenderer.js's
+    // `onGraphEdit` calls (and components/detail/VisualizationsSection.js's/
+    // ReductionsSection.js's own `graphNodeOps` tracking) have always used "renameNode"/
+    // "removeNode"/"addNode" (see applyGraphOp in data/frameEditOps.js). With the old
+    // strings, every branch below was silently unreachable: the loop fell through with no
+    // `else`, `tree` and `currentIds` never changed, and this function quietly returned the
+    // original text back as if nothing were wrong -- so a node edit's own local preview
+    // looked correct while Run sent the *unedited* instance to the backend. Caught by
+    // testing T53's own source-pane Run round trip end to end, not something T53 changed on
+    // purpose.
+    if (op.type === "renameNode") {
       tree = renameLeafEverywhere(tree, op.from, op.to);
       currentIds = currentIds.map((id) => (id === op.from ? op.to : id));
-    } else if (op.type === "remove") {
+    } else if (op.type === "removeNode") {
       // The located node-id set is passed as the protected subtree so it always shrinks
       // by one, never gets collapsed by the pair-removal heuristic that also runs in this
       // same pass -- see removeLeafEverywhere's own doc comment for why a plain two-node
@@ -116,7 +129,7 @@ export function serializeGraphInstance(originalInstanceText, baseNodeIds, nodeOp
       const protectedNode = findExactLeafSetNode(tree, currentIds);
       tree = removeLeafEverywhere(tree, op.id, protectedNode);
       currentIds = currentIds.filter((id) => id !== op.id);
-    } else if (op.type === "add") {
+    } else if (op.type === "addNode") {
       const next = addLeafToMatchingSet(tree, currentIds, op.id);
       if (next === tree) {
         return {

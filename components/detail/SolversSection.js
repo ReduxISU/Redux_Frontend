@@ -151,6 +151,12 @@ function formatSeconds(milliseconds) {
  *   Run was pressed somewhere -- this section or another `usesRun` one.
  * @param {() => void} [props.onRunRequest] Bumps `runToken`. Called by this
  *   section's own Run button instead of solving directly.
+ * @param {(certificate: {value: string, instance: string}) => void} [props.onCertificateChange]
+ *   Called with the solved instance and the instance it was solved from every time a solve
+ *   completes successfully (T53/#116). ProblemDetailLayout.js holds the one shared copy so
+ *   ReductionsSection can use it as the certificate `ProblemProvider/visualizeReduction`
+ *   requires -- see that file's header for why this lives here rather than being lifted
+ *   into a shared Run action outright.
  * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
  *   Forwarded straight through to SectionShell — see T18 (#27).
  */
@@ -160,6 +166,7 @@ export default function SolversSection({
   onInstanceChange,
   runToken,
   onRunRequest,
+  onCertificateChange,
   dragHandleProps,
 }) {
   const solvers = problem.solvers ?? [];
@@ -206,6 +213,9 @@ export default function SolversSection({
         instanceAtRun,
         signal,
       );
+      // T53 (#116): reported up regardless of which solver produced it -- Reductions only
+      // needs *a* certificate for the current instance, not one from any particular solver.
+      onCertificateChange?.({ value: output, instance: instanceAtRun });
       return {
         output,
         solverClassName: solver.className,
@@ -213,7 +223,7 @@ export default function SolversSection({
         instance: instanceAtRun,
       };
     });
-  }, [canRun, selected, instanceValue, startRun]);
+  }, [canRun, selected, instanceValue, startRun, onCertificateChange]);
 
   // Reacts to the shared Run trigger (T48/#111, see file header) rather than
   // performing the solve inline in the button's onClick -- that way it fires

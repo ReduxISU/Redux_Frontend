@@ -131,7 +131,28 @@ function buildVerifier(verifierClassNames, info, problemInfo) {
   };
 }
 
-function buildReductions(problemCode, reductionGraph, codeToName) {
+// T53 (#116): `to` entries carry two things T18-era `buildReductions` never needed --
+// `className` (the reduction's own class name, e.g. "KarpVertexCoverToSetCover", what
+// `ProblemProvider/visualizeReduction?reduction=` takes -- confirmed directly against a
+// local Redux backend) and `targetVisualization` (the reduced problem's own default
+// visualization, resolved through the exact same `buildVisualizations` this file already
+// uses for the current problem). The reduced pane needs a `backendType` to pick a renderer
+// the same way the current problem's own visualizations do (VisualizationCanvas ->
+// resolveVisualizationType), and `Navigation/Reductions` itself carries no type field for
+// either side of a reduction -- VISUALIZATION_TYPE_CONTRACTS.md §5 already rejected
+// resolving a universal type by inspecting a frame's own shape ("duck-typing... this
+// project would rather have one static, readable map than six inline heuristics"), so this
+// resolves the target's type the same static-map way, not by sniffing the fetched frame.
+// `from` entries get neither: they're informational only, never selectable
+// (ReductionsSection.js), so nothing ever renders a diagram for one.
+function buildReductions(
+  problemCode,
+  reductionGraph,
+  codeToName,
+  visualizationsByProblem,
+  info,
+  visualizationTypesByInstance,
+) {
   const to = [];
   const from = [];
 
@@ -139,10 +160,17 @@ function buildReductions(problemCode, reductionGraph, codeToName) {
     for (const [toCode, edges] of Object.entries(toMap)) {
       for (const edge of edges) {
         if (fromCode === problemCode) {
+          const [targetVisualization] = buildVisualizations(
+            visualizationsByProblem[toCode],
+            info,
+            visualizationTypesByInstance,
+          );
           to.push({
             target: codeToName.get(toCode) ?? toCode,
             cost: REDUCTION_COST_MAP[edge.cost],
             type: REDUCTION_TYPE_MAP[edge.reductionType],
+            className: edge.className,
+            targetVisualization: targetVisualization ?? null,
           });
         }
         if (toCode === problemCode) {
@@ -211,7 +239,14 @@ function buildProblem(problemCode, info, batches, codeToName) {
       visualizationTypesByInstance,
     ),
     verifier: buildVerifier(verifiersByProblem[problemCode], info, problemInfo),
-    reductions: buildReductions(problemCode, reductionGraph, codeToName),
+    reductions: buildReductions(
+      problemCode,
+      reductionGraph,
+      codeToName,
+      visualizationsByProblem,
+      info,
+      visualizationTypesByInstance,
+    ),
   };
 }
 
