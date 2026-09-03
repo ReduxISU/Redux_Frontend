@@ -122,7 +122,14 @@ import VisualizationsSection from "./detail/VisualizationsSection";
 // not: Verify checks a user-supplied certificate against an instance, it
 // does not run a solver, and its certificate has no guaranteed relationship
 // to a fresh /visualize call (INTERACTIVE_LAYER_DESIGN.md §2.1). Reductions
-// joins `usesRun` in T53, once it has real data to refresh.
+// joins `usesRun` in T53 (#116), now that it has real data to refresh.
+//
+// `providesCertificate`/`usesCertificate` (T53) are the other half of that same wiring:
+// `ProblemProvider/visualizeReduction` requires a certificate for the source instance
+// (INTERACTIVE_LAYER_DESIGN.md §1.3), and the only thing that ever produces one is a
+// completed Solvers run -- so Solvers reports its own solve's output up through
+// `onCertificateChange`, this component holds the one shared copy the same way it holds
+// `instance`, and Reductions reads it back as `certificate`.
 const SECTIONS = [
   { key: "overview", title: "Overview", Component: OverviewSection },
   {
@@ -138,9 +145,17 @@ const SECTIONS = [
     Component: SolversSection,
     usesInstance: true,
     usesRun: true,
+    providesCertificate: true,
   },
   { key: "verifier", title: "Verifier", Component: VerifierSection, usesInstance: true },
-  { key: "reductions", title: "Reductions", Component: ReductionsSection },
+  {
+    key: "reductions",
+    title: "Reductions",
+    Component: ReductionsSection,
+    usesInstance: true,
+    usesRun: true,
+    usesCertificate: true,
+  },
 ];
 
 const SECTIONS_BY_KEY = new Map(SECTIONS.map((section) => [section.key, section]));
@@ -214,6 +229,12 @@ export default function ProblemDetailLayout({ problem }) {
   // real declared `defaultInstance`.
   const [instance, setInstance] = useState(problem.defaultInstance ?? "");
 
+  // The shared certificate (T53/#116, see header) -- `null` until Solvers' own Run
+  // produces one. Shaped `{ value, instance }` (mirroring SolversSection's own
+  // `liveResult`/`instanceChangedSinceRun` pattern) so a consumer can tell a certificate
+  // for the *current* instance apart from a stale one left over from a since-edited box.
+  const [certificate, setCertificate] = useState(null);
+
   // Re-seed the box when the page switches to a different problem, so one
   // problem's instance can never be left sitting in another's input. In
   // practice pages/[problem].js unmounts this component while the next
@@ -222,11 +243,13 @@ export default function ProblemDetailLayout({ problem }) {
   // than something this component should depend on. React's documented
   // "adjust state when a prop changes" pattern, not an effect: it settles
   // during the same render instead of flashing the previous problem's
-  // instance for a frame first.
+  // instance for a frame first. The certificate resets alongside it -- a
+  // certificate for the previous problem's instance is never valid here.
   const [instanceProblemName, setInstanceProblemName] = useState(problem.name);
   if (instanceProblemName !== problem.name) {
     setInstanceProblemName(problem.name);
     setInstance(problem.defaultInstance ?? "");
+    setCertificate(null);
   }
 
   // The shared Run trigger (T48/#111, see file header). A `usesRun` section
@@ -318,14 +341,25 @@ export default function ProblemDetailLayout({ problem }) {
         <SortableContext items={order} strategy={verticalListSortingStrategy}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {order.map((key) => {
-              const { Component, usesInstance, usesRun } = SECTIONS_BY_KEY.get(key);
+              const { Component, usesInstance, usesRun, providesCertificate, usesCertificate } =
+                SECTIONS_BY_KEY.get(key);
               const instanceProps = usesInstance
                 ? { instanceValue: instance, onInstanceChange: setInstance }
                 : null;
               const runProps = usesRun ? { runToken, onRunRequest: triggerRun } : null;
+              const certificateProps = providesCertificate
+                ? { onCertificateChange: setCertificate }
+                : usesCertificate
+                  ? { certificate }
+                  : null;
               return (
                 <SortableSection key={key} id={key}>
-                  <Component problem={problem} {...instanceProps} {...runProps} />
+                  <Component
+                    problem={problem}
+                    {...instanceProps}
+                    {...runProps}
+                    {...certificateProps}
+                  />
                 </SortableSection>
               );
             })}

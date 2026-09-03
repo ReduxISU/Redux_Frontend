@@ -49,6 +49,13 @@ import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  applyCircuitOp,
+  applyGraphOp,
+  cloneCircuitForEdit,
+  cloneGraphForEdit,
+  SAT3_MAX_LITERALS_PER_CLAUSE,
+} from "../../data/frameEditOps";
+import {
   serializeBooleanSatisfiabilityInstance,
   serializeGraphInstance,
   serializeRecursiveSetInstance,
@@ -70,177 +77,6 @@ import StepScrubber from "./StepScrubber";
 import VisualizationCanvas from "./visualizations/VisualizationCanvas";
 
 const VISUALIZATION_TYPE_FACET = TAXONOMY.find((facet) => facet.key === "visualizationType");
-
-// SAT3's literal-per-clause cap (VISUALIZATION_TYPE_CONTRACTS.md §3.3, T52/#115's own
-// issue body) -- SAT itself has no cap. "3SAT" is the real backend `problemName` (per
-// data/supplementalTags.js's own header note: code "SAT3" -> problemName "3SAT"), not the
-// visualization/solver class-name spelling, so this checks the problem, not the
-// visualization, since the cap is a property of the problem's grammar, not of any one
-// visualization instance.
-const SAT3_MAX_LITERALS_PER_CLAUSE = 3;
-
-// Ids assigned to a newly-added edge/gate within one editing session only need to be
-// unique within that session (React keys, DOM ids) -- a module-level counter is enough.
-let editIdCounter = 0;
-function nextEditId(prefix) {
-  editIdCounter += 1;
-  return `${prefix}-${editIdCounter}`;
-}
-
-function cloneGraphForEdit(frame) {
-  return {
-    nodes: frame.nodes.map((node) => ({ ...node, _key: node.id })),
-    links: frame.links.map((link) => ({ ...link, _key: link.id })),
-  };
-}
-
-// Applies one GraphRenderer edit descriptor to a cloned {nodes, links} structure.
-// Referential integrity for node removal/rename (an edge can't be left dangling, per
-// T46's finding that SPADE itself won't catch this) is handled locally here the same way
-// data/spadeInstanceText.js's `removeLeafEverywhere`/`renameLeafEverywhere` handle it in
-// the text -- the two are independent implementations of the same rule, one over the
-// in-memory structure for the local preview, one over the parsed text for Run.
-function applyGraphOp(current, op) {
-  switch (op.type) {
-    case "addNode": {
-      if (current.nodes.some((node) => node.id === op.id)) return current;
-      return {
-        ...current,
-        nodes: [
-          ...current.nodes,
-          {
-            id: op.id,
-            name: op.id,
-            color: "",
-            outline: "",
-            delay: "",
-            dashed: "",
-            additional: "",
-            _key: op.id,
-          },
-        ],
-      };
-    }
-    case "removeNode":
-      return {
-        nodes: current.nodes.filter((node) => node.id !== op.id),
-        links: current.links.filter((link) => link.source !== op.id && link.target !== op.id),
-      };
-    case "renameNode": {
-      if (op.from === op.to || current.nodes.some((node) => node.id === op.to)) return current;
-      return {
-        nodes: current.nodes.map((node) =>
-          node.id === op.from ? { ...node, id: op.to, name: op.to } : node,
-        ),
-        links: current.links.map((link) => ({
-          ...link,
-          source: link.source === op.from ? op.to : link.source,
-          target: link.target === op.from ? op.to : link.target,
-        })),
-      };
-    }
-    case "addEdge": {
-      if (op.source === op.target) return current;
-      const alreadyExists = current.links.some(
-        (link) =>
-          (link.source === op.source && link.target === op.target) ||
-          (link.source === op.target && link.target === op.source),
-      );
-      if (alreadyExists) return current;
-      return {
-        ...current,
-        links: [
-          ...current.links,
-          {
-            id: nextEditId("edge"),
-            _key: nextEditId("edge-key"),
-            source: op.source,
-            target: op.target,
-            color: "",
-            dashed: "",
-            delay: "",
-            weight: "",
-            weighted: false,
-            directed: false,
-            attribute1: "",
-            attribute2: "",
-          },
-        ],
-      };
-    }
-    case "removeEdge":
-      return { ...current, links: current.links.filter((link) => link.id !== op.id) };
-    default:
-      return current;
-  }
-}
-
-function cloneCircuitForEdit(d3) {
-  return {
-    qubits: [...d3.qubits],
-    classical: [...(d3.classical ?? [])],
-    gates: (d3.gates ?? []).map((gate) => ({ ...gate, targets: [...gate.targets] })),
-    overlays: d3.overlays ?? [],
-    metadata: d3.metadata ?? null,
-  };
-}
-
-// Local-preview-only (data/instanceSerializers.js has no `quantumCircuit` serializer --
-// see that file's header) -- so unlike `applyGraphOp`, nothing here needs to track a
-// separate op log for Run.
-function applyCircuitOp(current, op) {
-  switch (op.type) {
-    case "addQubit":
-      if (current.qubits.includes(op.id)) return current;
-      return { ...current, qubits: [...current.qubits, op.id] };
-    case "removeQubit":
-      return {
-        ...current,
-        qubits: current.qubits.filter((qubit) => qubit !== op.id),
-        gates: current.gates.filter((gate) => !gate.targets.includes(op.id)),
-      };
-    case "renameQubit": {
-      if (op.from === op.to || current.qubits.includes(op.to)) return current;
-      return {
-        ...current,
-        qubits: current.qubits.map((qubit) => (qubit === op.from ? op.to : qubit)),
-        gates: current.gates.map((gate) => ({
-          ...gate,
-          targets: gate.targets.map((target) => (target === op.from ? op.to : target)),
-        })),
-      };
-    }
-    case "addGate": {
-      const maxTime = current.gates.reduce((max, gate) => Math.max(max, gate.time ?? 0), -1);
-      return {
-        ...current,
-        gates: [
-          ...current.gates,
-          {
-            id: nextEditId("gate"),
-            type: op.gateType,
-            targets: [op.target],
-            classical: null,
-            params: null,
-            label: null,
-            time: maxTime + 1,
-          },
-        ],
-      };
-    }
-    case "removeGate":
-      return { ...current, gates: current.gates.filter((gate) => gate.id !== op.id) };
-    case "relabelGate":
-      return {
-        ...current,
-        gates: current.gates.map((gate) =>
-          gate.id === op.id ? { ...gate, type: op.gateType } : gate,
-        ),
-      };
-    default:
-      return current;
-  }
-}
 
 // #71: fixed rail height so a problem with many declared visualizations
 // scrolls inside the rail instead of stretching the section indefinitely.

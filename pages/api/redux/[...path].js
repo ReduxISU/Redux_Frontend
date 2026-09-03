@@ -75,8 +75,9 @@ const rateLimitBuckets = new Map();
  * `lib/redux/index.js`. That is a deliberate exception to "the list holds what the site
  * actually uses": Track B's design tasks (T41, #99; T42, #100) need to see real
  * visualization payloads through this app's own proxy, and nothing can render one while
- * the proxy 404s the request first. `ProblemProvider/visualizeReduction` has the same
- * compute profile and is deliberately NOT added yet -- see the comment below.
+ * the proxy 404s the request first. `ProblemProvider/visualizeReduction` had the same
+ * compute profile and was deliberately left out until T53 (#116) gave it a real caller
+ * (`requestReducedInstance`, `lib/redux/index.js`) -- it is allowed below now.
  *
  * Keys are paths relative to `REDUX_BASE_URL`, matched exactly and case-sensitively.
  * Query strings are not part of the match.
@@ -92,11 +93,7 @@ const ALLOWED_ENDPOINTS = new Map([
   ["ProblemProvider/solve", ["POST"]],
   ["ProblemProvider/verify", ["POST"]],
   ["ProblemProvider/visualize", ["POST"]],
-  // ProblemProvider/visualizeReduction is NOT here. It has the same compute profile as
-  // `visualize` above, but nothing calls it yet. Add it, and its COMPUTE_ENDPOINTS entry
-  // below, in whichever task first wires the Reductions section against live data --
-  // not before, per this allowlist's own principle that it holds what the site actually
-  // uses. (T44, #103)
+  ["ProblemProvider/visualizeReduction", ["POST"]],
 ]);
 
 /** Endpoints that run an algorithm rather than returning a stored lookup. */
@@ -104,6 +101,7 @@ const COMPUTE_ENDPOINTS = new Set([
   "ProblemProvider/solve",
   "ProblemProvider/verify",
   "ProblemProvider/visualize",
+  "ProblemProvider/visualizeReduction",
 ]);
 
 export const config = {
