@@ -78,14 +78,21 @@ function CannotRender({ idPrefix, reason, violations }) {
  *   "GraphD3") -- `Navigation/Batch/allVisualizationTypes`, falling back to `allInfo`.
  * @param {Object|null} [props.frame] One frame (`frames[currentStep]`), or null/undefined
  *   when there's nothing to show yet (not yet run, or an empty `frames[]`).
- * @param {boolean} [props.editable] T52 (#115): forwarded straight through to whichever
- *   renderer is dispatched to. Only `BooleanSatisfiabilityRenderer` reads it today; the
- *   other renderers simply ignore an unused prop, the same way they already ignore
+ * @param {boolean} [props.editable] Forwarded straight through to whichever renderer is
+ *   dispatched to -- `BooleanSatisfiabilityRenderer` (T52/#115), `GraphRenderer`,
+ *   `RecursiveSetRenderer` and `QuantumCircuitRenderer` (T51/#114) all read it; the other
+ *   renderers simply ignore an unused prop, the same way they already ignore
  *   `instanceName` when they have no use for it.
  * @param {Function} [props.onClausesChange] Forwarded straight through -- see
  *   `BooleanSatisfiabilityRenderer`'s own doc comment for the updater-function shape.
  * @param {number} [props.maxLiteralsPerClause] Forwarded straight through -- SAT3's
  *   3-literal cap.
+ * @param {(op: Object) => void} [props.onGraphEdit] Forwarded straight through -- see
+ *   `GraphRenderer`'s own doc comment for the edit-descriptor shape.
+ * @param {(updater: (data: Object) => Object) => void} [props.onDataChange] Forwarded
+ *   straight through -- see `RecursiveSetRenderer`'s own doc comment.
+ * @param {(op: Object) => void} [props.onCircuitEdit] Forwarded straight through -- see
+ *   `QuantumCircuitRenderer`'s own doc comment for the edit-descriptor shape.
  */
 export default function VisualizationCanvas({
   idPrefix,
@@ -95,6 +102,9 @@ export default function VisualizationCanvas({
   editable,
   onClausesChange,
   maxLiteralsPerClause,
+  onGraphEdit,
+  onDataChange,
+  onCircuitEdit,
 }) {
   const universalType = resolveVisualizationType(backendType, frame);
   const Renderer = universalType ? RENDERERS[universalType] : null;
@@ -146,6 +156,9 @@ export default function VisualizationCanvas({
       editable={editable}
       onClausesChange={onClausesChange}
       maxLiteralsPerClause={maxLiteralsPerClause}
+      onGraphEdit={onGraphEdit}
+      onDataChange={onDataChange}
+      onCircuitEdit={onCircuitEdit}
     />
   );
 }
