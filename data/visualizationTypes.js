@@ -62,6 +62,30 @@ export function resolveVisualizationType(backendType, payload) {
   return universalType;
 }
 
+/**
+ * T50 (#113): a more specific "cannot render" reason for the one case that's
+ * genuinely in-contract but out of v1's coverage (§3.2's decision) -- a
+ * `quantumCircuit` frame at `format: 0` (QASM-only, no `d3` arm).
+ * `resolveVisualizationType` already folds this into `null` like any other
+ * unresolvable type; this export exists only so the UI can tell that
+ * specific case apart from a genuinely unsupported backend type, per the
+ * issue's own Done-when list ("show 'cannot render' with a distinct
+ * reason, not a fake empty circuit").
+ *
+ * @param {string} [backendType]
+ * @param {Object} [payload]
+ * @returns {string|null}
+ */
+export function describeUnrenderableReason(backendType, payload) {
+  if (
+    VISUALIZATION_TYPE_MAP[backendType] === "quantumCircuit" &&
+    !(payload?.format === 1 && payload?.d3)
+  ) {
+    return "No structured circuit data for this visualization.";
+  }
+  return null;
+}
+
 const GRAPH_REQUIRED_NODE_STRING_FIELDS = [
   "id",
   "name",
@@ -166,9 +190,167 @@ function validateBooleanSatisfiabilityFrame(frame) {
   return { valid: violations.length === 0, violations };
 }
 
+/**
+ * §3.2's contract, checked field by field. By the time a frame reaches this
+ * validator, resolveVisualizationType has already guaranteed `format === 1`
+ * and `frame.d3` is truthy (that's what makes it resolve to
+ * "quantumCircuit" instead of null in the first place) -- this only checks
+ * the required shape *inside* `d3`, which resolveVisualizationType does not.
+ */
+function validateQuantumCircuitFrame(frame) {
+  const violations = [];
+  const d3 = frame?.d3;
+  if (!d3 || typeof d3 !== "object") {
+    violations.push("d3: expected an object");
+    return { valid: false, violations };
+  }
+  if (!Array.isArray(d3.qubits)) violations.push("d3.qubits: expected an array");
+  if (!Array.isArray(d3.classical)) violations.push("d3.classical: expected an array");
+  if (!Array.isArray(d3.gates)) violations.push("d3.gates: expected an array");
+  if (d3.overlays !== undefined && d3.overlays !== null && !Array.isArray(d3.overlays)) {
+    violations.push("d3.overlays: expected an array");
+  }
+  if (violations.length > 0) {
+    return { valid: false, violations };
+  }
+
+  d3.gates.forEach((gate, index) => {
+    if (typeof gate?.id !== "string") violations.push(`d3.gates[${index}].id: expected a string`);
+    if (typeof gate?.type !== "string")
+      violations.push(`d3.gates[${index}].type: expected a string`);
+    if (!Array.isArray(gate?.targets)) {
+      violations.push(`d3.gates[${index}].targets: expected an array`);
+    }
+    if (typeof gate?.time !== "number")
+      violations.push(`d3.gates[${index}].time: expected a number`);
+  });
+
+  (d3.overlays ?? []).forEach((overlay, index) => {
+    if (typeof overlay?.id !== "string") {
+      violations.push(`d3.overlays[${index}].id: expected a string`);
+    }
+    if (!Array.isArray(overlay?.targets)) {
+      violations.push(`d3.overlays[${index}].targets: expected an array`);
+    }
+    if (typeof overlay?.timeStart !== "number") {
+      violations.push(`d3.overlays[${index}].timeStart: expected a number`);
+    }
+    if (typeof overlay?.timeEnd !== "number") {
+      violations.push(`d3.overlays[${index}].timeEnd: expected a number`);
+    }
+  });
+
+  return { valid: violations.length === 0, violations };
+}
+
+/**
+ * §3.4's contract. Only checks that `data` itself is present -- per-node
+ * consistency (`isValue: true` with no `value`, `isValue: false` with no
+ * `list`) is deliberately NOT checked here. §3.4 is explicit that this kind
+ * of defect is "malformed at that node", not a reason to fail the whole
+ * frame; RecursiveSetRenderer.js's SetNode degrades a bad node to a
+ * placeholder mark instead, so there is nothing for the canary to gate on
+ * beyond the one field that really does make the whole frame unrenderable.
+ */
+function validateRecursiveSetFrame(frame) {
+  const violations = [];
+  if (!frame?.data || typeof frame.data !== "object") {
+    violations.push("data: expected an object");
+  }
+  return { valid: violations.length === 0, violations };
+}
+
+/**
+ * §3.5's contract. A `cells` entry missing a column's key is the documented
+ * "-" case, not a violation, so only `columns`/`rows` shape is checked here.
+ */
+function validateStepTableFrame(frame) {
+  const violations = [];
+  if (!Array.isArray(frame?.columns)) violations.push("columns: expected an array");
+  if (!Array.isArray(frame?.rows)) violations.push("rows: expected an array");
+  if (violations.length > 0) {
+    return { valid: false, violations };
+  }
+
+  frame.columns.forEach((column, index) => {
+    if (typeof column?.key !== "string")
+      violations.push(`columns[${index}].key: expected a string`);
+    if (typeof column?.label !== "string") {
+      violations.push(`columns[${index}].label: expected a string`);
+    }
+  });
+  frame.rows.forEach((row, index) => {
+    if (typeof row?.id !== "string") violations.push(`rows[${index}].id: expected a string`);
+    if (!row?.cells || typeof row.cells !== "object") {
+      violations.push(`rows[${index}].cells: expected an object`);
+    }
+  });
+
+  return { valid: violations.length === 0, violations };
+}
+
+const PUMP_SCHEDULE_METRIC_NUMBER_FIELDS = [
+  "hour",
+  "stepCost",
+  "cumulativeCost",
+  "tankLevel",
+  "tankCapacity",
+  "tankFillRatio",
+  "flowIn",
+  "demand",
+];
+
+/**
+ * §3.6's contract. `pumpSchedule` is the one type whose numeric fields are
+ * real JSON numbers rather than strings (per §3.6), so this checks `number`/
+ * `boolean`, not `string`, unlike every other validator in this file.
+ */
+function validatePumpScheduleFrame(frame) {
+  const violations = [];
+  if (typeof frame?.action !== "string") violations.push("action: expected a string");
+
+  if (!frame?.metrics || typeof frame.metrics !== "object") {
+    violations.push("metrics: expected an object");
+  } else {
+    for (const field of PUMP_SCHEDULE_METRIC_NUMBER_FIELDS) {
+      if (typeof frame.metrics[field] !== "number") {
+        violations.push(`metrics.${field}: expected a number`);
+      }
+    }
+    if (typeof frame.metrics.isPeakHour !== "boolean") {
+      violations.push("metrics.isPeakHour: expected a boolean");
+    }
+  }
+
+  if (!Array.isArray(frame?.state?.pumps)) {
+    violations.push("state.pumps: expected an array");
+  } else {
+    frame.state.pumps.forEach((pump, index) => {
+      if (typeof pump?.name !== "string") {
+        violations.push(`state.pumps[${index}].name: expected a string`);
+      }
+      if (typeof pump?.isOn !== "boolean") {
+        violations.push(`state.pumps[${index}].isOn: expected a boolean`);
+      }
+      if (typeof pump?.flowGph !== "number") {
+        violations.push(`state.pumps[${index}].flowGph: expected a number`);
+      }
+      if (typeof pump?.powerKw !== "number") {
+        violations.push(`state.pumps[${index}].powerKw: expected a number`);
+      }
+    });
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
 const VALIDATORS = {
   graph: validateGraphFrame,
   booleanSatisfiability: validateBooleanSatisfiabilityFrame,
+  quantumCircuit: validateQuantumCircuitFrame,
+  recursiveSet: validateRecursiveSetFrame,
+  stepTable: validateStepTableFrame,
+  pumpSchedule: validatePumpScheduleFrame,
 };
 
 /**
@@ -176,10 +358,10 @@ const VALIDATORS = {
  * contracts, not a general JSON-schema validator. Only checks the failure classes §3
  * already enumerates per type.
  *
- * A universal type with no validator yet (every type besides `graph` and
- * `booleanSatisfiability`, until T50 adds the rest) always reports valid -- there is no
- * renderer consuming it yet either, so there is nothing for a false-negative here to
- * protect.
+ * All 6 universal types have a validator as of T50. A universal type this map doesn't
+ * recognize at all (`null`, or a payload-level `kind` this frontend has never heard of)
+ * always reports valid -- there is no renderer consuming it either, so there is nothing
+ * for a false-negative here to protect.
  *
  * @param {string|null} universalType
  * @param {Object} frame

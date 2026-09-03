@@ -6,22 +6,35 @@
 // no data / not yet supported (quiet, case b), versus a contract violation (a loud
 // `console.warn` plus a dev-only visible marker, case c).
 //
-// `graph` (T48) and `booleanSatisfiability` (T49) have renderers today -- T50 adds the
-// rest, one task per universal type, the same "once per type, not once per instance"
-// split the whole Track B design is built around. Every other resolved type, and every
-// payload this frontend doesn't recognize at all, takes the quiet "not supported yet"
-// path: that is honestly case (b), not something to warn about.
+// All 6 universal types have renderers as of T50 (`quantumCircuit`,
+// `recursiveSet`, `stepTable`, `pumpSchedule` joining `graph`/T48 and
+// `booleanSatisfiability`/T49), the "once per type, not once per instance"
+// split the whole Track B design is built around. Every payload this
+// frontend doesn't recognize at all still takes the quiet "not supported
+// yet" path: that is honestly case (b), not something to warn about.
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useEffect } from "react";
-import { resolveVisualizationType, validateFrame } from "../../../data/visualizationTypes";
+import {
+  describeUnrenderableReason,
+  resolveVisualizationType,
+  validateFrame,
+} from "../../../data/visualizationTypes";
 import BooleanSatisfiabilityRenderer from "./BooleanSatisfiabilityRenderer";
 import GraphRenderer from "./GraphRenderer";
+import PumpScheduleRenderer from "./PumpScheduleRenderer";
+import QuantumCircuitRenderer from "./QuantumCircuitRenderer";
+import RecursiveSetRenderer from "./RecursiveSetRenderer";
+import StepTableRenderer from "./StepTableRenderer";
 
 const RENDERERS = {
   graph: GraphRenderer,
   booleanSatisfiability: BooleanSatisfiabilityRenderer,
+  quantumCircuit: QuantumCircuitRenderer,
+  recursiveSet: RecursiveSetRenderer,
+  stepTable: StepTableRenderer,
+  pumpSchedule: PumpScheduleRenderer,
 };
 
 function CannotRender({ idPrefix, reason, violations }) {
@@ -85,13 +98,15 @@ export default function VisualizationCanvas({ idPrefix, instanceName, backendTyp
   }
 
   if (!Renderer) {
+    const specificReason = describeUnrenderableReason(backendType, frame);
     return (
       <CannotRender
         idPrefix={idPrefix}
         reason={
-          universalType
+          specificReason ??
+          (universalType
             ? `No renderer built yet for "${universalType}" visualizations.`
-            : "This visualization type isn't supported yet."
+            : "This visualization type isn't supported yet.")
         }
       />
     );
