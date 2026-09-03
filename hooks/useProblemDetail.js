@@ -62,6 +62,7 @@ import {
   requestAllSolvers,
   requestAllVerifiers,
   requestAllVisualizations,
+  requestAllVisualizationTypes,
   requestReductionGraph,
 } from "../lib/redux";
 
@@ -89,12 +90,24 @@ function buildSolvers(solverClassNames, info) {
   });
 }
 
-function buildVisualizations(visualizationClassNames, info) {
+// `className` and `backendType` are carried alongside the display name because T48
+// (#111) needs both: live rendering calls `ProblemProvider/visualize?visualization=
+// <className>` (keyed the same way solve/verify are, by class name rather than the
+// human-readable `visualizationName`), and resolving which universal render type a
+// frame is (data/visualizationTypes.js) needs the raw backend `visualizationType` wire
+// value. `visualizationTypesByInstance` is `Navigation/Batch/allVisualizationTypes`'s
+// answer when that endpoint exists; T40 found some deployments don't have it yet, so
+// this falls back to the same field read off `allInfo`, matching what Redux_GUI's own
+// hook already does for the same gap.
+function buildVisualizations(visualizationClassNames, info, visualizationTypesByInstance) {
   return (visualizationClassNames ?? []).map((className) => {
     const visualizationInfo = info[className] ?? {};
     return {
+      className,
       name: visualizationInfo.visualizationName ?? className,
       type: mergeVisualStyle(className, undefined),
+      backendType:
+        visualizationTypesByInstance[className] ?? visualizationInfo.visualizationType ?? "",
       caption: visualizationInfo.visualizationDefinition ?? "",
     };
   });
@@ -148,7 +161,13 @@ function buildReductions(problemCode, reductionGraph, codeToName) {
 
 function buildProblem(problemCode, info, batches, codeToName) {
   const problemInfo = info[problemCode] ?? {};
-  const { solversByProblem, verifiersByProblem, visualizationsByProblem, reductionGraph } = batches;
+  const {
+    solversByProblem,
+    verifiersByProblem,
+    visualizationsByProblem,
+    reductionGraph,
+    visualizationTypesByInstance,
+  } = batches;
 
   const contributors = Array.isArray(problemInfo.contributors) ? problemInfo.contributors : [];
 
@@ -186,7 +205,11 @@ function buildProblem(problemCode, info, batches, codeToName) {
     defaultInstance: problemInfo.defaultInstance || "",
     instanceFormat: problemInfo.instanceFormat || "",
     solvers: buildSolvers(solversByProblem[problemCode], info),
-    visualizations: buildVisualizations(visualizationsByProblem[problemCode], info),
+    visualizations: buildVisualizations(
+      visualizationsByProblem[problemCode],
+      info,
+      visualizationTypesByInstance,
+    ),
     verifier: buildVerifier(verifiersByProblem[problemCode], info, problemInfo),
     reductions: buildReductions(problemCode, reductionGraph, codeToName),
   };
@@ -235,6 +258,7 @@ export function useProblemDetail(url, problemName) {
           verifiersByProblem,
           visualizationsByProblem,
           reductionGraph,
+          visualizationTypesByInstance,
         ] = await Promise.all([
           requestAllProblems(url),
           requestAllInfo(url),
@@ -242,6 +266,11 @@ export function useProblemDetail(url, problemName) {
           requestAllVerifiers(url),
           requestAllVisualizations(url),
           requestReductionGraph(url),
+          // Falls back to allInfo per-instance (buildVisualizations) rather than
+          // failing the whole page load -- T40 found some deployments don't have this
+          // endpoint yet, which is exactly the case requestAllVisualizationTypes's own
+          // doc comment says a caller needs to handle.
+          requestAllVisualizationTypes(url).catch(() => null),
         ]);
 
         if (cancelled) return;
@@ -270,6 +299,7 @@ export function useProblemDetail(url, problemName) {
               verifiersByProblem: verifiersByProblem ?? {},
               visualizationsByProblem: visualizationsByProblem ?? {},
               reductionGraph: reductionGraph ?? {},
+              visualizationTypesByInstance: visualizationTypesByInstance ?? {},
             },
             codeToName,
           ),
