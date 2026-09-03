@@ -126,8 +126,49 @@ function validateGraphFrame(frame) {
   return { valid: violations.length === 0, violations };
 }
 
+/**
+ * §3.3's contract, checked field by field. An empty `clauses` array is a valid
+ * degenerate case (0 clauses), not malformed -- only a missing/non-array `clauses`, or
+ * a clause with no `literals` array, is.
+ */
+function validateBooleanSatisfiabilityFrame(frame) {
+  const violations = [];
+  if (!Array.isArray(frame?.clauses)) {
+    violations.push("clauses: expected an array");
+    return { valid: false, violations };
+  }
+
+  frame.clauses.forEach((clause, clauseIndex) => {
+    if (typeof clause?.id !== "string") {
+      violations.push(`clauses[${clauseIndex}].id: expected a string`);
+    }
+    if (!Array.isArray(clause?.literals)) {
+      violations.push(`clauses[${clauseIndex}].literals: expected an array`);
+      return;
+    }
+    clause.literals.forEach((literal, literalIndex) => {
+      if (typeof literal?.id !== "string") {
+        violations.push(`clauses[${clauseIndex}].literals[${literalIndex}].id: expected a string`);
+      }
+      if (typeof literal?.literal !== "string") {
+        violations.push(
+          `clauses[${clauseIndex}].literals[${literalIndex}].literal: expected a string`,
+        );
+      }
+      if (typeof literal?.color !== "string") {
+        violations.push(
+          `clauses[${clauseIndex}].literals[${literalIndex}].color: expected a string`,
+        );
+      }
+    });
+  });
+
+  return { valid: violations.length === 0, violations };
+}
+
 const VALIDATORS = {
   graph: validateGraphFrame,
+  booleanSatisfiability: validateBooleanSatisfiabilityFrame,
 };
 
 /**
@@ -135,9 +176,10 @@ const VALIDATORS = {
  * contracts, not a general JSON-schema validator. Only checks the failure classes §3
  * already enumerates per type.
  *
- * A universal type with no validator yet (every type besides `graph`, until T49/T50
- * add their own) always reports valid -- there is no renderer consuming it yet either,
- * so there is nothing for a false-negative here to protect.
+ * A universal type with no validator yet (every type besides `graph` and
+ * `booleanSatisfiability`, until T50 adds the rest) always reports valid -- there is no
+ * renderer consuming it yet either, so there is nothing for a false-negative here to
+ * protect.
  *
  * @param {string|null} universalType
  * @param {Object} frame
