@@ -78,8 +78,27 @@ function CannotRender({ idPrefix, reason, violations }) {
  *   "GraphD3") -- `Navigation/Batch/allVisualizationTypes`, falling back to `allInfo`.
  * @param {Object|null} [props.frame] One frame (`frames[currentStep]`), or null/undefined
  *   when there's nothing to show yet (not yet run, or an empty `frames[]`).
+ * @param {boolean} [props.editable] T51 (#114): forwarded straight through to whichever
+ *   renderer is dispatched to. Only `GraphRenderer`, `RecursiveSetRenderer` and
+ *   `QuantumCircuitRenderer` read it today; the other renderers simply ignore an unused
+ *   prop, the same way they already ignore `instanceName` when they have no use for it.
+ * @param {(op: Object) => void} [props.onGraphEdit] Forwarded straight through -- see
+ *   `GraphRenderer`'s own doc comment for the edit-descriptor shape.
+ * @param {(updater: (data: Object) => Object) => void} [props.onDataChange] Forwarded
+ *   straight through -- see `RecursiveSetRenderer`'s own doc comment.
+ * @param {(op: Object) => void} [props.onCircuitEdit] Forwarded straight through -- see
+ *   `QuantumCircuitRenderer`'s own doc comment for the edit-descriptor shape.
  */
-export default function VisualizationCanvas({ idPrefix, instanceName, backendType, frame }) {
+export default function VisualizationCanvas({
+  idPrefix,
+  instanceName,
+  backendType,
+  frame,
+  editable,
+  onGraphEdit,
+  onDataChange,
+  onCircuitEdit,
+}) {
   const universalType = resolveVisualizationType(backendType, frame);
   const Renderer = universalType ? RENDERERS[universalType] : null;
   const { valid, violations } =
@@ -122,5 +141,15 @@ export default function VisualizationCanvas({ idPrefix, instanceName, backendTyp
     );
   }
 
-  return <Renderer idPrefix={idPrefix} instanceName={instanceName} frame={frame} />;
+  return (
+    <Renderer
+      idPrefix={idPrefix}
+      instanceName={instanceName}
+      frame={frame}
+      editable={editable}
+      onGraphEdit={onGraphEdit}
+      onDataChange={onDataChange}
+      onCircuitEdit={onCircuitEdit}
+    />
+  );
 }

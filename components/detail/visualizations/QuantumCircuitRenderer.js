@@ -19,8 +19,33 @@
 // below the diagram) is out of scope here -- §3.2's contract covers `d3`'s
 // wires/gates/overlays, not `metadata`'s free-form contents, and T50's own
 // scope is rendering the frame, not a metadata inspector.
+//
+// --- T51 (#114): editing UI ships; the diagram-to-text serializer does not -------------
+// Add/remove qubit and add/remove/relabel gate are wired here, gated behind `editable`,
+// and update the local preview immediately (INTERACTIVE_LAYER_DESIGN.md §2.1.2) exactly
+// like the `graph` and `recursiveSet` editors on this same task. What's deliberately
+// missing is a serializer to send an edit through Run: T46 (#109) verified SPADE
+// round-tripping against Clique and DFA, a set-of-nodes-plus-edges grammar and an
+// automaton grammar -- neither is a gate-sequence grammar, and nothing this project has
+// checked says whether a quantum-circuit instance's text encodes gates by literal type
+// tokens, by position, or some other shape entirely, or whether gate `id` (which this
+// contract's payload appears to synthesize during parsing, unlike a graph node's `id`,
+// which is plausibly the literal grammar token) has any textual counterpart at all.
+// Writing a serializer against an unverified guess risks producing instance text that
+// looks plausible and silently means something else -- worse than leaving the gap
+// visible. VisualizationsSection.js declines to serialize a pending `quantumCircuit`
+// edit and says why, rather than guessing. See data/instanceSerializers.js's own header
+// for the parallel note. This is this task's one explicitly left-open item -- see its
+// handback summary.
 
+import AddIcon from "@mui/icons-material/Add";
+import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { useId, useMemo, useState } from "react";
 import { getVisualizationColor } from "../../theme";
 
@@ -175,6 +200,200 @@ function OverlayBand({ idPrefix, overlay, overlayIndex, x0, x1, yMin, yMax }) {
   );
 }
 
+// `qubits` is `d3.qubits` straight from the contract -- a plain `string[]` (§3.2), not
+// objects, unlike `graph`'s nodes. Rows are keyed by array index rather than value: a
+// qubit's position in the array is stable across a rename (renaming mutates the string at
+// the same index, it doesn't reorder), so indexing avoids the same remount-during-rename
+// problem GraphEditPanel solves with a synthetic `_key` -- without needing one here, since
+// the contract gives this type no per-qubit object to hang one off. `gates` don't need
+// this treatment at all: `gate.id` (§3.2) is independent of `gate.type`, the field being
+// relabeled, so it's already a stable key on its own.
+function QuantumCircuitEditPanel({ idPrefix, qubits, gates, onCircuitEdit }) {
+  const [newQubitId, setNewQubitId] = useState("");
+  const [newGateType, setNewGateType] = useState("");
+  const [newGateTarget, setNewGateTarget] = useState(qubits[0] ?? "");
+  const targetValue = qubits.includes(newGateTarget) ? newGateTarget : (qubits[0] ?? "");
+
+  function handleAddQubit(event) {
+    event.preventDefault();
+    const trimmed = newQubitId.trim();
+    if (!trimmed || qubits.includes(trimmed)) return;
+    onCircuitEdit({ type: "addQubit", id: trimmed });
+    setNewQubitId("");
+  }
+
+  function handleAddGate(event) {
+    event.preventDefault();
+    const trimmed = newGateType.trim();
+    if (!trimmed || !targetValue) return;
+    onCircuitEdit({ type: "addGate", gateType: trimmed, target: targetValue });
+    setNewGateType("");
+  }
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 1,
+        mt: 1,
+        p: 1.5,
+        border: "1px dashed",
+        borderColor: "divider",
+        borderRadius: 1,
+      }}
+    >
+      <Typography variant="overline" sx={{ color: "text.secondary" }}>
+        Edit qubits
+      </Typography>
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+        {qubits.map((qubitId, index) => (
+          <Box key={index} sx={{ display: "inline-flex", alignItems: "center", gap: 0.25 }}>
+            <Box component="label" htmlFor={`${idPrefix}-qubit-${index}`} sx={{ display: "none" }}>
+              Rename qubit {qubitId}
+            </Box>
+            <TextField
+              id={`${idPrefix}-qubit-${index}`}
+              size="small"
+              variant="standard"
+              value={qubitId}
+              onChange={(event) =>
+                onCircuitEdit({ type: "renameQubit", from: qubitId, to: event.target.value })
+              }
+              sx={{ width: 56, "& input": { fontSize: "0.8125rem", py: 0.25 } }}
+              inputProps={{ "aria-label": `Rename qubit ${qubitId}` }}
+            />
+            <IconButton
+              id={`${idPrefix}-qubit-${index}-remove`}
+              size="small"
+              aria-label={`Remove qubit ${qubitId}`}
+              onClick={() => onCircuitEdit({ type: "removeQubit", id: qubitId })}
+              sx={{ p: 0.375 }}
+            >
+              <CloseIcon sx={{ fontSize: "0.875rem" }} />
+            </IconButton>
+          </Box>
+        ))}
+      </Box>
+      <Box
+        component="form"
+        onSubmit={handleAddQubit}
+        sx={{ display: "inline-flex", gap: 0.5, alignItems: "center" }}
+      >
+        <Box component="label" htmlFor={`${idPrefix}-add-qubit`} sx={{ display: "none" }}>
+          New qubit id
+        </Box>
+        <TextField
+          id={`${idPrefix}-add-qubit`}
+          size="small"
+          variant="outlined"
+          placeholder="new qubit id"
+          value={newQubitId}
+          onChange={(event) => setNewQubitId(event.target.value)}
+          sx={{ width: 120, "& input": { fontSize: "0.8125rem", py: 0.5 } }}
+          inputProps={{ "aria-label": "New qubit id" }}
+        />
+        <IconButton
+          id={`${idPrefix}-add-qubit-submit`}
+          type="submit"
+          size="small"
+          disabled={!newQubitId.trim() || qubits.includes(newQubitId.trim())}
+          aria-label="Add qubit"
+          sx={{ p: 0.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}
+        >
+          <AddIcon sx={{ fontSize: "1rem" }} />
+        </IconButton>
+      </Box>
+
+      <Typography variant="overline" sx={{ color: "text.secondary", mt: 1 }}>
+        Edit gates
+      </Typography>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+        {gates.length === 0 && (
+          <Typography variant="body2" sx={{ color: "text.secondary", fontStyle: "italic" }}>
+            No gates.
+          </Typography>
+        )}
+        {gates.map((gate) => (
+          <Box key={gate.id} sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+            <Box component="label" htmlFor={`${idPrefix}-gate-${gate.id}`} sx={{ display: "none" }}>
+              Relabel gate on {gate.targets?.join(", ")}
+            </Box>
+            <TextField
+              id={`${idPrefix}-gate-${gate.id}`}
+              size="small"
+              variant="standard"
+              value={gate.type ?? ""}
+              onChange={(event) =>
+                onCircuitEdit({ type: "relabelGate", id: gate.id, gateType: event.target.value })
+              }
+              sx={{ width: 56, "& input": { fontSize: "0.8125rem", py: 0.25 } }}
+              inputProps={{ "aria-label": `Relabel gate on ${gate.targets?.join(", ")}` }}
+            />
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+              on {gate.targets?.join(", ")}
+            </Typography>
+            <IconButton
+              id={`${idPrefix}-gate-${gate.id}-remove`}
+              size="small"
+              aria-label={`Remove gate on ${gate.targets?.join(", ")}`}
+              onClick={() => onCircuitEdit({ type: "removeGate", id: gate.id })}
+              sx={{ p: 0.375 }}
+            >
+              <CloseIcon sx={{ fontSize: "0.875rem" }} />
+            </IconButton>
+          </Box>
+        ))}
+      </Box>
+      {qubits.length > 0 && (
+        <Box
+          component="form"
+          onSubmit={handleAddGate}
+          sx={{ display: "inline-flex", gap: 0.5, alignItems: "center" }}
+        >
+          <TextField
+            id={`${idPrefix}-add-gate-type`}
+            size="small"
+            variant="outlined"
+            placeholder="gate type"
+            value={newGateType}
+            onChange={(event) => setNewGateType(event.target.value)}
+            sx={{ width: 100, "& input": { fontSize: "0.8125rem", py: 0.5 } }}
+            inputProps={{ "aria-label": "New gate type" }}
+          />
+          <Select
+            id={`${idPrefix}-add-gate-target`}
+            size="small"
+            value={targetValue}
+            onChange={(event) => setNewGateTarget(event.target.value)}
+            inputProps={{ "aria-label": "New gate target qubit" }}
+            sx={{ minWidth: 72 }}
+          >
+            {qubits.map((qubitId) => (
+              <MenuItem key={qubitId} value={qubitId}>
+                {qubitId}
+              </MenuItem>
+            ))}
+          </Select>
+          <IconButton
+            id={`${idPrefix}-add-gate-submit`}
+            type="submit"
+            size="small"
+            disabled={!newGateType.trim()}
+            aria-label="Add gate"
+            sx={{ p: 0.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}
+          >
+            <AddIcon sx={{ fontSize: "1rem" }} />
+          </IconButton>
+        </Box>
+      )}
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+        These changes preview here, but can&apos;t be sent to Run yet for this visualization type.
+      </Typography>
+    </Box>
+  );
+}
+
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id this component renders,
@@ -185,8 +404,23 @@ function OverlayBand({ idPrefix, overlay, overlayIndex, x0, x1, yMin, yMax }) {
  * @param {{d3: Object}} props.frame One already-validated `quantumCircuit`
  *   frame (the `d3` arm -- resolveVisualizationType only reaches this
  *   renderer when `format === 1` and `d3` is present, per §3.2).
+ * @param {boolean} [props.editable] T51 (#114): true only when this frame is
+ *   the base frame of a visualization the caller has decided is editable
+ *   right now. See this file's header for why edits here preview locally
+ *   but are never sent to Run.
+ * @param {(op: Object) => void} [props.onCircuitEdit] Called with one edit
+ *   descriptor per structural edit -- `{type: "addQubit", id}`,
+ *   `{type: "removeQubit", id}`, `{type: "renameQubit", from, to}`,
+ *   `{type: "addGate", gateType, target}`, `{type: "removeGate", id}`, or
+ *   `{type: "relabelGate", id, gateType}`. Required when `editable` is true.
  */
-export default function QuantumCircuitRenderer({ idPrefix, instanceName, frame }) {
+export default function QuantumCircuitRenderer({
+  idPrefix,
+  instanceName,
+  frame,
+  editable = false,
+  onCircuitEdit,
+}) {
   const reactId = useId().replace(/:/g, "");
   const scopeId = `${idPrefix}-${reactId}`;
   const [hoveredGateId, setHoveredGateId] = useState(null);
@@ -199,7 +433,7 @@ export default function QuantumCircuitRenderer({ idPrefix, instanceName, frame }
   const summary = instanceName ? `${instanceName}: ${summaryBody}` : summaryBody;
 
   return (
-    <Box sx={{ width: "100%", height: "100%", overflow: "auto" }}>
+    <Box sx={{ width: "100%", height: editable ? "auto" : "100%", overflow: "auto" }}>
       <svg
         id={scopeId}
         role="img"
@@ -290,6 +524,14 @@ export default function QuantumCircuitRenderer({ idPrefix, instanceName, frame }
           );
         })}
       </svg>
+      {editable && (
+        <QuantumCircuitEditPanel
+          idPrefix={scopeId}
+          qubits={frame.d3.qubits}
+          gates={frame.d3.gates}
+          onCircuitEdit={onCircuitEdit}
+        />
+      )}
     </Box>
   );
 }
