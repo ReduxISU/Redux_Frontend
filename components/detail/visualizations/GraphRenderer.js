@@ -21,7 +21,36 @@
 // thrown away -- this is a *static* render (T48's own scope: "static (non-interactive)
 // rendering only"). No drag, no persistent simulation timer, no re-layout on a render
 // that didn't get a new frame.
+//
+// T51 (#114): structural editing (add/remove/relabel a node; add/remove an edge -- see
+// this component's own scope note below) is gated behind the `editable` prop. Rather than
+// embedding forms inside the SVG (no natural text-flow to hang a labelled input off, and
+// every hover target here is already a small circle), edit controls render in a separate
+// panel below the diagram -- a real, focusable, aria-labelled list of node/edge rows plus
+// add forms, the same keyboard-reachable pattern T52 established for
+// BooleanSatisfiabilityRenderer. The SVG itself stays exactly as before when not editable.
+//
+// Node/gate position dragging is out of scope everywhere in this contract
+// (INTERACTIVE_LAYER_DESIGN.md §2.3: no position field exists on any type this project's
+// force-directed layout is computed fresh, not read from data) -- nothing here changes
+// that.
+//
+// **Edge edits preview locally but are not sent to Run.** See
+// data/instanceSerializers.js's `serializeGraphInstance` doc comment for the full
+// reasoning: a node id is a simple literal token this project can locate in instance text
+// with confidence; an edge is not, across all 24 `graph` instances (DFA/NFA's weighted
+// transition symbols are the concrete counterexample). VisualizationsSection.js's own
+// summary to the user says this plainly when an edge edit is pending, rather than sending
+// a guess to the backend.
 
+import AddIcon from "@mui/icons-material/Add";
+import CloseIcon from "@mui/icons-material/Close";
+import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
 import { useId, useMemo, useState } from "react";
 import { getVisualizationColor } from "../../theme";
@@ -187,6 +216,199 @@ function GraphNodeMark({ node, highlighted, onEnter, onLeave }) {
   );
 }
 
+// Node/edge rows are keyed by `_key`, a stable identifier VisualizationsSection.js
+// assigns once when local edit state is created (see that file's header) and never
+// changes even when the node's own `id` is renamed -- keying by `node.id` directly would
+// remount (and drop focus from) the very text field the user is typing a rename into,
+// since React treats a changed `key` as a different element. `id` is still what's shown,
+// edited, and referenced by edges; `_key` only exists for this reason.
+function GraphEditPanel({ idPrefix, nodes, links, onGraphEdit }) {
+  const [newNodeId, setNewNodeId] = useState("");
+  const [newEdgeSource, setNewEdgeSource] = useState(nodes[0]?.id ?? "");
+  const [newEdgeTarget, setNewEdgeTarget] = useState(nodes[1]?.id ?? nodes[0]?.id ?? "");
+
+  const sourceValue = nodes.some((node) => node.id === newEdgeSource)
+    ? newEdgeSource
+    : (nodes[0]?.id ?? "");
+  const targetValue = nodes.some((node) => node.id === newEdgeTarget)
+    ? newEdgeTarget
+    : (nodes[1]?.id ?? nodes[0]?.id ?? "");
+
+  function handleAddNode(event) {
+    event.preventDefault();
+    const trimmed = newNodeId.trim();
+    if (!trimmed || nodes.some((node) => node.id === trimmed)) return;
+    onGraphEdit({ type: "addNode", id: trimmed });
+    setNewNodeId("");
+  }
+
+  function handleAddEdge(event) {
+    event.preventDefault();
+    if (!sourceValue || !targetValue) return;
+    onGraphEdit({ type: "addEdge", source: sourceValue, target: targetValue });
+  }
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 1,
+        mt: 1,
+        p: 1.5,
+        border: "1px dashed",
+        borderColor: "divider",
+        borderRadius: 1,
+      }}
+    >
+      <Typography variant="overline" sx={{ color: "text.secondary" }}>
+        Edit nodes
+      </Typography>
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+        {nodes.map((node) => (
+          <Box key={node._key} sx={{ display: "inline-flex", alignItems: "center", gap: 0.25 }}>
+            <Box
+              component="label"
+              htmlFor={`${idPrefix}-node-${node._key}`}
+              sx={{ display: "none" }}
+            >
+              Rename node {node.id}
+            </Box>
+            <TextField
+              id={`${idPrefix}-node-${node._key}`}
+              size="small"
+              variant="standard"
+              value={node.id}
+              onChange={(event) =>
+                onGraphEdit({ type: "renameNode", from: node.id, to: event.target.value })
+              }
+              sx={{ width: 56, "& input": { fontSize: "0.8125rem", py: 0.25 } }}
+              inputProps={{ "aria-label": `Rename node ${node.id}` }}
+            />
+            <IconButton
+              id={`${idPrefix}-node-${node._key}-remove`}
+              size="small"
+              aria-label={`Remove node ${node.id}`}
+              onClick={() => onGraphEdit({ type: "removeNode", id: node.id })}
+              sx={{ p: 0.375 }}
+            >
+              <CloseIcon sx={{ fontSize: "0.875rem" }} />
+            </IconButton>
+          </Box>
+        ))}
+      </Box>
+      <Box
+        component="form"
+        onSubmit={handleAddNode}
+        sx={{ display: "inline-flex", gap: 0.5, alignItems: "center" }}
+      >
+        <Box component="label" htmlFor={`${idPrefix}-add-node`} sx={{ display: "none" }}>
+          New node id
+        </Box>
+        <TextField
+          id={`${idPrefix}-add-node`}
+          size="small"
+          variant="outlined"
+          placeholder="new node id"
+          value={newNodeId}
+          onChange={(event) => setNewNodeId(event.target.value)}
+          sx={{ width: 120, "& input": { fontSize: "0.8125rem", py: 0.5 } }}
+          inputProps={{ "aria-label": "New node id" }}
+        />
+        <IconButton
+          id={`${idPrefix}-add-node-submit`}
+          type="submit"
+          size="small"
+          disabled={!newNodeId.trim() || nodes.some((node) => node.id === newNodeId.trim())}
+          aria-label="Add node"
+          sx={{ p: 0.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}
+        >
+          <AddIcon sx={{ fontSize: "1rem" }} />
+        </IconButton>
+      </Box>
+
+      <Typography variant="overline" sx={{ color: "text.secondary", mt: 1 }}>
+        Edit edges
+      </Typography>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+        {links.length === 0 && (
+          <Typography variant="body2" sx={{ color: "text.secondary", fontStyle: "italic" }}>
+            No edges.
+          </Typography>
+        )}
+        {links.map((link) => (
+          <Box key={link._key} sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+            <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+              {link.source} {link.directed ? "->" : "--"} {link.target}
+            </Typography>
+            <IconButton
+              id={`${idPrefix}-edge-${link._key}-remove`}
+              size="small"
+              aria-label={`Remove edge from ${link.source} to ${link.target}`}
+              onClick={() => onGraphEdit({ type: "removeEdge", id: link.id })}
+              sx={{ p: 0.375 }}
+            >
+              <CloseIcon sx={{ fontSize: "0.875rem" }} />
+            </IconButton>
+          </Box>
+        ))}
+      </Box>
+      {nodes.length > 0 && (
+        <Box
+          component="form"
+          onSubmit={handleAddEdge}
+          sx={{ display: "inline-flex", gap: 0.5, alignItems: "center" }}
+        >
+          <Select
+            id={`${idPrefix}-add-edge-source`}
+            size="small"
+            value={sourceValue}
+            onChange={(event) => setNewEdgeSource(event.target.value)}
+            inputProps={{ "aria-label": "New edge source node" }}
+            sx={{ minWidth: 72 }}
+          >
+            {nodes.map((node) => (
+              <MenuItem key={node._key} value={node.id}>
+                {node.id}
+              </MenuItem>
+            ))}
+          </Select>
+          <Typography variant="body2" aria-hidden="true">
+            {"->"}
+          </Typography>
+          <Select
+            id={`${idPrefix}-add-edge-target`}
+            size="small"
+            value={targetValue}
+            onChange={(event) => setNewEdgeTarget(event.target.value)}
+            inputProps={{ "aria-label": "New edge target node" }}
+            sx={{ minWidth: 72 }}
+          >
+            {nodes.map((node) => (
+              <MenuItem key={node._key} value={node.id}>
+                {node.id}
+              </MenuItem>
+            ))}
+          </Select>
+          <IconButton
+            id={`${idPrefix}-add-edge-submit`}
+            type="submit"
+            size="small"
+            aria-label="Add edge"
+            sx={{ p: 0.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}
+          >
+            <AddIcon sx={{ fontSize: "1rem" }} />
+          </IconButton>
+        </Box>
+      )}
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+        Node changes are sent to Run. Edge changes preview here but can&apos;t be sent to Run yet
+        for this visualization type.
+      </Typography>
+    </Box>
+  );
+}
+
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id this component renders, so two
@@ -194,8 +416,21 @@ function GraphNodeMark({ node, highlighted, onEnter, onLeave }) {
  * @param {string} [props.instanceName] Human-readable visualization name, folded into
  *   the accessible summary when given.
  * @param {{nodes: Array, links: Array}} props.frame One already-validated `graph` frame.
+ * @param {boolean} [props.editable] T51 (#114): true only when this frame is the base
+ *   frame of a visualization the caller has decided is editable right now -- this
+ *   component does not re-derive that gate.
+ * @param {(op: Object) => void} [props.onGraphEdit] Called with one edit descriptor per
+ *   structural edit -- `{type: "addNode", id}`, `{type: "removeNode", id}`,
+ *   `{type: "renameNode", from, to}`, `{type: "addEdge", source, target}`, or
+ *   `{type: "removeEdge", id}`. Required when `editable` is true.
  */
-export default function GraphRenderer({ idPrefix, instanceName, frame }) {
+export default function GraphRenderer({
+  idPrefix,
+  instanceName,
+  frame,
+  editable = false,
+  onGraphEdit,
+}) {
   const reactId = useId().replace(/:/g, "");
   const scopeId = `${idPrefix}-${reactId}`;
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
@@ -208,7 +443,7 @@ export default function GraphRenderer({ idPrefix, instanceName, frame }) {
   const summaryBody = `graph with ${nodeCount} node${nodeCount === 1 ? "" : "s"} and ${linkCount} link${linkCount === 1 ? "" : "s"}`;
   const summary = instanceName ? `${instanceName}: ${summaryBody}` : summaryBody;
 
-  return (
+  const svg = (
     <svg
       id={scopeId}
       role="img"
@@ -257,5 +492,21 @@ export default function GraphRenderer({ idPrefix, instanceName, frame }) {
         ))}
       </g>
     </svg>
+  );
+
+  if (!editable) {
+    return svg;
+  }
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <Box sx={{ flex: 1, minHeight: 0 }}>{svg}</Box>
+      <GraphEditPanel
+        idPrefix={scopeId}
+        nodes={frame.nodes}
+        links={frame.links}
+        onGraphEdit={onGraphEdit}
+      />
+    </Box>
   );
 }
