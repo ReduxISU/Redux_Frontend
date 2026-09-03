@@ -48,12 +48,12 @@
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Paper from "@mui/material/Paper";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { getVisualizationColor } from "../../theme";
+import { FloatingMenu, useCloseFloatingMenu } from "./floatingMenu";
 import {
   computeEdgePath,
   computeSelfLoopPath,
@@ -225,31 +225,8 @@ function GraphNodeMark({ node, highlighted, onEnter, onLeave }) {
   );
 }
 
-// Fixed-position floating popup, positioned at the screen point a right-click or drag-end
-// happened -- SARE_2026's AutomatonCanvas.tsx menu pattern (issue #124). Lives as a sibling
-// of the <svg> in the DOM, not inside it, so a click inside the menu never reaches the
-// canvas's own mousedown/contextmenu handlers.
-function FloatingMenu({ menuRef, x, y, children }) {
-  return (
-    <Paper
-      ref={menuRef}
-      elevation={8}
-      sx={{
-        position: "fixed",
-        left: x + 4,
-        top: y + 4,
-        p: 1.5,
-        zIndex: 20,
-        minWidth: 200,
-        display: "flex",
-        flexDirection: "column",
-        gap: 1,
-      }}
-    >
-      {children}
-    </Paper>
-  );
-}
+// FloatingMenu and its outside-click/Escape handling now live in ./floatingMenu.js -- pulled
+// out once BooleanSatisfiabilityRenderer.js (T55/#128) needed the identical pattern.
 
 /**
  * @param {Object} props
@@ -321,25 +298,7 @@ export default function GraphRenderer({
     setMenuError("");
   }, []);
 
-  // Outside click / Escape closes whatever menu is open -- reads only this component's own
-  // menuRef, not a hardcoded global selector (§4.1).
-  useEffect(() => {
-    if (!menu) return undefined;
-    function handlePointerDown(event) {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        closeMenu();
-      }
-    }
-    function handleKeyDown(event) {
-      if (event.key === "Escape") closeMenu();
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [menu, closeMenu]);
+  useCloseFloatingMenu(menuRef, menu !== null, closeMenu);
 
   const svgPoint = useCallback((event) => {
     const svg = svgRef.current;
@@ -432,7 +391,9 @@ export default function GraphRenderer({
         const target = displayNodes.find(
           (node) => distanceBetween(x, y, node.x, node.y) <= NODE_RADIUS,
         );
-        if (target && target.id !== drag.sourceId) {
+        // #127: releasing back on the origin node creates a self-loop -- applyGraphOp's
+        // addEdge no longer rejects source === target.
+        if (target) {
           onGraphEdit?.({ type: "addEdge", source: drag.sourceId, target: target.id });
         }
         setRubber(null);

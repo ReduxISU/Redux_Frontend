@@ -80,7 +80,9 @@ export function applyGraphOp(current, op) {
       };
     }
     case "addEdge": {
-      if (op.source === op.target) return current;
+      // #127: self-loops (op.source === op.target) are allowed -- DFA/NFA instances need
+      // them routinely (a state transitioning to itself), and they already render fine
+      // (graphGeometry.js's computeSelfLoopPath) when present in loaded instance data.
       const alreadyExists = current.links.some(
         (link) =>
           (link.source === op.source && link.target === op.target) ||
