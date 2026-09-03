@@ -6,12 +6,13 @@
 //
 // T48 (#111): the canvas is real now, for the `graph` universal type (24 of
 // 48 declared instances, the largest group -- ai_documentation/
-// VISUALIZATION_TYPE_CONTRACTS.md §3.1). Structural editing is still out of
-// scope (T51, gated on T46) -- rendering is read-only, and the earlier "Drag
-// nodes to reposition / Right-click to add" hint text is gone rather than
-// left pointing at an interaction that doesn't exist: it was harmless over
-// a static placeholder box, but would be actively misleading under a real,
-// rendered diagram nothing responds to.
+// VISUALIZATION_TYPE_CONTRACTS.md §3.1).
+//
+// T54 (#125): structural editing for `graph` is drag/right-click directly on the diagram
+// (components/detail/visualizations/GraphRenderer.js), not a side panel -- the "Drag nodes
+// to reposition / Right-click to add" interaction this file's header once said was
+// deliberately removed (T48, when the canvas was still a static read-only placeholder) is
+// back, now backed by a real editable renderer instead of pointing at nothing.
 //
 // Per INTERACTIVE_LAYER_DESIGN.md §0/§2.1/§2.1.1: this section shares
 // `instanceValue`/`onInstanceChange` with Solvers and Verifier (T35/#93) and
