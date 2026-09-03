@@ -179,6 +179,14 @@ export function applyCircuitOp(current, op) {
           gate.id === op.id ? { ...gate, type: op.gateType } : gate,
         ),
       };
+    // T56 (#129): drag-to-retime/retarget and right-click "add gate at this cell" both
+    // touch more than one gate at once (a retime can shift every later gate's `time`
+    // forward -- see components/detail/visualizations/quantumCircuitGrid.js), so the
+    // renderer computes the whole next `gates` array itself and hands it over wholesale
+    // rather than this function trying to re-derive collision/shift logic from a
+    // single-gate op descriptor.
+    case "replaceGates":
+      return { ...current, gates: op.gates };
     default:
       return current;
   }
