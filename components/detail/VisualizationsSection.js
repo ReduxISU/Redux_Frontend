@@ -4,17 +4,23 @@
 // problem's declared visualizations (name + type badge), and a right pane
 // with a static canvas, its caption, and step-scrubber chrome.
 //
-// v1 scope (ground rule 5): only the rail selection is live. The canvas
-// itself is a static rendering, and the step-scrubber controls (prev/play/
-// next, progress bar, step counter) plus the "Drag nodes to reposition" /
-// "Right-click to add" hint text are rendered as visibly inert chrome —
-// real MUI `disabled` buttons (which also removes them from tab order),
-// not just dimmed-looking active ones. No live node editing, no
-// right-click menu, no working scrubber.
+// v1 scope (ground rule 5, as narrowed by INTERACTIVE_LAYER_DESIGN.md's
+// staging plan): only the rail selection and the step-scrubber are live.
+// The canvas itself is still a static rendering (real diagram rendering is
+// T48-T50) and the "Drag nodes to reposition" / "Right-click to add" hint
+// text stays inert chrome — no live node editing, no right-click menu. The
+// scrubber row is real, though (T47/#110): play/pause/step/speed/scrub bar
+// all work, via the shared StepScrubber component. `selected.frames` isn't
+// populated by hooks/useProblemDetail.js yet (that's T48-T50's job), so the
+// scrubber currently degrades to a real, correctly-labelled single frame
+// ("Step 1 of 1") rather than faking a frame count that doesn't exist yet.
 //
-// Only 3-SAT's fixture entries carry `stepLabel`/`stepNarration` — every
-// other problem's visualizations only have `{ name, type, caption }`, so
-// both are rendered conditionally rather than assumed present.
+// Only 3-SAT's fixture entries ever carried `stepLabel`/`stepNarration` —
+// every other problem's visualizations only have `{ name, type, caption }`,
+// so both are rendered conditionally rather than assumed present. Neither
+// field is populated by the real hook today (see hooks/useProblemDetail.js's
+// buildVisualizations) — kept here so this stays a no-op regression, not a
+// removal, if a future task adds narration data back.
 //
 // T28 (#37): the rail-plus-pane split stacks below `md` (900px) -- same
 // breakpoint components/detail/OverviewSection.js already uses for its own
@@ -22,17 +28,14 @@
 // into a drawer at, kept consistent rather than picking a third number. The
 // rail's fixed width only applies at `md` and up; stacked, it's full width.
 
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import SkipNextIcon from "@mui/icons-material/SkipNext";
-import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
 import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { TAXONOMY, UNCLASSIFIED } from "../../data/taxonomy";
 import { getFacetAccentColor, thinScrollbarSx } from "../theme";
 import SectionShell from "./SectionShell";
+import StepScrubber from "./StepScrubber";
 
 const VISUALIZATION_TYPE_FACET = TAXONOMY.find((facet) => facet.key === "visualizationType");
 
@@ -82,8 +85,21 @@ function TypeBadge({ typeKey }) {
 export default function VisualizationsSection({ problem, dragHandleProps }) {
   const visualizations = problem.visualizations ?? [];
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
   const selected = visualizations[selectedIndex];
   const noun = visualizations.length === 1 ? "visualization" : "visualizations";
+
+  // Selecting a different visualization starts its playback over rather
+  // than carrying over a step index that may be out of range for it. Done
+  // as a render-time state adjustment (React's documented pattern for this,
+  // not a useEffect) so it doesn't cost an extra committed render.
+  const [stepResetKey, setStepResetKey] = useState(selectedIndex);
+  if (stepResetKey !== selectedIndex) {
+    setStepResetKey(selectedIndex);
+    setCurrentStep(0);
+  }
+
+  const frameCount = selected?.frames?.length ?? 1;
 
   return (
     <SectionShell
@@ -169,47 +185,12 @@ export default function VisualizationsSection({ problem, dragHandleProps }) {
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                px: 1.5,
-                py: 1,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
-            >
-              <IconButton
-                id="visualizations-scrubber-previous"
-                size="small"
-                disabled
-                aria-label="Previous step"
-              >
-                <SkipPreviousIcon fontSize="small" />
-              </IconButton>
-              <IconButton id="visualizations-scrubber-play" size="small" disabled aria-label="Play">
-                <PlayArrowIcon fontSize="small" />
-              </IconButton>
-              <IconButton
-                id="visualizations-scrubber-next"
-                size="small"
-                disabled
-                aria-label="Next step"
-              >
-                <SkipNextIcon fontSize="small" />
-              </IconButton>
-              <Box
-                aria-hidden="true"
-                sx={{ flex: 1, height: 4, borderRadius: 999, backgroundColor: "divider", mx: 1 }}
-              />
-              {selected.stepLabel && (
-                <Typography variant="body2" sx={{ color: "text.secondary", flexShrink: 0 }}>
-                  {selected.stepLabel}
-                </Typography>
-              )}
-            </Box>
+            <StepScrubber
+              idPrefix="visualizations-scrubber"
+              frameCount={frameCount}
+              currentStep={currentStep}
+              onStepChange={setCurrentStep}
+            />
 
             <Box
               sx={{

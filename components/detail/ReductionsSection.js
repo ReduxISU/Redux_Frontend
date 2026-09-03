@@ -3,18 +3,18 @@
 // T16e (#25) — the most complex-looking panel in the mockup, and deliberately
 // the most scoped-down. Reduces-to/reduces-from lists and cost badges are
 // real declared data (data/fixtures.js's `reductions` shape aligns well with
-// the backend); the source/target instance diagrams are static placeholders
-// only — no live step-scrubber, no draggable/editable nodes (v1 scope).
+// the backend); the source/target instance diagrams are still static
+// placeholders (real diagram rendering is T53, once T48-T50 land) — no
+// draggable/editable nodes (v1 scope).
 //
-// Gap, deliberately not papered over: unlike VisualizationsSection's
-// per-instance `stepLabel`/`stepNarration`, data/fixtures.js's `reductions`
-// shape (`{ to: [{target, cost, type}], from: [{source, cost, type}] }`) has
-// no step/narration field at all, for any problem. The mockup's "step 2/5"
-// counter and "Step 2: clause C2 (...) becomes cover-edge (...)" narration
-// were hand-drawn for 3-SAT specifically and were never added to the T09
-// fixture contract. Rather than fabricate problem-specific narration text
-// that has no backing data, the scrubber below renders as inert chrome with
-// a plain, honest "not available yet" note instead of a real step count.
+// The step-scrubber row is real now (T47/#110), via the shared StepScrubber
+// component. A reduction is structurally a 2-frame case, not a UI limitation
+// to work around: `POST /ProblemProvider/visualizeReduction` always returns
+// an empty steps list (`AdditionalControllers/ProblemProvider.cs:312`), so
+// there is only ever a source-shape base frame and a reduced/solved frame,
+// never intermediate steps (INTERACTIVE_LAYER_DESIGN.md §1.3) — so this
+// section always passes `frameCount={2}` rather than deriving a count from
+// data that will never carry more than that.
 //
 // The source/target canvas cards are likewise static placeholders (no real
 // diagram-rendering exists yet) rather than an attempt to actually draw a
@@ -23,11 +23,7 @@
 // interactive behavior the issue's done-when asks for.
 
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import SkipNextIcon from "@mui/icons-material/SkipNext";
-import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
@@ -35,6 +31,7 @@ import { useState } from "react";
 import { TAXONOMY } from "../../data/taxonomy";
 import { getFacetAccentColor, thinScrollbarSx } from "../theme";
 import SectionShell from "./SectionShell";
+import StepScrubber from "./StepScrubber";
 
 // #71: fixed list height so a problem with many declared reduction targets
 // scrolls inside the list instead of stretching the section indefinitely.
@@ -113,12 +110,23 @@ function CanvasCard({ title }) {
 export default function ReductionsSection({ problem, dragHandleProps }) {
   const { to, from } = problem.reductions;
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
   const [fromExpanded, setFromExpanded] = useState(true);
 
   const hasTo = to.length > 0;
   const hasFrom = from.length > 0;
   const hasAny = hasTo || hasFrom;
   const selected = hasTo ? to[Math.min(selectedIndex, to.length - 1)] : null;
+
+  // Selecting a different reduction target starts its base/reduced toggle
+  // over rather than carrying a step index across to an unrelated pair.
+  // Render-time state adjustment (React's documented pattern for this, not
+  // a useEffect) so it doesn't cost an extra committed render.
+  const [stepResetKey, setStepResetKey] = useState(selectedIndex);
+  if (stepResetKey !== selectedIndex) {
+    setStepResetKey(selectedIndex);
+    setCurrentStep(0);
+  }
 
   const total = to.length + from.length;
   const summary = `${total} reduction${total === 1 ? "" : "s"}`;
@@ -139,24 +147,20 @@ export default function ReductionsSection({ problem, dragHandleProps }) {
         </Typography>
       )}
 
-      {hasAny && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-          <IconButton size="small" disabled aria-label="Previous step">
-            <SkipPreviousIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" disabled aria-label="Play">
-            <PlayArrowIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" disabled aria-label="Next step">
-            <SkipNextIcon fontSize="small" />
-          </IconButton>
-          <Box sx={{ flex: 1, height: 4, borderRadius: 999, backgroundColor: "divider" }} />
+      {hasTo && (
+        <Box sx={{ mb: 2 }}>
+          <StepScrubber
+            idPrefix="reductions-scrubber"
+            frameCount={2}
+            currentStep={currentStep}
+            onStepChange={setCurrentStep}
+            frameNoun="Frame"
+          />
+          <Typography variant="body2" sx={{ color: "text.secondary", mt: 1, fontStyle: "italic" }}>
+            A reduction is a single mapping, not a stepped process — this toggles between the source
+            instance and the reduced instance, with no intermediate steps.
+          </Typography>
         </Box>
-      )}
-      {hasAny && (
-        <Typography variant="body2" sx={{ color: "text.secondary", mb: 2, fontStyle: "italic" }}>
-          Step-by-step reduction narration isn&apos;t available yet for this problem.
-        </Typography>
       )}
 
       {hasTo && (
