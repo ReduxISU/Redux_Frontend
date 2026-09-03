@@ -1,29 +1,28 @@
 // data/instanceSerializers.js
 //
-// T51 (#114) -- diagram-to-text serializers for the wave-2 editable universal
-// visualization types (ai_documentation/INTERACTIVE_LAYER_DESIGN.md §2.2, §5 "What this
-// hands off"): `graph` and `recursiveSet`. Both build on the generic bracket-tree module
-// in data/spadeInstanceText.js -- see that file's header for why this project's own
-// deviation from T46's grammar-string-driven recommendation is the right call given what
-// this frontend actually has access to.
+// Diagram-to-text serializers for the editable universal visualization types
+// (ai_documentation/INTERACTIVE_LAYER_DESIGN.md §2.2). Turns an edited in-memory frame
+// structure back into instance text the backend's own parser accepts, so a structural
+// diagram edit can round-trip through Run (`/solve`/`/visualize`) the same way a textarea
+// edit already does. Built across two independent tasks that landed as separate PRs and
+// merged here:
 //
-// `quantumCircuit` is deliberately NOT in this file. See
-// components/detail/visualizations/QuantumCircuitRenderer.js's own header for why: T46
-// verified SPADE round-tripping against Clique (a set-of-nodes-plus-edges grammar) and DFA
-// (an automaton grammar), neither of which is a gate-sequence grammar, so nothing anyone
-// has actually checked says what a quantum-circuit instance's textual shape is -- whether
-// gate identifiers appear as literal leaf tokens the way node ids do, whether gate order is
-// encoded positionally or by an explicit time field, none of it. Guessing a serializer here
-// risks writing text that looks plausible and is silently wrong, with no way to verify it
-// against a live backend from this vantage point. Editing UI for `quantumCircuit` still
-// ships (local preview only, per INTERACTIVE_LAYER_DESIGN.md §2.1.2) -- only the
-// diagram-to-text step is left undone, recorded as this task's one open item rather than
-// guessed at.
-//
-// `booleanSatisfiability` (T52/#115) has its own serializer in a sibling file on that
-// task's branch -- not duplicated here, since the two tasks were built independently
-// (T52 has no dependency on T51, per INTERACTIVE_LAYER_DESIGN.md's staging table) and are
-// expected to merge as two separate reviewed changes.
+// - T52 (#115): `serializeBooleanSatisfiabilityInstance`, covering `booleanSatisfiability`
+//   (SAT, SAT3). Per INTERACTIVE_LAYER_DESIGN.md §2.2, SAT/SAT3 don't use the SPADE
+//   grammar library at all -- they parse a small hand-rolled CNF grammar (`&` between
+//   clauses, `|` between literals, `!` negation;
+//   `Problems/NPComplete/NPC_SAT3/SAT3_Class.cs`). The contract's literal strings ("x1",
+//   "!x2", VISUALIZATION_TYPE_CONTRACTS.md §3.3) already match this text format, so the
+//   serializer named in issue #115's own body is a straightforward join: literals within
+//   a clause joined with " | " inside parentheses, clauses joined with " & ".
+// - T51 (#114): `serializeGraphInstance` and `serializeRecursiveSetInstance`, covering
+//   `graph` and `recursiveSet`. Both build on the generic bracket-tree module in
+//   data/spadeInstanceText.js -- see that file's header for why this project's own
+//   deviation from T46's grammar-string-driven recommendation is the right call given
+//   what this frontend actually has access to. `quantumCircuit` is deliberately NOT
+//   covered here -- see components/detail/visualizations/QuantumCircuitRenderer.js's own
+//   header for why (T46 never verified SPADE round-tripping against a gate-sequence
+//   grammar, so nothing confirms a serializer here wouldn't be a silent guess).
 
 import {
   addLeafToMatchingSet,
@@ -33,6 +32,21 @@ import {
   renameLeafEverywhere,
   serializeInstanceText,
 } from "./spadeInstanceText";
+
+/**
+ * @param {Array<{literals: Array<{literal: string}>}>} clauses
+ * @returns {string} Instance text a SAT/SAT3 instance's hand-rolled parser accepts, e.g.
+ *   "(x1 | !x2) & (x2 | x3 | !x1)". An empty clause list serializes to "" -- the parser's
+ *   own handling of a 0-clause formula, not something this function invents.
+ */
+export function serializeBooleanSatisfiabilityInstance(clauses) {
+  if (!Array.isArray(clauses) || clauses.length === 0) {
+    return "";
+  }
+  return clauses
+    .map((clause) => `(${(clause.literals ?? []).map((literal) => literal.literal).join(" | ")})`)
+    .join(" & ");
+}
 
 /**
  * Replays an ordered log of node-level edits (add/remove/rename -- never edge edits, see

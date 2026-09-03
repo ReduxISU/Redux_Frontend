@@ -26,22 +26,22 @@
 // StepScrubber component, now driven by the real frame count a completed
 // run returns rather than a fallback of 1.
 //
-// T51 (#114): structural editing for the `graph`, `recursiveSet` and
-// `quantumCircuit` universal types (wave 2). Per INTERACTIVE_LAYER_DESIGN.md
-// §2.3, editing only ever applies to the base frame (frames[0]) -- the
-// `editedGraph`/`editedRecursiveData`/`editedCircuit` state below is
-// local-preview-only, seeded from the fetched base frame as soon as it's
-// available (so an edit panel's rows have stable identity from the start,
-// not just after the first edit) and cleared whenever the selected
-// visualization changes or a fresh Run replaces the frames (§2.1.2:
-// "editing previews locally; Run reconciles through the real backend round
-// trip"). Pressing Run serializes any pending edit into the shared instance
-// text (only `graph` node edits and `recursiveSet` are actually sendable --
-// see data/instanceSerializers.js's header for `quantumCircuit`'s open gap,
-// and this file's own handleRunClick for why `graph` edge edits stay
-// preview-only) via `onInstanceChange` *before* triggering the shared Run
-// action, exactly the same sequencing T52 (#115) established for
-// `booleanSatisfiability` on its own branch.
+// Structural editing (INTERACTIVE_LAYER_DESIGN.md §2, §2.3) was built as two
+// independent tasks that landed as separate PRs and are reconciled here:
+//
+// - T52 (#115): `booleanSatisfiability` (SAT/SAT3) -- wave 1, no dependency on T46.
+// - T51 (#114): `graph`, `recursiveSet` and `quantumCircuit` -- wave 2, gated on T46.
+//
+// Both follow the same rule: editing only ever applies to the base frame (frames[0]).
+// Each type's local-preview-only edit state (`editedClauses`, `editedGraph`,
+// `editedRecursiveData`, `editedCircuit`) is seeded from the fetched base frame and
+// cleared whenever the selected visualization changes or a fresh Run replaces the frames
+// (§2.1.2: "editing previews locally; Run reconciles through the real backend round
+// trip"). Pressing Run serializes whichever type's pending edit is sendable into the
+// shared instance text via `onInstanceChange` *before* triggering the shared Run action --
+// `booleanSatisfiability`, `graph` node edits, and `recursiveSet` all serialize; `graph`
+// edge edits and any `quantumCircuit` edit stay local-preview-only (see
+// data/instanceSerializers.js's header for why).
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -49,6 +49,7 @@ import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  serializeBooleanSatisfiabilityInstance,
   serializeGraphInstance,
   serializeRecursiveSetInstance,
 } from "../../data/instanceSerializers";
@@ -69,6 +70,14 @@ import StepScrubber from "./StepScrubber";
 import VisualizationCanvas from "./visualizations/VisualizationCanvas";
 
 const VISUALIZATION_TYPE_FACET = TAXONOMY.find((facet) => facet.key === "visualizationType");
+
+// SAT3's literal-per-clause cap (VISUALIZATION_TYPE_CONTRACTS.md §3.3, T52/#115's own
+// issue body) -- SAT itself has no cap. "3SAT" is the real backend `problemName` (per
+// data/supplementalTags.js's own header note: code "SAT3" -> problemName "3SAT"), not the
+// visualization/solver class-name spelling, so this checks the problem, not the
+// visualization, since the cap is a property of the problem's grammar, not of any one
+// visualization instance.
+const SAT3_MAX_LITERALS_PER_CLAUSE = 3;
 
 // Ids assigned to a newly-added edge/gate within one editing session only need to be
 // unique within that session (React keys, DOM ids) -- a module-level counter is enough.
@@ -285,8 +294,8 @@ function TypeBadge({ typeKey }) {
  *   components/ProblemDetailLayout.js (T35/#93).
  * @param {(next: string) => void} [props.onInstanceChange] Called with the new
  *   text whenever the visitor edits the instance elsewhere (Solvers' box), and
- *   (T51/#114) called by this section itself, just before Run, to write a
- *   pending diagram edit's serialized text into the shared instance.
+ *   called by this section itself, just before Run, to write a pending
+ *   diagram edit's serialized text into the shared instance.
  * @param {number} [props.runToken] The shared Run trigger (T48/#111). A change
  *   in value, not the value itself, means Run was pressed somewhere.
  * @param {() => void} [props.onRunRequest] Bumps `runToken`. Called by this
@@ -324,21 +333,28 @@ export default function VisualizationsSection({
       : null;
   const instanceChangedSinceRun = Boolean(liveFrames) && liveFrames.instance !== instanceValue;
 
-  // T51 (#114): which universal type the selected visualization renders as, and whether
-  // it's one of the three wave-2 editable types. Derived from the static backend-type map
-  // alone (not `resolveVisualizationType`, which also needs a live frame) since this is
-  // needed before a frame exists, to decide whether edit affordances can ever apply.
+  // Which universal type the selected visualization renders as, and whether it's one of
+  // the four editable types (T52's `booleanSatisfiability`, T51's `graph`/`recursiveSet`/
+  // `quantumCircuit`). Derived from the static backend-type map alone (not
+  // `resolveVisualizationType`, which also needs a live frame) since this is needed before
+  // a frame exists, to decide whether edit affordances can ever apply.
   const universalType = VISUALIZATION_TYPE_MAP[selected?.backendType] ?? null;
+  const isBooleanSatisfiability = universalType === "booleanSatisfiability";
   const isGraph = universalType === "graph";
   const isRecursiveSet = universalType === "recursiveSet";
   const isQuantumCircuit = universalType === "quantumCircuit";
-  const isEditableType = isGraph || isRecursiveSet || isQuantumCircuit;
+  const isEditableType = isBooleanSatisfiability || isGraph || isRecursiveSet || isQuantumCircuit;
+  // "3SAT" is the real backend problemName SAT3 resolves to (see the module header note)
+  // -- SAT itself has no per-clause literal cap.
+  const maxLiteralsPerClause =
+    isBooleanSatisfiability && problem.name === "3SAT" ? SAT3_MAX_LITERALS_PER_CLAUSE : undefined;
 
   // Local-preview-only edit state (INTERACTIVE_LAYER_DESIGN.md §2.1.2/§2.3), one slot per
-  // wave-2 type -- only the slot matching the selected visualization's type is ever
+  // editable type -- only the slot matching the selected visualization's type is ever
   // non-null. `graphNodeOps` is the ordered node-edit log `serializeGraphInstance` replays
   // at Run time (see that function's own doc comment for why edge edits aren't logged the
   // same way).
+  const [editedClauses, setEditedClauses] = useState(null);
   const [editedGraph, setEditedGraph] = useState(null);
   const [graphNodeOps, setGraphNodeOps] = useState([]);
   const [graphHasEdgeEdits, setGraphHasEdgeEdits] = useState(false);
@@ -355,6 +371,10 @@ export default function VisualizationsSection({
   // `lastVisualizeResult` below already use in this file).
   if (isGraph && currentStep === 0 && baseFrame && editedGraph === null) {
     setEditedGraph(cloneGraphForEdit(baseFrame));
+  }
+
+  function handleClausesChange(updater) {
+    setEditedClauses((current) => updater(current ?? baseFrame?.clauses ?? []));
   }
 
   function applyGraphEdit(op) {
@@ -380,6 +400,7 @@ export default function VisualizationsSection({
     // previous visualization survives the switch.
     visualize.reset();
     setSelectedIndex(index);
+    setEditedClauses(null);
     setEditedGraph(null);
     setGraphNodeOps([]);
     setGraphHasEdgeEdits(false);
@@ -409,17 +430,21 @@ export default function VisualizationsSection({
     });
   }, [canRun, selected, instanceValue, startVisualize]);
 
-  // T51 (#114): the Run affordance's onClick, not `handleRun`/`onRunRequest` directly --
-  // a pending `graph` node edit or `recursiveSet` edit must be serialized into the shared
-  // instance *before* Run fires (`onInstanceChange` and `onRunRequest` are both setters on
-  // the same parent, ProblemDetailLayout.js, batched into one re-render, so the runToken
-  // effect below sees the updated `instanceValue` by the time it fires -- the same
-  // ordering T52/#115 relies on for `booleanSatisfiability`, on its own branch). A
-  // `quantumCircuit` edit, or a `graph` edit that's edge-only, has nothing to serialize --
-  // Run still fires, it just won't reflect that particular pending edit.
+  // The Run affordance's onClick, not `handleRun`/`onRunRequest` directly -- a pending
+  // sendable edit (booleanSatisfiability, graph node ops, or recursiveSet) must be
+  // serialized into the shared instance *before* Run fires, so the run that follows
+  // (whichever section's Run button triggered it -- runToken is shared) acts on the edited
+  // instance. `onInstanceChange` and `onRunRequest` are both setters on the same parent
+  // (ProblemDetailLayout.js) and React batches them into one re-render, so by the time the
+  // runToken effect below (or Solvers' identical one) fires, `instanceValue` already
+  // reflects the edit. A `quantumCircuit` edit, or a `graph` edit that's edge-only, has
+  // nothing to serialize -- Run still fires, it just won't reflect that particular pending
+  // edit.
   function handleRunClick() {
     setSerializeError(null);
-    if (isGraph && graphNodeOps.length > 0 && liveFrames) {
+    if (isBooleanSatisfiability && editedClauses !== null) {
+      onInstanceChange?.(serializeBooleanSatisfiabilityInstance(editedClauses));
+    } else if (isGraph && graphNodeOps.length > 0 && liveFrames) {
       const baseNodeIds = liveFrames.frames[0].nodes.map((node) => node.id);
       const result = serializeGraphInstance(liveFrames.instance, baseNodeIds, graphNodeOps);
       if ("error" in result) {
@@ -463,6 +488,7 @@ export default function VisualizationsSection({
   if (lastVisualizeResult !== visualize.result) {
     setLastVisualizeResult(visualize.result);
     setCurrentStep(0);
+    if (editedClauses !== null) setEditedClauses(null);
     if (editedGraph !== null) setEditedGraph(null);
     if (graphNodeOps.length > 0) setGraphNodeOps([]);
     if (graphHasEdgeEdits) setGraphHasEdgeEdits(false);
@@ -472,13 +498,15 @@ export default function VisualizationsSection({
 
   const frameCount = liveFrames?.frames?.length ?? 1;
   const fetchedFrame = liveFrames?.frames?.[currentStep] ?? null;
-  // T51 (#114): on the base frame (frames[0]) only, a pending local edit shows instead of
-  // the fetched frame -- the diagram's own preview of an edit that hasn't been sent to the
-  // backend yet (§2.1.2). Any other step is always playback-only, never edited (§2.3).
+  // On the base frame (frames[0]) only, a pending local edit shows instead of the fetched
+  // frame -- the diagram's own preview of an edit that hasn't been sent to the backend yet
+  // (§2.1.2). Any other step is always playback-only, never edited (§2.3).
   const isEditingStep0 = currentStep === 0 && isEditableType;
   let currentFrame = fetchedFrame;
   if (isEditingStep0 && fetchedFrame) {
-    if (isGraph && editedGraph) {
+    if (isBooleanSatisfiability && editedClauses !== null) {
+      currentFrame = { clauses: editedClauses };
+    } else if (isGraph && editedGraph) {
       currentFrame = { nodes: editedGraph.nodes, links: editedGraph.links };
     } else if (isRecursiveSet && editedRecursiveData !== null) {
       currentFrame = { data: editedRecursiveData };
@@ -488,6 +516,7 @@ export default function VisualizationsSection({
   }
 
   const hasPendingEdit =
+    (isBooleanSatisfiability && editedClauses !== null) ||
     (isGraph && (graphNodeOps.length > 0 || graphHasEdgeEdits)) ||
     (isRecursiveSet && editedRecursiveData !== null) ||
     (isQuantumCircuit && editedCircuit !== null);
@@ -639,6 +668,8 @@ export default function VisualizationsSection({
                     backendType={selected.backendType}
                     frame={currentFrame}
                     editable={isEditingStep0}
+                    onClausesChange={isEditingStep0 ? handleClausesChange : undefined}
+                    maxLiteralsPerClause={maxLiteralsPerClause}
                     onGraphEdit={isEditingStep0 ? applyGraphEdit : undefined}
                     onDataChange={isEditingStep0 ? handleDataChange : undefined}
                     onCircuitEdit={isEditingStep0 ? applyCircuitEdit : undefined}
