@@ -66,11 +66,17 @@ const rateLimitBuckets = new Map();
  * Endpoints this frontend actually uses, and the methods each accepts. Anything else on
  * the backend origin is refused.
  *
- * The surface is small and fully known (`lib/redux/index.js` is the only caller), so an
- * allowlist costs almost nothing here and means a stray path cannot reach an endpoint
- * nobody meant to expose. Adding a backend call means adding it to this map too. Track
- * B (T41, #99) is expected to need at least one more entry once the visualization data
- * contract is settled.
+ * The surface is small and known (`lib/redux/index.js` is the only current caller for
+ * everything except `ProblemProvider/visualize`), so an allowlist costs almost nothing
+ * here and means a stray path cannot reach an endpoint nobody meant to expose. Adding a
+ * backend call means adding it to this map too.
+ *
+ * `ProblemProvider/visualize` (T44, #103) is allowed ahead of any caller existing in
+ * `lib/redux/index.js`. That is a deliberate exception to "the list holds what the site
+ * actually uses": Track B's design tasks (T41, #99; T42, #100) need to see real
+ * visualization payloads through this app's own proxy, and nothing can render one while
+ * the proxy 404s the request first. `ProblemProvider/visualizeReduction` has the same
+ * compute profile and is deliberately NOT added yet -- see the comment below.
  *
  * Keys are paths relative to `REDUX_BASE_URL`, matched exactly and case-sensitively.
  * Query strings are not part of the match.
@@ -85,10 +91,20 @@ const ALLOWED_ENDPOINTS = new Map([
   ["Navigation/Reductions", ["GET", "HEAD"]],
   ["ProblemProvider/solve", ["POST"]],
   ["ProblemProvider/verify", ["POST"]],
+  ["ProblemProvider/visualize", ["POST"]],
+  // ProblemProvider/visualizeReduction is NOT here. It has the same compute profile as
+  // `visualize` above, but nothing calls it yet. Add it, and its COMPUTE_ENDPOINTS entry
+  // below, in whichever task first wires the Reductions section against live data --
+  // not before, per this allowlist's own principle that it holds what the site actually
+  // uses. (T44, #103)
 ]);
 
 /** Endpoints that run an algorithm rather than returning a stored lookup. */
-const COMPUTE_ENDPOINTS = new Set(["ProblemProvider/solve", "ProblemProvider/verify"]);
+const COMPUTE_ENDPOINTS = new Set([
+  "ProblemProvider/solve",
+  "ProblemProvider/verify",
+  "ProblemProvider/visualize",
+]);
 
 export const config = {
   api: { bodyParser: false },
