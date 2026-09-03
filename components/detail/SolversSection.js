@@ -10,6 +10,15 @@
 // was a real `disabled` button producing nothing, per ground rule 5, and
 // this is the task that lifts that for the Solvers section.
 //
+// T48 (#111): the Run button no longer performs the solve directly. It
+// invokes the shared Run action (`onRunRequest`, owned by
+// ProblemDetailLayout.js -- see that file's header) instead, and an effect
+// here reacts to `runToken` changing by performing the same solve it always
+// did. The visible behavior of pressing this button is unchanged; what
+// changed is that Visualizations' own Run affordance now bumps the same
+// token, so a solve and a `/visualize` call happen together no matter which
+// section's button was pressed (INTERACTIVE_LAYER_DESIGN.md §2.1.1).
+//
 // Three things that took more care than the call itself:
 //
 //   - Staleness. A brute-force solver can run for the full 60 seconds the
@@ -51,7 +60,7 @@ import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TAXONOMY } from "../../data/taxonomy";
 import {
   COMPUTE_CANCELLED,
@@ -137,6 +146,11 @@ function formatSeconds(milliseconds) {
  *   new text whenever the visitor edits the box. The Verifier section's own
  *   instance input is bound to the same value, so an edit here shows up
  *   there too.
+ * @param {number} [props.runToken] The shared Run trigger (T48/#111), owned by
+ *   ProblemDetailLayout.js. A change in value (not the value itself) means
+ *   Run was pressed somewhere -- this section or another `usesRun` one.
+ * @param {() => void} [props.onRunRequest] Bumps `runToken`. Called by this
+ *   section's own Run button instead of solving directly.
  * @param {{attributes: Object, listeners: Object}} [props.dragHandleProps]
  *   Forwarded straight through to SectionShell — see T18 (#27).
  */
@@ -144,6 +158,8 @@ export default function SolversSection({
   problem,
   instanceValue = "",
   onInstanceChange,
+  runToken,
+  onRunRequest,
   dragHandleProps,
 }) {
   const solvers = problem.solvers ?? [];
@@ -178,24 +194,40 @@ export default function SolversSection({
     setSelectedIndex(index);
   }
 
-  function handleRun() {
+  const { start: startRun } = run;
+  const handleRun = useCallback(() => {
     if (!canRun) return;
     const solver = selected;
-    run.start(async (signal) => {
+    const instanceAtRun = instanceValue;
+    startRun(async (signal) => {
       const output = await requestSolvedInstance(
         REDUX_API_BASE_URL,
         solver.className,
-        instanceValue,
+        instanceAtRun,
         signal,
       );
       return {
         output,
         solverClassName: solver.className,
         solverName: solver.name,
-        instance: instanceValue,
+        instance: instanceAtRun,
       };
     });
-  }
+  }, [canRun, selected, instanceValue, startRun]);
+
+  // Reacts to the shared Run trigger (T48/#111, see file header) rather than
+  // performing the solve inline in the button's onClick -- that way it fires
+  // the same way whether this section's own Run button was pressed or
+  // another `usesRun` section's was. `previousRunTokenRef` is what makes
+  // this "run on change", not "run on every render this effect happens to
+  // fire in": only a token that actually differs from the last one this
+  // effect acted on triggers a new solve.
+  const previousRunTokenRef = useRef(runToken);
+  useEffect(() => {
+    if (runToken === undefined || runToken === previousRunTokenRef.current) return;
+    previousRunTokenRef.current = runToken;
+    handleRun();
+  }, [runToken, handleRun]);
 
   const solverName = selected?.name ?? "this solver";
   let announcement = "";
@@ -383,7 +415,7 @@ export default function SolversSection({
                   id="solvers-run-button"
                   variant="contained"
                   disabled={!canRun || run.isRunning}
-                  onClick={handleRun}
+                  onClick={() => (onRunRequest ? onRunRequest() : handleRun())}
                   sx={{ alignSelf: "flex-start" }}
                 >
                   Run

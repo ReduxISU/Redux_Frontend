@@ -71,6 +71,19 @@
 // `order` is plain component-local useState. No localStorage, no URL
 // params — per the issue body and TASKLIST.md's T18 entry ("do not add
 // persistence ... unless the project owner asks").
+//
+// --- The shared Run action (T48/#111, INTERACTIVE_LAYER_DESIGN.md §2.1.1) --
+// Run is one shared action, lifted here because this is where the instance it
+// acts on already lives. It is not a fetch itself -- each section that
+// declares `usesRun` (Solvers, Visualizations; Reductions joins in T53) still
+// owns its own request (a `/solve` failure and a `/visualize` failure are
+// independent outcomes, shown in their own panels, never all-or-nothing).
+// What's shared is just the trigger: `runToken` is a counter bumped by
+// `triggerRun`, passed to every `usesRun` section alongside it, so pressing
+// Run in ANY of them re-runs every one of them against the same instant of
+// the shared instance -- Solvers keeps its own selected solver, Visualizations
+// its own selected visualization, and the token carries no data of its own,
+// just the "go" signal.
 
 import {
   closestCenter,
@@ -103,13 +116,29 @@ import VisualizationsSection from "./detail/VisualizationsSection";
 // (TASKLIST.md T18 entry) — Reductions goes last deliberately, not by
 // omission.
 //
-// `usesInstance` marks the two sections that take the shared problem
-// instance (T35/#93, see header) -- the other three are rendered with
-// `problem` alone, exactly as before.
+// `usesInstance` marks the sections that take the shared problem instance
+// (T35/#93, see header). `usesRun` marks the ones that also react to the
+// shared Run trigger (T48/#111, see header) -- Verifier deliberately does
+// not: Verify checks a user-supplied certificate against an instance, it
+// does not run a solver, and its certificate has no guaranteed relationship
+// to a fresh /visualize call (INTERACTIVE_LAYER_DESIGN.md §2.1). Reductions
+// joins `usesRun` in T53, once it has real data to refresh.
 const SECTIONS = [
   { key: "overview", title: "Overview", Component: OverviewSection },
-  { key: "visualizations", title: "Visualizations", Component: VisualizationsSection },
-  { key: "solvers", title: "Solvers", Component: SolversSection, usesInstance: true },
+  {
+    key: "visualizations",
+    title: "Visualizations",
+    Component: VisualizationsSection,
+    usesInstance: true,
+    usesRun: true,
+  },
+  {
+    key: "solvers",
+    title: "Solvers",
+    Component: SolversSection,
+    usesInstance: true,
+    usesRun: true,
+  },
   { key: "verifier", title: "Verifier", Component: VerifierSection, usesInstance: true },
   { key: "reductions", title: "Reductions", Component: ReductionsSection },
 ];
@@ -200,6 +229,14 @@ export default function ProblemDetailLayout({ problem }) {
     setInstance(problem.defaultInstance ?? "");
   }
 
+  // The shared Run trigger (T48/#111, see file header). A `usesRun` section
+  // reacts to this changing, not to its value -- it is a "go" signal, not a
+  // payload.
+  const [runToken, setRunToken] = useState(0);
+  function triggerRun() {
+    setRunToken((token) => token + 1);
+  }
+
   // PointerSensor covers mouse; TouchSensor adds mobile/tablet support
   // (both ported from Redux_GUI). KeyboardSensor is new here — see file
   // header.
@@ -281,13 +318,14 @@ export default function ProblemDetailLayout({ problem }) {
         <SortableContext items={order} strategy={verticalListSortingStrategy}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {order.map((key) => {
-              const { Component, usesInstance } = SECTIONS_BY_KEY.get(key);
+              const { Component, usesInstance, usesRun } = SECTIONS_BY_KEY.get(key);
               const instanceProps = usesInstance
                 ? { instanceValue: instance, onInstanceChange: setInstance }
                 : null;
+              const runProps = usesRun ? { runToken, onRunRequest: triggerRun } : null;
               return (
                 <SortableSection key={key} id={key}>
-                  <Component problem={problem} {...instanceProps} />
+                  <Component problem={problem} {...instanceProps} {...runProps} />
                 </SortableSection>
               );
             })}

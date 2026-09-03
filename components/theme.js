@@ -149,6 +149,35 @@ export const thinScrollbarSx = {
   },
 };
 
+// --- T48 (#111): the shared visualization color-key vocabulary (§4.3) ------------------
+// `graph`, `quantumCircuit`, `booleanSatisfiability`, `recursiveSet` and `stepTable` all
+// send color fields as color-KEY NAMES ("Solution", "Background", "ElementHighlight",
+// ...), never hex, resolved through one lookup table -- Redux_GUI kept two
+// (`constants/VisColors.js`/`VisColorsArray.js`) for the same concept, which T40 flagged
+// as exactly the kind of drift this project doesn't want a second copy of. `pumpSchedule`
+// is exempt (§3.6): it hardcodes its own palette and sends no color-key field at all.
+//
+// Reconciled with this theme's own tokens rather than a separate palette: reusing
+// FACET_ACCENT_COLORS' hues keeps a visualization's "Solution"/"ElementHighlight" marks
+// visually related to this app's own accent vocabulary instead of introducing unrelated
+// colors. An unrecognized key (not in the table, and not "") is not malformed per the
+// contract -- it degrades to the same neutral BACKGROUND entry an empty string already
+// does, which is what the fallback below does.
+export const VISUALIZATION_COLOR_KEYS = {
+  Background: "#94A3B8",
+  Solution: FACET_ACCENT_COLORS.green,
+  ElementHighlight: FACET_ACCENT_COLORS.blue,
+  ClauseHighlight: FACET_ACCENT_COLORS.magenta,
+};
+
+const VISUALIZATION_COLOR_DEFAULT = VISUALIZATION_COLOR_KEYS.Background;
+
+/** Resolve a visualization payload's color-key string to a real color. */
+export function getVisualizationColor(colorKey) {
+  if (!colorKey) return VISUALIZATION_COLOR_DEFAULT;
+  return VISUALIZATION_COLOR_KEYS[colorKey] ?? VISUALIZATION_COLOR_DEFAULT;
+}
+
 const theme = createTheme({
   palette: {
     mode: "dark",
