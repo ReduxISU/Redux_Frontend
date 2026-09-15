@@ -266,6 +266,25 @@ export default function Home({ serverBootId }) {
     setSelected((prev) => ({ ...prev, [facetKey]: nextSet }));
   };
 
+  // T57 (#132): a card's own tag chip toggles that option in the exact same
+  // facet-selection state FacetSidebar's checkboxes write to -- no new
+  // state, just a second way to write to `selected`, routed through the
+  // same handleFacetChange the sidebar already uses. Since
+  // useCatalogFilters exposes `matchedTags` as `selected` itself (see that
+  // hook's own header comment), toggling here is also all that's needed for
+  // the clicked chip to immediately pick up the "matched" filled style --
+  // no separate wiring.
+  const handleTagClick = (facetKey, optionKey) => {
+    const current = selected[facetKey] ?? new Set();
+    const next = new Set(current);
+    if (next.has(optionKey)) {
+      next.delete(optionKey);
+    } else {
+      next.add(optionKey);
+    }
+    handleFacetChange(facetKey, next);
+  };
+
   const handleRemoveChip = (facetKey, optionKey) => {
     setSelected((prev) => {
       const next = new Set(prev[facetKey]);
@@ -454,6 +473,7 @@ export default function Home({ serverBootId }) {
                 matchedTags={matchedTags}
                 loading={loading}
                 emptyMessage={buildGridEmptyMessage({ error, filtersActive })}
+                onTagClick={handleTagClick}
               />
             </Box>
           </Box>

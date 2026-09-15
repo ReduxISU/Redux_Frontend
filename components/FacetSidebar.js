@@ -243,6 +243,15 @@ export default function FacetSidebar({
 }) {
   const sidebarFacets = TAXONOMY.filter((facet) => facet.sidebar);
 
+  // Total facet options selected across every group, not just the ones
+  // currently expanded -- so the count on the button below stays accurate
+  // even for a collapsed group's own selections. Omitted from the label
+  // entirely at zero: "Clear filters (0)" describes nothing to clear.
+  const totalSelectedCount = Object.values(selected).reduce(
+    (sum, optionSet) => sum + (optionSet?.size ?? 0),
+    0,
+  );
+
   return (
     <Box
       component="nav"
@@ -282,7 +291,7 @@ export default function FacetSidebar({
         sx={{ mt: 2 }}
         onClick={onClearFilters}
       >
-        Clear filters
+        {totalSelectedCount > 0 ? `Clear filters (${totalSelectedCount})` : "Clear filters"}
       </Button>
     </Box>
   );

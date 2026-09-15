@@ -63,7 +63,7 @@
 // done-when doesn't change that.
 
 import { useMemo } from "react";
-import { TAXONOMY } from "../data/taxonomy";
+import { TAXONOMY, optionLabel } from "../data/taxonomy";
 
 /**
  * Problems directly reachable from `source` via a single reduction edge.
@@ -114,6 +114,55 @@ function tagValueAsArray(tagValue) {
   return tagValue == null ? [] : [tagValue];
 }
 
+// A problem matches the free-text search term if it's a substring of the
+// problem's own name, OR a substring of any tag it carries -- resolved to
+// that tag's real display label (optionLabel, data/taxonomy.js), not its
+// raw option key, so typing "NP" matches a problem tagged "NP-Complete" the
+// same way a person reading the chip would expect, not just problems whose
+// internal key happens to start with those two letters. Checked across
+// every facet a problem has a tag for, not just the sidebar-visible ones,
+// since the ask is "any tag", not "any filterable tag".
+function matchesSearchTerm(name, tags, query) {
+  if (!query) {
+    return true;
+  }
+  if (name.toLowerCase().includes(query)) {
+    return true;
+  }
+  for (const facetKey of Object.keys(tags)) {
+    for (const optionKey of tagValueAsArray(tags[facetKey])) {
+      if (optionLabel(facetKey, optionKey).toLowerCase().includes(query)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Checking "NP" in the Complexity Class facet is a browsing question ("show
+// me everything in NP"), a different question from what one card's own chip
+// displays (its single most specific class — see COMPLEXITY_CLASS_MAP,
+// data/taxonomy.js). NP-Complete and NP-Hard problems no longer carry a
+// separate "np" tag value after that display change, so without this, the
+// "NP" checkbox would silently stop finding them even though they are (or,
+// for NP-Hard, are treated here as) part of what a person checking "NP"
+// expects to see. Direct project-owner instruction: NP-Complete and NP-Hard
+// both count. Only "np" itself expands — checking "NP-Complete" or
+// "NP-Hard" stays an exact match, since those are already the most specific
+// label a card can carry, nothing broader should pull extra results in.
+const COMPLEXITY_CLASS_NP_FILTER_EXPANSION = new Set(["np", "npComplete", "npHard"]);
+
+function optionSatisfiesSelection(facetKey, optionKey, selectedOptions) {
+  if (selectedOptions.has(optionKey)) {
+    return true;
+  }
+  return (
+    facetKey === "complexityClass" &&
+    selectedOptions.has("np") &&
+    COMPLEXITY_CLASS_NP_FILTER_EXPANSION.has(optionKey)
+  );
+}
+
 // A problem matches a facet's active selection if ANY selected option is
 // present in its tag value for that facet — whether that tag value is one
 // array (OR across the array) or a single string (plain equality). A facet
@@ -125,7 +174,9 @@ function matchesSelectedFacets(tags, selected) {
       continue;
     }
     const tagValues = tagValueAsArray(tags[facet.key]);
-    const matches = tagValues.some((optionKey) => selectedOptions.has(optionKey));
+    const matches = tagValues.some((optionKey) =>
+      optionSatisfiesSelection(facet.key, optionKey, selectedOptions),
+    );
     if (!matches) {
       return false;
     }
@@ -135,15 +186,19 @@ function matchesSelectedFacets(tags, selected) {
 
 // Per-option counts across the whole index (not just the filtered results —
 // see file header). Every option gets an entry, including ones with count 0
-// (issue done-when: "Counts render for every option including (0)").
+// (issue done-when: "Counts render for every option including (0)"). Uses
+// the same optionSatisfiesSelection expansion matchesSelectedFacets does —
+// a single-option Set here — so "NP (n)" always names exactly how many
+// results checking that box actually returns, never fewer.
 function buildFacetOptions(index) {
   const facetOptions = {};
   for (const facet of TAXONOMY) {
     facetOptions[facet.key] = facet.options.map((option) => {
+      const asSelection = new Set([option.key]);
       let count = 0;
       for (const tags of index.values()) {
         const tagValues = tagValueAsArray(tags[facet.key]);
-        if (tagValues.includes(option.key)) {
+        if (tagValues.some((optionKey) => optionSatisfiesSelection(facet.key, optionKey, asSelection))) {
           count += 1;
         }
       }
@@ -161,8 +216,10 @@ function buildFacetOptions(index) {
  * @param {Object} [options]
  * @param {Object} [options.selected] `{ [facetKey]: Set<optionKey> }` — the
  *   same shape FacetSidebar's `selected` prop already uses.
- * @param {string} [options.searchValue] Free-text search-by-name term,
- *   matched as a case-insensitive substring of the problem name.
+ * @param {string} [options.searchValue] Free-text search term, matched as a
+ *   case-insensitive substring of the problem name OR of any tag the problem
+ *   carries (its real display label, e.g. "NP" matches a problem tagged
+ *   "NP-Complete" — see matchesSearchTerm).
  * @param {Object} [options.reductionGraph] T59 (#134). `{ [fromName]:
  *   { [toName]: edge[] } }`, from useCatalogIndex()'s `reductionGraphByName`.
  *   Ignored when `reachabilitySource` is null.
@@ -205,7 +262,7 @@ export function useCatalogFilters(
     const query = searchValue.trim().toLowerCase();
     const matched = [];
     for (const [name, tags] of index.entries()) {
-      if (query && !name.toLowerCase().includes(query)) {
+      if (!matchesSearchTerm(name, tags, query)) {
         continue;
       }
       if (!matchesSelectedFacets(tags, selected)) {

@@ -90,11 +90,47 @@ const ALLOWED_ENDPOINTS = new Map([
   ["Navigation/Batch/allVisualizationTypes", ["GET", "HEAD"]],
   ["Navigation/Batch/allInfo", ["GET", "HEAD"]],
   ["Navigation/Reductions", ["GET", "HEAD"]],
+  ["Navigation/ContributorProfile/directory", ["GET", "HEAD"]],
   ["ProblemProvider/solve", ["POST"]],
   ["ProblemProvider/verify", ["POST"]],
   ["ProblemProvider/visualize", ["POST"]],
   ["ProblemProvider/visualizeReduction", ["POST"]],
 ]);
+
+/**
+ * Prefixes allowed with exactly one more path segment after them, for endpoints that
+ * take a variable in the path itself rather than a query string. Added for the About
+ * Us page (ported from Redux_GUI): `Navigation/ContributorProfile/{name}` returns one
+ * contributor's profile, where `{name}` is a contributor's display name, not a fixed
+ * value the exact-match map above can hold.
+ *
+ * Matched the same way `ALLOWED_ENDPOINTS` is: case-sensitively, one prefix here plus
+ * exactly one further segment, nothing deeper. `Navigation/ContributorProfile/directory`
+ * is deliberately in the exact-match map above instead of matched here, so a contributor
+ * named "directory" (unlikely, but not this proxy's business to assume) can never shadow
+ * the real directory endpoint.
+ */
+const ALLOWED_PREFIX_ENDPOINTS = new Map([["Navigation/ContributorProfile/", ["GET", "HEAD"]]]);
+
+/**
+ * Looks up the allowed methods for `endpoint`, checking the exact-match map first and
+ * then whether it is exactly one segment past one of `ALLOWED_PREFIX_ENDPOINTS`'s
+ * prefixes. Returns `undefined` for anything else, same as a plain `Map.get` would.
+ */
+function allowedMethodsFor(endpoint) {
+  const exact = ALLOWED_ENDPOINTS.get(endpoint);
+  if (exact) return exact;
+
+  for (const [prefix, methods] of ALLOWED_PREFIX_ENDPOINTS) {
+    if (endpoint.startsWith(prefix)) {
+      const rest = endpoint.slice(prefix.length);
+      if (rest.length > 0 && !rest.includes("/")) {
+        return methods;
+      }
+    }
+  }
+  return undefined;
+}
 
 /** Endpoints that run an algorithm rather than returning a stored lookup. */
 const COMPUTE_ENDPOINTS = new Set([
@@ -197,7 +233,7 @@ export default async function handler(req, res) {
   }
 
   const endpoint = target.pathname.slice(basePath.length);
-  const allowedMethods = ALLOWED_ENDPOINTS.get(endpoint);
+  const allowedMethods = allowedMethodsFor(endpoint);
   if (!allowedMethods) {
     res.status(404).json({ error: "Unknown Redux endpoint" });
     return;

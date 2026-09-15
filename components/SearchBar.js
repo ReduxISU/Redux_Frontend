@@ -1,7 +1,10 @@
 // components/SearchBar.js
 //
 // T10 (#14) — the search box above the Home page card grid. Filters cards by
-// substring as the user types.
+// substring as the user types, matched against a problem's name or any tag
+// it carries (see hooks/useCatalogFilters.js's matchesSearchTerm) — typing
+// "NP" matches a problem tagged "NP-Complete" the same way it would match a
+// problem named "NP-Something", not just an exact name hit.
 //
 // Port of Redux_GUI's components/widgets/SearchBarExtensible.js, but only in
 // the loose sense: that source is an MUI Autocomplete built to pick one exact
@@ -84,7 +87,7 @@ export default function SearchBar({ value, onChange }) {
   return (
     <Box sx={{ position: "relative", width: "100%" }}>
       <Box component="label" htmlFor={SEARCH_INPUT_ID} sx={visuallyHiddenSx}>
-        Search by problem name
+        Search by problem name or tag
       </Box>
       <TextField
         id={SEARCH_INPUT_ID}
@@ -92,7 +95,7 @@ export default function SearchBar({ value, onChange }) {
         fullWidth
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder='Search by problem name — e.g. "3-SAT"'
+        placeholder='Search by problem name or tag — e.g. "3-SAT" or "NP"'
         slotProps={{
           htmlInput: {
             onKeyDown: handleInputKeyDown,
