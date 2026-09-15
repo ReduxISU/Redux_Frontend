@@ -258,6 +258,18 @@ export default function VisualizationsSection({
   }
 
   const { start: startVisualize } = visualize;
+  // The React Compiler bails on this hook's memoization (react-hooks/preserve-manual-
+  // memoization) -- not because this callback itself is unsafe, but because the
+  // component also does a render-time setState (the `setEditedGraph` seed above, React's
+  // own documented "adjust state during render" pattern), which the compiler's static
+  // analysis can't fully reason about; SolversSection.js's near-identical handleRun
+  // passes cleanly precisely because that file has no such call. Restructuring this
+  // hook's own deps doesn't change that (tried keying off selected?.className/
+  // selected?.name instead of `selected` itself -- the compiler still bailed, confirming
+  // the seed call is the real cause). The manual useCallback below is still correct and
+  // necessary as written (its identity is a dependency of the runToken effect further
+  // down), so this is an accepted, understood compiler limitation, not a correctness bug.
+  /* eslint-disable react-hooks/preserve-manual-memoization */
   const handleRun = useCallback(() => {
     if (!canRun) return;
     const visualization = selected;
@@ -277,6 +289,7 @@ export default function VisualizationsSection({
       };
     });
   }, [canRun, selected, instanceValue, startVisualize]);
+  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   // The Run affordance's onClick, not `handleRun`/`onRunRequest` directly -- a pending
   // sendable edit (booleanSatisfiability, graph node ops, or recursiveSet) must be
