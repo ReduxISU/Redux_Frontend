@@ -113,12 +113,16 @@ function SkeletonCard() {
  *   a crash).
  * @param {boolean} [props.loading] Shows skeleton cards instead of
  *   `emptyMessage` while the catalog is still being fetched.
+ * @param {(facetKey: string, optionKey: string) => void} [props.onTagClick]
+ *   T57 (#132): forwarded to every card unchanged (ProblemCatalogCard's own
+ *   prop) -- this component doesn't know or care what a click does with it.
  */
 export default function ProblemGrid({
   problems,
   matchedTags = {},
   emptyMessage = "No problems match your filters.",
   loading = false,
+  onTagClick,
 }) {
   if (loading) {
     return (
@@ -143,7 +147,12 @@ export default function ProblemGrid({
   return (
     <Box sx={gridContainerSx}>
       {problems.map((problem) => (
-        <ProblemCatalogCard key={problem.slug} problem={problem} matchedTags={matchedTags} />
+        <ProblemCatalogCard
+          key={problem.slug}
+          problem={problem}
+          matchedTags={matchedTags}
+          onTagClick={onTagClick}
+        />
       ))}
     </Box>
   );
