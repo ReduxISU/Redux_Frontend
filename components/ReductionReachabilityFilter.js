@@ -32,6 +32,7 @@ import Box from "@mui/material/Box";
 import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import { thinScrollbarSx } from "./theme";
 
 const SOURCE_INPUT_ID = "reachability-source-input";
 const MODE_GROUP_ID = "reachability-mode-group";
@@ -70,6 +71,11 @@ export default function ReductionReachabilityFilter({
         disabled={loading}
         size="small"
         sx={{ width: "100%" }}
+        // Direct project-owner instruction: the dropdown's own listbox (a
+        // plain <ul>, one <li> per problem -- up to 49 of them) scrolls with
+        // the browser's default scrollbar otherwise, the one popup in the
+        // app that thinScrollbarSx (theme.js) hadn't reached yet.
+        slotProps={{ listbox: { sx: thinScrollbarSx } }}
         renderInput={(params) => (
           <TextField {...params} label="Reachable from" placeholder="Pick a source problem" />
         )}

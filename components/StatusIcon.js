@@ -1,110 +1,34 @@
 // components/StatusIcon.js
 //
-// T13 (#17) — the small status glyph in the top-right corner of each catalog
-// card: a green check when a problem is fully catalogued, a grey minus when
-// it isn't.
+// T13 (#17) originally added this module for a status glyph shown on each
+// catalog card (a green check when "fully catalogued", a grey minus
+// otherwise), plus a separate Monitor "has a renderable visualization" icon
+// added later (T57/T58 follow-up work). Direct project-owner instruction:
+// both icons are removed from ProblemCatalogCard.js -- with Solvers and
+// Visualizations always rendering their own labeled row (a real chip, or
+// "No solvers"/"No visualizations"), a person can already read a card's
+// completeness directly off those rows, so a separate glyph reporting the
+// same thing a second way added nothing. hasRenderableVisualization() (the
+// Monitor icon's own predicate) is deleted along with it -- this file's
+// only remaining export is the completeness predicate below.
 //
-// Not a port. ARCHITECTURE.md's directory listing doesn't include this file
-// at all -- TASKLIST.md pulled it out into its own module because its
-// meaning was still an open question (#6, item 4) when the file tree was
-// drawn, and it's consumed from more than one place (this card icon, and
-// T12/#16's decision on whether the card is a link at all).
+// isProblemComplete() is kept at this path (rather than moved/renamed) since
+// pages/[problem].js still imports it to decide whether an incomplete
+// problem's detail page is reachable at all (#6 item 4, settled
+// 2026-08-31) -- that gate is unrelated to whether a card draws an icon, so
+// removing the icon doesn't touch it.
 //
-// The predicate (#6, item 4, settled 2026-08-31 in this issue's own
-// comment): "fully catalogued" means at least one declared solver, at least
-// one declared visualization, and a declared verifier. Per data/fixtures.js,
+// "Fully catalogued" means at least one declared solver, at least one
+// declared visualization, and a declared verifier. Per data/fixtures.js,
 // solvers and visualizations are arrays but verifier is a single
 // object-or-null -- so this is an array-length check for two fields and a
 // null check for the third, not three interchangeable length checks.
-// isProblemComplete() is the one place that rule lives; T12 imports it
-// rather than re-deriving "is this thing complete" on its own.
-//
-// Colors are sampled from the mockup, not invented. The green ring's mockup
-// pixels land almost exactly on theme.js's existing FACET_ACCENT_COLORS.green
-// (Visualization Type's accent, #4ADE80) -- reused via getFacetAccentColor
-// rather than duplicated. The grey ring has no such existing per-facet
-// color, but its antialiased mockup pixels scale up (backing out the
-// thin-stroke/JPEG blending with the dark panel background) to theme.js's
-// palette.secondary.main (#94A3B8), so this resolves that via the standard
-// sx palette-path string ("secondary.main") instead of adding a new token.
-
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
-import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
-import { getFacetAccentColor } from "./theme";
-
-const COMPLETE_COLOR = getFacetAccentColor("green");
-const INCOMPLETE_COLOR = "secondary.main";
-
-const MISSING_PART_LABELS = {
-  solver: "a solver",
-  visualization: "a visualization",
-  verifier: "a verifier",
-};
-
-// Fixed order (solver, visualization, verifier) so the message is stable
-// regardless of which fields happen to be set on a given fixture.
-function getMissingParts(problem) {
-  const missing = [];
-  if (!(problem.solvers?.length > 0)) {
-    missing.push(MISSING_PART_LABELS.solver);
-  }
-  if (!(problem.visualizations?.length > 0)) {
-    missing.push(MISSING_PART_LABELS.visualization);
-  }
-  if (problem.verifier == null) {
-    missing.push(MISSING_PART_LABELS.verifier);
-  }
-  return missing;
-}
-
-function joinWithAnd(parts) {
-  if (parts.length === 1) {
-    return parts[0];
-  }
-  if (parts.length === 2) {
-    return `${parts[0]} and ${parts[1]}`;
-  }
-  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
-}
 
 /** The one place the completeness rule lives (#6, item 4, 2026-08-31). */
 export function isProblemComplete(problem) {
-  return getMissingParts(problem).length === 0;
-}
-
-/**
- * Whether this problem has at least one visualization it can actually draw
- * something for -- same predicate `getMissingParts` already uses for the
- * "visualization" part of completeness (hooks/useCatalogIndex.js's
- * buildCompleteness already filters out backend-confirmed "Unimplemented"
- * stubs before this ever sees them), exported separately so a caller that
- * only cares about visualization presence, not full completeness, doesn't
- * have to re-derive it. Same name as Redux_GUI's own equivalent
- * (components/widgets/ProblemCard.js's `hasRenderableVisualization` prop).
- */
-export function hasRenderableVisualization(problem) {
-  return (problem.visualizations?.length ?? 0) > 0;
-}
-
-export default function StatusIcon({ problem }) {
-  const missing = getMissingParts(problem);
-  const complete = missing.length === 0;
-
-  // Accurate about which piece is missing when there's only one -- a card
-  // missing just a verifier reads differently from one missing everything.
-  // titleAccess renders a native <title> (a hover tooltip for sighted mouse
-  // users, who have no other affordance on a card that isn't a link) and
-  // sets role="img"; aria-label carries the same text as the accessible name
-  // for screen readers, since aria-label takes precedence over <title> in
-  // the accessible-name computation.
-  const label = complete
-    ? "Fully catalogued: has at least one solver, visualization, and verifier."
-    : `Not yet implemented: missing ${joinWithAnd(missing)}. Details unavailable.`;
-
-  const Icon = complete ? CheckCircleOutlineIcon : RemoveCircleOutlineIcon;
-  const color = complete ? COMPLETE_COLOR : INCOMPLETE_COLOR;
-
   return (
-    <Icon titleAccess={label} aria-label={label} fontSize="small" sx={{ color, flexShrink: 0 }} />
+    (problem.solvers?.length ?? 0) > 0 &&
+    (problem.visualizations?.length ?? 0) > 0 &&
+    problem.verifier != null
   );
 }
