@@ -17,6 +17,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
+import { thinScrollbarSx } from "../theme";
 
 // Only renders when there is an actual value -- avoids "Not specified" clutter for a
 // field (bio, education, ...) a contributor has not filled in. The backend answers
@@ -161,7 +162,7 @@ export default function ContributorDialog({
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers sx={{ borderColor: "divider" }}>
+      <DialogContent dividers sx={{ borderColor: "divider", ...thinScrollbarSx }}>
         {loading ? (
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
             Loading...

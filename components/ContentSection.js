@@ -13,13 +13,18 @@
 // aria-expanded/aria-controls, body kept mounted and hidden via display:none rather
 // than unmounted while collapsed, so a section's own state doesn't reset just because
 // its panel closed) without the drag grip, which is a Problem Detail reordering
-// feature this static page has no use for.
+// feature this static page has no use for. thinScrollbarSx (theme.js) applied to the
+// scrolling body -- the same treatment every other vertical-scroll region in this app
+// already uses (pages/index.js's sidebar/drawer, ProblemGrid.js, the detail page's
+// Solvers/Visualizations/Reductions rails); this was the one place that had been
+// missed when it was first built.
 
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import { thinScrollbarSx } from "./theme";
 
 const SECTION_PADDING = { xs: 2.5, sm: 3 };
 
@@ -106,6 +111,7 @@ export default function ContentSection({
           overflowY: "auto",
           px: SECTION_PADDING,
           pb: SECTION_PADDING,
+          ...thinScrollbarSx,
         }}
       >
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>{children}</Box>
