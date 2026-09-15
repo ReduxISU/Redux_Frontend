@@ -78,7 +78,7 @@ import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
-import { TAXONOMY, optionLabel } from "../data/taxonomy";
+import { optionLabel, TAXONOMY } from "../data/taxonomy";
 import { isProblemComplete } from "./StatusIcon";
 import { hiddenScrollbarSx } from "./theme";
 

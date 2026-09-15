@@ -91,7 +91,17 @@ export async function gotoFirstProblemDetail(page, { expect }) {
     );
   }
 
-  await firstCard.click();
+  // Clicks the card's own title text (its `<h3>`), not the card element's
+  // default bounding-box center: a card also carries several tag chips
+  // (Complexity Class/Problem Type, plus the labeled Solvers/Visualizations
+  // rows), each independently clickable and each calling stopPropagation
+  // (T57/#132) so a chip click toggles a filter instead of also navigating
+  // the card. Depending on how many chips a given problem happens to carry,
+  // the card's geometric center can land on one of those chips rather than
+  // on blank card space, which would swallow the click this helper needs to
+  // actually navigate. The title is never a chip and is always present,
+  // so it's a reliable click target regardless of a problem's own tag count.
+  await firstCard.locator("h3").click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   return { name };
 }

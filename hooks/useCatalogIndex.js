@@ -98,16 +98,16 @@ import {
   SOLVER_TYPE_MAP,
   UNCLASSIFIED,
 } from "../data/taxonomy";
+import { VISUALIZATION_TYPE_MAP } from "../data/visualizationTypes";
 import {
   requestAllInfo,
   requestAllProblems,
   requestAllSolvers,
   requestAllVerifiers,
-  requestAllVisualizationTypes,
   requestAllVisualizations,
+  requestAllVisualizationTypes,
   requestReductionGraph,
 } from "../lib/redux";
-import { VISUALIZATION_TYPE_MAP } from "../data/visualizationTypes";
 
 /**
  * Re-keys the raw reduction graph's `{ [fromCode]: { [toCode]: edge[] } }`

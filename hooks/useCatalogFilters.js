@@ -63,7 +63,7 @@
 // done-when doesn't change that.
 
 import { useMemo } from "react";
-import { TAXONOMY, optionLabel } from "../data/taxonomy";
+import { optionLabel, TAXONOMY } from "../data/taxonomy";
 
 /**
  * Problems directly reachable from `source` via a single reduction edge.
@@ -198,7 +198,9 @@ function buildFacetOptions(index) {
       let count = 0;
       for (const tags of index.values()) {
         const tagValues = tagValueAsArray(tags[facet.key]);
-        if (tagValues.some((optionKey) => optionSatisfiesSelection(facet.key, optionKey, asSelection))) {
+        if (
+          tagValues.some((optionKey) => optionSatisfiesSelection(facet.key, optionKey, asSelection))
+        ) {
           count += 1;
         }
       }
