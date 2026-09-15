@@ -42,6 +42,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { TAXONOMY } from "../data/taxonomy";
+import ReductionReachabilityFilter from "./ReductionReachabilityFilter";
 import { getFacetAccentColor } from "./theme";
 
 function FacetFilterGroup({ facet, options, selected, onChange, loading }) {
@@ -215,12 +216,30 @@ function FacetFilterGroup({ facet, options, selected, onChange, loading }) {
   );
 }
 
+/**
+ * @param {Object} props
+ * ...existing facet props...
+ * @param {string[]} [props.problemNames] T59 (#134). Forwarded unchanged to
+ *   ReductionReachabilityFilter's own `problemNames` prop — every real
+ *   problem name currently in the catalog index.
+ * @param {string|null} [props.reachabilitySource] T59 (#134).
+ * @param {"oneHop"|"anyHops"} [props.reachabilityMode] T59 (#134).
+ * @param {(next: string|null) => void} [props.onReachabilitySourceChange]
+ *   T59 (#134).
+ * @param {(next: "oneHop"|"anyHops") => void} [props.onReachabilityModeChange]
+ *   T59 (#134).
+ */
 export default function FacetSidebar({
   facetOptions = {},
   selected = {},
   onChange,
   onClearFilters,
   loading = false,
+  problemNames = [],
+  reachabilitySource = null,
+  reachabilityMode = "oneHop",
+  onReachabilitySourceChange,
+  onReachabilityModeChange,
 }) {
   const sidebarFacets = TAXONOMY.filter((facet) => facet.sidebar);
 
@@ -243,10 +262,24 @@ export default function FacetSidebar({
         </Box>
       ))}
       <Divider sx={{ mt: 1, mb: 2 }} />
+      {/* T59 (#134): moved here from above the search bar, per direct
+          project-owner instruction — reads as another filter control
+          alongside the facet checkboxes rather than a second search input.
+          Sits just above "Clear filters" so it's included in the same
+          "reset everything" gesture that button already represents. */}
+      <ReductionReachabilityFilter
+        problemNames={problemNames}
+        source={reachabilitySource}
+        mode={reachabilityMode}
+        onSourceChange={onReachabilitySourceChange}
+        onModeChange={onReachabilityModeChange}
+        loading={loading}
+      />
       <Button
         id="facet-sidebar-clear-filters"
         variant="outlined"
         fullWidth
+        sx={{ mt: 2 }}
         onClick={onClearFilters}
       >
         Clear filters

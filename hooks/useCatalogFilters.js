@@ -41,9 +41,66 @@
 // pairs, not full fixture-shaped problem objects. Reconciling that with
 // whatever route/slug metadata the real catalog needs is T25's job, not
 // this hook's.
+//
+// --- T59 (#134): reduction-reachability filter -----------------------------
+// Redux_GUI's Browse page has a filter this facet system can't express: pick
+// a source problem and narrow the results to only what's reachable from it
+// via the reduction graph, either one direct hop or the full transitive
+// closure. That is graph traversal, not a facet membership test, so it is
+// applied as its own extra predicate in the filter pipeline below rather than
+// forced into the facet shape.
+//
+// reachableOneHop/reachableAnyHops are a direct port of Redux_GUI's
+// components/hooks/ProblemFilters/useProblemFilters.js (lines 9-21) —
+// unchanged traversal logic, only the graph's shape at the call site differs
+// (see useCatalogIndex.js's buildReductionGraphByName: this project passes a
+// `{ [fromName]: { [toName]: edge[] } }` map keyed by display name, since
+// that's what this hook's `index` and `results` are already keyed by, where
+// Redux_GUI's own graph is keyed the same way for its own problem index).
+// Both functions only follow the graph's own edge direction (a reduction
+// FROM the source problem), matching what Redux_GUI's live filter already
+// does — see this task's handback summary for why "to/from" in the issue's
+// done-when doesn't change that.
 
 import { useMemo } from "react";
 import { TAXONOMY } from "../data/taxonomy";
+
+/**
+ * Problems directly reachable from `source` via a single reduction edge.
+ * @param {Object} graph `{ [fromName]: { [toName]: edge[] } }`.
+ * @param {string|null} source
+ * @returns {Set<string>|null} `null` when there is no source (no filter).
+ */
+function reachableOneHop(graph, source) {
+  if (!source) return null;
+  return new Set(Object.keys(graph?.[source] ?? {}));
+}
+
+/**
+ * Every problem transitively reachable from `source` via any number of
+ * reduction edges, source excluded. A plain BFS over the already-fetched
+ * graph, same as Redux_GUI's client-side mirror of the backend's
+ * `ReductionGraphData.ReachableFrom`.
+ * @param {Object} graph `{ [fromName]: { [toName]: edge[] } }`.
+ * @param {string|null} source
+ * @returns {Set<string>|null} `null` when there is no source (no filter).
+ */
+function reachableAnyHops(graph, source) {
+  if (!source) return null;
+  const visited = new Set([source]);
+  const queue = [source];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    for (const next of Object.keys(graph?.[current] ?? {})) {
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  visited.delete(source);
+  return visited;
+}
 
 /**
  * @param {*} tagValue Either an array of option keys or a single option-key
@@ -106,20 +163,43 @@ function buildFacetOptions(index) {
  *   same shape FacetSidebar's `selected` prop already uses.
  * @param {string} [options.searchValue] Free-text search-by-name term,
  *   matched as a case-insensitive substring of the problem name.
+ * @param {Object} [options.reductionGraph] T59 (#134). `{ [fromName]:
+ *   { [toName]: edge[] } }`, from useCatalogIndex()'s `reductionGraphByName`.
+ *   Ignored when `reachabilitySource` is null.
+ * @param {string|null} [options.reachabilitySource] T59 (#134). A problem
+ *   name to filter reachability from, or null for no reachability filter.
+ * @param {"oneHop"|"anyHops"} [options.reachabilityMode] T59 (#134). Whether
+ *   reachability is a single reduction hop or the full transitive closure.
  * @returns {{
  *   results: Array<{name: string, tags: Object}>,
  *   facetOptions: Object,
  *   matchedTags: Object,
  * }}
- *   `results` — problems passing both the search term and every active facet
- *   selection, in the index's own iteration order.
+ *   `results` — problems passing the search term, every active facet
+ *   selection, and the reachability filter (if any), in the index's own
+ *   iteration order.
  *   `facetOptions` — `{ [facetKey]: [{key, label, count}] }`, counted against
  *   the full index per option, ready for FacetSidebar's `facetOptions` prop.
  *   `matchedTags` — `selected` passed through unchanged, ready for
  *   ProblemCatalogCard's `matchedTags` prop (see file header).
  */
-export function useCatalogFilters(index, { selected = {}, searchValue = "" } = {}) {
+export function useCatalogFilters(
+  index,
+  {
+    selected = {},
+    searchValue = "",
+    reductionGraph = {},
+    reachabilitySource = null,
+    reachabilityMode = "oneHop",
+  } = {},
+) {
   const facetOptions = useMemo(() => buildFacetOptions(index), [index]);
+
+  const reachableSet = useMemo(() => {
+    return reachabilityMode === "anyHops"
+      ? reachableAnyHops(reductionGraph, reachabilitySource)
+      : reachableOneHop(reductionGraph, reachabilitySource);
+  }, [reductionGraph, reachabilitySource, reachabilityMode]);
 
   const results = useMemo(() => {
     const query = searchValue.trim().toLowerCase();
@@ -131,10 +211,18 @@ export function useCatalogFilters(index, { selected = {}, searchValue = "" } = {
       if (!matchesSelectedFacets(tags, selected)) {
         continue;
       }
+      // reachableSet is null whenever reachabilitySource is null (see
+      // reachableOneHop/reachableAnyHops above), so this AND's in as an
+      // extra predicate only while the reachability filter is active — same
+      // "no active selection imposes no constraint" rule the facet loop
+      // above already follows.
+      if (reachableSet && !reachableSet.has(name)) {
+        continue;
+      }
       matched.push({ name, tags });
     }
     return matched;
-  }, [index, selected, searchValue]);
+  }, [index, selected, searchValue, reachableSet]);
 
   return { results, facetOptions, matchedTags: selected };
 }

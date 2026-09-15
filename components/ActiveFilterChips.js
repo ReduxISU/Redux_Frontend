@@ -23,6 +23,17 @@
 // Every chip's label text comes from data/taxonomy.js; colors come from
 // components/theme.js's getFacetAccentColor(), the same helper
 // FacetSidebar's group dot and selection badge already use.
+//
+// T59 (#134): the reduction-reachability filter (hooks/useCatalogFilters.js)
+// isn't a data/taxonomy.js facet — it's graph traversal, not facet
+// membership — so its chip ("Reachable from Clique") is built from the
+// reachabilitySource/reachabilityMode props directly rather than from a
+// TAXONOMY entry, but reuses the same Chip primitive and remove-button
+// pattern every facet chip already uses. Its accent is "magenta" — defined
+// in components/theme.js's FACET_ACCENT_COLORS but unused by any current
+// facet since the mockup's separate Quantum Complexity Class group was
+// merged into Complexity Class (#6, 2026-09-01) — so this reuses an existing
+// token rather than adding a new one.
 
 import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
@@ -32,6 +43,7 @@ import { TAXONOMY } from "../data/taxonomy";
 import { getFacetAccentColor } from "./theme";
 
 const TAXONOMY_BY_KEY = new Map(TAXONOMY.map((facet) => [facet.key, facet]));
+const REACHABILITY_ACCENT = getFacetAccentColor("magenta");
 
 function optionLabel(facetKey, optionKey) {
   const option = TAXONOMY_BY_KEY.get(facetKey)?.options.find((candidate) => {
@@ -40,11 +52,7 @@ function optionLabel(facetKey, optionKey) {
   return option?.label ?? optionKey;
 }
 
-function FilterChip({ facet, optionKey, onRemove }) {
-  const accentColor = getFacetAccentColor(facet.accentColor);
-  const label = optionLabel(facet.key, optionKey);
-  const removeId = `active-filter-chip-${facet.key}-${optionKey}-remove`;
-
+function Chip({ label, accentColor, removeId, ariaLabel, onRemove }) {
   return (
     <Box
       sx={{
@@ -67,8 +75,8 @@ function FilterChip({ facet, optionKey, onRemove }) {
         id={removeId}
         component="button"
         type="button"
-        aria-label={`Remove ${label} filter`}
-        onClick={() => onRemove(facet.key, optionKey)}
+        aria-label={ariaLabel}
+        onClick={onRemove}
         sx={{
           display: "inline-flex",
           alignItems: "center",
@@ -88,18 +96,57 @@ function FilterChip({ facet, optionKey, onRemove }) {
   );
 }
 
+function FilterChip({ facet, optionKey, onRemove }) {
+  const accentColor = getFacetAccentColor(facet.accentColor);
+  const label = optionLabel(facet.key, optionKey);
+  const removeId = `active-filter-chip-${facet.key}-${optionKey}-remove`;
+
+  return (
+    <Chip
+      label={label}
+      accentColor={accentColor}
+      removeId={removeId}
+      ariaLabel={`Remove ${label} filter`}
+      onRemove={() => onRemove(facet.key, optionKey)}
+    />
+  );
+}
+
+// "Reachable from Clique" for one hop; "(any hops)" appended when the mode
+// is the full transitive closure, so the chip itself says which reading is
+// active rather than leaving that to the (disabled, when no source is set)
+// mode toggle alone.
+function reachabilityLabel(reachabilitySource, reachabilityMode) {
+  return reachabilityMode === "anyHops"
+    ? `Reachable from ${reachabilitySource} (any hops)`
+    : `Reachable from ${reachabilitySource}`;
+}
+
 /**
  * @param {Object} props
  * @param {Object} [props.selected] `{ [facetKey]: Set<optionKey> }` -- the
  *   same shape FacetSidebar's `selected` prop already uses, so the Home page
  *   can pass one filter-state object to both.
+ * @param {string|null} [props.reachabilitySource] T59 (#134). The active
+ *   reduction-reachability filter's source problem name, or null when it
+ *   isn't active.
+ * @param {"oneHop"|"anyHops"} [props.reachabilityMode] T59 (#134).
  * @param {(facetKey: string, optionKey: string) => void} props.onRemove
- *   Called when a single chip's remove button is pressed.
+ *   Called when a single facet chip's remove button is pressed.
+ * @param {() => void} [props.onRemoveReachability] T59 (#134). Called when
+ *   the reachability chip's remove button is pressed.
  * @param {() => void} props.onClearAll Called by the row's "Clear all"
  *   action. This component only ever touches filter selections -- clearing
  *   the search box too (issue body) is the page's responsibility.
  */
-export default function ActiveFilterChips({ selected = {}, onRemove, onClearAll }) {
+export default function ActiveFilterChips({
+  selected = {},
+  reachabilitySource = null,
+  reachabilityMode = "oneHop",
+  onRemove,
+  onRemoveReachability,
+  onClearAll,
+}) {
   const entries = [];
   for (const facet of TAXONOMY) {
     for (const optionKey of selected[facet.key] ?? []) {
@@ -107,7 +154,7 @@ export default function ActiveFilterChips({ selected = {}, onRemove, onClearAll 
     }
   }
 
-  if (entries.length === 0) {
+  if (entries.length === 0 && !reachabilitySource) {
     return null;
   }
 
@@ -124,6 +171,15 @@ export default function ActiveFilterChips({ selected = {}, onRemove, onClearAll 
           onRemove={onRemove}
         />
       ))}
+      {reachabilitySource && (
+        <Chip
+          label={reachabilityLabel(reachabilitySource, reachabilityMode)}
+          accentColor={REACHABILITY_ACCENT}
+          removeId="active-filter-chip-reachability-remove"
+          ariaLabel={`Remove ${reachabilityLabel(reachabilitySource, reachabilityMode)} filter`}
+          onRemove={onRemoveReachability}
+        />
+      )}
       <Box
         id="active-filter-chips-clear-all"
         component="button"
