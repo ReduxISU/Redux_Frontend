@@ -110,6 +110,37 @@ import {
 import { VISUALIZATION_TYPE_MAP } from "../data/visualizationTypes";
 
 /**
+ * Re-keys the raw reduction graph's `{ [fromCode]: { [toCode]: edge[] } }`
+ * adjacency map (keyed by the raw class/reflection code, despite
+ * lib/redux/index.js's JSDoc calling the keys "problemName" -- confirmed
+ * against Redux's Nav_Reductions.cs the same way this file's own header
+ * already documents for the other batch endpoints) to the display names
+ * `hooks/useCatalogFilters.js`'s reachability traversal and the Home page's
+ * problem picker both need, since useCatalogIndex's own `index` Map (and
+ * everything downstream of it) is keyed by display name, not code.
+ *
+ * T59 (#134). Edge arrays are concatenated rather than overwritten on a
+ * from/to pair that appears more than once after re-keying, which does not
+ * happen with today's real names but keeps this correct if it ever did.
+ *
+ * @param {Object} reductionGraph Raw `requestReductionGraph` result.
+ * @param {Map<string, string>} codeToName Problem code -> display name.
+ * @returns {Object} `{ [fromName]: { [toName]: edge[] } }`.
+ */
+function buildReductionGraphByName(reductionGraph, codeToName) {
+  const graphByName = {};
+  for (const [fromCode, toMap] of Object.entries(reductionGraph)) {
+    const fromName = codeToName.get(fromCode) ?? fromCode;
+    const toByName = graphByName[fromName] ?? (graphByName[fromName] = {});
+    for (const [toCode, edges] of Object.entries(toMap)) {
+      const toName = codeToName.get(toCode) ?? toCode;
+      toByName[toName] = (toByName[toName] ?? []).concat(edges);
+    }
+  }
+  return graphByName;
+}
+
+/**
  * Flattens the reduction graph's `{ from: { to: [edge] } }` adjacency map
  * into `Map<problemCode, edge[]>`, one entry per problem covering both
  * directions it appears in (as the FROM problem and as the TO problem).
@@ -265,13 +296,19 @@ function buildCompleteness(
  * @returns {{
  *   index: Map<string, Object>,
  *   completeness: Map<string, {hasSolver: boolean, hasVisualization: boolean, hasVerifier: boolean}>,
+ *   reductionGraphByName: Object,
  *   loading: boolean,
  *   error: Error|null,
  * }}
+ *   `reductionGraphByName` (T59/#134) is the reduction graph re-keyed by
+ *   display name (see `buildReductionGraphByName` above) -- what
+ *   `useCatalogFilters`'s reachability filter traverses, since everything
+ *   else this hook returns is already keyed by display name.
  */
 export function useCatalogIndex(url) {
   const [index, setIndex] = useState(new Map());
   const [completeness, setCompleteness] = useState(new Map());
+  const [reductionGraphByName, setReductionGraphByName] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -307,6 +344,7 @@ export function useCatalogIndex(url) {
 
         const map = new Map();
         const completenessMap = new Map();
+        const codeToName = new Map();
         for (const problemCode of problemCodes ?? []) {
           const { problemName, tags } = buildProblemTags(
             problemCode,
@@ -326,10 +364,12 @@ export function useCatalogIndex(url) {
               verifiersByProblem ?? {},
             ),
           );
+          codeToName.set(problemCode, problemName);
         }
 
         setIndex(map);
         setCompleteness(completenessMap);
+        setReductionGraphByName(buildReductionGraphByName(reductionGraph ?? {}, codeToName));
       } catch (caughtError) {
         if (!cancelled) setError(caughtError);
       } finally {
@@ -342,5 +382,5 @@ export function useCatalogIndex(url) {
     };
   }, [url]);
 
-  return { index, completeness, loading, error };
+  return { index, completeness, reductionGraphByName, loading, error };
 }

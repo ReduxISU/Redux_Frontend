@@ -15,6 +15,13 @@
 // ProblemGrid/ProblemCatalogCard need that useCatalogFilters's plain
 // `{name, tags}` results don't carry (see toCardProblem below).
 //
+// T59 (#134): the reduction-reachability filter's own state
+// (reachabilitySource, reachabilityMode) lives here alongside `selected`/
+// `searchValue`, for the same reason -- flows into useCatalogFilters as an
+// extra filter predicate, into ReductionReachabilityFilter as the controlled
+// picker's value, and into ActiveFilterChips so it clears via "Clear all"
+// the same way every facet selection already does.
+//
 // T29 (#38): the loading/error/empty presentation this file's own header
 // above already called out is where this task's work lands. Three states
 // this page can be in, distinctly worded rather than any of them collapsing
@@ -98,6 +105,11 @@ function buildEmptySelection() {
   }
   return selection;
 }
+
+// T59 (#134): the reduction-reachability filter's default mode -- a single
+// direct hop, the narrower of the two readings, matching the more common
+// "what does this reduce to/from" question over the full transitive closure.
+const DEFAULT_REACHABILITY_MODE = "oneHop";
 
 function formatResultCount(count, filtersActive) {
   const noun = count === 1 ? "problem" : "problems";
@@ -212,6 +224,10 @@ export default function Home({ serverBootId }) {
   const [selected, setSelected] = useState(buildEmptySelection);
   const [searchValue, setSearchValue] = useState("");
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
+  // T59 (#134): reduction-reachability filter state, alongside the other
+  // filter state this page already owns above.
+  const [reachabilitySource, setReachabilitySource] = useState(null);
+  const [reachabilityMode, setReachabilityMode] = useState(DEFAULT_REACHABILITY_MODE);
 
   const theme = useTheme();
   // Defaults to `false` (narrow) on the server and on first client render,
@@ -220,14 +236,26 @@ export default function Home({ serverBootId }) {
   // rather than just CSS visibility.
   const isWideLayout = useMediaQuery(theme.breakpoints.up(SIDEBAR_BREAKPOINT));
 
-  const { index, completeness, loading, error } = useCatalogIndex(REDUX_API_BASE_URL);
+  const { index, completeness, reductionGraphByName, loading, error } =
+    useCatalogIndex(REDUX_API_BASE_URL);
   const { results, facetOptions, matchedTags } = useCatalogFilters(index, {
     selected,
     searchValue,
+    reductionGraph: reductionGraphByName,
+    reachabilitySource,
+    reachabilityMode,
   });
 
+  // Sorted, real problem names for the reachability picker's option list --
+  // same source of truth ProblemGrid's own cards come from.
+  const problemNames = useMemo(
+    () => Array.from(index.keys()).sort((a, b) => a.localeCompare(b)),
+    [index],
+  );
+
   const activeFilterCount = Object.values(selected).reduce((sum, options) => sum + options.size, 0);
-  const filtersActive = searchValue.trim().length > 0 || activeFilterCount > 0;
+  const filtersActive =
+    searchValue.trim().length > 0 || activeFilterCount > 0 || Boolean(reachabilitySource);
 
   const problems = useMemo(
     () => results.map((result) => toCardProblem(result, completeness)),
@@ -268,6 +296,8 @@ export default function Home({ serverBootId }) {
   const handleClearAll = () => {
     setSelected(buildEmptySelection());
     setSearchValue("");
+    setReachabilitySource(null);
+    setReachabilityMode(DEFAULT_REACHABILITY_MODE);
   };
 
   return (
@@ -317,7 +347,10 @@ export default function Home({ serverBootId }) {
 
           <ActiveFilterChips
             selected={selected}
+            reachabilitySource={reachabilitySource}
+            reachabilityMode={reachabilityMode}
             onRemove={handleRemoveChip}
+            onRemoveReachability={() => setReachabilitySource(null)}
             onClearAll={handleClearAll}
           />
         </Box>
@@ -387,6 +420,11 @@ export default function Home({ serverBootId }) {
             onChange={handleFacetChange}
             onClearFilters={handleClearAll}
             loading={loading}
+            problemNames={problemNames}
+            reachabilitySource={reachabilitySource}
+            reachabilityMode={reachabilityMode}
+            onReachabilitySourceChange={setReachabilitySource}
+            onReachabilityModeChange={setReachabilityMode}
           />
         </Drawer>
 
@@ -416,6 +454,11 @@ export default function Home({ serverBootId }) {
                 onChange={handleFacetChange}
                 onClearFilters={handleClearAll}
                 loading={loading}
+                problemNames={problemNames}
+                reachabilitySource={reachabilitySource}
+                reachabilityMode={reachabilityMode}
+                onReachabilitySourceChange={setReachabilitySource}
+                onReachabilityModeChange={setReachabilityMode}
               />
             </Box>
           )}
