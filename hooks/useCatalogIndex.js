@@ -103,9 +103,11 @@ import {
   requestAllProblems,
   requestAllSolvers,
   requestAllVerifiers,
+  requestAllVisualizationTypes,
   requestAllVisualizations,
   requestReductionGraph,
 } from "../lib/redux";
+import { VISUALIZATION_TYPE_MAP } from "../data/visualizationTypes";
 
 /**
  * Flattens the reduction graph's `{ from: { to: [edge] } }` adjacency map
@@ -199,23 +201,51 @@ function buildProblemTags(
 }
 
 /**
+ * True unless `visualizationTypesByClassName` explicitly names this class's
+ * backend type as one `VISUALIZATION_TYPE_MAP` maps to `null` (today, only
+ * "Unimplemented" — a real, confirmed "no renderer exists for this" from the
+ * backend itself, e.g. ConvexHullVisualization, checked directly against the
+ * live production catalog 2026-09-15: 4 of 49 declared visualizations are
+ * this). A backend type this map has never heard of at all still counts —
+ * unlike a confirmed Unimplemented stub, an unmapped type is just something
+ * this frontend hasn't classified yet, not something known not to render.
+ */
+function isRenderableVisualizationClass(className, visualizationTypesByClassName) {
+  const backendType = visualizationTypesByClassName[className];
+  if (!Object.hasOwn(VISUALIZATION_TYPE_MAP, backendType)) {
+    return true;
+  }
+  return VISUALIZATION_TYPE_MAP[backendType] !== null;
+}
+
+/**
  * Presence-only signal for StatusIcon's isProblemComplete() rule (at least
  * one declared solver, visualization and verifier) — deliberately raw
- * declared-item counts, not the tags object above. A solver/visualization
- * whose backend-reported type has no entry in SOLVER_TYPE_MAP /
- * mergeVisualStyle's own fallback is still a declared solver/visualization
- * for completeness purposes even though it contributes nothing to `tags`.
+ * declared-item counts, not the tags object above, with one exception: a
+ * declared visualization only counts if it can actually render something.
+ * Checked directly (2026-09-15) after Convex Hull's card showed a green
+ * "fully catalogued" check despite having no real visualization — its one
+ * declared class, ConvexHullVisualization, is backend-confirmed
+ * "Unimplemented", so `hasVisualization` was true on nothing but a
+ * registered-but-empty class name. A solver whose backend-reported type has
+ * no entry in SOLVER_TYPE_MAP is still a declared solver for completeness
+ * purposes even though it contributes nothing to `tags` — solvers have no
+ * backend-declared "this does nothing" value the way visualizations do, so
+ * that part of the original rule still holds.
  * @returns {{hasSolver: boolean, hasVisualization: boolean, hasVerifier: boolean}}
  */
 function buildCompleteness(
   problemCode,
   solversByProblem,
   visualizationsByProblem,
+  visualizationTypesByClassName,
   verifiersByProblem,
 ) {
   return {
     hasSolver: (solversByProblem[problemCode]?.length ?? 0) > 0,
-    hasVisualization: (visualizationsByProblem[problemCode]?.length ?? 0) > 0,
+    hasVisualization: (visualizationsByProblem[problemCode] ?? []).some((className) =>
+      isRenderableVisualizationClass(className, visualizationTypesByClassName),
+    ),
     hasVerifier: (verifiersByProblem[problemCode]?.length ?? 0) > 0,
   };
 }
@@ -258,6 +288,7 @@ export function useCatalogIndex(url) {
           info,
           solversByProblem,
           visualizationsByProblem,
+          visualizationTypesByClassName,
           verifiersByProblem,
           reductionGraph,
         ] = await Promise.all([
@@ -265,6 +296,7 @@ export function useCatalogIndex(url) {
           requestAllInfo(url),
           requestAllSolvers(url),
           requestAllVisualizations(url),
+          requestAllVisualizationTypes(url),
           requestAllVerifiers(url),
           requestReductionGraph(url),
         ]);
@@ -290,6 +322,7 @@ export function useCatalogIndex(url) {
               problemCode,
               solversByProblem ?? {},
               visualizationsByProblem ?? {},
+              visualizationTypesByClassName ?? {},
               verifiersByProblem ?? {},
             ),
           );

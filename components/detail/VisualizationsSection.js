@@ -148,7 +148,18 @@ export default function VisualizationsSection({
   onRunRequest,
   dragHandleProps,
 }) {
-  const visualizations = problem.visualizations ?? [];
+  // Only visualizations this frontend can actually draw something for belong
+  // in the rail or the "N visualizations" summary. A backend type declared
+  // "Unimplemented" is a real, confirmed no-op (VISUALIZATION_TYPE_MAP maps
+  // it to null), not something this section just hasn't classified yet --
+  // checked directly (2026-09-15) after Convex Hull's rail claimed "1
+  // visualization" for a class that produces nothing. Filtered at the
+  // source here, not just hidden in the UI, so the rail, the count, and
+  // `canRun` below all agree with each other rather than three places
+  // independently deciding whether a visualization "exists".
+  const visualizations = (problem.visualizations ?? []).filter(
+    (v) => VISUALIZATION_TYPE_MAP[v.backendType] !== null,
+  );
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
   const selected = visualizations[selectedIndex];

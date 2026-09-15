@@ -71,16 +71,19 @@ export const TAXONOMY = [
     sidebar: true,
     // #6 (2026-09-01, supersedes the 2026-08-31 record): multi-valued, and
     // absorbs the former separate "Quantum Complexity Class" facet. A
-    // problem shows every class it truly belongs to at once (0/1 Knapsack is
-    // both NP-complete and NP) — see deriveComplexityClasses() below.
+    // problem shows only its single most specific classical class plus any
+    // quantum class it also carries (direct project-owner instruction
+    // supersedes this facet's earlier "show every class truly held" rule —
+    // see deriveComplexityClasses() below for the actual precedence).
     multiValued: true,
     options: [
       // Classical ladder, ordered by increasing difficulty (ratified
-      // 2026-08-31). Wikipedia casing: lowercase "complete"/"hard".
+      // 2026-08-31). Title-cased "Complete"/"Hard" (direct project-owner
+      // instruction; supersedes the earlier Wikipedia-cased lowercase call).
       { key: "p", label: "P" },
       { key: "np", label: "NP" },
-      { key: "npComplete", label: "NP-complete" },
-      { key: "npHard", label: "NP-hard" },
+      { key: "npComplete", label: "NP-Complete" },
+      { key: "npHard", label: "NP-Hard" },
       // Quantum classes, merged in from the deleted facet (#6, 2026-09-01).
       // No backend field exists; these are sourced entirely from the
       // supplementalTags.js overlay (#7).
@@ -205,6 +208,24 @@ export const TAXONOMY = [
   },
 ];
 
+const TAXONOMY_BY_KEY = new Map(TAXONOMY.map((facet) => [facet.key, facet]));
+
+/**
+ * The display label for one facet's option key ("npComplete" -> "NP-Complete"),
+ * the same lookup ProblemCatalogCard's chips already used locally before this
+ * became the shared copy every caller reads from -- this file's own header
+ * comment: "No component anywhere may hardcode a label this file owns."
+ * Falls back to the raw key for an option this file doesn't recognize,
+ * rather than throwing, so an unmapped/overlay-only value still renders as
+ * something instead of crashing the caller.
+ */
+export function optionLabel(facetKey, optionKey) {
+  const option = TAXONOMY_BY_KEY.get(facetKey)?.options.find(
+    (candidate) => candidate.key === optionKey,
+  );
+  return option?.label ?? optionKey;
+}
+
 // --- Translation maps: backend vocabulary -> frontend option key(s) -------
 //
 // The backend's enums and the frontend's display vocabulary don't match.
@@ -236,34 +257,60 @@ export const SOLVER_TYPE_MAP = {
   Unclassified: undefined,
 };
 
-// ComplexityClass (backend, single-valued) -> the full set of Complexity
-// Class option keys a problem belongs to, by true containment. Reworked
-// 2026-09-01 (#6): this is a derivation, not a 1:1 rename, because a single
-// backend value can (and P/NPComplete do) imply more than one displayed
-// class. `QuantumOracle` yields no classical value — those problems carry a
-// real quantum class from the overlay instead (see deriveComplexityClasses).
+// ComplexityClass (backend, single-valued) -> the Complexity Class option
+// key(s) actually shown for a problem. Reworked again (direct project-owner
+// instruction, supersedes the 2026-09-01/#6 "show every class truly held"
+// rule): a problem now shows only its single most specific classification,
+// not every broader class that classification implies. NP-complete already
+// means "in NP and NP-hard", so a problem that is NP-complete shows just
+// that, not three chips saying the same fact three ways; same reasoning
+// drops "np" from P (P implies NP, "P" is the stronger, more informative
+// statement). "np" as a displayed tag is reserved for the one case where
+// nothing more specific applies.
+//
+// Keys here must be the real ReduxISU/Redux enum member names
+// (Interfaces/ComplexityClass.cs), not a guessed or historical name for the
+// same idea. Checked directly against that file (2026-09-15) after Prime
+// Factorization turned up showing no complexity class tag at all: the real
+// member for "in NP, not known P or NP-complete" is `NP` itself (its own doc
+// comment names integer factorization as the textbook example), not
+// `NPIntermediate` -- that key never matched anything, so every problem
+// declaring the real `NP` value silently fell through to no tag. The
+// backend's six quantum members (BQP, EQP, QMA, QCMA, QIP, MIPStar) are
+// listed individually for the same reason, replacing a single made-up
+// `QuantumOracle` placeholder that matched none of them -- currently a
+// latent bug rather than a live one, since a missing key falls back to `[]`
+// the same way a correct one would while quantum classes are still sourced
+// from the overlay, but wrong regardless and worth being honest about
+// before anything ever reads this map for those values directly.
 export const COMPLEXITY_CLASS_MAP = {
-  P: ["p", "np"],
-  NPComplete: ["npComplete", "np", "npHard"],
-  NPIntermediate: ["np"],
+  P: ["p"],
+  NPComplete: ["npComplete"],
+  NP: ["np"],
   NPHard: ["npHard"],
-  QuantumOracle: [],
+  BQP: [],
+  EQP: [],
+  QMA: [],
+  QCMA: [],
+  QIP: [],
+  MIPStar: [],
   Unclassified: [],
 };
 
 /**
- * The full set of Complexity Class option keys a problem belongs to.
+ * The Complexity Class option key(s) a problem displays: its single most
+ * specific classical classification (see COMPLEXITY_CLASS_MAP), unioned
+ * with any quantum classes from the overlay, since a problem can genuinely
+ * carry both (a classical class and a quantum one) at once.
  *
  * `backendComplexityClass` is the single stored `ComplexityClass` enum
  * value. `overlayQuantumClasses` is the problem's quantum classes from the
- * supplementalTags.js overlay (e.g. ["bqp"]) — unioned onto the classical
- * set derived from the backend value, since a problem can carry both.
+ * supplementalTags.js overlay (e.g. ["bqp"]).
  *
- * Invariant (TAXONOMY_REFERENCE.md §3/#6 2026-09-01): "np" appears ALONE in
- * the classical portion of the result only when `backendComplexityClass` is
- * "NPIntermediate" — every other classical value either omits "np" or pairs
- * it with "p" or "npComplete"/"npHard". A caller that ever sees a bare "np"
- * from any other backend value has a bug in this map, not in the caller.
+ * Invariant: "np" appears in the result only when `backendComplexityClass`
+ * is "NP" — every other classical value maps to a single, more-specific key
+ * instead. A caller that ever sees "np" from any other backend value has a
+ * bug in this map, not in the caller.
  */
 export function deriveComplexityClasses(backendComplexityClass, overlayQuantumClasses = []) {
   const classical = COMPLEXITY_CLASS_MAP[backendComplexityClass] ?? [];
