@@ -1,17 +1,20 @@
 // components/ProblemCatalogCard.js
 //
-// T12 (#16) — one card in the Home page grid: problem name, status icon, and
-// rows of derived tag badges (Complexity Class, Problem Type, plus the
-// always-visible labeled Solvers/Visualizations sections added by T58/#133).
+// T12 (#16) — one card in the Home page grid: problem name and rows of
+// derived tag badges (Complexity Class, Problem Type, plus the always-
+// visible labeled Solvers/Visualizations sections added by T58/#133).
 //
-// A small monitor icon sits next to the title whenever hasRenderableVisualization()
-// (StatusIcon.js) is true -- ported directly from Redux_GUI's own Browse card
-// (components/widgets/ProblemCard.js's `hasRenderableVisualization` prop and its
-// `Monitor` icon), after Convex Hull's card was found showing a green "fully
-// catalogued" status despite having no real visualization to show. Presence-only,
-// matching Redux_GUI's pattern exactly: nothing renders here when false, rather than
-// a second "absent" icon competing for attention next to StatusIcon's own complete/
-// incomplete glyph.
+// Direct project-owner instruction: the green-checkmark/grey-minus status
+// glyph (StatusIcon) and the Monitor "has a renderable visualization" icon
+// that used to sit next to the title are both removed -- with Solvers and
+// Visualizations always rendering their own labeled row (a real chip, or
+// "No solvers"/"No visualizations"), a person can already read a card's
+// completeness directly off those rows instead of a separate glyph
+// reporting the same thing a second way. Verifier presence has no chip row
+// of its own (it isn't a data/taxonomy.js facet), so it stays only
+// observable via the card's existing incomplete-card treatment below, not a
+// dedicated indicator -- an accepted loss of that one specific detail,
+// per this instruction.
 //
 // The whole card is a link to the problem's detail page -- but only when the
 // problem is complete. #6 item 4 (2026-08-31) ratifies that an incomplete
@@ -20,7 +23,8 @@
 // not a link, not a tab stop, visibly distinct -- not a link that swallows
 // the click. isProblemComplete() (components/StatusIcon.js) is the one place
 // that predicate lives; this file imports it rather than re-deriving "has a
-// solver/visualization/verifier" on its own.
+// solver/visualization/verifier" on its own -- this only gates the
+// Link/non-Link + opacity/dashed-border treatment now, no icon left to gate.
 //
 // T25 (#34): the link target is `/${encodeURIComponent(problem.name)}`, not
 // `/${problem.slug}` -- the real backend has no slug concept, and T26
@@ -69,14 +73,14 @@
 // bespoke keyboard handling here.
 
 import CheckIcon from "@mui/icons-material/Check";
-import MonitorIcon from "@mui/icons-material/Monitor";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { TAXONOMY, optionLabel } from "../data/taxonomy";
-import StatusIcon, { hasRenderableVisualization, isProblemComplete } from "./StatusIcon";
+import { isProblemComplete } from "./StatusIcon";
+import { hiddenScrollbarSx } from "./theme";
 
 const EMPTY_SET = new Set();
 
@@ -121,13 +125,37 @@ function tagValueAsArray(tagValue) {
 // free. `idPrefix` gives every chip a globally unique id (ground rule 4) --
 // the same optionKey can appear on many cards at once, so the id has to
 // include the owning card, not just the facet/option pair.
-function TagRow({ facetKey, tagKeys, matchedKeys, idPrefix, onTagClick }) {
+//
+// `scrollable` (direct project-owner instruction, LabeledFacetSection's own
+// use only): a horizontally-scrolling single-line lane with the browser's
+// own scrollbar chrome hidden (hiddenScrollbarSx, theme.js) instead of the
+// base-row/extra-row default of wrapping onto further lines. flexShrink: 0
+// on each chip keeps them at their natural width instead of being squeezed
+// by the row's own flex context; minWidth: 0 on the row itself is load-
+// bearing on a flex child -- without it the row grows to fit every chip
+// instead of clipping/scrolling them, the same reasoning Redux_GUI's sibling
+// treatment documents (components/widgets/ProblemCard.js, chipScrollRowSx).
+function TagRow({ facetKey, tagKeys, matchedKeys, idPrefix, onTagClick, scrollable = false }) {
   if (!tagKeys || tagKeys.length === 0) {
     return null;
   }
   const clickable = typeof onTagClick === "function";
   return (
-    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+    <Box
+      sx={
+        scrollable
+          ? {
+              display: "flex",
+              flexWrap: "nowrap",
+              gap: 0.75,
+              overflowX: "auto",
+              minWidth: 0,
+              py: 0.25,
+              ...hiddenScrollbarSx,
+            }
+          : { display: "flex", flexWrap: "wrap", gap: 0.75 }
+      }
+    >
       {tagKeys.map((optionKey) => {
         const matched = matchedKeys.has(optionKey);
         return (
@@ -151,6 +179,7 @@ function TagRow({ facetKey, tagKeys, matchedKeys, idPrefix, onTagClick }) {
                   }
                 : undefined
             }
+            sx={scrollable ? { flexShrink: 0 } : undefined}
           />
         );
       })}
@@ -163,6 +192,18 @@ function TagRow({ facetKey, tagKeys, matchedKeys, idPrefix, onTagClick }) {
 // used elsewhere on this card (see ProblemGrid.js/FacetSidebar.js) rather
 // than TagRow's own "render nothing" behavior, which would leave a silent
 // gap instead of a placeholder.
+//
+// Direct project-owner instruction: the label sits to the left of its chip
+// row instead of above it, and the chip row itself scrolls horizontally
+// (TagRow's own `scrollable` mode) instead of wrapping onto further lines --
+// ported from Redux_GUI's equivalent Browse card treatment
+// (components/widgets/ProblemCard.js). LABEL_COLUMN_WIDTH is fixed (rather
+// than each label sizing to its own text) so the Solvers and Visualizations
+// rows' chip lists both start at the same x position on a given card,
+// regardless of which label is longer -- sized to fit "Visualizations", the
+// longer of the two.
+const LABEL_COLUMN_WIDTH = "6.5rem";
+
 function LabeledFacetSection({
   facetKey,
   label,
@@ -173,11 +214,11 @@ function LabeledFacetSection({
   onTagClick,
 }) {
   return (
-    <Box>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
       <Typography
         variant="overline"
         component="p"
-        sx={{ color: "text.primary", display: "block", mb: 0.5 }}
+        sx={{ color: "text.primary", flexShrink: 0, width: LABEL_COLUMN_WIDTH }}
       >
         {label}
       </Typography>
@@ -192,6 +233,7 @@ function LabeledFacetSection({
           matchedKeys={matchedKeys}
           idPrefix={idPrefix}
           onTagClick={onTagClick}
+          scrollable
         />
       )}
     </Box>
@@ -275,27 +317,29 @@ export default function ProblemCatalogCard({ problem, matchedTags = {}, onTagCli
         >
           {problem.name}
         </Typography>
-        {hasRenderableVisualization(problem) ? (
-          <MonitorIcon
-            titleAccess="Has a renderable visualization"
-            fontSize="small"
-            sx={{ color: "text.secondary", flexShrink: 0 }}
-          />
-        ) : null}
-        <StatusIcon problem={problem} />
       </Box>
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        {BASE_BADGE_FACET_KEYS.map((facetKey) => (
-          <TagRow
-            key={facetKey}
-            facetKey={facetKey}
-            tagKeys={tagValueAsArray(problem.tags?.[facetKey])}
-            matchedKeys={matchedTags[facetKey] ?? EMPTY_SET}
-            idPrefix={idPrefix}
-            onTagClick={onTagClick}
-          />
-        ))}
+        {/* Direct project-owner instruction: Complexity Class and Problem
+            Type sit side by side rather than stacked -- both describe the
+            problem itself (as opposed to Solvers/Visualizations, which
+            describe what's been built for it), so they read as one group.
+            Each facet's own TagRow keeps its own internal wrap (a facet
+            with several chips still wraps as a unit); this outer row only
+            wraps the pair onto a second line if the two together don't fit
+            the card's width, rather than interleaving their chips. */}
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
+          {BASE_BADGE_FACET_KEYS.map((facetKey) => (
+            <TagRow
+              key={facetKey}
+              facetKey={facetKey}
+              tagKeys={tagValueAsArray(problem.tags?.[facetKey])}
+              matchedKeys={matchedTags[facetKey] ?? EMPTY_SET}
+              idPrefix={idPrefix}
+              onTagClick={onTagClick}
+            />
+          ))}
+        </Box>
         {extraFacetKeys.map((facetKey) => (
           <TagRow
             key={facetKey}

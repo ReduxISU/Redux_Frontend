@@ -125,14 +125,21 @@ const PAGE_BACKGROUND = "#0A0908";
 const PANEL_BACKGROUND = "#17140F"; // one step lighter than the page, per the mockup's elevated surfaces
 const HAIRLINE_BORDER = "rgba(255, 237, 213, 0.09)"; // warm-tinted hairline, used for every panel/card edge
 
-// Shared scrollbar treatment for every internally-scrolling region on the
-// Home page (#68): the sidebar's own scroll, each facet group's capped
-// option list, and the card grid. Track is transparent (matches the page
-// background it sits over, per #68's explicit requirement) and the thumb is
-// a slim, low-contrast bar rather than the browser default. Firefox
-// properties (`scrollbarWidth`/`scrollbarColor`) and the WebKit
+// Shared scrollbar treatment for every internally-scrolling region in the
+// app (#68 originally, extended by direct project-owner instruction to
+// every vertical-scroll region app-wide -- the sidebar's own scroll, each
+// facet group's capped option list, the card grid, the detail page's
+// Solvers/Visualizations/Reductions rails, About Us's collapsible section
+// bodies, and any MUI popup (Autocomplete/Select) whose own listbox/menu can
+// scroll). Track is transparent (matches the page background it sits over,
+// per #68's explicit requirement) and the thumb is a slim, low-contrast bar
+// rather than the browser default, with a hover state so it reads as
+// interactive -- matching Redux_GUI's own thinScrollbarSx (components/
+// theme.js in that sibling repo), the reference this was asked to match.
+// Firefox properties (`scrollbarWidth`/`scrollbarColor`) and the WebKit
 // pseudo-elements are both set so Chrome/Edge/Safari and Firefox match.
 const SCROLLBAR_THUMB_COLOR = "rgba(245, 241, 234, 0.22)";
+const SCROLLBAR_THUMB_HOVER_COLOR = "rgba(245, 241, 234, 0.34)";
 export const thinScrollbarSx = {
   scrollbarWidth: "thin",
   scrollbarColor: `${SCROLLBAR_THUMB_COLOR} transparent`,
@@ -146,6 +153,27 @@ export const thinScrollbarSx = {
   "&::-webkit-scrollbar-thumb": {
     backgroundColor: SCROLLBAR_THUMB_COLOR,
     borderRadius: 999,
+  },
+  "&::-webkit-scrollbar-thumb:hover": {
+    backgroundColor: SCROLLBAR_THUMB_HOVER_COLOR,
+  },
+};
+
+// Fully hidden scrollbar -- unlike thinScrollbarSx above (a still-visible,
+// just slimmer thumb), this suppresses the browser's own scrollbar chrome
+// entirely while leaving the element just as scrollable via wheel/trackpad/
+// touch/drag. Direct project-owner instruction, ported from the same
+// treatment applied to Redux_GUI's Browse card's horizontally-scrolling
+// Solvers/Visualizations chip rows (components/widgets/ProblemCard.js,
+// chipScrollRowSx) -- same three-property combo for the same reason: no
+// single property covers every engine (scrollbarWidth is Firefox's own,
+// msOverflowStyle is legacy Edge/IE, ::-webkit-scrollbar is Chrome/Safari/
+// Chromium-Edge's pseudo-element).
+export const hiddenScrollbarSx = {
+  scrollbarWidth: "none",
+  msOverflowStyle: "none",
+  "&::-webkit-scrollbar": {
+    display: "none",
   },
 };
 
