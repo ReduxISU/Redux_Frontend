@@ -72,6 +72,20 @@ export function isProblemComplete(problem) {
   return getMissingParts(problem).length === 0;
 }
 
+/**
+ * Whether this problem has at least one visualization it can actually draw
+ * something for -- same predicate `getMissingParts` already uses for the
+ * "visualization" part of completeness (hooks/useCatalogIndex.js's
+ * buildCompleteness already filters out backend-confirmed "Unimplemented"
+ * stubs before this ever sees them), exported separately so a caller that
+ * only cares about visualization presence, not full completeness, doesn't
+ * have to re-derive it. Same name as Redux_GUI's own equivalent
+ * (components/widgets/ProblemCard.js's `hasRenderableVisualization` prop).
+ */
+export function hasRenderableVisualization(problem) {
+  return (problem.visualizations?.length ?? 0) > 0;
+}
+
 export default function StatusIcon({ problem }) {
   const missing = getMissingParts(problem);
   const complete = missing.length === 0;
