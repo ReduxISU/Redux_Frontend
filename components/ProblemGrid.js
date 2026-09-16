@@ -16,11 +16,19 @@
 // whether/how this becomes responsive -- has one place to change rather
 // than a hunt through this file.
 //
-// T28 (#37): 1 column below `sm` (600px), 2 from `sm` up through `md`
-// (600-1199px, which covers both the 768px and 1024px reference widths --
-// at 1024 the sidebar is back to its fixed 340px column per pages/index.js,
-// so 2 columns fit the remaining width better than 3 would), 3 at `lg`
-// (1200px) and up.
+// T28 (#37): 1 column below `sm` (600px), 2 from `sm` up (600-1199px, which
+// covers both the 768px and 1024px reference widths -- at 1024 the sidebar
+// is back to its fixed 340px column per pages/index.js, so 2 columns fit the
+// remaining width better than 3 would).
+//
+// #167: capped at 2 columns everywhere from `sm` up, including `lg`
+// (1200px+) and beyond -- T28's original decision above stepped up to 3
+// columns at `lg`, but a 3-column card is narrow enough that a typical
+// problem title wraps to two lines more often than not. 2 columns keeps
+// every card wide enough for its title to fit on one line at the widths this
+// app actually gets used at, at the cost of using less of the available
+// width on a very wide window. Requested directly by the project owner on
+// #167.
 //
 // Owns its own vertical scroll (`overflowY: "auto"`) rather than leaving it
 // to an ancestor, because the mockup's results column scrolls independently
@@ -55,7 +63,7 @@ import Typography from "@mui/material/Typography";
 import ProblemCatalogCard from "./ProblemCatalogCard";
 import { thinScrollbarSx } from "./theme";
 
-const COLUMN_COUNT_BY_BREAKPOINT = { xs: 1, sm: 2, lg: 3 };
+const COLUMN_COUNT_BY_BREAKPOINT = { xs: 1, sm: 2 };
 const SKELETON_CARD_COUNT = 6;
 
 const gridContainerSx = {
