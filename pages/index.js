@@ -47,6 +47,18 @@
 // the real, currently-displayed counts (never a hardcoded one, per that
 // issue's done-when) instead of scraping for a number inside less specific
 // text.
+//
+// #149: the in-progress comparison set (`compareNames`) is owned here, same
+// as every other piece of filter/selection state this page already owns --
+// following this file's own established pattern rather than introducing a
+// context provider or an external store (issue instruction: "no new global
+// state machinery"). It flows down to ProblemGrid -> ProblemCatalogCard
+// exactly the way `matchedTags`/`onTagClick` already do. Once 2+ problems
+// are selected, a floating "Compare (N)" bar appears (MIN_COMPARE_PROBLEMS,
+// lib/compareQuery.js) linking to `/compare?problems=...` -- the comparison
+// page (pages/compare.js) reads the same encoding back out of the URL, so a
+// comparison is itself shareable rather than living only in this page's
+// state.
 
 import CloseIcon from "@mui/icons-material/Close";
 import TuneIcon from "@mui/icons-material/Tune";
@@ -57,6 +69,7 @@ import IconButton from "@mui/material/IconButton";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import ActiveFilterChips from "../components/ActiveFilterChips";
 import ErrorBanner from "../components/ErrorBanner";
@@ -69,6 +82,11 @@ import { thinScrollbarSx } from "../components/theme";
 import { TAXONOMY } from "../data/taxonomy";
 import { useCatalogFilters } from "../hooks/useCatalogFilters";
 import { useCatalogIndex } from "../hooks/useCatalogIndex";
+import {
+  buildCompareQueryValue,
+  MAX_COMPARE_PROBLEMS,
+  MIN_COMPARE_PROBLEMS,
+} from "../lib/compareQuery";
 import { REDUX_API_BASE_URL } from "../lib/redux";
 
 // #68: 280 was too narrow -- the longest option labels ("Algebra and Number
@@ -228,6 +246,11 @@ export default function Home({ serverBootId }) {
   // filter state this page already owns above.
   const [reachabilitySource, setReachabilitySource] = useState(null);
   const [reachabilityMode, setReachabilityMode] = useState(DEFAULT_REACHABILITY_MODE);
+  // #149: the in-progress comparison set -- an ordered array (not a Set) so
+  // the "Compare (N)" bar's link and ProblemCatalogCard's own `compareSelected`
+  // lookup can share one piece of state; ProblemGrid/ProblemCatalogCard get a
+  // derived Set (compareSelectedSet below) for O(1) membership checks.
+  const [compareNames, setCompareNames] = useState([]);
 
   const theme = useTheme();
   // Defaults to `false` (narrow) on the server and on first client render,
@@ -284,6 +307,26 @@ export default function Home({ serverBootId }) {
     }
     handleFacetChange(facetKey, next);
   };
+
+  // #149: toggles `problemName` in the comparison set -- removal is always
+  // allowed (even once the set is at MAX_COMPARE_PROBLEMS), addition is a
+  // no-op once it's full rather than silently bumping the oldest selection,
+  // so "why did my first pick disappear" can never happen. The checkbox
+  // itself is also disabled at that point (ProblemCatalogCard's own
+  // `compareFull` prop), this is the second, state-owning half of that guard.
+  const handleCompareToggle = (problemName) => {
+    setCompareNames((prev) => {
+      if (prev.includes(problemName)) {
+        return prev.filter((name) => name !== problemName);
+      }
+      if (prev.length >= MAX_COMPARE_PROBLEMS) {
+        return prev;
+      }
+      return [...prev, problemName];
+    });
+  };
+
+  const compareSelectedSet = useMemo(() => new Set(compareNames), [compareNames]);
 
   const handleRemoveChip = (facetKey, optionKey) => {
     setSelected((prev) => {
@@ -474,11 +517,62 @@ export default function Home({ serverBootId }) {
                 loading={loading}
                 emptyMessage={buildGridEmptyMessage({ error, filtersActive })}
                 onTagClick={handleTagClick}
+                compareSelected={compareSelectedSet}
+                compareFull={compareNames.length >= MAX_COMPARE_PROBLEMS}
+                onCompareToggle={handleCompareToggle}
               />
             </Box>
           </Box>
         </Box>
       </Box>
+
+      {/* #149: appears once there's something to compare (MIN_COMPARE_PROBLEMS)
+          -- fixed/centered rather than inline so it stays reachable while
+          scrolling a long result grid, matching the issue's own "floating/
+          sticky" suggestion. The link encodes the current selection via
+          lib/compareQuery.js, the same encoding pages/compare.js decodes. */}
+      {compareNames.length >= MIN_COMPARE_PROBLEMS && (
+        <Box
+          sx={{
+            position: "fixed",
+            bottom: { xs: 16, sm: 28 },
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1300,
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            pl: 2.5,
+            pr: 1,
+            py: 1,
+            borderRadius: 999,
+            bgcolor: "background.paper",
+            border: "1px solid",
+            borderColor: "divider",
+            boxShadow: "0 12px 32px rgba(0, 0, 0, 0.5)",
+          }}
+        >
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            {compareNames.length} of {MAX_COMPARE_PROBLEMS} selected
+          </Typography>
+          <Button
+            id="home-compare-bar-open"
+            variant="contained"
+            component={Link}
+            href={`/compare?problems=${buildCompareQueryValue(compareNames)}`}
+          >
+            Compare ({compareNames.length})
+          </Button>
+          <IconButton
+            id="home-compare-bar-clear"
+            aria-label="Clear comparison selection"
+            size="small"
+            onClick={() => setCompareNames([])}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+      )}
     </Box>
   );
 }

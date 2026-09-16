@@ -116,6 +116,12 @@ function SkeletonCard() {
  * @param {(facetKey: string, optionKey: string) => void} [props.onTagClick]
  *   T57 (#132): forwarded to every card unchanged (ProblemCatalogCard's own
  *   prop) -- this component doesn't know or care what a click does with it.
+ * @param {Set<string>} [props.compareSelected] #149: forwarded to every card
+ *   unchanged (ProblemCatalogCard's own prop).
+ * @param {boolean} [props.compareFull] #149: forwarded to every card
+ *   unchanged (ProblemCatalogCard's own prop).
+ * @param {(problemName: string) => void} [props.onCompareToggle] #149:
+ *   forwarded to every card unchanged (ProblemCatalogCard's own prop).
  */
 export default function ProblemGrid({
   problems,
@@ -123,6 +129,9 @@ export default function ProblemGrid({
   emptyMessage = "No problems match your filters.",
   loading = false,
   onTagClick,
+  compareSelected,
+  compareFull = false,
+  onCompareToggle,
 }) {
   if (loading) {
     return (
@@ -152,6 +161,9 @@ export default function ProblemGrid({
           problem={problem}
           matchedTags={matchedTags}
           onTagClick={onTagClick}
+          compareSelected={compareSelected}
+          compareFull={compareFull}
+          onCompareToggle={onCompareToggle}
         />
       ))}
     </Box>
