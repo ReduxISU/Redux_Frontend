@@ -53,6 +53,20 @@
 // (900px), same breakpoint components/detail/VisualizationsSection.js's
 // identically-shaped rail/pane split uses. The rail's fixed width only
 // applies at `md` and up; stacked, it's full width.
+//
+// #150 follow-up (see components/ProblemDetailLayout.js's own decision
+// comment for the shared `?instance=` half of this): `selectedIndex`
+// round-trips through this page's URL query string too, as `?solver=<name>`
+// (the declared solver name, same "human-hand-constructable" rule #150's
+// original facet params follow) -- mirrors VisualizationsSection's
+// identical `?viz=<name>` exactly, including seeding via a lazy `useState`
+// initializer (this component only ever mounts once router.isReady is
+// true) and writing back via `router.replace({shallow: true})` guarded by a
+// ref so re-renders that don't change the selection don't spam history.
+// Deliberately NOT synced: the run itself, same reasoning as
+// ProblemDetailLayout.js's `?instance=` decision -- a link should be able
+// to point at "this solver, with this instance loaded," not claim to show
+// an answer it would have to fake or re-run to actually produce.
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -60,6 +74,7 @@ import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
+import { useRouter } from "next/router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TAXONOMY } from "../../data/taxonomy";
 import {
@@ -77,6 +92,12 @@ import SectionShell from "./SectionShell";
 // #71: fixed rail height so a problem with many declared solvers scrolls
 // inside the rail instead of stretching the section indefinitely.
 const RAIL_MAX_HEIGHT = 320;
+
+// #150 follow-up: a stable reference for the "no declared solvers" case, so
+// `problem.solvers ?? EMPTY_SOLVERS` doesn't hand the URL-sync effect below
+// a fresh empty array every render (react-hooks/exhaustive-deps warns on
+// exactly that pattern otherwise).
+const EMPTY_SOLVERS = [];
 
 const TAXONOMY_BY_KEY = new Map(TAXONOMY.map((facet) => [facet.key, facet]));
 
@@ -136,6 +157,17 @@ function formatSeconds(milliseconds) {
   return `${(milliseconds / 1000).toFixed(2)}s`;
 }
 
+// #150 follow-up: `?solver=<name>` -> the matching index into `solvers`, or
+// 0 (the default) when the name is missing or doesn't match any of this
+// problem's solvers -- same "degrade to the default rather than throw or
+// point at nothing" rule VisualizationsSection's identical
+// findVisualizationIndexByName follows.
+function findSolverIndexByName(solvers, name) {
+  if (!name) return 0;
+  const index = solvers.findIndex((solver) => solver.name === name);
+  return index === -1 ? 0 : index;
+}
+
 /**
  * @param {Object} props
  * @param {Object} props.problem A data/fixtures.js-shaped FixtureProblem.
@@ -169,8 +201,16 @@ export default function SolversSection({
   onCertificateChange,
   dragHandleProps,
 }) {
-  const solvers = problem.solvers ?? [];
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const solvers = problem.solvers ?? EMPTY_SOLVERS;
+  const router = useRouter();
+  // #150 follow-up: seeded from the URL on this component's first mount
+  // only -- see this file's own #150 header comment above.
+  const [selectedIndex, setSelectedIndex] = useState(() =>
+    findSolverIndexByName(
+      solvers,
+      typeof router.query.solver === "string" ? router.query.solver : null,
+    ),
+  );
   const selected = solvers[selectedIndex];
 
   const noun = solvers.length === 1 ? "solver" : "solvers";
@@ -200,6 +240,22 @@ export default function SolversSection({
     run.reset();
     setSelectedIndex(index);
   }
+
+  // #150 follow-up: pushes selectedIndex -> URL (`?solver=`, omitted at the
+  // default first solver) -- see this file's own #150 header comment.
+  // `lastSyncedSolverRef` skips a redundant router.replace call the same
+  // way VisualizationsSection's identical effect does.
+  const lastSyncedSolverRef = useRef(null);
+  useEffect(() => {
+    if (solvers.length === 0) return;
+    const activeSolver = solvers[selectedIndex] ?? null;
+    const solverParam = selectedIndex !== 0 && activeSolver ? activeSolver.name : null;
+    if (lastSyncedSolverRef.current === solverParam) return;
+    lastSyncedSolverRef.current = solverParam;
+    const { solver: _solver, ...restQuery } = router.query;
+    const nextQuery = solverParam ? { ...restQuery, solver: solverParam } : restQuery;
+    router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
+  }, [selectedIndex, solvers, router]);
 
   const { start: startRun } = run;
   const handleRun = useCallback(() => {
