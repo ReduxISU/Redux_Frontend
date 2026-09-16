@@ -11,18 +11,30 @@
 // hook Home already uses, so `next build`'s static analysis never needs a live backend --
 // this page just reuses its already-computed `reductionGraphByName` rather than fetching
 // and re-keying the raw graph a second time.
+//
+// #148 -- ReductionPathFinder (source/target picker) sits above the graph panel and owns
+// its own source/target selection plus the `requestReductionPath` lookup; this page only
+// holds the settled result (`pathResult`, via `onPathChange`) so it can pass
+// `pathNodeNames`/`pathHops` down into ReductionGraphView for highlighting. Kept here
+// rather than inside the picker component itself because the graph that needs to know
+// about the path lives in a sibling component, not a child of the picker.
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
 import ReductionGraphView from "../components/ReductionGraphView";
+import ReductionPathFinder from "../components/ReductionPathFinder";
 import { useCatalogIndex } from "../hooks/useCatalogIndex";
 import { REDUX_API_BASE_URL } from "../lib/redux";
 
 export default function ReductionGraphPage() {
   const { index, reductionGraphByName, loading, error } = useCatalogIndex(REDUX_API_BASE_URL);
+
+  const [pathSource, setPathSource] = useState(null);
+  const [pathTarget, setPathTarget] = useState(null);
+  const [pathResult, setPathResult] = useState(null);
 
   const problemNames = useMemo(
     () => Array.from(index.keys()).sort((a, b) => a.localeCompare(b)),
@@ -75,6 +87,31 @@ export default function ReductionGraphPage() {
           </Typography>
         )}
 
+        {!error && (
+          <Box
+            sx={{
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
+              bgcolor: "background.paper",
+              p: 2,
+            }}
+          >
+            <Typography variant="h2" component="h2" sx={{ fontSize: "1rem", mb: 1.5 }}>
+              Find the cheapest reduction path
+            </Typography>
+            <ReductionPathFinder
+              problemNames={problemNames}
+              loading={loading}
+              source={pathSource}
+              target={pathTarget}
+              onSourceChange={setPathSource}
+              onTargetChange={setPathTarget}
+              onPathChange={setPathResult}
+            />
+          </Box>
+        )}
+
         <Box
           sx={{
             flex: 1,
@@ -90,6 +127,8 @@ export default function ReductionGraphPage() {
             <ReductionGraphView
               problemNames={problemNames}
               reductionGraphByName={reductionGraphByName}
+              pathNodeNames={pathResult?.found ? pathResult.nodes : undefined}
+              pathHops={pathResult?.found ? pathResult.hops : undefined}
             />
           )}
         </Box>

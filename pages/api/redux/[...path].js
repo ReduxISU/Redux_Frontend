@@ -79,6 +79,11 @@ const rateLimitBuckets = new Map();
  * compute profile and was deliberately left out until T53 (#116) gave it a real caller
  * (`requestReducedInstance`, `lib/redux/index.js`) -- it is allowed below now.
  *
+ * `Navigation/Reductions/path` (#148) is its own exact entry rather than folded into
+ * `Navigation/Reductions` above: it is a genuinely different endpoint (a weighted
+ * shortest-path lookup taking `source`/`target` query parameters) that happens to share
+ * `Navigation/Reductions` as a path prefix, not a variant reachable by the same request.
+ *
  * Keys are paths relative to `REDUX_BASE_URL`, matched exactly and case-sensitively.
  * Query strings are not part of the match.
  */
@@ -90,6 +95,7 @@ const ALLOWED_ENDPOINTS = new Map([
   ["Navigation/Batch/allVisualizationTypes", ["GET", "HEAD"]],
   ["Navigation/Batch/allInfo", ["GET", "HEAD"]],
   ["Navigation/Reductions", ["GET", "HEAD"]],
+  ["Navigation/Reductions/path", ["GET", "HEAD"]],
   ["Navigation/ContributorProfile/directory", ["GET", "HEAD"]],
   ["ProblemProvider/solve", ["POST"]],
   ["ProblemProvider/verify", ["POST"]],
