@@ -31,6 +31,9 @@ const NAV_LINKS = [
   { id: "navbar-aboutus-link", href: "/aboutus", label: "About Us" },
   { id: "navbar-help-link", href: "/help", label: "Help" },
   { id: "navbar-contribute-link", href: "/contribute", label: "Contribute" },
+  // T60 (#135): linked rather than left as a hidden route, for discoverability --
+  // see the decision comment on #135.
+  { id: "navbar-quantum-demo-link", href: "/quantum-demo", label: "Quantum Demo" },
 ];
 
 export default function NavBar() {
