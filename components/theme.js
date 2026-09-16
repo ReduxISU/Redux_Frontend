@@ -101,7 +101,7 @@ function buildChipVariants() {
     variants.push({
       props: { variant: outlinedVariant },
       style: {
-        color: base,
+        color: "#FFFFFF",
         backgroundColor: alpha(base, 0.1),
         border: `1px solid ${alpha(base, 0.55)}`,
         fontWeight: 600,

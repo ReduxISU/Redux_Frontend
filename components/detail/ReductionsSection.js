@@ -115,7 +115,7 @@ function CostBadge({ costKey }) {
         borderRadius: 999,
         fontSize: "0.75rem",
         fontWeight: 700,
-        color: REDUCTION_COST_ACCENT,
+        color: "#FFFFFF",
         backgroundColor: alpha(REDUCTION_COST_ACCENT, 0.12),
         border: `1px solid ${alpha(REDUCTION_COST_ACCENT, 0.55)}`,
       }}
