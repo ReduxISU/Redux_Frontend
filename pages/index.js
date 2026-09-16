@@ -47,6 +47,73 @@
 // the real, currently-displayed counts (never a hardcoded one, per that
 // issue's done-when) instead of scraping for a number inside less specific
 // text.
+//
+// #150: shareable permalinks. `selected`/`searchValue`/`reachabilitySource`/
+// `reachabilityMode` (all above) now also round-trip through the URL query
+// string, so a filtered view is copy-pasteable/bookmarkable rather than only
+// living in this page's in-memory state. The URL is the source of truth on
+// load (the Home component below reads it once router.isReady, via React's
+// "adjust state during render" pattern rather than an effect -- see that
+// block's own comment) and user interaction pushes back to it via
+// `router.replace({ shallow: true })` --
+// shallow because this page has getServerSideProps (startup-splash's
+// serverBootId) and a normal push/replace would re-run it on every filter
+// click for no reason; see this file's earlier "T43 (#65)" comment for why
+// that prop exists at all.
+//
+// Encoding (one query param per taxonomy facet, holding a comma-joined list
+// of selected option keys, kept human-hand-constructable per the issue body):
+//   ?problemType=graphTheory,logic&complexityClass=P,NPComplete
+//   &q=<search text>
+//   &reachFrom=<problem name>&reachMode=oneHop|anyHops
+// Every param is omitted at its default (nothing selected, empty search, no
+// reachability source) so a plain, unfiltered visit to "/" stays a plain
+// "/" rather than a URL full of empty params. `reachMode` only ever appears
+// alongside `reachFrom` -- a mode with no source is meaningless.
+//
+// Search text is debounced (SEARCH_URL_DEBOUNCE_MS) before it reaches the
+// URL -- searchValue itself still updates on every keystroke (SearchBar
+// stays instantly responsive), only the URL write waits, so typing doesn't
+// spam router.replace calls.
+//
+// #154: last-viewed filters, persisted to localStorage independent of the
+// URL above. Distinct problem from #150's shareable permalinks (that
+// issue's own body: "distinct from... encoding state into a URL to *share*
+// a specific view. This one is about a single visitor's own state surviving
+// without needing a link at all"), so the two live side by side rather than
+// one replacing the other:
+//   - The URL wins whenever it carries real filter params (unchanged #150
+//     behavior) -- a shared/bookmarked link should always show what it
+//     encodes, never something a previous local session left behind.
+//   - A plain visit (bare "/", no filter params in the query string) falls
+//     back to this browser's last-saved filters instead of bare defaults,
+//     if any are saved (hasUrlFilterParams/readStoredHomeFilters below).
+//   - Every filter change writes to both the URL and localStorage, at the
+//     same point and on the same debounce timing (the write effect below),
+//     so the two never drift apart -- either one can serve as "the last
+//     known state" for a future plain visit.
+// HOME_FILTERS_STORAGE_KEY is namespaced (`redux-frontend:` prefix) so it
+// can't collide with components/StartupSplash.js's own localStorage key or
+// anything else that might land in this origin's storage later.
+// HOME_FILTERS_STORAGE_VERSION guards the shape: a value written by some
+// future, differently-shaped version of this page degrades to "nothing
+// stored" (readStoredHomeFilters returns null) rather than being partially
+// or incorrectly applied -- same defensive posture StartupSplash's own
+// readStoredBootId/writeStoredBootId already document for the localStorage
+// APIs throwing outright in some browser configurations (Safari private
+// mode, cookie-blocking policies).
+//
+// #149: the in-progress comparison set (`compareNames`) is owned here, same
+// as every other piece of filter/selection state this page already owns --
+// following this file's own established pattern rather than introducing a
+// context provider or an external store (issue instruction: "no new global
+// state machinery"). It flows down to ProblemGrid -> ProblemCatalogCard
+// exactly the way `matchedTags`/`onTagClick` already do. Once 2+ problems
+// are selected, a floating "Compare (N)" bar appears (MIN_COMPARE_PROBLEMS,
+// lib/compareQuery.js) linking to `/compare?problems=...` -- the comparison
+// page (pages/compare.js) reads the same encoding back out of the URL, so a
+// comparison is itself shareable rather than living only in this page's
+// state.
 
 import CloseIcon from "@mui/icons-material/Close";
 import TuneIcon from "@mui/icons-material/Tune";
@@ -57,7 +124,9 @@ import IconButton from "@mui/material/IconButton";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ActiveFilterChips from "../components/ActiveFilterChips";
 import ErrorBanner from "../components/ErrorBanner";
 import FacetSidebar from "../components/FacetSidebar";
@@ -69,6 +138,11 @@ import { thinScrollbarSx } from "../components/theme";
 import { TAXONOMY } from "../data/taxonomy";
 import { useCatalogFilters } from "../hooks/useCatalogFilters";
 import { useCatalogIndex } from "../hooks/useCatalogIndex";
+import {
+  buildCompareQueryValue,
+  MAX_COMPARE_PROBLEMS,
+  MIN_COMPARE_PROBLEMS,
+} from "../lib/compareQuery";
 import { REDUX_API_BASE_URL } from "../lib/redux";
 
 // #68: 280 was too narrow -- the longest option labels ("Algebra and Number
@@ -110,6 +184,155 @@ function buildEmptySelection() {
 // direct hop, the narrower of the two readings, matching the more common
 // "what does this reduce to/from" question over the full transitive closure.
 const DEFAULT_REACHABILITY_MODE = "oneHop";
+const REACHABILITY_MODES = new Set(["oneHop", "anyHops"]);
+
+// #150: how long to wait after the last keystroke before the search box's
+// text reaches the URL -- long enough that a normal typing burst produces
+// one URL write, not one per character.
+const SEARCH_URL_DEBOUNCE_MS = 400;
+
+// #154: see this file's header comment above for the full picture.
+const HOME_FILTERS_STORAGE_KEY = "redux-frontend:home-filters";
+const HOME_FILTERS_STORAGE_VERSION = 1;
+
+// #150: `?<facetKey>=a,b,c` -> `{ [facetKey]: Set<optionKey> }`, one entry
+// per taxonomy facet. Unknown facet keys in the URL are ignored (some other
+// param this page doesn't own) and unknown option keys within a known facet
+// are dropped -- a stale or hand-typed link degrades to "that option isn't
+// selected" rather than throwing or selecting something that doesn't exist.
+function selectionFromQuery(query) {
+  const selection = buildEmptySelection();
+  for (const facet of TAXONOMY) {
+    const raw = query[facet.key];
+    if (typeof raw !== "string" || raw === "") continue;
+    const validKeys = new Set(facet.options.map((option) => option.key));
+    const keys = raw.split(",").filter((key) => validKeys.has(key));
+    selection[facet.key] = new Set(keys);
+  }
+  return selection;
+}
+
+// #150: the inverse of selectionFromQuery -- only facets with at least one
+// option selected get an entry, so a fully-cleared filter set contributes
+// nothing to the URL.
+function queryFromSelection(selected) {
+  const entries = {};
+  for (const facet of TAXONOMY) {
+    const keys = Array.from(selected[facet.key] ?? []);
+    if (keys.length > 0) {
+      entries[facet.key] = keys.join(",");
+    }
+  }
+  return entries;
+}
+
+// #154: whether router.query carries any of this page's own filter params,
+// as opposed to being a plain/bare visit. Used only to decide which source
+// -- the URL or localStorage -- supplies the initial filter state below;
+// see this file's header comment for the precedence. Mirrors
+// selectionFromQuery/queryFromSelection's own notion of "empty": a facet
+// key or `q` present but set to "" doesn't count as a real param any more
+// than queryFromSelection would ever write one out.
+function hasUrlFilterParams(query) {
+  if (typeof query.q === "string" && query.q !== "") return true;
+  if (typeof query.reachFrom === "string" && query.reachFrom !== "") return true;
+  return TAXONOMY.some((facet) => typeof query[facet.key] === "string" && query[facet.key] !== "");
+}
+
+// #154: `selected`'s per-facet Sets -> a JSON-serializable shape for
+// localStorage. Same facet-by-facet idea as queryFromSelection above, but as
+// arrays under their own facet key rather than comma-joined strings --
+// JSON already has arrays, so there's no reason to flatten to a string just
+// to parse it back out on the next read.
+function selectionToStored(selected) {
+  const stored = {};
+  for (const facet of TAXONOMY) {
+    stored[facet.key] = Array.from(selected[facet.key] ?? []);
+  }
+  return stored;
+}
+
+// #154: the localStorage equivalent of selectionFromQuery above, and the
+// inverse of selectionToStored -- same defensive shape (an unrecognized
+// facet key is ignored, an unrecognized option key within a known facet is
+// dropped), since a value read back from a previous visit can be just as
+// stale as a hand-typed URL if the taxonomy has changed since it was
+// written.
+function selectionFromStored(storedSelected) {
+  const selection = buildEmptySelection();
+  if (storedSelected === null || typeof storedSelected !== "object") return selection;
+  for (const facet of TAXONOMY) {
+    const raw = storedSelected[facet.key];
+    if (!Array.isArray(raw)) continue;
+    const validKeys = new Set(facet.options.map((option) => option.key));
+    const keys = raw.filter((key) => typeof key === "string" && validKeys.has(key));
+    selection[facet.key] = new Set(keys);
+  }
+  return selection;
+}
+
+// #154: reads this browser's last-saved Home filters. Returns null for
+// "nothing stored", which also covers every way a stored value can fail to
+// apply cleanly: localStorage throwing outright (see this file's header
+// comment), the value not being valid JSON, or the parsed value not
+// matching HOME_FILTERS_STORAGE_VERSION -- a malformed or outdated value
+// degrades to "nothing stored" rather than crashing the page or applying
+// something half-right.
+function readStoredHomeFilters() {
+  let raw;
+  try {
+    raw = window.localStorage.getItem(HOME_FILTERS_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    parsed.version !== HOME_FILTERS_STORAGE_VERSION
+  ) {
+    return null;
+  }
+
+  return {
+    selected: selectionFromStored(parsed.selected),
+    searchValue: typeof parsed.searchValue === "string" ? parsed.searchValue : "",
+    reachabilitySource:
+      typeof parsed.reachabilitySource === "string" ? parsed.reachabilitySource : null,
+    reachabilityMode: REACHABILITY_MODES.has(parsed.reachabilityMode)
+      ? parsed.reachabilityMode
+      : DEFAULT_REACHABILITY_MODE,
+  };
+}
+
+// #154: writes the current filters as this browser's last-saved state.
+// Write failures are silently ignored -- same as StartupSplash's own
+// writeStoredBootId, and for the same reason (see this file's header
+// comment): there is nowhere better to surface a storage failure, and it
+// should never block the filter change that triggered it.
+function writeStoredHomeFilters({ selected, searchValue, reachabilitySource, reachabilityMode }) {
+  try {
+    window.localStorage.setItem(
+      HOME_FILTERS_STORAGE_KEY,
+      JSON.stringify({
+        version: HOME_FILTERS_STORAGE_VERSION,
+        selected: selectionToStored(selected),
+        searchValue,
+        reachabilitySource,
+        reachabilityMode,
+      }),
+    );
+  } catch {
+    // Nothing to do: see readStoredHomeFilters.
+  }
+}
 
 function formatResultCount(count, filtersActive) {
   const noun = count === 1 ? "problem" : "problems";
@@ -221,13 +444,131 @@ export async function getServerSideProps() {
  *   it to tell a restart apart from a reload.
  */
 export default function Home({ serverBootId }) {
+  const router = useRouter();
   const [selected, setSelected] = useState(buildEmptySelection);
   const [searchValue, setSearchValue] = useState("");
+  // #150: what actually reaches the URL for `q` -- see SEARCH_URL_DEBOUNCE_MS
+  // above. Starts equal to searchValue (both "") so nothing writes to the URL
+  // before hydrateFromUrl (below) has had a chance to read it.
+  const [debouncedSearchValue, setDebouncedSearchValue] = useState("");
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
   // T59 (#134): reduction-reachability filter state, alongside the other
   // filter state this page already owns above.
   const [reachabilitySource, setReachabilitySource] = useState(null);
   const [reachabilityMode, setReachabilityMode] = useState(DEFAULT_REACHABILITY_MODE);
+  // #149: the in-progress comparison set -- an ordered array (not a Set) so
+  // the "Compare (N)" bar's link and ProblemCatalogCard's own `compareSelected`
+  // lookup can share one piece of state; ProblemGrid/ProblemCatalogCard get a
+  // derived Set (compareSelectedSet below) for O(1) membership checks.
+  const [compareNames, setCompareNames] = useState([]);
+
+  // #150: becomes true once this page has read its filter state from the
+  // URL (below) -- guards the URL-write effect further down so it never
+  // fires with the plain useState defaults above and stomps a URL a visitor
+  // actually arrived with, before hydration has had a chance to apply it.
+  const [hydratedFromUrl, setHydratedFromUrl] = useState(false);
+
+  // #150: the URL is the source of truth on load -- applied once, as soon as
+  // the router has resolved the real query (router.isReady; see
+  // pages/[problem].js's identical guard for why this can't just read
+  // router.query on the very first render). React's documented "adjust
+  // state during render" pattern (the same one components/
+  // ProblemDetailLayout.js's instanceProblemName reset and components/detail/
+  // VisualizationsSection.js's stepResetKey/lastVisualizeResult resets
+  // already use in this codebase), not a useEffect -- it settles within the
+  // same render instead of committing the plain defaults above first and
+  // only fixing them up a moment later. `debouncedSearchValue` is seeded
+  // here too, not left to the debounce effect below, so a link that already
+  // has `?q=...` doesn't briefly flash `q`-less before the debounce timer
+  // catches up.
+  //
+  // #154: when the URL is bare (hasUrlFilterParams is false), a saved
+  // localStorage filter set takes over instead of the plain useState
+  // defaults above -- still resolved here, in the same render, for the same
+  // reason. If nothing is saved either (readStoredHomeFilters returns
+  // null), the plain defaults are left standing untouched.
+  if (!hydratedFromUrl && router.isReady) {
+    if (hasUrlFilterParams(router.query)) {
+      setSelected(selectionFromQuery(router.query));
+      const q = typeof router.query.q === "string" ? router.query.q : "";
+      setSearchValue(q);
+      setDebouncedSearchValue(q);
+      setReachabilitySource(
+        typeof router.query.reachFrom === "string" ? router.query.reachFrom : null,
+      );
+      const mode = router.query.reachMode;
+      setReachabilityMode(REACHABILITY_MODES.has(mode) ? mode : DEFAULT_REACHABILITY_MODE);
+    } else {
+      const stored = readStoredHomeFilters();
+      if (stored) {
+        setSelected(stored.selected);
+        setSearchValue(stored.searchValue);
+        setDebouncedSearchValue(stored.searchValue);
+        setReachabilitySource(stored.reachabilitySource);
+        setReachabilityMode(stored.reachabilityMode);
+      }
+    }
+    setHydratedFromUrl(true);
+  }
+
+  // #150: debounces searchValue -> debouncedSearchValue (see
+  // SEARCH_URL_DEBOUNCE_MS above) -- the URL-write effect below reads
+  // debouncedSearchValue, not searchValue, so typing updates SearchBar
+  // instantly without spamming router.replace calls.
+  useEffect(() => {
+    const timeoutId = setTimeout(
+      () => setDebouncedSearchValue(searchValue),
+      SEARCH_URL_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(timeoutId);
+  }, [searchValue]);
+
+  // #150: pushes filter state -> URL. `lastSyncedQueryRef` skips a
+  // router.replace call whenever the query this render would produce is the
+  // same as the last one this effect actually sent, so re-renders that don't
+  // change any filter (or the render right after hydration, which reads back
+  // what it just wrote) don't generate redundant history-replace calls.
+  //
+  // #154: also pushes filter state -> localStorage, at the same point and on
+  // the same debounce timing as the URL write right below it -- both are
+  // reacting to the exact same "the filters changed" signal, just toward two
+  // different destinations, so there is no reason for them to run at
+  // different times. Unlike the URL write, this one isn't skipped when
+  // `nextQuery`'s serialized form is unchanged: reachabilityMode, for
+  // instance, never appears in nextQuery while reachabilitySource is unset,
+  // but a visitor's mode preference is still worth saving for next time they
+  // pick a source.
+  const lastSyncedQueryRef = useRef(null);
+  useEffect(() => {
+    if (!hydratedFromUrl) return;
+
+    writeStoredHomeFilters({
+      selected,
+      searchValue: debouncedSearchValue,
+      reachabilitySource,
+      reachabilityMode,
+    });
+
+    const nextQuery = queryFromSelection(selected);
+    if (debouncedSearchValue.trim().length > 0) {
+      nextQuery.q = debouncedSearchValue;
+    }
+    if (reachabilitySource) {
+      nextQuery.reachFrom = reachabilitySource;
+      nextQuery.reachMode = reachabilityMode;
+    }
+    const serialized = JSON.stringify(nextQuery);
+    if (lastSyncedQueryRef.current === serialized) return;
+    lastSyncedQueryRef.current = serialized;
+    router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
+  }, [
+    hydratedFromUrl,
+    selected,
+    debouncedSearchValue,
+    reachabilitySource,
+    reachabilityMode,
+    router,
+  ]);
 
   const theme = useTheme();
   // Defaults to `false` (narrow) on the server and on first client render,
@@ -285,6 +626,26 @@ export default function Home({ serverBootId }) {
     handleFacetChange(facetKey, next);
   };
 
+  // #149: toggles `problemName` in the comparison set -- removal is always
+  // allowed (even once the set is at MAX_COMPARE_PROBLEMS), addition is a
+  // no-op once it's full rather than silently bumping the oldest selection,
+  // so "why did my first pick disappear" can never happen. The checkbox
+  // itself is also disabled at that point (ProblemCatalogCard's own
+  // `compareFull` prop), this is the second, state-owning half of that guard.
+  const handleCompareToggle = (problemName) => {
+    setCompareNames((prev) => {
+      if (prev.includes(problemName)) {
+        return prev.filter((name) => name !== problemName);
+      }
+      if (prev.length >= MAX_COMPARE_PROBLEMS) {
+        return prev;
+      }
+      return [...prev, problemName];
+    });
+  };
+
+  const compareSelectedSet = useMemo(() => new Set(compareNames), [compareNames]);
+
   const handleRemoveChip = (facetKey, optionKey) => {
     setSelected((prev) => {
       const next = new Set(prev[facetKey]);
@@ -296,6 +657,10 @@ export default function Home({ serverBootId }) {
   const handleClearAll = () => {
     setSelected(buildEmptySelection());
     setSearchValue("");
+    // #150: cleared immediately alongside searchValue, rather than waiting
+    // for the debounce effect above to catch up -- "Clear all" should clear
+    // the URL's `q` right away, the same instant it clears the search box.
+    setDebouncedSearchValue("");
     setReachabilitySource(null);
     setReachabilityMode(DEFAULT_REACHABILITY_MODE);
   };
@@ -474,11 +839,62 @@ export default function Home({ serverBootId }) {
                 loading={loading}
                 emptyMessage={buildGridEmptyMessage({ error, filtersActive })}
                 onTagClick={handleTagClick}
+                compareSelected={compareSelectedSet}
+                compareFull={compareNames.length >= MAX_COMPARE_PROBLEMS}
+                onCompareToggle={handleCompareToggle}
               />
             </Box>
           </Box>
         </Box>
       </Box>
+
+      {/* #149: appears once there's something to compare (MIN_COMPARE_PROBLEMS)
+          -- fixed/centered rather than inline so it stays reachable while
+          scrolling a long result grid, matching the issue's own "floating/
+          sticky" suggestion. The link encodes the current selection via
+          lib/compareQuery.js, the same encoding pages/compare.js decodes. */}
+      {compareNames.length >= MIN_COMPARE_PROBLEMS && (
+        <Box
+          sx={{
+            position: "fixed",
+            bottom: { xs: 16, sm: 28 },
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1300,
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            pl: 2.5,
+            pr: 1,
+            py: 1,
+            borderRadius: 999,
+            bgcolor: "background.paper",
+            border: "1px solid",
+            borderColor: "divider",
+            boxShadow: "0 12px 32px rgba(0, 0, 0, 0.5)",
+          }}
+        >
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            {compareNames.length} of {MAX_COMPARE_PROBLEMS} selected
+          </Typography>
+          <Button
+            id="home-compare-bar-open"
+            variant="contained"
+            component={Link}
+            href={`/compare?problems=${buildCompareQueryValue(compareNames)}`}
+          >
+            Compare ({compareNames.length})
+          </Button>
+          <IconButton
+            id="home-compare-bar-clear"
+            aria-label="Clear comparison selection"
+            size="small"
+            onClick={() => setCompareNames([])}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+      )}
     </Box>
   );
 }

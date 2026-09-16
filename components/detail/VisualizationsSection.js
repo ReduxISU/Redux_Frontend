@@ -43,11 +43,28 @@
 // `booleanSatisfiability`, `graph` node edits, and `recursiveSet` all serialize; `graph`
 // edge edits and any `quantumCircuit` edit stay local-preview-only (see
 // data/instanceSerializers.js's header for why).
+//
+// #150: `selectedIndex`/`currentStep` round-trip through this page's URL query string
+// (`viz`, the selected visualization's declared name; `step`, the 1-based playback frame),
+// via useRouter directly in this component rather than lifting the state up to
+// pages/[problem].js or ProblemDetailLayout.js -- neither of those needs to know which
+// visualization/frame is showing, so there's nothing to lift it *for*. Read once on mount
+// (this component only ever mounts once router.isReady is true -- pages/[problem].js
+// doesn't render it before then) and written back on every change via
+// router.replace({shallow: true}), same reasoning as pages/index.js's identical pattern
+// for the facet filters (see that file's own #150 comment). Deliberately NOT synced:
+// every interactive-editing state this file's own header above already lists
+// (`editedClauses`, `editedGraph`, `graphNodeOps`, `editedRecursiveData`, `editedCircuit`,
+// etc.) -- live in-session editing, not meaningfully shareable, and the existing
+// stepResetKey/lastVisualizeResult render-time resets below are untouched: a fresh Run
+// (or switching visualizations) still resets `currentStep` to 0 exactly as it always has,
+// so a permalink to a specific frame only holds until the visitor's own next Run.
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
+import { useRouter } from "next/router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyCircuitOp,
@@ -100,6 +117,27 @@ function visualizationTypeLabel(typeKey) {
   }
   const option = VISUALIZATION_TYPE_FACET.options.find((candidate) => candidate.key === typeKey);
   return option?.label ?? typeKey;
+}
+
+// #150: `?viz=<name>` -> the matching index into `visualizations`, or 0 (the
+// default) when the name is missing or doesn't match any of this problem's
+// visualizations -- a stale or hand-typed link degrades to "just show the
+// first one" rather than throwing or pointing at nothing.
+function findVisualizationIndexByName(visualizations, name) {
+  if (!name) return 0;
+  const index = visualizations.findIndex((visualization) => visualization.name === name);
+  return index === -1 ? 0 : index;
+}
+
+// #150: `?step=<n>` (1-based, for a human-readable URL) -> the 0-based
+// `currentStep` index StepScrubber actually uses. Anything that isn't a
+// positive integer falls back to 0 (the default), same "degrade gracefully"
+// rule as findVisualizationIndexByName above.
+function parseStepParam(rawStep) {
+  if (typeof rawStep !== "string") return 0;
+  const parsed = Number.parseInt(rawStep, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return 0;
+  return parsed - 1;
 }
 
 function TypeBadge({ typeKey }) {
@@ -160,8 +198,19 @@ export default function VisualizationsSection({
   const visualizations = (problem.visualizations ?? []).filter(
     (v) => VISUALIZATION_TYPE_MAP[v.backendType] !== null,
   );
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [currentStep, setCurrentStep] = useState(0);
+  const router = useRouter();
+  // #150: seeded from the URL on this component's first mount only (see this
+  // file's own #150 header comment) -- router.query is already resolved by
+  // the time this ever mounts, so a plain `useState(() => ...)` lazy
+  // initializer is enough, no separate hydration effect needed (unlike
+  // pages/index.js, which can render before its router is ready).
+  const [selectedIndex, setSelectedIndex] = useState(() =>
+    findVisualizationIndexByName(
+      visualizations,
+      typeof router.query.viz === "string" ? router.query.viz : null,
+    ),
+  );
+  const [currentStep, setCurrentStep] = useState(() => parseStepParam(router.query.step));
   const selected = visualizations[selectedIndex];
   const noun = visualizations.length === 1 ? "visualization" : "visualizations";
 
@@ -258,18 +307,18 @@ export default function VisualizationsSection({
   }
 
   const { start: startVisualize } = visualize;
-  // The React Compiler bails on this hook's memoization (react-hooks/preserve-manual-
-  // memoization) -- not because this callback itself is unsafe, but because the
-  // component also does a render-time setState (the `setEditedGraph` seed above, React's
-  // own documented "adjust state during render" pattern), which the compiler's static
-  // analysis can't fully reason about; SolversSection.js's near-identical handleRun
-  // passes cleanly precisely because that file has no such call. Restructuring this
-  // hook's own deps doesn't change that (tried keying off selected?.className/
-  // selected?.name instead of `selected` itself -- the compiler still bailed, confirming
-  // the seed call is the real cause). The manual useCallback below is still correct and
-  // necessary as written (its identity is a dependency of the runToken effect further
-  // down), so this is an accepted, understood compiler limitation, not a correctness bug.
-  /* eslint-disable react-hooks/preserve-manual-memoization */
+  // Historically the React Compiler bailed on this hook's memoization specifically
+  // (react-hooks/preserve-manual-memoization) because of the render-time `setEditedGraph`
+  // seed above (React's own documented "adjust state during render" pattern), which its
+  // static analysis couldn't fully reason about -- SolversSection.js's near-identical
+  // handleRun passed cleanly precisely because that file has no such call. As of #150's
+  // URL-sync effect further down (which writes to a ref inside an effect), the compiler
+  // now bails on optimizing this component more broadly and no longer reports that specific
+  // diagnostic anywhere in this file -- confirmed directly (`npx eslint` against this file
+  // alone) rather than assumed, which is why the eslint-disable that used to sit here is
+  // gone: left in place, it trips "Unused eslint-disable directive" instead. The manual
+  // useCallback below is still correct and necessary as written regardless (its identity is
+  // a dependency of the runToken effect further down).
   const handleRun = useCallback(() => {
     if (!canRun) return;
     const visualization = selected;
@@ -289,7 +338,6 @@ export default function VisualizationsSection({
       };
     });
   }, [canRun, selected, instanceValue, startVisualize]);
-  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   // The Run affordance's onClick, not `handleRun`/`onRunRequest` directly -- a pending
   // sendable edit (booleanSatisfiability, graph node ops, or recursiveSet) must be
@@ -356,6 +404,31 @@ export default function VisualizationsSection({
     if (editedRecursiveData !== null) setEditedRecursiveData(null);
     if (editedCircuit !== null) setEditedCircuit(null);
   }
+
+  // #150: pushes selectedIndex/currentStep -> URL (`viz`/`step`, see the
+  // helpers above for the encoding). Both are omitted at their defaults
+  // (first visualization, first frame) so a plain problem link stays plain.
+  // `lastSyncedVizStepRef` skips a redundant router.replace call whenever
+  // the pair this render would write is the same as the last one actually
+  // sent -- `visualizations` is a fresh array every render (the filter()
+  // above isn't memoized), so without this the effect's dependency array
+  // would consider it changed on every render even when nothing meaningful
+  // did.
+  const lastSyncedVizStepRef = useRef(null);
+  useEffect(() => {
+    if (visualizations.length === 0) return;
+    const activeVisualization = visualizations[selectedIndex] ?? null;
+    const vizParam = selectedIndex !== 0 && activeVisualization ? activeVisualization.name : null;
+    const stepParam = currentStep > 0 ? String(currentStep + 1) : null;
+    const serialized = `${vizParam ?? ""}|${stepParam ?? ""}`;
+    if (lastSyncedVizStepRef.current === serialized) return;
+    lastSyncedVizStepRef.current = serialized;
+
+    const { viz: _viz, step: _step, ...restQuery } = router.query;
+    const nextQuery = vizParam ? { ...restQuery, viz: vizParam } : restQuery;
+    const finalQuery = stepParam ? { ...nextQuery, step: stepParam } : nextQuery;
+    router.replace({ pathname: router.pathname, query: finalQuery }, undefined, { shallow: true });
+  }, [selectedIndex, currentStep, visualizations, router]);
 
   const frameCount = liveFrames?.frames?.length ?? 1;
   const fetchedFrame = liveFrames?.frames?.[currentStep] ?? null;
