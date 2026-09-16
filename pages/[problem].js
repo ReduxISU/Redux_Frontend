@@ -39,6 +39,15 @@
 // asserting a "not found" claim the page has no actual basis for while the
 // backend is unreachable. Checked before the not-found branch so a real
 // fetch failure never gets misreported as "no such problem."
+//
+// #151: when the route carries `?playlist=<slug>`, a PlaylistRail renders below
+// Breadcrumb and above ProblemDetailLayout -- see components/PlaylistRail.js's own
+// header for why that's a separate piece of UI from ProblemDetailLayout's section
+// state, not a change to it. The rail only renders once the slug names a real
+// playlist AND this problem is actually one of its entries; either check failing
+// (unknown slug, or a stale/hand-edited link naming a playlist this problem isn't
+// in) omits the rail entirely rather than showing broken navigation, per the
+// issue's explicit "degrade gracefully" requirement.
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -49,8 +58,10 @@ import { useRouter } from "next/router";
 import Breadcrumb from "../components/Breadcrumb";
 import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
+import PlaylistRail from "../components/PlaylistRail";
 import ProblemDetailLayout from "../components/ProblemDetailLayout";
 import { isProblemComplete } from "../components/StatusIcon";
+import { PLAYLISTS } from "../data/playlists";
 import { TAXONOMY } from "../data/taxonomy";
 import { useProblemDetail } from "../hooks/useProblemDetail";
 import { REDUX_API_BASE_URL } from "../lib/redux";
@@ -179,6 +190,18 @@ export default function ProblemDetail() {
     return <NotFound />;
   }
 
+  // #151: `playlist` is only ever a real playlist object once the query param
+  // names one AND `problem.name` is actually one of its entries -- see this
+  // file's header comment and components/PlaylistRail.js's own for why a
+  // stale/hand-edited link renders no rail at all rather than a broken one.
+  const playlistSlug = typeof router.query.playlist === "string" ? router.query.playlist : null;
+  const playlist = playlistSlug
+    ? PLAYLISTS.find((candidate) => candidate.slug === playlistSlug)
+    : null;
+  const playlistIndex = playlist
+    ? playlist.problems.findIndex((entry) => entry.name === problem.name)
+    : -1;
+
   return (
     <PageShell>
       <Box
@@ -215,6 +238,10 @@ export default function ProblemDetail() {
         </Box>
 
         <Box sx={{ borderBottom: "1px solid", borderColor: "divider" }} />
+
+        {playlist && playlistIndex !== -1 && (
+          <PlaylistRail playlist={playlist} currentIndex={playlistIndex} />
+        )}
 
         <ProblemDetailLayout problem={problem} />
       </Box>
