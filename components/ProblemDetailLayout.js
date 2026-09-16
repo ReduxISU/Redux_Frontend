@@ -99,6 +99,28 @@
 // params — per the issue body and TASKLIST.md's T18 entry ("do not add
 // persistence ... unless the project owner asks").
 //
+// --- Decision: the shared instance round-trips through the URL too ---------
+// #150 follow-up, ratified by the project owner 2026-09-16: a link to a
+// problem should be able to point at a particular solver with a particular
+// instance already loaded, the same way components/detail/
+// VisualizationsSection.js's own #150 work already lets a link point at a
+// particular visualization/frame. `?instance=<text>` is owned here (this
+// component already holds the one shared `instance` value, see the T35/#93
+// decision above) rather than in SolversSection.js or VerifierSection.js,
+// for the same reason those two sections don't each keep their own copy of
+// it. The selected *solver* is a separate, section-local decision --
+// SolversSection.js syncs `?solver=<name>` itself, mirroring
+// VisualizationsSection's `?viz=<name>`. Deliberately NOT synced: the run
+// result itself (Run can take up to 60s and a stale answer next to a link
+// that looks live is worse than no answer -- see this file's own header on
+// why Run is a trigger, not a value) and Verifier's certificate input,
+// which has no declared default to omit-at and is arguably contributor
+// output rather than a "view" worth bookmarking.
+// Rejected alternative: encoding the live run's output into the URL too, so
+// a permalink could show a *result* rather than just a loaded instance --
+// rejected because a solve is neither cheap to replay nor safe to fake, and
+// nothing about the URL could tell a stale answer apart from a fresh one.
+//
 // --- The shared Run action (T48/#111, INTERACTIVE_LAYER_DESIGN.md §2.1.1) --
 // Run is one shared action, lifted here because this is where the instance it
 // acts on already lives. It is not a fetch itself -- each section that
@@ -132,7 +154,8 @@ import { CSS } from "@dnd-kit/utilities";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { cloneElement, useEffect, useLayoutEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { cloneElement, useEffect, useLayoutEffect, useRef, useState } from "react";
 import OverviewSection from "./detail/OverviewSection";
 import ReductionsSection from "./detail/ReductionsSection";
 import SolversSection from "./detail/SolversSection";
@@ -283,6 +306,16 @@ function clearStoredOrder() {
   }
 }
 
+// #150 follow-up: same debounce pages/index.js uses for its search box (see
+// that file's own SEARCH_URL_DEBOUNCE_MS) -- the instance textarea updates
+// on every keystroke, and only the URL write should wait, not the box
+// itself.
+const INSTANCE_URL_DEBOUNCE_MS = 400;
+
+function instanceFromQuery(query, problem) {
+  return typeof query.instance === "string" ? query.instance : (problem.defaultInstance ?? "");
+}
+
 // Overridden @dnd-kit live-region announcements (issue done-when: name the
 // real section, not the library's generic "sortable item" defaults). Pure
 // function of section keys, so this can live at module scope rather than
@@ -341,6 +374,7 @@ function SortableSection({ id, children }) {
  *   passed straight through to every section.
  */
 export default function ProblemDetailLayout({ problem }) {
+  const router = useRouter();
   const [order, setOrder] = useState(DEFAULT_ORDER);
 
   // #154: hydrate `order` from this browser's last-saved value once mounted
@@ -356,8 +390,19 @@ export default function ProblemDetailLayout({ problem }) {
   }, []);
 
   // The shared problem instance (T35/#93), pre-filled from the problem's
-  // real declared `defaultInstance`.
-  const [instance, setInstance] = useState(problem.defaultInstance ?? "");
+  // real declared `defaultInstance` -- or, per the #150 follow-up decision
+  // above, from `?instance=` when the URL carries one. A lazy initializer is
+  // enough here, no separate hydration effect: pages/[problem].js never
+  // renders this component before router.isReady (see that file's own
+  // guard), so router.query is already resolved by the time this ever
+  // mounts -- the same reasoning components/detail/VisualizationsSection.js
+  // gives for its own selectedIndex/currentStep initializers.
+  const [instance, setInstance] = useState(() => instanceFromQuery(router.query, problem));
+  // What actually reaches the URL for `instance` (see
+  // INSTANCE_URL_DEBOUNCE_MS above). Starts equal to `instance` so the
+  // write effect below doesn't briefly see a stale, un-debounced value on
+  // the very first render.
+  const [debouncedInstance, setDebouncedInstance] = useState(instance);
 
   // The shared certificate (T53/#116, see header) -- `null` until Solvers' own Run
   // produces one. Shaped `{ value, instance }` (mirroring SolversSection's own
@@ -378,7 +423,9 @@ export default function ProblemDetailLayout({ problem }) {
   const [instanceProblemName, setInstanceProblemName] = useState(problem.name);
   if (instanceProblemName !== problem.name) {
     setInstanceProblemName(problem.name);
-    setInstance(problem.defaultInstance ?? "");
+    const nextInstance = problem.defaultInstance ?? "";
+    setInstance(nextInstance);
+    setDebouncedInstance(nextInstance);
     setCertificate(null);
   }
 
@@ -389,6 +436,30 @@ export default function ProblemDetailLayout({ problem }) {
   function triggerRun() {
     setRunToken((token) => token + 1);
   }
+
+  // #150 follow-up: debounces instance -> debouncedInstance, same reasoning
+  // as pages/index.js's identical searchValue/debouncedSearchValue pair.
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedInstance(instance), INSTANCE_URL_DEBOUNCE_MS);
+    return () => clearTimeout(timeoutId);
+  }, [instance]);
+
+  // #150 follow-up: pushes debouncedInstance -> URL (`?instance=`), omitted
+  // whenever it matches this problem's own declared default so a plain,
+  // unedited visit stays a plain link -- same "omit at default" rule
+  // pages/index.js's filter params and VisualizationsSection's `viz`/`step`
+  // already follow. `lastSyncedInstanceRef` skips a redundant
+  // router.replace call the same way those two do.
+  const lastSyncedInstanceRef = useRef(null);
+  useEffect(() => {
+    const defaultInstance = problem.defaultInstance ?? "";
+    const instanceParam = debouncedInstance !== defaultInstance ? debouncedInstance : null;
+    if (lastSyncedInstanceRef.current === instanceParam) return;
+    lastSyncedInstanceRef.current = instanceParam;
+    const { instance: _instance, ...restQuery } = router.query;
+    const nextQuery = instanceParam ? { ...restQuery, instance: instanceParam } : restQuery;
+    router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
+  }, [debouncedInstance, problem.defaultInstance, router]);
 
   // PointerSensor covers mouse; TouchSensor adds mobile/tablet support
   // (both ported from Redux_GUI). KeyboardSensor is new here — see file
