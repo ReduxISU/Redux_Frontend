@@ -23,8 +23,19 @@
 // that the one-shot force layout reads clearly with room to spare -- no hairball at this
 // scale -- and today's data has no bidirectional pair (A->B and B->A both present) or
 // self-loop, though the shared geometry helpers handle both defensively anyway.
+//
+// --- #148: highlighting a computed shortest path -----------------------------------------
+// `pathNodeNames`/`pathHops` (from ReductionPathFinder.js's `requestReductionPath` result)
+// get their own visual channel, deliberately separate from the existing hover highlight
+// above: hover just boosts the existing violet/blue accent's stroke-width and opacity (a
+// transient "what's this node connected to" cue), where a found path is a persistent answer
+// to a question the visitor asked, so it gets FACET_ACCENT_COLORS.green -- the same hue
+// `theme.js`'s VISUALIZATION_COLOR_KEYS.Solution already uses for "this is the answer" across
+// every per-problem visualization, reused here for the same reason rather than inventing a
+// third color. A hop is matched by (from, to, className) rather than array index/order,
+// since `hops` and this component's own `links` are built independently.
 
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
 import { useRouter } from "next/router";
 import { useId, useMemo, useState } from "react";
@@ -110,7 +121,16 @@ function edgeTooltip(link) {
   return `${link.source.id ?? link.source} → ${link.target.id ?? link.target}: ${parts.join(", ")}`;
 }
 
-function ReductionEdge({ link, idPrefix, stroke, highlighted, allLinks, curvatureOverride }) {
+function ReductionEdge({
+  link,
+  idPrefix,
+  stroke,
+  pathStroke,
+  highlighted,
+  onPath,
+  allLinks,
+  curvatureOverride,
+}) {
   const source = link.source;
   const target = link.target;
   if (!source || !target || source.x === undefined || target.x === undefined) {
@@ -130,17 +150,27 @@ function ReductionEdge({ link, idPrefix, stroke, highlighted, allLinks, curvatur
     <path
       d={geo.path}
       fill="none"
-      stroke={stroke}
-      strokeWidth={highlighted ? 2.5 : 1.25}
-      strokeOpacity={highlighted ? 0.95 : 0.55}
-      markerEnd={`url(#${idPrefix}-arrow)`}
+      stroke={onPath ? pathStroke : stroke}
+      strokeWidth={onPath ? 3 : highlighted ? 2.5 : 1.25}
+      strokeOpacity={onPath ? 1 : highlighted ? 0.95 : 0.55}
+      markerEnd={`url(#${idPrefix}-${onPath ? "arrow-path" : "arrow"})`}
     >
       <title>{edgeTooltip(link)}</title>
     </path>
   );
 }
 
-function ReductionNode({ node, isolated, highlighted, accent, textColor, mutedTextColor, onOpen }) {
+function ReductionNode({
+  node,
+  isolated,
+  highlighted,
+  onPath,
+  accent,
+  pathAccent,
+  textColor,
+  mutedTextColor,
+  onOpen,
+}) {
   const lines = useMemo(() => wrapLabel(node.id), [node.id]);
   const labelStartY = NODE_RADIUS + 12;
   const lineHeight = 11;
@@ -166,9 +196,9 @@ function ReductionNode({ node, isolated, highlighted, accent, textColor, mutedTe
     >
       <circle
         r={NODE_RADIUS}
-        fill="#17140F"
-        stroke={accent}
-        strokeWidth={highlighted ? 3 : 1.5}
+        fill={onPath ? alpha(pathAccent, 0.28) : "#17140F"}
+        stroke={onPath ? pathAccent : accent}
+        strokeWidth={onPath ? 3.5 : highlighted ? 3 : 1.5}
         opacity={isolated ? 0.55 : 1}
       />
       <text
@@ -192,8 +222,8 @@ function ReductionNode({ node, isolated, highlighted, accent, textColor, mutedTe
           y={labelStartY + index * lineHeight}
           textAnchor="middle"
           fontSize={9.5}
-          fontWeight={highlighted ? 700 : 500}
-          fill={highlighted ? textColor : mutedTextColor}
+          fontWeight={onPath || highlighted ? 700 : 500}
+          fill={onPath ? pathAccent : highlighted ? textColor : mutedTextColor}
           style={{ pointerEvents: "none" }}
         >
           {line}
@@ -210,8 +240,20 @@ function ReductionNode({ node, isolated, highlighted, accent, textColor, mutedTe
  * @param {Object} props.reductionGraphByName `{ [fromName]: { [toName]: edge[] } }`, e.g.
  *   `hooks/useCatalogIndex.js`'s `reductionGraphByName` (already re-keyed from the raw
  *   backend problem codes to display names).
+ * @param {string[]} [props.pathNodeNames] #148. Every problem name on the currently found
+ *   shortest path (`requestReductionPath`'s `nodes`, in order), or an empty array/undefined
+ *   when no path is highlighted.
+ * @param {Array<{from: string, to: string, className: string}>} [props.pathHops] #148.
+ *   `requestReductionPath`'s `hops`, used to pick out which edges belong to the path -- a
+ *   hop is matched by (from, to, className) rather than position, since this component
+ *   builds its own `links` independently of the order `hops` arrives in.
  */
-export default function ReductionGraphView({ problemNames, reductionGraphByName }) {
+export default function ReductionGraphView({
+  problemNames,
+  reductionGraphByName,
+  pathNodeNames = [],
+  pathHops = [],
+}) {
   const idPrefix = useId().replace(/:/g, "");
   const router = useRouter();
   const theme = useTheme();
@@ -219,6 +261,13 @@ export default function ReductionGraphView({ problemNames, reductionGraphByName 
 
   const nodeAccent = getFacetAccentColor("blue");
   const edgeAccent = getFacetAccentColor("violet");
+  const pathAccent = getFacetAccentColor("green");
+
+  const pathNodeIdSet = useMemo(() => new Set(pathNodeNames), [pathNodeNames]);
+  const pathEdgeKeySet = useMemo(
+    () => new Set(pathHops.map((hop) => `${hop.from}->${hop.to}->${hop.className}`)),
+    [pathHops],
+  );
 
   const { nodes, links } = useMemo(() => {
     const builtNodes = problemNames.map((name) => ({ id: name }));
@@ -298,6 +347,16 @@ export default function ReductionGraphView({ problemNames, reductionGraphByName 
         >
           <path d="M0,0 L0,6 L8,3 Z" fill={edgeAccent} />
         </marker>
+        <marker
+          id={`${idPrefix}-arrow-path`}
+          markerWidth={8}
+          markerHeight={6}
+          refX={8}
+          refY={3}
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L0,6 L8,3 Z" fill={pathAccent} />
+        </marker>
       </defs>
       <g>
         {displayLinks.map((link) => (
@@ -306,12 +365,14 @@ export default function ReductionGraphView({ problemNames, reductionGraphByName 
             link={link}
             idPrefix={idPrefix}
             stroke={edgeAccent}
+            pathStroke={pathAccent}
             allLinks={displayLinks}
             curvatureOverride={{}}
             highlighted={
               hoveredNodeId != null &&
               (link.source.id === hoveredNodeId || link.target.id === hoveredNodeId)
             }
+            onPath={pathEdgeKeySet.has(`${link.source.id}->${link.target.id}->${link.className}`)}
           />
         ))}
       </g>
@@ -326,7 +387,9 @@ export default function ReductionGraphView({ problemNames, reductionGraphByName 
             }}
             isolated={!degreeById.has(node.id)}
             highlighted={node.id === hoveredNodeId}
+            onPath={pathNodeIdSet.has(node.id)}
             accent={nodeAccent}
+            pathAccent={pathAccent}
             textColor={theme.palette.text.primary}
             mutedTextColor={theme.palette.text.secondary}
             onOpen={handleOpen}
