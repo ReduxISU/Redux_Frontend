@@ -4,9 +4,9 @@
 
 This is a standalone Next.js web client for the [Redux backend](https://github.com/ReduxISU/Redux), independent of the existing [Redux_GUI](https://github.com/ReduxISU/Redux_GUI) — the same relationship [Redux_VR](https://github.com/ReduxISU/Redux_VR) already has to the backend. It's being built to match a new design (a faceted catalog/browse experience with a Home page and a Problem Detail page), with its own repo per director request rather than as an addition to `Redux_GUI`.
 
-## Status: scaffolding in place — catalog UI not built yet
+## Status: catalog UI built and running against the real backend
 
-Next.js scaffolding is complete and verified working (`npm install`, `npm run build`, and `npm run lint` all pass) — but the actual catalog UI described below hasn't been built yet. `pages/index.js` is currently just a placeholder page. The plan is to build the visual/interaction shell next (layout, routing, components against placeholder data), then wire it up to the real Redux backend plus a small local overlay for the handful of tag categories the backend doesn't support yet.
+The Home page (search + 8-facet sidebar + card grid), the Problem Detail page (drag-reorderable/collapsible Overview, Visualizations, Solvers, Verifier, Reductions sections), and the reduction-network graph page are all built and wired to the real Redux backend via the same-origin proxy. Solvers' "Run" and Verifier's "Verify" call the backend live (not canned output), and the Visualizations/Reductions diagrams support direct-manipulation editing, not just static rendering. See "Planned Features" below for what's real-backend-driven today versus still covered by the local tag overlay.
 
 ## Planned Features
 
@@ -14,23 +14,23 @@ Next.js scaffolding is complete and verified working (`npm install`, `npm run bu
 - **Card grid** — each problem's name, complexity badges, solver-type badges, Problem Type tag, and a status icon at a glance, matching the approved design mockup.
 - **Problem Detail page** (`/[problem]`) — five sections users can drag-reorder (by a grip handle) and independently collapse: **Overview** (Input:/Output: statement, source, contributors — no set-notation formal definitions), **Visualizations**, **Solvers** (paste-an-instance format + a list of implemented solvers, each tagged with its Solver Type and Solver Complexity), **Verifier** (certificate format + a checker, labeled generically "Default Verifier," not problem-prefixed), **Reductions** (reduces-to/reduces-from lists with cost badges, plus a rendering of the reduction diagram). A "Reset to default" control restores the standard order (Overview, Visualizations, Solvers, Verifier, Reductions).
 - **Real backend data wherever the backend already supports it.** 4 of the 8 sidebar facets are backed by the real `Redux` API today (Complexity Class, Solver Type, Reduction Cost, Visualization Type); the other 4 (Problem Type, Computational Model, Quantum Complexity Class, Reduction Type) use a small local overlay designed to be phased out field-by-field as the backend adds native support. Solver Complexity (the per-solver field, not a sidebar facet) is also real-backend-driven, though the backend currently only supports 3 of the 8 ratified complexity buckets.
-- **v1 scope note:** Visualizations, Solvers, Verifier, and Reductions all show real declared data, but their interactive pieces are static/canned rather than live for v1 — Solvers' "Run" and Verifier's "Verify" return fixed output rather than calling the backend, and Visualizations/Reductions render a static diagram rather than the mockup's live step-scrubber with draggable/editable nodes (Reductions is arguably the single most complex interactive piece in the whole design, so it's deliberately scoped down along with the others rather than assumed to be simpler). Wiring any of this up live is an explicit later phase, not blocking v1.
+- **Live interaction.** Solvers' "Run" and Verifier's "Verify" call the real backend (with staleness handling, cancellation, and distinguishable error states for unreachable/timeout/too-large/rate-limited requests) rather than returning fixed output. Visualization and Reduction diagrams support direct-manipulation editing (drag-to-reorder, drag-to-retime, right-click menus, depending on the visualization type) on top of the shared step-playback scrubber, rather than rendering a static image. A problem whose declared data includes a runtime/result still shows that until a live run replaces it.
 - **Site chrome** — top nav bar ("REDUX" wordmark, Home/Help/Contribute), a breadcrumb ("Home / {Problem}") on the detail page, a dynamic problem-count tagline on Home (e.g. "N catalogued problems across complexity classes, solvers, and visualizations"), and a `/` keyboard shortcut to focus the search bar. **Help and Contribute are chrome only for v1** — visible in the nav, but either linking out to `Redux_GUI`'s existing Help/Contribute pages or inert placeholders, not real content built fresh in this project.
 - **Accessibility (explicit v1 requirement, not a later pass):** every interactive element gets a unique `id` — `Redux_GUI` has a known bug where all six of its dropdowns share `id="search-bar"`, breaking screen-reader labeling, and this project deliberately avoids repeating it. Drag-to-reorder on the detail page needs a keyboard-operable alternative, not just pointer/touch (`@dnd-kit`'s `KeyboardSensor`).
 - **Responsive layout (required for v1).** The mockup itself is desktop-only — there's no mobile design to match. This means following standard responsive patterns (a collapsing sidebar, a card grid that reduces columns at narrower widths) and making reasonable layout calls where no mockup exists to check them against, rather than a pixel-accurate mobile translation of the desktop design. Touch-based drag-to-reorder is already covered by the ported `@dnd-kit` pointer+touch sensor pattern.
 
 ## Setup and Run
 
-These instructions work today and will start a real dev server — but until the catalog UI is built, what you'll see is the placeholder page mentioned above, not the features described earlier in this README.
+These instructions start a real dev server running the full catalog UI described above.
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/en/download) 24 or newer (Active LTS as of when this was set — see `package.json`'s `engines` field)
-- The [Redux backend](https://github.com/ReduxISU/Redux) running, once you get to building against real data — the placeholder page doesn't call it yet
+- The [Redux backend](https://github.com/ReduxISU/Redux) running, or use the default `.env.local` setting to point at the live production backend instead (see below)
 
 ### Environment variables
 
-The app needs one environment variable, `REDUX_BASE_URL`, telling it which Redux backend to talk to. **This applies no matter how you run the app** — local dev, a production build, or Docker all read the same value, just supplied a different way for each (see each section below). (Note: the code that actually reads this — the API proxy — hasn't been built yet, so setting this up won't change what the placeholder page shows today. Set it up now anyway; it's one less step later.)
+The app needs one environment variable, `REDUX_BASE_URL`, telling it which Redux backend to talk to. **This applies no matter how you run the app** — local dev, a production build, or Docker all read the same value, just supplied a different way for each (see each section below). It's read by the API proxy (`pages/api/redux/[...path].js`), which every page's data and every live Run/Verify call goes through.
 
 For local dev and production builds, here's exactly how to set it up:
 
@@ -94,9 +94,9 @@ docker run -it --rm -p 3000:3000 -e REDUX_BASE_URL=https://redux.isu.edu/api/red
 - **Quantum solver service:** [quantumsolver](https://github.com/ReduxISU/quantumsolver)
 - **Build/CI tooling:** [Redux_Build_System](https://github.com/ReduxISU/Redux_Build_System)
 
-## Technology (planned)
+## Technology
 
-Next.js / React / MUI, matching `Redux_GUI`'s stack for consistency across the org's frontends.
+Next.js / React / MUI (matching `Redux_GUI`'s stack for consistency across the org's frontends), `@dnd-kit` for drag-to-reorder/editing, `d3-force` for graph layout, Playwright for end-to-end tests.
 
 ## License
 
