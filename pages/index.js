@@ -75,6 +75,33 @@
 // URL -- searchValue itself still updates on every keystroke (SearchBar
 // stays instantly responsive), only the URL write waits, so typing doesn't
 // spam router.replace calls.
+//
+// #154: last-viewed filters, persisted to localStorage independent of the
+// URL above. Distinct problem from #150's shareable permalinks (that
+// issue's own body: "distinct from... encoding state into a URL to *share*
+// a specific view. This one is about a single visitor's own state surviving
+// without needing a link at all"), so the two live side by side rather than
+// one replacing the other:
+//   - The URL wins whenever it carries real filter params (unchanged #150
+//     behavior) -- a shared/bookmarked link should always show what it
+//     encodes, never something a previous local session left behind.
+//   - A plain visit (bare "/", no filter params in the query string) falls
+//     back to this browser's last-saved filters instead of bare defaults,
+//     if any are saved (hasUrlFilterParams/readStoredHomeFilters below).
+//   - Every filter change writes to both the URL and localStorage, at the
+//     same point and on the same debounce timing (the write effect below),
+//     so the two never drift apart -- either one can serve as "the last
+//     known state" for a future plain visit.
+// HOME_FILTERS_STORAGE_KEY is namespaced (`redux-frontend:` prefix) so it
+// can't collide with components/StartupSplash.js's own localStorage key or
+// anything else that might land in this origin's storage later.
+// HOME_FILTERS_STORAGE_VERSION guards the shape: a value written by some
+// future, differently-shaped version of this page degrades to "nothing
+// stored" (readStoredHomeFilters returns null) rather than being partially
+// or incorrectly applied -- same defensive posture StartupSplash's own
+// readStoredBootId/writeStoredBootId already document for the localStorage
+// APIs throwing outright in some browser configurations (Safari private
+// mode, cookie-blocking policies).
 
 import CloseIcon from "@mui/icons-material/Close";
 import TuneIcon from "@mui/icons-material/Tune";
@@ -146,6 +173,10 @@ const REACHABILITY_MODES = new Set(["oneHop", "anyHops"]);
 // one URL write, not one per character.
 const SEARCH_URL_DEBOUNCE_MS = 400;
 
+// #154: see this file's header comment above for the full picture.
+const HOME_FILTERS_STORAGE_KEY = "redux-frontend:home-filters";
+const HOME_FILTERS_STORAGE_VERSION = 1;
+
 // #150: `?<facetKey>=a,b,c` -> `{ [facetKey]: Set<optionKey> }`, one entry
 // per taxonomy facet. Unknown facet keys in the URL are ignored (some other
 // param this page doesn't own) and unknown option keys within a known facet
@@ -175,6 +206,114 @@ function queryFromSelection(selected) {
     }
   }
   return entries;
+}
+
+// #154: whether router.query carries any of this page's own filter params,
+// as opposed to being a plain/bare visit. Used only to decide which source
+// -- the URL or localStorage -- supplies the initial filter state below;
+// see this file's header comment for the precedence. Mirrors
+// selectionFromQuery/queryFromSelection's own notion of "empty": a facet
+// key or `q` present but set to "" doesn't count as a real param any more
+// than queryFromSelection would ever write one out.
+function hasUrlFilterParams(query) {
+  if (typeof query.q === "string" && query.q !== "") return true;
+  if (typeof query.reachFrom === "string" && query.reachFrom !== "") return true;
+  return TAXONOMY.some((facet) => typeof query[facet.key] === "string" && query[facet.key] !== "");
+}
+
+// #154: `selected`'s per-facet Sets -> a JSON-serializable shape for
+// localStorage. Same facet-by-facet idea as queryFromSelection above, but as
+// arrays under their own facet key rather than comma-joined strings --
+// JSON already has arrays, so there's no reason to flatten to a string just
+// to parse it back out on the next read.
+function selectionToStored(selected) {
+  const stored = {};
+  for (const facet of TAXONOMY) {
+    stored[facet.key] = Array.from(selected[facet.key] ?? []);
+  }
+  return stored;
+}
+
+// #154: the localStorage equivalent of selectionFromQuery above, and the
+// inverse of selectionToStored -- same defensive shape (an unrecognized
+// facet key is ignored, an unrecognized option key within a known facet is
+// dropped), since a value read back from a previous visit can be just as
+// stale as a hand-typed URL if the taxonomy has changed since it was
+// written.
+function selectionFromStored(storedSelected) {
+  const selection = buildEmptySelection();
+  if (storedSelected === null || typeof storedSelected !== "object") return selection;
+  for (const facet of TAXONOMY) {
+    const raw = storedSelected[facet.key];
+    if (!Array.isArray(raw)) continue;
+    const validKeys = new Set(facet.options.map((option) => option.key));
+    const keys = raw.filter((key) => typeof key === "string" && validKeys.has(key));
+    selection[facet.key] = new Set(keys);
+  }
+  return selection;
+}
+
+// #154: reads this browser's last-saved Home filters. Returns null for
+// "nothing stored", which also covers every way a stored value can fail to
+// apply cleanly: localStorage throwing outright (see this file's header
+// comment), the value not being valid JSON, or the parsed value not
+// matching HOME_FILTERS_STORAGE_VERSION -- a malformed or outdated value
+// degrades to "nothing stored" rather than crashing the page or applying
+// something half-right.
+function readStoredHomeFilters() {
+  let raw;
+  try {
+    raw = window.localStorage.getItem(HOME_FILTERS_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    parsed.version !== HOME_FILTERS_STORAGE_VERSION
+  ) {
+    return null;
+  }
+
+  return {
+    selected: selectionFromStored(parsed.selected),
+    searchValue: typeof parsed.searchValue === "string" ? parsed.searchValue : "",
+    reachabilitySource:
+      typeof parsed.reachabilitySource === "string" ? parsed.reachabilitySource : null,
+    reachabilityMode: REACHABILITY_MODES.has(parsed.reachabilityMode)
+      ? parsed.reachabilityMode
+      : DEFAULT_REACHABILITY_MODE,
+  };
+}
+
+// #154: writes the current filters as this browser's last-saved state.
+// Write failures are silently ignored -- same as StartupSplash's own
+// writeStoredBootId, and for the same reason (see this file's header
+// comment): there is nowhere better to surface a storage failure, and it
+// should never block the filter change that triggered it.
+function writeStoredHomeFilters({ selected, searchValue, reachabilitySource, reachabilityMode }) {
+  try {
+    window.localStorage.setItem(
+      HOME_FILTERS_STORAGE_KEY,
+      JSON.stringify({
+        version: HOME_FILTERS_STORAGE_VERSION,
+        selected: selectionToStored(selected),
+        searchValue,
+        reachabilitySource,
+        reachabilityMode,
+      }),
+    );
+  } catch {
+    // Nothing to do: see readStoredHomeFilters.
+  }
 }
 
 function formatResultCount(count, filtersActive) {
@@ -319,16 +458,33 @@ export default function Home({ serverBootId }) {
   // here too, not left to the debounce effect below, so a link that already
   // has `?q=...` doesn't briefly flash `q`-less before the debounce timer
   // catches up.
+  //
+  // #154: when the URL is bare (hasUrlFilterParams is false), a saved
+  // localStorage filter set takes over instead of the plain useState
+  // defaults above -- still resolved here, in the same render, for the same
+  // reason. If nothing is saved either (readStoredHomeFilters returns
+  // null), the plain defaults are left standing untouched.
   if (!hydratedFromUrl && router.isReady) {
-    setSelected(selectionFromQuery(router.query));
-    const q = typeof router.query.q === "string" ? router.query.q : "";
-    setSearchValue(q);
-    setDebouncedSearchValue(q);
-    setReachabilitySource(
-      typeof router.query.reachFrom === "string" ? router.query.reachFrom : null,
-    );
-    const mode = router.query.reachMode;
-    setReachabilityMode(REACHABILITY_MODES.has(mode) ? mode : DEFAULT_REACHABILITY_MODE);
+    if (hasUrlFilterParams(router.query)) {
+      setSelected(selectionFromQuery(router.query));
+      const q = typeof router.query.q === "string" ? router.query.q : "";
+      setSearchValue(q);
+      setDebouncedSearchValue(q);
+      setReachabilitySource(
+        typeof router.query.reachFrom === "string" ? router.query.reachFrom : null,
+      );
+      const mode = router.query.reachMode;
+      setReachabilityMode(REACHABILITY_MODES.has(mode) ? mode : DEFAULT_REACHABILITY_MODE);
+    } else {
+      const stored = readStoredHomeFilters();
+      if (stored) {
+        setSelected(stored.selected);
+        setSearchValue(stored.searchValue);
+        setDebouncedSearchValue(stored.searchValue);
+        setReachabilitySource(stored.reachabilitySource);
+        setReachabilityMode(stored.reachabilityMode);
+      }
+    }
     setHydratedFromUrl(true);
   }
 
@@ -349,9 +505,27 @@ export default function Home({ serverBootId }) {
   // same as the last one this effect actually sent, so re-renders that don't
   // change any filter (or the render right after hydration, which reads back
   // what it just wrote) don't generate redundant history-replace calls.
+  //
+  // #154: also pushes filter state -> localStorage, at the same point and on
+  // the same debounce timing as the URL write right below it -- both are
+  // reacting to the exact same "the filters changed" signal, just toward two
+  // different destinations, so there is no reason for them to run at
+  // different times. Unlike the URL write, this one isn't skipped when
+  // `nextQuery`'s serialized form is unchanged: reachabilityMode, for
+  // instance, never appears in nextQuery while reachabilitySource is unset,
+  // but a visitor's mode preference is still worth saving for next time they
+  // pick a source.
   const lastSyncedQueryRef = useRef(null);
   useEffect(() => {
     if (!hydratedFromUrl) return;
+
+    writeStoredHomeFilters({
+      selected,
+      searchValue: debouncedSearchValue,
+      reachabilitySource,
+      reachabilityMode,
+    });
+
     const nextQuery = queryFromSelection(selected);
     if (debouncedSearchValue.trim().length > 0) {
       nextQuery.q = debouncedSearchValue;

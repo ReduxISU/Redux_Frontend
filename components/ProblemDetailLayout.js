@@ -67,8 +67,35 @@
 // state and already renders both sections from SECTIONS. pages/[problem].js
 // passes only `problem` and stays that way.
 //
-// --- No persistence ---------------------------------------------------------
-// `order` is plain component-local useState. No localStorage, no URL
+// --- Persistence (#154) ---------------------------------------------------
+// `order` is now persisted to localStorage and hydrated back in once this
+// component has mounted (SECTION_ORDER_STORAGE_KEY below) — the project
+// owner asking for exactly this on #154, which is what reverses the "no
+// persistence" decision T18/#27 originally recorded here (kept below for the
+// record). Collapse state is untouched by this: it stays exactly where #27
+// left it, inside SectionShell's own internal useState, never lifted up into
+// this component and never written to storage — #154's own scope for this
+// component is `order` only.
+//
+// Hydration happens in a mount effect rather than in useState's own lazy
+// initializer: this page has no getServerSideProps, but Next.js still
+// prerenders it, and localStorage does not exist during that render, so the
+// first client render has to match the prerendered DEFAULT_ORDER exactly to
+// hydrate cleanly. The effect corrects `order` immediately after mounting,
+// the same "start at a safe default, correct once the client can look" shape
+// components/StartupSplash.js's own mount check uses for the same reason
+// (that file's header comment covers the SSR/hydration mechanics in more
+// detail).
+//
+// "Reset to default" (handleReset below) is the explicit escape hatch #154's
+// issue body calls for ("A visible 'Reset to default' control already
+// exists for section order per the README — this should remain the escape
+// hatch back to defaults"): it clears the persisted value as well as the
+// in-memory order, so pressing it lands a visitor on DEFAULT_ORDER on their
+// next visit too, not just for the rest of the current session.
+//
+// --- Original #27 decision, kept for the record ---------------------------
+// `order` was plain component-local useState. No localStorage, no URL
 // params — per the issue body and TASKLIST.md's T18 entry ("do not add
 // persistence ... unless the project owner asks").
 //
@@ -105,7 +132,7 @@ import { CSS } from "@dnd-kit/utilities";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { cloneElement, useState } from "react";
+import { cloneElement, useEffect, useLayoutEffect, useState } from "react";
 import OverviewSection from "./detail/OverviewSection";
 import ReductionsSection from "./detail/ReductionsSection";
 import SolversSection from "./detail/SolversSection";
@@ -161,8 +188,99 @@ const SECTIONS = [
 const SECTIONS_BY_KEY = new Map(SECTIONS.map((section) => [section.key, section]));
 const DEFAULT_ORDER = SECTIONS.map((section) => section.key);
 
+// #154: useLayoutEffect on the client, useEffect on the server -- same
+// pattern and same reasoning as components/StartupSplash.js's own
+// useIsomorphicLayoutEffect (that file's header covers it in detail): a
+// setState called synchronously from a plain useEffect flags eslint's
+// react-hooks/set-state-in-effect rule (the intended fix for that rule is
+// almost always "don't setState from a fetch/subscription effect", which
+// isn't what's happening here), and separately, a layout effect corrects
+// `order` before the browser paints, so a returning visitor never sees a
+// frame of DEFAULT_ORDER before it snaps to their saved one.
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+// #154: namespaced (`redux-frontend:` prefix, matching pages/index.js's own
+// HOME_FILTERS_STORAGE_KEY) so this can't collide with
+// components/StartupSplash.js's own localStorage key or anything else that
+// might land in this origin's storage later.
+const SECTION_ORDER_STORAGE_KEY = "redux-frontend:problem-detail-section-order";
+// Bumped whenever the shape written below changes -- see readStoredOrder.
+const SECTION_ORDER_STORAGE_VERSION = 1;
+
 function sectionTitle(key) {
   return SECTIONS_BY_KEY.get(key)?.title ?? key;
+}
+
+// #154: reads this browser's last-saved section order. Returns null for
+// "nothing stored", which also covers every way a stored value can fail to
+// apply cleanly: localStorage throwing outright (see components/
+// StartupSplash.js's readStoredBootId for the same caveat -- Safari private
+// mode, cookie-blocking policies), the value not being valid JSON, the
+// parsed value not matching SECTION_ORDER_STORAGE_VERSION, or the order it
+// names not being a clean permutation of DEFAULT_ORDER (a stale value from
+// before a section was added/removed/renamed, or a hand-edited one). Any of
+// those degrades to "nothing stored" rather than crashing the page or
+// applying a partial/duplicated order.
+function readStoredOrder() {
+  let raw;
+  try {
+    raw = window.localStorage.getItem(SECTION_ORDER_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    parsed.version !== SECTION_ORDER_STORAGE_VERSION ||
+    !Array.isArray(parsed.order)
+  ) {
+    return null;
+  }
+
+  const isValidPermutation =
+    parsed.order.length === DEFAULT_ORDER.length &&
+    new Set(parsed.order).size === DEFAULT_ORDER.length &&
+    DEFAULT_ORDER.every((key) => parsed.order.includes(key));
+  return isValidPermutation ? parsed.order : null;
+}
+
+// #154: writes the current section order as this browser's last-saved
+// state. Write failures are silently ignored, same as StartupSplash's own
+// writeStoredBootId and for the same reason -- there is nowhere better to
+// surface a storage failure, and it should never block the reorder that
+// triggered it.
+function writeStoredOrder(order) {
+  try {
+    window.localStorage.setItem(
+      SECTION_ORDER_STORAGE_KEY,
+      JSON.stringify({ version: SECTION_ORDER_STORAGE_VERSION, order }),
+    );
+  } catch {
+    // Nothing to do: see readStoredOrder.
+  }
+}
+
+// #154: "Reset to default" (handleReset below) clears the persisted value
+// outright rather than overwriting it with DEFAULT_ORDER, so a future
+// readStoredOrder call reports "nothing stored" and this component's own
+// useState(DEFAULT_ORDER) default is what a later visit starts from --
+// functionally identical to writing DEFAULT_ORDER back, but it reads more
+// directly as "there is no longer a saved preference" than "the saved
+// preference happens to match the default".
+function clearStoredOrder() {
+  try {
+    window.localStorage.removeItem(SECTION_ORDER_STORAGE_KEY);
+  } catch {
+    // Nothing to do: see readStoredOrder.
+  }
 }
 
 // Overridden @dnd-kit live-region announcements (issue done-when: name the
@@ -225,6 +343,18 @@ function SortableSection({ id, children }) {
 export default function ProblemDetailLayout({ problem }) {
   const [order, setOrder] = useState(DEFAULT_ORDER);
 
+  // #154: hydrate `order` from this browser's last-saved value once mounted
+  // -- see this file's own "Persistence (#154)" header comment above for why
+  // this is a mount effect rather than useState's lazy initializer, and
+  // useIsomorphicLayoutEffect's own comment above for why it's a layout
+  // effect rather than a plain one.
+  useIsomorphicLayoutEffect(() => {
+    const stored = readStoredOrder();
+    if (stored) {
+      setOrder(stored);
+    }
+  }, []);
+
   // The shared problem instance (T35/#93), pre-filled from the problem's
   // real declared `defaultInstance`.
   const [instance, setInstance] = useState(problem.defaultInstance ?? "");
@@ -275,13 +405,22 @@ export default function ProblemDetailLayout({ problem }) {
       setOrder((items) => {
         const oldIndex = items.indexOf(active.id);
         const newIndex = items.indexOf(over.id);
-        return arrayMove(items, oldIndex, newIndex);
+        const next = arrayMove(items, oldIndex, newIndex);
+        // #154: persisted at the point the order actually changes, same as
+        // every other write-on-change path in this codebase.
+        writeStoredOrder(next);
+        return next;
       });
     }
   }
 
   function handleReset() {
     setOrder(DEFAULT_ORDER);
+    // #154: Reset to default is the explicit escape hatch back to defaults
+    // -- clearing the persisted value too means it stays gone on the next
+    // visit, not just for the rest of this session (see this file's own
+    // "Persistence (#154)" header comment).
+    clearStoredOrder();
   }
 
   const currentLayoutText = order.map(sectionTitle).join(", ");
