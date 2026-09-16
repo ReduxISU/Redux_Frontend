@@ -21,6 +21,10 @@
 // per chrome link below `sm`) — plain text links are compact enough that
 // four of them plus the wordmark fit without needing one; `flexWrap: "wrap"`
 // on the group is the only safety net left, for extreme narrow widths.
+//
+// T61 (#136) added the "Reduction Graph" link -- decision recorded on #136:
+// linked from here rather than left undiscoverable, since it's a core-data
+// feature (the whole catalog's reduction graph), not a demo page.
 
 import Box from "@mui/material/Box";
 import Link from "next/link";
@@ -28,6 +32,7 @@ import { useRouter } from "next/router";
 
 const NAV_LINKS = [
   { id: "navbar-home-link", href: "/", label: "Home" },
+  { id: "navbar-reduction-graph-link", href: "/reduction-graph", label: "Reduction Graph" },
   { id: "navbar-aboutus-link", href: "/aboutus", label: "About Us" },
   { id: "navbar-help-link", href: "/help", label: "Help" },
   { id: "navbar-contribute-link", href: "/contribute", label: "Contribute" },
