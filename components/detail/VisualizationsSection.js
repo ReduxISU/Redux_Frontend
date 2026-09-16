@@ -114,7 +114,7 @@ function TypeBadge({ typeKey }) {
         borderRadius: 999,
         fontSize: "0.75rem",
         fontWeight: 600,
-        color: accentColor,
+        color: "#FFFFFF",
         backgroundColor: alpha(accentColor, 0.12),
         border: `1px solid ${alpha(accentColor, 0.55)}`,
       }}

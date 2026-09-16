@@ -104,7 +104,7 @@ function ComplexityBucketBadge({ bucketKey }) {
         px: 1.25,
         py: 0.375,
         borderRadius: 999,
-        color: accentColor,
+        color: "#FFFFFF",
         backgroundColor: alpha(accentColor, 0.12),
         border: `1px solid ${alpha(accentColor, 0.55)}`,
         fontSize: "0.8125rem",

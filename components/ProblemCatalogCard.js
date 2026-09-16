@@ -96,8 +96,8 @@ const BASE_BADGE_FACET_KEYS = ["complexityClass", "problemType"];
 // here rather than added to data/taxonomy.js -- same precedent as
 // FacetSidebar.js's own hardcoded "No values available" placeholder.
 const LABELED_FACET_ROWS = [
-  { facetKey: "solverType", label: "Solvers", emptyLabel: "No solvers" },
-  { facetKey: "visualizationType", label: "Visualizations", emptyLabel: "No visualizations" },
+  { facetKey: "solverType", label: "Solvers:", emptyLabel: "No solvers" },
+  { facetKey: "visualizationType", label: "Visualizations:", emptyLabel: "No visualizations" },
 ];
 const LABELED_FACET_KEYS = LABELED_FACET_ROWS.map((row) => row.facetKey);
 
@@ -212,9 +212,10 @@ function LabeledFacetSection({
   matchedKeys,
   idPrefix,
   onTagClick,
+  sx,
 }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, ...sx }}>
       <Typography
         variant="overline"
         component="p"
@@ -299,7 +300,7 @@ export default function ProblemCatalogCard({ problem, matchedTags = {}, onTagCli
         "&:hover": complete ? { borderColor: "primary.light" } : undefined,
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1.5 }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 0.25 }}>
         <Typography
           component="h3"
           variant="h2"
@@ -309,9 +310,9 @@ export default function ProblemCatalogCard({ problem, matchedTags = {}, onTagCli
             overflow: "hidden",
             WebkitBoxOrient: "vertical",
             WebkitLineClamp: 2,
-            minHeight: "calc(1.3em * 2)",
+            minHeight: "calc(1em * 2)",
             fontSize: "1.0625rem",
-            lineHeight: 1.3,
+            lineHeight: 1,
             textTransform: "uppercase",
           }}
         >
@@ -350,7 +351,7 @@ export default function ProblemCatalogCard({ problem, matchedTags = {}, onTagCli
             onTagClick={onTagClick}
           />
         ))}
-        {LABELED_FACET_ROWS.map(({ facetKey, label, emptyLabel }) => (
+        {LABELED_FACET_ROWS.map(({ facetKey, label, emptyLabel }, index) => (
           <LabeledFacetSection
             key={facetKey}
             facetKey={facetKey}
@@ -360,6 +361,7 @@ export default function ProblemCatalogCard({ problem, matchedTags = {}, onTagCli
             matchedKeys={matchedTags[facetKey] ?? EMPTY_SET}
             idPrefix={idPrefix}
             onTagClick={onTagClick}
+            sx={index === 0 ? { mt: 1.25 } : undefined}
           />
         ))}
       </Box>
