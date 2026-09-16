@@ -47,6 +47,7 @@ import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import Breadcrumb from "../components/Breadcrumb";
+import CitationExport from "../components/detail/CitationExport";
 import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
 import ProblemDetailLayout from "../components/ProblemDetailLayout";
@@ -212,6 +213,7 @@ export default function ProblemDetail() {
               )),
             )}
           </Box>
+          <CitationExport problem={problem} />
         </Box>
 
         <Box sx={{ borderBottom: "1px solid", borderColor: "divider" }} />
