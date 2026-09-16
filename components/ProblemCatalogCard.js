@@ -71,10 +71,30 @@
 // callback and renders through MUI Chip's own `clickable`/`onClick` props,
 // so Tab+Enter/Space activates it exactly like a mouse click would, with no
 // bespoke keyboard handling here.
+//
+// #149: the "Compare" checkbox next to the title is this card's other entry
+// point into the comparison feature (pages/compare.js). It's a real,
+// controlled MUI Checkbox (via FormControlLabel, same construction
+// FacetSidebar.js's own option checkboxes use) rather than a bespoke toggle,
+// so it gets focus/keyboard/label semantics for free. The whole card is a
+// `Link` when complete (see below), so the checkbox is wrapped in a Box
+// whose own `onClick` calls `event.stopPropagation()` -- stopping the click
+// before it ever reaches the anchor is enough to keep it from also
+// navigating; unlike TagRow's chip handler below, this one must NOT also
+// call `preventDefault()`, since that would cancel the checkbox's own
+// native toggle (and the `onChange` this component relies on) rather than
+// just the anchor's navigation. Deliberately available on an incomplete
+// card too: comparison doesn't need a problem to be "fully catalogued" the
+// way visiting its own detail page does (#6 item 4) -- OverviewSection/
+// SolversSection/VerifierSection all already degrade to a plain "not yet
+// documented" message on missing data instead of crashing, so an incomplete
+// problem is still meaningfully comparable.
 
 import CheckIcon from "@mui/icons-material/Check";
 import Box from "@mui/material/Box";
+import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
@@ -261,10 +281,31 @@ function LabeledFacetSection({
  *   already write to; this component never touches that state itself, it
  *   only reports the click. Omit to render every chip non-interactive, same
  *   as before this task.
+ * @param {Set<string>} [props.compareSelected] #149: real problem display
+ *   names currently in the in-progress comparison set, owned by
+ *   pages/index.js -- this card only reads whether its own `problem.name` is
+ *   a member, never the set itself.
+ * @param {boolean} [props.compareFull] #149: true once the comparison set is
+ *   already at its cap (lib/compareQuery.js's MAX_COMPARE_PROBLEMS). Disables
+ *   this card's checkbox unless the card is itself already selected, so a
+ *   visitor can still remove a selection from a full set, just not add a
+ *   fourth.
+ * @param {(problemName: string) => void} [props.onCompareToggle] #149:
+ *   called with this card's own `problem.name` when its Compare checkbox is
+ *   toggled. Omit to render the checkbox non-interactive (disabled), rather
+ *   than a checkbox that silently does nothing.
  */
-export default function ProblemCatalogCard({ problem, matchedTags = {}, onTagClick }) {
+export default function ProblemCatalogCard({
+  problem,
+  matchedTags = {},
+  onTagClick,
+  compareSelected,
+  compareFull = false,
+  onCompareToggle,
+}) {
   const complete = isProblemComplete(problem);
   const idPrefix = `problem-card-${problem.slug}`;
+  const compareChecked = compareSelected?.has(problem.name) ?? false;
 
   // #70: a facet outside the base row / labeled sections gets a row added
   // only once a filter for it is active (a non-empty matched set) -- every
@@ -318,6 +359,28 @@ export default function ProblemCatalogCard({ problem, matchedTags = {}, onTagCli
         >
           {problem.name}
         </Typography>
+        {/* #149: see this file's header for why this stops propagation
+            (but never calls preventDefault) instead of relying on the
+            checkbox's own click handler alone. */}
+        <Box onClick={(event) => event.stopPropagation()} sx={{ flexShrink: 0 }}>
+          <FormControlLabel
+            sx={{ m: 0, gap: 0.25 }}
+            control={
+              <Checkbox
+                id={`${idPrefix}-compare-toggle`}
+                size="small"
+                checked={compareChecked}
+                disabled={!onCompareToggle || (compareFull && !compareChecked)}
+                onChange={() => onCompareToggle?.(problem.name)}
+              />
+            }
+            label={
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Compare
+              </Typography>
+            }
+          />
+        </Box>
       </Box>
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
