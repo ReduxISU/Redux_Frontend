@@ -48,6 +48,13 @@
 // (unknown slug, or a stale/hand-edited link naming a playlist this problem isn't
 // in) omits the rail entirely rather than showing broken navigation, per the
 // issue's explicit "degrade gracefully" requirement.
+//
+// #165: `?playlist=custom` is the self-service path -- resolvePlaylist below
+// tries that reserved slug first (decoding the playlist straight out of the
+// `p` param via lib/playlistQuery.js) before falling back to a lookup in
+// data/playlists.js's hand-authored array. Either branch returns the same
+// shape (title/problems/playlistHref/buildProblemHref), so everything below
+// this point treats a custom and a hand-authored playlist identically.
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -64,7 +71,53 @@ import { isProblemComplete } from "../components/StatusIcon";
 import { PLAYLISTS } from "../data/playlists";
 import { TAXONOMY } from "../data/taxonomy";
 import { useProblemDetail } from "../hooks/useProblemDetail";
+import { buildPlaylistStepQuerySuffix, parseCustomPlaylist } from "../lib/playlistQuery";
 import { REDUX_API_BASE_URL } from "../lib/redux";
+
+// #165's reserved slug -- see data/playlists.js's own note.
+const CUSTOM_PLAYLIST_SLUG = "custom";
+
+/**
+ * Resolves `?playlist=<slug>` (and, for the reserved "custom" slug, `?p=...`)
+ * into one shape both branches share, so the render below doesn't need to
+ * know which kind of playlist it's showing. Returns `null` for no param, an
+ * unknown hand-authored slug, or an unparseable custom payload -- all three
+ * degrade to "no rail" the same way (see this file's header comment).
+ * @param {Object} query router.query
+ * @returns {{title: string, problems: {name: string, note?: string, solver?: string, visualization?: string}[], playlistHref: string, buildProblemHref: (entry: {name: string, solver?: string, visualization?: string}) => string}|null}
+ */
+function resolvePlaylist(query) {
+  const playlistSlug = typeof query.playlist === "string" ? query.playlist : null;
+  if (!playlistSlug) return null;
+
+  if (playlistSlug === CUSTOM_PLAYLIST_SLUG) {
+    const rawPayload = typeof query.p === "string" ? query.p : undefined;
+    const custom = parseCustomPlaylist(rawPayload);
+    if (!custom) return null;
+
+    // Re-encoding the raw string round-trips to the exact value the link was
+    // built with -- no need to re-serialize `custom` itself.
+    const encodedPayload = encodeURIComponent(rawPayload);
+    return {
+      title: custom.title,
+      problems: custom.problems,
+      playlistHref: `/playlists/custom?p=${encodedPayload}`,
+      buildProblemHref: (entry) =>
+        `/${encodeURIComponent(entry.name)}?playlist=custom&p=${encodedPayload}${buildPlaylistStepQuerySuffix(entry)}`,
+    };
+  }
+
+  const playlist = PLAYLISTS.find((candidate) => candidate.slug === playlistSlug);
+  if (!playlist) return null;
+
+  return {
+    title: playlist.title,
+    problems: playlist.problems,
+    playlistHref: `/playlists/${playlist.slug}`,
+    buildProblemHref: (entry) =>
+      `/${encodeURIComponent(entry.name)}?playlist=${encodeURIComponent(playlist.slug)}${buildPlaylistStepQuerySuffix(entry)}`,
+  };
+}
 
 // Badge row order per the mockup (NP-Complete, NP, Boolean Logic): complexity
 // badges first, then problem type. Chip variant is keyed straight off
@@ -190,14 +243,12 @@ export default function ProblemDetail() {
     return <NotFound />;
   }
 
-  // #151: `playlist` is only ever a real playlist object once the query param
-  // names one AND `problem.name` is actually one of its entries -- see this
-  // file's header comment and components/PlaylistRail.js's own for why a
-  // stale/hand-edited link renders no rail at all rather than a broken one.
-  const playlistSlug = typeof router.query.playlist === "string" ? router.query.playlist : null;
-  const playlist = playlistSlug
-    ? PLAYLISTS.find((candidate) => candidate.slug === playlistSlug)
-    : null;
+  // #151/#165: `playlist` is only ever a real playlist object once the query
+  // names one (hand-authored or custom) AND `problem.name` is actually one of
+  // its entries -- see this file's header comment and components/
+  // PlaylistRail.js's own for why a stale/hand-edited link renders no rail at
+  // all rather than a broken one.
+  const playlist = resolvePlaylist(router.query);
   const playlistIndex = playlist
     ? playlist.problems.findIndex((entry) => entry.name === problem.name)
     : -1;
@@ -240,7 +291,13 @@ export default function ProblemDetail() {
         <Box sx={{ borderBottom: "1px solid", borderColor: "divider" }} />
 
         {playlist && playlistIndex !== -1 && (
-          <PlaylistRail playlist={playlist} currentIndex={playlistIndex} />
+          <PlaylistRail
+            playlistTitle={playlist.title}
+            playlistHref={playlist.playlistHref}
+            problems={playlist.problems}
+            currentIndex={playlistIndex}
+            buildProblemHref={playlist.buildProblemHref}
+          />
         )}
 
         <ProblemDetailLayout problem={problem} />
