@@ -15,6 +15,11 @@
 // No getStaticProps/getStaticPaths: the playlist list is small, hand-authored data
 // already baked into the bundle, and useRouter().query.slug resolves once the
 // router is ready, same reasoning pages/[problem].js's own header records.
+//
+// Each step's link also carries its optional `solver`/`visualization` selection
+// (buildPlaylistStepQuerySuffix, lib/playlistQuery.js), same as pages/[problem].js's
+// own Previous/Next rail does -- both are just "get to this step's problem page,"
+// so both need to pass the same params along.
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -22,6 +27,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import NavBar from "../../components/NavBar";
 import { PLAYLISTS } from "../../data/playlists";
+import { buildPlaylistStepQuerySuffix } from "../../lib/playlistQuery";
 
 function PageShell({ children }) {
   return (
@@ -145,7 +151,7 @@ export default function PlaylistDetail() {
                 <Box
                   id={`playlist-problem-link-${index}`}
                   component={Link}
-                  href={`/${encodeURIComponent(entry.name)}?playlist=${encodeURIComponent(playlist.slug)}`}
+                  href={`/${encodeURIComponent(entry.name)}?playlist=${encodeURIComponent(playlist.slug)}${buildPlaylistStepQuerySuffix(entry)}`}
                   sx={{ color: "primary.main", fontWeight: 600 }}
                 >
                   {entry.name}

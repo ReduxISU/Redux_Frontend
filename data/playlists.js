@@ -28,6 +28,23 @@
 // `note` is optional short instructor commentary for that one step (e.g. "start
 // here"); omit the field entirely for a step with nothing extra to say rather than
 // writing an empty string.
+//
+// `solver`/`visualization` are optional too: a declared solver's or visualization's
+// exact name on THAT problem (e.g. Clique's "Clique Brute Force Solver"), preselected
+// when the step's problem page loads -- the same name components/detail/
+// SolversSection.js's/VisualizationsSection.js's own `?solver=`/`?viz=` permalink
+// params already read, so a step just supplies the value that would otherwise have to
+// be copied off that problem's own page. An unrecognized or missing name degrades to
+// that section's default (its first declared solver/visualization) the same way a
+// stale hand-typed `?solver=` link already does -- nothing here validates it against
+// the real catalog, so double-check the spelling against the problem's own page.
+//
+
+// #165: "custom" is a reserved slug -- pages/[problem].js and pages/playlists/
+// custom.js both treat `?playlist=custom` as the self-service playlist path
+// (lib/playlistQuery.js's encoded `p` param carries the whole playlist, not a
+// lookup into this array). Don't add a hand-authored entry with that slug; it
+// would never be reachable, since the custom-playlist check runs first.
 
 export const PLAYLISTS = [
   {
