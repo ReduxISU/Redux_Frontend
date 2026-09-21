@@ -38,7 +38,7 @@ import Paper from "@mui/material/Paper";
 import { alpha } from "@mui/material/styles";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
   COMPUTE_CANCELLED,
   COMPUTE_DONE,
@@ -74,6 +74,16 @@ function costLabel(cost) {
  * @param {string[]} props.problemNames Every real problem name currently in the catalog
  *   index (useCatalogIndex()'s `index` keys) -- the same option list
  *   ReductionReachabilityFilter.js and ReductionGraphView.js already use.
+ * @param {Map<string, string>} props.codeToName Problem code -> display name
+ *   (useCatalogIndex()'s `codeToName`). `Navigation/Reductions/path` is keyed by raw
+ *   class code, not display name (confirmed against Nav_Reductions.cs's `ResolveKey`,
+ *   which only matches `ReductionGraphData.Graph`'s code keys) -- unlike every other
+ *   read this component's sibling components make, which already go through
+ *   name-keyed data (`reductionGraphByName`, `index`). Used to translate the picked
+ *   source/target display names to codes before calling `requestReductionPath`, and
+ *   to translate the returned `nodes`/hop `from`/`to` codes back to display names
+ *   before they reach `onPathChange` -- so every caller of this component still only
+ *   ever sees display names, matching the rest of the app's convention.
  * @param {boolean} [props.loading] Disables both pickers while the catalog is still
  *   loading, matching ReductionReachabilityFilter's own `loading` treatment -- there is
  *   nothing real to pick yet.
@@ -89,6 +99,7 @@ function costLabel(cost) {
  */
 export default function ReductionPathFinder({
   problemNames,
+  codeToName,
   loading = false,
   source,
   target,
@@ -98,6 +109,15 @@ export default function ReductionPathFinder({
 }) {
   const lookup = useComputeRequest({ subject: "problem pair" });
   const { start, reset } = lookup;
+
+  // Reverse of codeToName -- built locally rather than threaded down as its own prop,
+  // since codeToName is the map useCatalogIndex already owns and this is the only
+  // thing in this component that needs the name -> code direction.
+  const nameToCode = useMemo(() => {
+    const reversed = new Map();
+    for (const [code, name] of codeToName) reversed.set(name, code);
+    return reversed;
+  }, [codeToName]);
 
   const samePick = Boolean(source) && Boolean(target) && source === target;
 
@@ -110,8 +130,25 @@ export default function ReductionPathFinder({
       reset();
       return;
     }
-    start((signal) => requestReductionPath(REDUX_API_BASE_URL, source, target, signal));
-  }, [source, target, samePick, start, reset]);
+    start(async (signal) => {
+      // Navigation/Reductions/path only resolves raw class codes (see this
+      // component's own JSDoc) -- source/target here are display names, so they must
+      // be translated before the request and the response's codes translated back
+      // before anything downstream (onPathChange, the hop list below) sees them.
+      const sourceCode = nameToCode.get(source) ?? source;
+      const targetCode = nameToCode.get(target) ?? target;
+      const result = await requestReductionPath(REDUX_API_BASE_URL, sourceCode, targetCode, signal);
+      return {
+        ...result,
+        nodes: result.nodes.map((code) => codeToName.get(code) ?? code),
+        hops: result.hops.map((hop) => ({
+          ...hop,
+          from: codeToName.get(hop.from) ?? hop.from,
+          to: codeToName.get(hop.to) ?? hop.to,
+        })),
+      };
+    });
+  }, [source, target, samePick, start, reset, nameToCode, codeToName]);
 
   useEffect(() => {
     onPathChange?.(lookup.status === COMPUTE_DONE ? lookup.result : null);
