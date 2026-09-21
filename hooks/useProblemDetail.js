@@ -125,6 +125,13 @@ function buildVerifier(verifierClassNames, info, problemInfo) {
     // Same reason as buildSolvers' className: ProblemProvider/verify is
     // keyed by the verifier class name (T37/#95).
     className: firstVerifierClassName,
+    // The verifier's own declared display name (IVerifier.verifierName,
+    // e.g. "Default SAT Verifier") -- same `?? className` fallback as
+    // buildSolvers/buildVisualizations use for their own name fields.
+    // Distinct from this section's title, which the ratified naming
+    // convention (see this file's own header) always keeps as the generic
+    // "Verifier" regardless of which verifier class is shown.
+    name: verifierInfo.verifierName ?? firstVerifierClassName,
     certificateDescription: verifierInfo.verifierDefinition ?? "",
     certificateFormat: problemInfo.certificateFormat || "",
     exampleCertificate: verifierInfo.certificate || undefined,
