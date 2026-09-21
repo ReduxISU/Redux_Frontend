@@ -63,7 +63,26 @@
 // done-when doesn't change that.
 
 import { useMemo } from "react";
-import { optionLabel, TAXONOMY } from "../data/taxonomy";
+import { buildOptionsFromBackendNames, optionLabel, TAXONOMY } from "../data/taxonomy";
+
+// Facet keys backed by a real backend enum (one of the six
+// Navigation/*Types-and-friends endpoints, via hooks/useEnumCatalog.js).
+// computationalModel and visualizationType have no backend equivalent at
+// all (data/taxonomy.js's own facet comments) and are deliberately left out
+// -- they always use their hardcoded `options` array, unconditionally, per
+// this task's own instructions.
+//
+// The value each key maps to is the matching property name on
+// useEnumCatalog()'s return value, so buildFacetOptions can look the live
+// array up generically instead of a six-way if/else.
+const BACKEND_BACKED_FACET_ENUM_KEYS = {
+  problemType: "problemType",
+  complexityClass: "complexityClass",
+  reductionType: "reductionType",
+  reductionCost: "reductionCost",
+  solverType: "solverType",
+  solverComplexity: "solverComplexityBucket",
+};
 
 /**
  * Problems directly reachable from `source` via a single reduction edge.
@@ -184,16 +203,37 @@ function matchesSelectedFacets(tags, selected) {
   return true;
 }
 
+// The option LIST a facet offers: the live backend enum's member names
+// (data/taxonomy.js's buildOptionsFromBackendNames) for one of the six
+// backend-backed facets whenever useEnumCatalog() has actually resolved a
+// non-empty array for it, falling back to the facet's own hardcoded
+// `options` otherwise -- whether that's because the facet has no backend
+// equivalent at all (computationalModel, visualizationType), the live fetch
+// hasn't resolved yet, it errored, or the endpoint returned nothing. This is
+// the "never regress to blank just because a fetch is in flight" rule this
+// task's instructions call for; it costs nothing on facets that were never
+// going to change (the fallback IS today's exact behavior).
+function facetOptionList(facet, enumCatalog) {
+  const enumCatalogKey = BACKEND_BACKED_FACET_ENUM_KEYS[facet.key];
+  if (enumCatalogKey) {
+    const backendMemberNames = enumCatalog?.[enumCatalogKey];
+    if (Array.isArray(backendMemberNames) && backendMemberNames.length > 0) {
+      return buildOptionsFromBackendNames(facet.key, backendMemberNames);
+    }
+  }
+  return facet.options;
+}
+
 // Per-option counts across the whole index (not just the filtered results —
 // see file header). Every option gets an entry, including ones with count 0
 // (issue done-when: "Counts render for every option including (0)"). Uses
 // the same optionSatisfiesSelection expansion matchesSelectedFacets does —
 // a single-option Set here — so "NP (n)" always names exactly how many
 // results checking that box actually returns, never fewer.
-function buildFacetOptions(index) {
+function buildFacetOptions(index, enumCatalog) {
   const facetOptions = {};
   for (const facet of TAXONOMY) {
-    facetOptions[facet.key] = facet.options.map((option) => {
+    facetOptions[facet.key] = facetOptionList(facet, enumCatalog).map((option) => {
       const asSelection = new Set([option.key]);
       let count = 0;
       for (const tags of index.values()) {
@@ -229,6 +269,14 @@ function buildFacetOptions(index) {
  *   name to filter reachability from, or null for no reachability filter.
  * @param {"oneHop"|"anyHops"} [options.reachabilityMode] T59 (#134). Whether
  *   reachability is a single reduction hop or the full transitive closure.
+ * @param {Object} [options.enumCatalog] The live-backend-enum sidebar
+ *   options work: `useEnumCatalog()`'s return value (or an equivalent empty
+ *   object/loading state), supplying each backend-backed facet's live
+ *   member-name array. Any facet whose array is missing, empty, or hasn't
+ *   loaded yet falls back to that facet's hardcoded `options` from
+ *   data/taxonomy.js — see `facetOptionList` above. computationalModel and
+ *   visualizationType always use their hardcoded `options` regardless, since
+ *   they have no backend equivalent at all.
  * @returns {{
  *   results: Array<{name: string, tags: Object}>,
  *   facetOptions: Object,
@@ -250,9 +298,30 @@ export function useCatalogFilters(
     reductionGraph = {},
     reachabilitySource = null,
     reachabilityMode = "oneHop",
+    enumCatalog = {},
   } = {},
 ) {
-  const facetOptions = useMemo(() => buildFacetOptions(index), [index]);
+  // Depends on each live array individually, not the `enumCatalog` object
+  // itself: useEnumCatalog() (like every hook here) returns a fresh object
+  // literal on every render even when none of its state has actually
+  // changed, so depending on the object reference would recompute
+  // facetOptions on every render of the Home page instead of only when a
+  // fetch actually resolves. The arrays themselves are stable useState
+  // values that only get new references when their fetch actually updates
+  // them.
+  const facetOptions = useMemo(
+    () => buildFacetOptions(index, enumCatalog),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
+    [
+      index,
+      enumCatalog.problemType,
+      enumCatalog.complexityClass,
+      enumCatalog.reductionType,
+      enumCatalog.reductionCost,
+      enumCatalog.solverType,
+      enumCatalog.solverComplexityBucket,
+    ],
+  );
 
   const reachableSet = useMemo(() => {
     return reachabilityMode === "anyHops"
