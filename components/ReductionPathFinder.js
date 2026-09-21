@@ -257,10 +257,7 @@ export default function ReductionPathFinder({
                   {index + 1}. {hop.from} → {hop.to}
                 </Typography>
                 <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                  <Box component="span" sx={{ fontFamily: "monospace" }}>
-                    {hop.className}
-                  </Box>{" "}
-                  — {costLabel(hop.cost)} cost
+                  {hop.reductionName ?? hop.className} — {costLabel(hop.cost)} cost
                 </Typography>
               </Box>
             ))}
