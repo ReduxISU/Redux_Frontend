@@ -152,6 +152,13 @@ function buildVerifier(verifierClassNames, info, problemInfo) {
 // resolves the target's type the same static-map way, not by sniffing the fetched frame.
 // `from` entries get neither: they're informational only, never selectable
 // (ReductionsSection.js), so nothing ever renders a diagram for one.
+//
+// `to` entries also carry `name`, the reduction's own declared display name
+// (IReduction.reductionName via Navigation/Reductions' edge -- ReduxISU/Redux#582),
+// same convention as buildSolvers/buildVisualizations/buildVerifier's own `name`
+// fields. Not currently rendered by ReductionsSection.js (which labels a reduction
+// card by its target problem's name, not the reduction's own), but available to any
+// caller that wants it, same as `className` already is.
 function buildReductions(
   problemCode,
   reductionGraph,
@@ -177,6 +184,13 @@ function buildReductions(
             cost: REDUCTION_COST_MAP[edge.cost],
             type: REDUCTION_TYPE_MAP[edge.reductionType],
             className: edge.className,
+            // The reduction's own declared display name (IReduction.reductionName, e.g.
+            // "Karp Reduction: Vertex Cover to Set Cover") -- same `?? className`
+            // fallback buildSolvers/buildVisualizations/buildVerifier already use for
+            // their own name fields. Navigation/Reductions now sends this directly on
+            // each edge (ReduxISU/Redux#582), so no separate `info` lookup is needed
+            // the way solvers/visualizations/verifiers require.
+            name: edge.reductionName ?? edge.className,
             targetVisualization: targetVisualization ?? null,
           });
         }
