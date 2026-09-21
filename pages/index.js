@@ -138,6 +138,7 @@ import { thinScrollbarSx } from "../components/theme";
 import { TAXONOMY } from "../data/taxonomy";
 import { useCatalogFilters } from "../hooks/useCatalogFilters";
 import { useCatalogIndex } from "../hooks/useCatalogIndex";
+import { useEnumCatalog } from "../hooks/useEnumCatalog";
 import {
   buildCompareQueryValue,
   MAX_COMPARE_PROBLEMS,
@@ -579,12 +580,20 @@ export default function Home({ serverBootId }) {
 
   const { index, completeness, reductionGraphByName, loading, error } =
     useCatalogIndex(REDUX_API_BASE_URL);
+  // Live backend enum member names for the six backend-backed sidebar
+  // facets (data/taxonomy.js's buildOptionsFromBackendNames via
+  // useCatalogFilters's buildFacetOptions) -- a separate hook/fetch from
+  // useCatalogIndex above since it hits six different endpoints
+  // (Navigation/ComplexityClasses etc.) that useCatalogIndex has no other
+  // reason to know about.
+  const enumCatalog = useEnumCatalog(REDUX_API_BASE_URL);
   const { results, facetOptions, matchedTags } = useCatalogFilters(index, {
     selected,
     searchValue,
     reductionGraph: reductionGraphByName,
     reachabilitySource,
     reachabilityMode,
+    enumCatalog,
   });
 
   // Sorted, real problem names for the reachability picker's option list --
