@@ -1,0 +1,13 @@
+# Weekly dependency update PRs, matching Redux and Redux_GUI. Without this, version bumps
+# (including security fixes such as next 16.3.6) only arrive when someone updates by hand.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
