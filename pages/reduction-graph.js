@@ -30,7 +30,8 @@ import { useCatalogIndex } from "../hooks/useCatalogIndex";
 import { REDUX_API_BASE_URL } from "../lib/redux";
 
 export default function ReductionGraphPage() {
-  const { index, reductionGraphByName, loading, error } = useCatalogIndex(REDUX_API_BASE_URL);
+  const { index, reductionGraphByName, codeToName, loading, error } =
+    useCatalogIndex(REDUX_API_BASE_URL);
 
   const [pathSource, setPathSource] = useState(null);
   const [pathTarget, setPathTarget] = useState(null);
@@ -102,6 +103,7 @@ export default function ReductionGraphPage() {
             </Typography>
             <ReductionPathFinder
               problemNames={problemNames}
+              codeToName={codeToName}
               loading={loading}
               source={pathSource}
               target={pathTarget}
