@@ -33,6 +33,10 @@
 //   Topological Sort, Traveling Salesperson, Unstructured Search,
 //   Vertex Cover, Weighted Cut
 //
+// Renamed since this snapshot: "Hamiltonian Path" is now "Hamiltonian Cycle"
+// and "Directed Hamiltonian Path" is now "Directed Hamiltonian Cycle"
+// (ReduxISU/Redux#597), because both problems decide a cycle.
+//
 // Note this is 49, not the ~59 issue #7 and TASKLIST.md's T03 write-up
 // expect from the mockup -- see this task's handback summary. Also note
 // several of these real names differ from data/fixtures.js's Phase-1 sample
@@ -197,7 +201,7 @@ export const SUPPLEMENTAL_TAGS = {
     complexityClass: ["eqp"],
   },
   "DFA Acceptance": { problemType: ["automataAndLanguages"], computationalModel: "automata" },
-  "Directed Hamiltonian Path": {
+  "Directed Hamiltonian Cycle": {
     problemType: ["graphTheory"],
     computationalModel: "turingMachines",
   },
@@ -209,7 +213,7 @@ export const SUPPLEMENTAL_TAGS = {
   "Edit Distance": { problemType: ["storageAndRetrieval"], computationalModel: "turingMachines" },
   "Exact Cover": { problemType: ["setsAndPartitions"], computationalModel: "turingMachines" },
   "Graph Coloring": { problemType: ["graphTheory"], computationalModel: "turingMachines" },
-  "Hamiltonian Path": { problemType: ["graphTheory"], computationalModel: "turingMachines" },
+  "Hamiltonian Cycle": { problemType: ["graphTheory"], computationalModel: "turingMachines" },
   "Hitting Set": { problemType: ["setsAndPartitions"], computationalModel: "turingMachines" },
   "Independent Set": { problemType: ["graphTheory"], computationalModel: "turingMachines" },
   "0-1 Integer Programming": {
