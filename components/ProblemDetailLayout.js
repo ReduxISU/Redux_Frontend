@@ -536,6 +536,7 @@ export default function ProblemDetailLayout({ problem }) {
             cursor: "pointer",
             textDecoration: "underline",
             flexShrink: 0,
+            minHeight: { xs: 44, md: "auto" },
           }}
         >
           Reset to default

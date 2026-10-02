@@ -17,6 +17,7 @@ export default function Breadcrumb({ problemName }) {
       aria-label="Breadcrumb"
       sx={{
         display: "flex",
+        flexWrap: "wrap",
         alignItems: "center",
         gap: 0.75,
         fontSize: "0.9375rem",
@@ -24,13 +25,25 @@ export default function Breadcrumb({ problemName }) {
         mb: 1,
       }}
     >
-      <Box id="breadcrumb-home-link" component={Link} href="/" sx={{ color: "inherit" }}>
+      <Box
+        id="breadcrumb-home-link"
+        component={Link}
+        href="/"
+        sx={{
+          color: "inherit",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minWidth: { xs: 44, md: "auto" },
+          minHeight: { xs: 44, md: "auto" },
+        }}
+      >
         Home
       </Box>
       <Box component="span" aria-hidden="true">
         /
       </Box>
-      <Box component="span" sx={{ color: "text.primary" }}>
+      <Box component="span" sx={{ color: "text.primary", minWidth: 0, overflowWrap: "anywhere" }}>
         {problemName}
       </Box>
     </Box>

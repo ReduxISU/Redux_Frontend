@@ -26,7 +26,7 @@ export default function ExternalLinkList({ idPrefix, links, trailingItem }) {
           key={link.url}
           sx={{
             px: 2,
-            py: 1.25,
+            py: { xs: 0, md: 1.25 },
             borderRadius: 1.5,
             border: "1px solid",
             borderColor: "divider",
@@ -38,7 +38,16 @@ export default function ExternalLinkList({ idPrefix, links, trailingItem }) {
             target="_blank"
             rel="noopener noreferrer"
             underline="hover"
-            sx={{ color: "primary.light", fontWeight: 600, fontSize: "0.875rem" }}
+            sx={{
+              color: "primary.light",
+              fontWeight: 600,
+              fontSize: "0.875rem",
+              // 44px touch target below md (#179): the whole row width is the link.
+              display: { xs: "flex", md: "inline" },
+              alignItems: "center",
+              minHeight: { xs: 44, md: "auto" },
+              overflowWrap: "anywhere",
+            }}
           >
             {link.label}
           </Link>

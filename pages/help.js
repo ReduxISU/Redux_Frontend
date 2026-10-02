@@ -19,6 +19,13 @@ import ExternalLinkList from "../components/ExternalLinkList";
 import NavBar from "../components/NavBar";
 import { ACCESS_LINKS, BACKGROUND_READING_LINKS, LEARN_MORE_LINKS } from "../data/helpContent";
 
+// 44px touch targets below md (#179) for links that sit alone in a list item.
+const listLinkSx = {
+  display: { xs: "inline-flex", md: "inline" },
+  alignItems: "center",
+  minHeight: { xs: 44, md: "auto" },
+};
+
 // The one nested (one level deep) list on this page -- kept local rather than in
 // components/, since nothing else needs a two-level bulleted link list.
 function BackgroundReadingList({ links }) {
@@ -32,7 +39,7 @@ function BackgroundReadingList({ links }) {
             target="_blank"
             rel="noopener noreferrer"
             underline="hover"
-            sx={{ color: "primary.light", fontWeight: 600 }}
+            sx={{ color: "primary.light", fontWeight: 600, ...listLinkSx }}
           >
             {link.label}
           </Link>
@@ -46,7 +53,7 @@ function BackgroundReadingList({ links }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     underline="hover"
-                    sx={{ color: "primary.light", fontWeight: 600 }}
+                    sx={{ color: "primary.light", fontWeight: 600, ...listLinkSx }}
                   >
                     {child.label}
                   </Link>

@@ -9,6 +9,18 @@ import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 
+// "[DOI]" / "[PDF]" style links after a citation; 44px touch targets below md (#179).
+export const bracketLinkSx = {
+  color: "primary.light",
+  fontWeight: 600,
+  ml: 0.5,
+  display: { xs: "inline-flex", md: "inline" },
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: { xs: 44, md: "auto" },
+  minHeight: { xs: 44, md: "auto" },
+};
+
 const LINK_KINDS = [
   { key: "doi", label: "DOI" },
   { key: "url", label: "URL" },
@@ -46,7 +58,7 @@ export default function CitationList({ idPrefix, citations }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     underline="hover"
-                    sx={{ color: "primary.light", fontWeight: 600, ml: 0.5 }}
+                    sx={bracketLinkSx}
                   >
                     [{label}]
                   </Link>

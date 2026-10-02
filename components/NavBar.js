@@ -72,6 +72,9 @@ export default function NavBar() {
             fontWeight: 700,
             letterSpacing: "0.28em",
             color: "text.primary",
+            display: "inline-flex",
+            alignItems: "center",
+            minHeight: { xs: 44, md: "auto" },
           }}
         >
           REDUX
@@ -93,6 +96,13 @@ export default function NavBar() {
                 borderBottom: "2px solid",
                 borderColor: isActive ? "primary.main" : "transparent",
                 pb: 0.75,
+                // 44px touch target below md (#179); the underline stays under the text.
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: { xs: 44, md: "auto" },
+                minHeight: { xs: 44, md: "auto" },
+                pt: { xs: 0.75, md: 0 },
               }}
             >
               {label}

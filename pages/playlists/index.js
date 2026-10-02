@@ -98,7 +98,13 @@ export default function PlaylistIndex() {
                 id={`playlist-index-link-${playlist.slug}`}
                 component={Link}
                 href={`/playlists/${playlist.slug}`}
-                sx={{ color: "primary.main", fontWeight: 700 }}
+                sx={{
+                  color: "primary.main",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  minHeight: { xs: 44, md: "auto" },
+                }}
               >
                 {playlist.title}
               </Box>

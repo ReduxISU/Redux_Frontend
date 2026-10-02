@@ -170,7 +170,8 @@ function TagRow({ facetKey, tagKeys, matchedKeys, idPrefix, onTagClick, scrollab
               gap: 0.75,
               overflowX: "auto",
               minWidth: 0,
-              py: 0.25,
+              // Room for each chip's 44px touch area (theme.js) below md; this row clips it.
+              py: { xs: "11px", md: 0.25 },
               ...hiddenScrollbarSx,
             }
           : { display: "flex", flexWrap: "wrap", gap: 0.75 }

@@ -22,7 +22,7 @@
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import CitationList from "../components/aboutus/CitationList";
+import CitationList, { bracketLinkSx } from "../components/aboutus/CitationList";
 import ContributorList from "../components/aboutus/ContributorList";
 import ContentSection from "../components/ContentSection";
 import NavBar from "../components/NavBar";
@@ -103,7 +103,7 @@ export default function AboutUsPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 underline="hover"
-                sx={{ color: "primary.light", fontWeight: 600, ml: 0.5 }}
+                sx={bracketLinkSx}
               >
                 [DOI]
               </Link>
@@ -113,7 +113,7 @@ export default function AboutUsPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 underline="hover"
-                sx={{ color: "primary.light", fontWeight: 600, ml: 0.5 }}
+                sx={bracketLinkSx}
               >
                 [PDF]
               </Link>

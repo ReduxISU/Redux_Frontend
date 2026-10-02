@@ -121,6 +121,8 @@ function buildChipVariants() {
   return variants;
 }
 
+const TOUCH_TARGET = 44; // px; the minimum tappable size below the md breakpoint
+
 const PAGE_BACKGROUND = "#0A0908";
 const PANEL_BACKGROUND = "#17140F"; // one step lighter than the page, per the mockup's elevated surfaces
 const HAIRLINE_BORDER = "rgba(255, 237, 213, 0.09)"; // warm-tinted hairline, used for every panel/card edge
@@ -327,18 +329,60 @@ const theme = createTheme({
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: {
-        root: {
+        root: ({ theme: themeParam }) => ({
           borderRadius: 999, // pill-shaped, per the mockup's buttons ("Clear filters", "Help", "Contribute")
           textTransform: "none",
           fontWeight: 600,
-        },
+          [themeParam.breakpoints.down("md")]: { minHeight: TOUCH_TARGET },
+        }),
+      },
+    },
+    // #179: below the md breakpoint (the app's one responsive convention) every tappable control
+    // is at least 44px. Chips and the Autocomplete's small indicator buttons keep their look and
+    // get an invisible 44px hit area instead.
+    MuiIconButton: {
+      styleOverrides: {
+        root: ({ theme: themeParam }) => ({
+          [themeParam.breakpoints.down("md")]: {
+            minWidth: TOUCH_TARGET,
+            minHeight: TOUCH_TARGET,
+            "&.MuiAutocomplete-popupIndicator, &.MuiAutocomplete-clearIndicator": {
+              minWidth: 0,
+              minHeight: 0,
+              "&::after": { content: '""', position: "absolute", inset: -8 },
+            },
+          },
+        }),
+      },
+    },
+    MuiCheckbox: {
+      styleOverrides: {
+        root: ({ theme: themeParam }) => ({
+          [themeParam.breakpoints.down("md")]: { padding: 12 },
+        }),
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: ({ theme: themeParam }) => ({
+          [themeParam.breakpoints.down("md")]: {
+            "&:not(.MuiInputBase-multiline)": { minHeight: TOUCH_TARGET },
+          },
+        }),
       },
     },
     MuiChip: {
       styleOverrides: {
-        root: {
+        root: ({ theme: themeParam }) => ({
           borderRadius: 999, // full pill shape
-        },
+          [themeParam.breakpoints.down("md")]: {
+            "&.MuiChip-clickable::after": {
+              content: '""',
+              position: "absolute",
+              inset: -11,
+            },
+          },
+        }),
       },
       variants: buildChipVariants(),
     },

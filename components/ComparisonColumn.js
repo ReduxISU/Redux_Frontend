@@ -131,13 +131,22 @@ export default function ComparisonColumn({
       sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1.5 }}
     >
       <Box>
-        <Typography variant="h2" component="h2" sx={{ fontSize: "1.25rem" }}>
+        <Typography
+          variant="h2"
+          component="h2"
+          sx={{ fontSize: "1.25rem", overflowWrap: "anywhere" }}
+        >
           {isProblemComplete(problem) ? (
             <Box
               id={`compare-column-${slug}-detail-link`}
               component={Link}
               href={`/${encodeURIComponent(problem.name)}`}
-              sx={{ color: "inherit" }}
+              sx={{
+                color: "inherit",
+                display: "inline-flex",
+                alignItems: "center",
+                minHeight: { xs: 44, md: "auto" },
+              }}
             >
               {problem.name}
             </Box>

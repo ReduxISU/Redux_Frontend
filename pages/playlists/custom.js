@@ -70,7 +70,14 @@ function NotFound() {
           id="custom-playlist-not-found-home-link"
           component={Link}
           href="/playlists"
-          sx={{ color: "primary.main", fontWeight: 600, mt: 1 }}
+          sx={{
+            color: "primary.main",
+            fontWeight: 600,
+            mt: 1,
+            display: "inline-flex",
+            alignItems: "center",
+            minHeight: { xs: 44, md: "auto" },
+          }}
         >
           Back to Playlists
         </Box>

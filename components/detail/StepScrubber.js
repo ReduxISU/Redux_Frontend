@@ -147,7 +147,7 @@ export default function StepScrubber({
         borderColor: "divider",
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1 }}>
         <IconButton
           id={`${idPrefix}-previous`}
           size="small"
@@ -189,7 +189,14 @@ export default function StepScrubber({
           value={currentStep}
           onChange={handleScrub}
           disabled={!canScrub}
-          sx={{ flex: 1, mx: 1 }}
+          // Below md the controls wrap: buttons and speed on one row, the scrub bar full width on
+          // its own row, so nothing is squeezed to a sliver or overflows a phone.
+          sx={{
+            flex: { xs: "1 1 calc(100% - 24px)", md: 1 },
+            order: { xs: 5, md: 0 },
+            mx: { xs: 1.5, md: 1 },
+            py: { xs: "21px", md: "13px" },
+          }}
         />
 
         <Select
@@ -199,7 +206,7 @@ export default function StepScrubber({
           value={speedValue}
           disabled={!canScrub}
           onChange={(event) => setSpeedValue(event.target.value)}
-          sx={{ flexShrink: 0, minWidth: 76 }}
+          sx={{ flexShrink: 0, minWidth: 76, ml: { xs: "auto", md: 0 } }}
         >
           {SPEED_OPTIONS.map((option) => (
             <MenuItem key={option.value} value={option.value}>
