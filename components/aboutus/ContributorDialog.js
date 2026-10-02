@@ -57,19 +57,17 @@ function ContributionList({ label, items }) {
 }
 
 const REPO_STAT_FIELDS = [
-  { key: "commits", label: "commits" },
-  { key: "prsOpened", label: "PRs opened" },
-  { key: "prsMerged", label: "PRs merged" },
-  { key: "reviews", label: "reviews" },
+  { key: "prsMerged", singular: "PR merged", plural: "PRs merged" },
+  { key: "reviews", singular: "review", plural: "reviews" },
 ];
 
-// Renders as "100 commits, 14 PRs opened, 79 PRs merged, 31 reviews", dropping any
-// field that is zero or missing.
+// Renders as "79 PRs merged, 31 reviews", dropping any field that is zero or
+// missing.
 function formatRepoStats(stats) {
   if (!stats) return [];
-  return REPO_STAT_FIELDS.map(({ key, label }) => {
+  return REPO_STAT_FIELDS.map(({ key, singular, plural }) => {
     const value = stats[key] ?? 0;
-    return value > 0 ? `${value} ${label}` : null;
+    return value > 0 ? `${value} ${value === 1 ? singular : plural}` : null;
   }).filter(Boolean);
 }
 
