@@ -164,6 +164,11 @@ export default function VerifierSection({
   return (
     <SectionShell sectionKey="verifier" title="Verifier" dragHandleProps={dragHandleProps}>
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {verifier.name && (
+          <Typography variant="h2" component="h4" sx={{ fontSize: "1rem" }}>
+            {verifier.name}
+          </Typography>
+        )}
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="overline" sx={{ color: "text.secondary" }}>
             Certificate Format
