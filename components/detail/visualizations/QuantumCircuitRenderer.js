@@ -67,6 +67,7 @@ import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { getVisualizationColor } from "../../theme";
 import { FloatingMenu, useCloseFloatingMenu } from "./floatingMenu";
 import { addGateAtCell, moveGateToCell } from "./quantumCircuitGrid";
+import ZoomPanSurface, { useViewScale } from "./ZoomPanSurface";
 
 const GATE_WIDTH = 44;
 const GATE_HEIGHT = 26;
@@ -259,8 +260,16 @@ function DraggableHandle({
     id: `${gateId}::${targetIndex}`,
     data: { type: "gateHandle", gateId, targetIndex },
   });
+  // dnd-kit's transform is in screen pixels; the handle lives inside the zoomed content group.
+  const viewScale = useViewScale();
   const dragStyle = {
-    transform: transform ? CSS.Translate.toString(transform) : undefined,
+    transform: transform
+      ? CSS.Translate.toString({
+          ...transform,
+          x: transform.x / viewScale,
+          y: transform.y / viewScale,
+        })
+      : undefined,
     opacity: isDragging ? 0.4 : 1,
     cursor: "grab",
   };
@@ -478,6 +487,8 @@ export default function QuantumCircuitRenderer({
     height,
   } = layout;
 
+  const fitKey = `${qubits.join(",")}|${width}x${height}`;
+
   const summaryBody = `quantum circuit with ${qubits.length} qubit${qubits.length === 1 ? "" : "s"} and ${gates.length} gate${gates.length === 1 ? "" : "s"}`;
   const summary = instanceName ? `${instanceName}: ${summaryBody}` : summaryBody;
 
@@ -621,8 +632,6 @@ export default function QuantumCircuitRenderer({
 
   const svgCommon = (
     <>
-      <title>{summary}</title>
-
       {classicalRowY != null && (
         <g>
           <text
@@ -670,17 +679,65 @@ export default function QuantumCircuitRenderer({
 
   if (!editable) {
     return (
-      <Box sx={{ width: "100%", height: "100%", overflow: "auto" }}>
-        <svg
-          id={scopeId}
-          role="img"
-          aria-label={summary}
-          viewBox={`0 0 ${width} ${height}`}
-          width={width}
-          height={height}
-          style={{ display: "block" }}
-        >
+      <ZoomPanSurface id={scopeId} summary={summary} fitKey={fitKey}>
+        {svgCommon}
+        {qubits.map((qubitId) => {
+          const y = qubitRowY.get(qubitId);
+          return (
+            <g key={qubitId}>
+              <text x={MARGIN.left - 10} y={y + 4} textAnchor="end" fontSize={11} fill={WIRE_COLOR}>
+                {qubitId}
+              </text>
+              <line x1={MARGIN.left} x2={width - MARGIN.right} y1={y} y2={y} stroke={WIRE_COLOR} />
+            </g>
+          );
+        })}
+        {gates.map((gate) => {
+          const x = xForTime(gate.time);
+          const targetYs = (gate.targets ?? [])
+            .map((targetId) => qubitRowY.get(targetId))
+            .filter((y) => y != null);
+          return (
+            <GateMark
+              key={gate.id}
+              idPrefix={scopeId}
+              gate={gate}
+              x={x}
+              targetYs={targetYs}
+              classicalY={classicalRowY}
+              highlighted={hoveredGateId === gate.id}
+              onEnter={() => setHoveredGateId(gate.id)}
+              onLeave={() => setHoveredGateId((current) => (current === gate.id ? null : current))}
+            />
+          );
+        })}
+      </ZoomPanSurface>
+    );
+  }
+
+  const addQubitZoneTop = (classicalRowY ?? lastQubitY) + ROW_SPACING / 2;
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <ZoomPanSurface id={scopeId} summary={summary} fitKey={fitKey}>
           {svgCommon}
+
+          {/* Grid cells first, so gates painted afterward sit on top and win hit-testing */}
+          {qubits.map((qubitId) => {
+            const y = qubitRowY.get(qubitId);
+            return Array.from({ length: sortedTimes.length + 1 }, (_, columnIndex) => (
+              <GridCell
+                key={`${qubitId}-${columnIndex}`}
+                wireId={qubitId}
+                columnIndex={columnIndex}
+                x={xForColumnIndex(columnIndex)}
+                y={y}
+                onContextMenu={(event) => openCellMenu(qubitId, columnIndex, event)}
+              />
+            ));
+          })}
+
           {qubits.map((qubitId) => {
             const y = qubitRowY.get(qubitId);
             return (
@@ -691,6 +748,8 @@ export default function QuantumCircuitRenderer({
                   textAnchor="end"
                   fontSize={11}
                   fill={WIRE_COLOR}
+                  style={{ cursor: "context-menu" }}
+                  onContextMenu={(event) => openQubitMenu(qubitId, event)}
                 >
                   {qubitId}
                 </text>
@@ -704,116 +763,30 @@ export default function QuantumCircuitRenderer({
               </g>
             );
           })}
-          {gates.map((gate) => {
-            const x = xForTime(gate.time);
-            const targetYs = (gate.targets ?? [])
-              .map((targetId) => qubitRowY.get(targetId))
-              .filter((y) => y != null);
-            return (
-              <GateMark
-                key={gate.id}
-                idPrefix={scopeId}
-                gate={gate}
-                x={x}
-                targetYs={targetYs}
-                classicalY={classicalRowY}
-                highlighted={hoveredGateId === gate.id}
-                onEnter={() => setHoveredGateId(gate.id)}
-                onLeave={() =>
-                  setHoveredGateId((current) => (current === gate.id ? null : current))
-                }
-              />
-            );
-          })}
-        </svg>
-      </Box>
-    );
-  }
 
-  const addQubitZoneTop = (classicalRowY ?? lastQubitY) + ROW_SPACING / 2;
-
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <Box sx={{ width: "100%", overflow: "auto" }}>
-          <svg
-            id={scopeId}
-            role="img"
-            aria-label={summary}
-            viewBox={`0 0 ${width} ${height}`}
+          <rect
+            x={0}
+            y={addQubitZoneTop}
             width={width}
-            height={height}
-            style={{ display: "block" }}
-          >
-            {svgCommon}
+            height={Math.max(height - addQubitZoneTop, 1)}
+            fill="transparent"
+            onContextMenu={openAddQubitMenu}
+          />
 
-            {/* Grid cells first, so gates painted afterward sit on top and win hit-testing */}
-            {qubits.map((qubitId) => {
-              const y = qubitRowY.get(qubitId);
-              return Array.from({ length: sortedTimes.length + 1 }, (_, columnIndex) => (
-                <GridCell
-                  key={`${qubitId}-${columnIndex}`}
-                  wireId={qubitId}
-                  columnIndex={columnIndex}
-                  x={xForColumnIndex(columnIndex)}
-                  y={y}
-                  onContextMenu={(event) => openCellMenu(qubitId, columnIndex, event)}
-                />
-              ));
-            })}
-
-            {qubits.map((qubitId) => {
-              const y = qubitRowY.get(qubitId);
-              return (
-                <g key={qubitId}>
-                  <text
-                    x={MARGIN.left - 10}
-                    y={y + 4}
-                    textAnchor="end"
-                    fontSize={11}
-                    fill={WIRE_COLOR}
-                    style={{ cursor: "context-menu" }}
-                    onContextMenu={(event) => openQubitMenu(qubitId, event)}
-                  >
-                    {qubitId}
-                  </text>
-                  <line
-                    x1={MARGIN.left}
-                    x2={width - MARGIN.right}
-                    y1={y}
-                    y2={y}
-                    stroke={WIRE_COLOR}
-                  />
-                </g>
-              );
-            })}
-
-            <rect
-              x={0}
-              y={addQubitZoneTop}
-              width={width}
-              height={Math.max(height - addQubitZoneTop, 1)}
-              fill="transparent"
-              onContextMenu={openAddQubitMenu}
+          {gates.map((gate) => (
+            <EditableGateMark
+              key={gate.id}
+              gate={gate}
+              x={xForTime(gate.time)}
+              qubitRowY={qubitRowY}
+              classicalY={classicalRowY}
+              highlighted={hoveredGateId === gate.id}
+              onEnter={() => setHoveredGateId(gate.id)}
+              onLeave={() => setHoveredGateId((current) => (current === gate.id ? null : current))}
+              onGateContextMenu={openGateMenu}
             />
-
-            {gates.map((gate) => (
-              <EditableGateMark
-                key={gate.id}
-                gate={gate}
-                x={xForTime(gate.time)}
-                qubitRowY={qubitRowY}
-                classicalY={classicalRowY}
-                highlighted={hoveredGateId === gate.id}
-                onEnter={() => setHoveredGateId(gate.id)}
-                onLeave={() =>
-                  setHoveredGateId((current) => (current === gate.id ? null : current))
-                }
-                onGateContextMenu={openGateMenu}
-              />
-            ))}
-          </svg>
-        </Box>
+          ))}
+        </ZoomPanSurface>
       </DndContext>
 
       <Typography variant="body2" sx={{ color: "text.secondary" }}>

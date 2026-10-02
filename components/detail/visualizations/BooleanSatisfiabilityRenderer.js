@@ -510,6 +510,7 @@ export default function BooleanSatisfiabilityRenderer({
         sx={{
           display: "flex",
           flexWrap: "wrap",
+          justifyContent: "center",
           alignItems: "center",
           gap: 1,
           p: 2,
@@ -595,6 +596,7 @@ export default function BooleanSatisfiabilityRenderer({
             sx={{
               display: "flex",
               flexWrap: "wrap",
+              justifyContent: "center",
               alignItems: "center",
               gap: 1,
               p: 2,

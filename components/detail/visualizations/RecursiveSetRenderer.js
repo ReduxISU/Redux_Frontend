@@ -393,6 +393,7 @@ export default function RecursiveSetRenderer({
       sx={{
         display: "flex",
         flexWrap: "wrap",
+        justifyContent: "center",
         alignItems: "center",
         gap: 0.5,
         p: 2,

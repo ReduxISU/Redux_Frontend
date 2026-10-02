@@ -13,11 +13,23 @@
 // stripping characters, per §3.5's decision. A `cells` entry missing a
 // column's key renders "-", the documented degenerate case, not a
 // violation.
+//
+// #178: a table wider than its box scrolls sideways inside that box (never widening the page),
+// with the first column pinned so the row label stays visible while the rest scrolls.
 
 import Box from "@mui/material/Box";
 import { alpha } from "@mui/material/styles";
 import { useId } from "react";
 import { getVisualizationColor } from "../../theme";
+
+// Opaque, so scrolled cells never show through the pinned column; a cell's own tint is layered
+// over it with a gradient.
+const stickyFirstColumnSx = {
+  position: "sticky",
+  left: 0,
+  zIndex: 1,
+  backgroundColor: "background.paper",
+};
 
 /**
  * @param {Object} props
@@ -58,6 +70,7 @@ export default function StepTableRenderer({ idPrefix, instanceName, frame }) {
         sx={{
           borderCollapse: "collapse",
           width: "100%",
+          minWidth: "max-content",
           fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
           fontSize: "0.8125rem",
         }}
@@ -70,7 +83,7 @@ export default function StepTableRenderer({ idPrefix, instanceName, frame }) {
         </Box>
         <Box component="thead">
           <Box component="tr">
-            {columns.map((column) => (
+            {columns.map((column, columnIndex) => (
               <Box
                 component="th"
                 key={column.key}
@@ -79,6 +92,7 @@ export default function StepTableRenderer({ idPrefix, instanceName, frame }) {
                 sx={{
                   position: "sticky",
                   top: 0,
+                  ...(columnIndex === 0 ? { left: 0, zIndex: 2 } : {}),
                   border: "1px solid",
                   borderColor: "divider",
                   backgroundColor: "background.paper",
@@ -101,7 +115,7 @@ export default function StepTableRenderer({ idPrefix, instanceName, frame }) {
                 key={row.id ?? rowIndex}
                 sx={{ color: rowColor ?? "inherit", fontWeight: rowColor ? 700 : 400 }}
               >
-                {columns.map((column) => {
+                {columns.map((column, columnIndex) => {
                   const cellColorKey = row.cellColors?.[column.key];
                   const cellColor = cellColorKey ? getVisualizationColor(cellColorKey) : null;
                   return (
@@ -115,6 +129,14 @@ export default function StepTableRenderer({ idPrefix, instanceName, frame }) {
                         p: 1,
                         textAlign: "center",
                         backgroundColor: cellColor ? alpha(cellColor, 0.22) : "transparent",
+                        ...(columnIndex === 0
+                          ? {
+                              ...stickyFirstColumnSx,
+                              backgroundImage: cellColor
+                                ? `linear-gradient(${alpha(cellColor, 0.22)}, ${alpha(cellColor, 0.22)})`
+                                : undefined,
+                            }
+                          : {}),
                       }}
                     >
                       {row.cells?.[column.key] ?? "-"}

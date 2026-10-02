@@ -60,13 +60,13 @@ import {
   distanceBetween,
   effectiveCurvature,
 } from "./graphGeometry";
+import ZoomPanSurface from "./ZoomPanSurface";
 
 const NODE_RADIUS = 15;
 const INNER_DRAG_RADIUS_RATIO = 0.6; // inside this fraction of the ring: move; outside: create edge
 const EDGE_HANDLE_HIT_RADIUS = 8;
 const LAYOUT_WIDTH = 640;
 const LAYOUT_HEIGHT = 380;
-const LAYOUT_PADDING = NODE_RADIUS * 2;
 const SIMULATION_TICKS = 300;
 const DEFAULT_STROKE = getVisualizationColor("");
 
@@ -99,19 +99,6 @@ function layoutGraph(nodes, links) {
   }
 
   return { simNodes, simLinks };
-}
-
-function computeViewBox(nodes) {
-  if (nodes.length === 0) {
-    return `0 0 ${LAYOUT_WIDTH} ${LAYOUT_HEIGHT}`;
-  }
-  const xs = nodes.map((node) => node.x);
-  const ys = nodes.map((node) => node.y);
-  const minX = Math.min(...xs) - LAYOUT_PADDING;
-  const maxX = Math.max(...xs) + LAYOUT_PADDING;
-  const minY = Math.min(...ys) - LAYOUT_PADDING;
-  const maxY = Math.max(...ys) + LAYOUT_PADDING;
-  return `${minX} ${minY} ${Math.max(maxX - minX, 1)} ${Math.max(maxY - minY, 1)}`;
 }
 
 function LinkMark({ link, idPrefix, highlighted, editable }) {
@@ -253,6 +240,7 @@ export default function GraphRenderer({
   const reactId = useId().replace(/:/g, "");
   const scopeId = `${idPrefix}-${reactId}`;
   const svgRef = useRef(null);
+  const contentRef = useRef(null);
   const menuRef = useRef(null);
 
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
@@ -290,7 +278,13 @@ export default function GraphRenderer({
     [simLinks, nodeById],
   );
 
-  const viewBox = useMemo(() => computeViewBox(displayNodes), [displayNodes]);
+  // Refit when the graph's structure changes (a new instance or visualization), not on every
+  // frame of step playback or on a node drag.
+  const fitKey = useMemo(
+    () =>
+      `${frame.nodes.map((node) => node.id).join(",")}|${frame.links.map((link) => link.id).join(",")}`,
+    [frame],
+  );
 
   const closeMenu = useCallback(() => {
     setMenu(null);
@@ -300,13 +294,16 @@ export default function GraphRenderer({
 
   useCloseFloatingMenu(menuRef, menu !== null, closeMenu);
 
+  // Maps a pointer to the drawing's own coordinates. Uses the zoomed/panned content group's
+  // CTM, not the <svg>'s, so it stays right under any view transform.
   const svgPoint = useCallback((event) => {
     const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
+    const content = contentRef.current;
+    if (!svg || !content) return { x: 0, y: 0 };
     const point = svg.createSVGPoint();
     point.x = event.clientX;
     point.y = event.clientY;
-    const matrix = svg.getScreenCTM();
+    const matrix = content.getScreenCTM();
     if (!matrix) return { x: 0, y: 0 };
     const transformed = point.matrixTransform(matrix.inverse());
     return { x: transformed.x, y: transformed.y };
@@ -501,22 +498,21 @@ export default function GraphRenderer({
   const summary = instanceName ? `${instanceName}: ${summaryBody}` : summaryBody;
 
   const svg = (
-    <svg
-      ref={svgRef}
+    <ZoomPanSurface
       id={scopeId}
-      role="img"
-      aria-label={summary}
-      viewBox={viewBox}
-      width="100%"
-      height="100%"
-      style={{ display: "block", cursor: drag.kind === "moveNode" ? "grabbing" : "default" }}
-      onMouseDown={handleSvgMouseDown}
-      onMouseMove={handleSvgMouseMove}
-      onMouseUp={handleSvgMouseUp}
-      onMouseLeave={handleSvgMouseUp}
-      onContextMenu={handleSvgContextMenu}
+      summary={summary}
+      fitKey={fitKey}
+      svgRef={svgRef}
+      contentRef={contentRef}
+      svgProps={{
+        style: { display: "block", cursor: drag.kind === "moveNode" ? "grabbing" : "default" },
+        onMouseDown: handleSvgMouseDown,
+        onMouseMove: handleSvgMouseMove,
+        onMouseUp: handleSvgMouseUp,
+        onMouseLeave: handleSvgMouseUp,
+        onContextMenu: handleSvgContextMenu,
+      }}
     >
-      <title>{summary}</title>
       <defs>
         <marker
           id={`${scopeId}-arrow`}
@@ -596,7 +592,7 @@ export default function GraphRenderer({
           />
         ))}
       </g>
-    </svg>
+    </ZoomPanSurface>
   );
 
   if (!editable) {
@@ -604,11 +600,12 @@ export default function GraphRenderer({
   }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Box sx={{ flex: 1, minHeight: 0 }}>{svg}</Box>
+    <Box sx={{ display: "flex", flexDirection: "column" }}>
+      {svg}
       <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
         Drag a node to move it, or drag from its outer edge onto another node to connect them.
-        Right-click a node, a connection, or empty space to add, rename, or delete.
+        Right-click a node, a connection, or empty space to add, rename, or delete. Scroll to zoom
+        and right-drag (or use two fingers) to pan.
       </Typography>
 
       {menu?.kind === "createNode" && (
