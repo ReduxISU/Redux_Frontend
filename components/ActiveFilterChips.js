@@ -62,6 +62,10 @@ function Chip({ label, accentColor, removeId, ariaLabel, onRemove }) {
         pl: 1.25,
         pr: 0.5,
         py: 0.375,
+        // A long label (a problem name in the reachability chip) wraps inside the chip rather
+        // than pushing the row wider than a phone.
+        maxWidth: "100%",
+        minWidth: 0,
         borderRadius: 999,
         color: "#FFFFFF",
         backgroundColor: alpha(accentColor, 0.12),
@@ -70,7 +74,9 @@ function Chip({ label, accentColor, removeId, ariaLabel, onRemove }) {
         fontWeight: 600,
       }}
     >
-      <Box component="span">{label}</Box>
+      <Box component="span" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
+        {label}
+      </Box>
       <Box
         id={removeId}
         component="button"
@@ -84,6 +90,12 @@ function Chip({ label, accentColor, removeId, ariaLabel, onRemove }) {
           border: "none",
           background: "none",
           p: 0.25,
+          // 44px touch target below md, absorbed by negative margins so the chip keeps its size.
+          minWidth: { xs: 44, md: "auto" },
+          minHeight: { xs: 44, md: "auto" },
+          my: { xs: -1.25, md: 0 },
+          mr: { xs: -0.5, md: 0 },
+          flexShrink: 0,
           borderRadius: "50%",
           color: "inherit",
           cursor: "pointer",
@@ -195,6 +207,8 @@ export default function ActiveFilterChips({
           fontWeight: 600,
           cursor: "pointer",
           textDecoration: "underline",
+          minHeight: { xs: 44, md: "auto" },
+          px: { xs: 1, md: 0 },
         }}
       >
         Clear all

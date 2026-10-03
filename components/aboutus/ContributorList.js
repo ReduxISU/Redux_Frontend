@@ -107,7 +107,7 @@ export default function ContributorList() {
                 alignItems: "center",
                 gap: 1,
                 px: 1.75,
-                py: 1.25,
+                py: { xs: 0, md: 1.25 },
                 minHeight: 46,
                 borderRadius: 2,
                 border: "1px solid",
@@ -122,7 +122,16 @@ export default function ContributorList() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`${name}'s GitHub profile`}
-                  sx={{ display: "inline-flex", flexShrink: 0 }}
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    // 44px touch target below md; the avatar itself stays 28px.
+                    minWidth: { xs: 44, md: "auto" },
+                    minHeight: { xs: 44, md: "auto" },
+                    mx: { xs: -1, md: 0 },
+                  }}
                 >
                   <Avatar
                     src={githubProfile.image}
@@ -149,6 +158,8 @@ export default function ContributorList() {
                   font: "inherit",
                   textAlign: "left",
                   cursor: "pointer",
+                  minHeight: { xs: 44, md: "auto" },
+                  flex: { xs: 1, md: "none" },
                   color: "text.primary",
                   "&:hover": { color: "primary.light" },
                 }}

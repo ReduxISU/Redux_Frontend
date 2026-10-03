@@ -470,6 +470,7 @@ export default function ReductionsSection({
               <Box
                 sx={{
                   minHeight: 220,
+                  overflowX: "auto", // a long unbreakable token scrolls here, never widens the page
                   borderRadius: 1,
                   border: "1px solid",
                   borderColor: "divider",
@@ -568,6 +569,7 @@ export default function ReductionsSection({
                     color: "inherit",
                     px: 1.5,
                     py: 1,
+                    minHeight: { xs: 44, md: "auto" },
                     border: "none",
                     borderLeft: "3px solid",
                     borderLeftColor: isSelected ? "primary.main" : "transparent",
@@ -617,6 +619,7 @@ export default function ReductionsSection({
               border: "none",
               background: "none",
               p: 0,
+              minHeight: { xs: 44, md: "auto" },
               cursor: "pointer",
               color: "inherit",
               font: "inherit",

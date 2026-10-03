@@ -106,7 +106,7 @@ function PlaylistCreatorStep({
           size="small"
           fullWidth
         />
-        <Box sx={{ display: "flex", gap: 1 }}>
+        <Box sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: 1 }}>
           <Autocomplete
             id={`playlist-creator-solver-${index}`}
             options={solverNames}

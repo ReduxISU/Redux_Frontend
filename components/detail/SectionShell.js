@@ -84,9 +84,14 @@ export default function SectionShell({ sectionKey, title, summary, children, dra
           sx={{
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             color: "text.secondary",
             cursor: "grab",
             flexShrink: 0,
+            // 44px touch target below md (#179); the icon itself stays small.
+            minWidth: { xs: 44, md: "auto" },
+            minHeight: { xs: 44, md: "auto" },
+            mx: { xs: -1, md: 0 },
           }}
         >
           <DragIndicatorIcon fontSize="small" />
@@ -105,6 +110,7 @@ export default function SectionShell({ sectionKey, title, summary, children, dra
               alignItems: "center",
               gap: 1.5,
               width: "100%",
+              minHeight: { xs: 44, md: "auto" },
               border: "none",
               background: "none",
               p: 0,

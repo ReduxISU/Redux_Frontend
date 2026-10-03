@@ -591,6 +591,12 @@ export default function VisualizationsSection({
                 <Box
                   sx={{
                     minHeight: 260,
+                    // Text-flow renderers (SAT, sets, pump schedule) sit vertically centered in
+                    // the box; a long unbreakable token scrolls here, never widens the page.
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    overflowX: "auto",
                     borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
