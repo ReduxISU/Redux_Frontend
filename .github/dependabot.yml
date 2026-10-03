@@ -6,6 +6,20 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # Next.js refuses to build unless react and react-dom are the exact same version, so
+      # they must always move together in one PR.
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+    ignore:
+      # eslint-config-next's plugins and parser don't support ESLint 10 yet (lint crashes with
+      # "scopeManager.addGlobals is not a function"). Remove this once eslint-config-next does.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
