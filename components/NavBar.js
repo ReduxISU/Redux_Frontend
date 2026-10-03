@@ -15,20 +15,26 @@
 // instance to link out to. Superseded twice over by direct project-owner
 // instruction: first all three became real pages in this app rather than
 // external links, then Help and Contribute moved next to Home and About Us
-// and dropped the pill/icon-button treatment entirely, so all four nav
-// items now render identically, one plain-text link style, one flex group.
-// That also retired the old mobile fallback (a separate icon-only button
-// per chrome link below `sm`) — plain text links are compact enough that
-// four of them plus the wordmark fit without needing one; `flexWrap: "wrap"`
-// on the group is the only safety net left, for extreme narrow widths.
+// and dropped the pill/icon-button treatment entirely, so all nav items
+// render identically, one plain-text link style, one flex group.
 //
 // T61 (#136) added the "Reduction Graph" link -- decision recorded on #136:
 // linked from here rather than left undiscoverable, since it's a core-data
 // feature (the whole catalog's reduction graph), not a demo page.
+//
+// Below `md` (the project's one responsive breakpoint) the links collapse into
+// a menu button, by project-owner request: five links plus the wordmark
+// wrapped onto two or three lines at phone width. The desktop links keep their
+// ids; the menu items get a `-menu` suffix so ids stay unique.
 
+import MenuIcon from "@mui/icons-material/Menu";
 import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { useState } from "react";
 
 const NAV_LINKS = [
   { id: "navbar-home-link", href: "/", label: "Home" },
@@ -40,6 +46,9 @@ const NAV_LINKS = [
 
 export default function NavBar() {
   const router = useRouter();
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const menuOpen = Boolean(menuAnchor);
+  const closeMenu = () => setMenuAnchor(null);
 
   return (
     <Box
@@ -49,7 +58,7 @@ export default function NavBar() {
         alignItems: "center",
         gap: { xs: 1.5, sm: 3 },
         px: { xs: 2, sm: 5 },
-        py: 2.5,
+        py: { xs: 1.5, md: 2.5 },
         borderBottom: "1px solid",
         borderColor: "divider",
       }}
@@ -61,6 +70,7 @@ export default function NavBar() {
           flexWrap: "wrap",
           rowGap: 1,
           columnGap: { xs: 2, sm: 5 },
+          flexGrow: 1,
         }}
       >
         <Box
@@ -96,13 +106,9 @@ export default function NavBar() {
                 borderBottom: "2px solid",
                 borderColor: isActive ? "primary.main" : "transparent",
                 pb: 0.75,
-                // 44px touch target below md (#179); the underline stays under the text.
-                display: "inline-flex",
+                display: { xs: "none", md: "inline-flex" },
                 alignItems: "center",
                 justifyContent: "center",
-                minWidth: { xs: 44, md: "auto" },
-                minHeight: { xs: 44, md: "auto" },
-                pt: { xs: 0.75, md: 0 },
               }}
             >
               {label}
@@ -110,6 +116,50 @@ export default function NavBar() {
           );
         })}
       </Box>
+
+      <IconButton
+        id="navbar-menu-button"
+        aria-label="Open navigation menu"
+        aria-controls={menuOpen ? "navbar-menu" : undefined}
+        aria-haspopup="true"
+        aria-expanded={menuOpen ? "true" : undefined}
+        onClick={(event) => setMenuAnchor(event.currentTarget)}
+        sx={{ display: { xs: "inline-flex", md: "none" }, width: 44, height: 44 }}
+      >
+        <MenuIcon />
+      </IconButton>
+      <Menu
+        id="navbar-menu"
+        anchorEl={menuAnchor}
+        open={menuOpen}
+        onClose={closeMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{ list: { "aria-labelledby": "navbar-menu-button" } }}
+      >
+        {NAV_LINKS.map(({ id, href, label }) => {
+          const isActive = router.pathname === href;
+          return (
+            <MenuItem
+              key={id}
+              id={`${id}-menu`}
+              component={Link}
+              href={href}
+              selected={isActive}
+              aria-current={isActive ? "page" : undefined}
+              onClick={closeMenu}
+              sx={{
+                minHeight: 44,
+                fontWeight: 600,
+                borderLeft: "3px solid",
+                borderColor: isActive ? "primary.main" : "transparent",
+              }}
+            >
+              {label}
+            </MenuItem>
+          );
+        })}
+      </Menu>
     </Box>
   );
 }
