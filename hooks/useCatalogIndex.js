@@ -297,6 +297,7 @@ function buildCompleteness(
  *   index: Map<string, Object>,
  *   completeness: Map<string, {hasSolver: boolean, hasVisualization: boolean, hasVerifier: boolean}>,
  *   reductionGraphByName: Object,
+ *   codeToName: Map<string, string>,
  *   loading: boolean,
  *   error: Error|null,
  * }}
@@ -304,11 +305,18 @@ function buildCompleteness(
  *   display name (see `buildReductionGraphByName` above) -- what
  *   `useCatalogFilters`'s reachability filter traverses, since everything
  *   else this hook returns is already keyed by display name.
+ *   `codeToName` is the same problem code -> display name map used to build
+ *   `reductionGraphByName`, exposed so a caller that must call a backend
+ *   endpoint keyed by raw code directly (e.g. `Navigation/Reductions/path`,
+ *   via `ReductionPathFinder.js`) can translate a display name the user
+ *   picked back to the code the backend expects, and translate the result
+ *   back to display names for rendering.
  */
 export function useCatalogIndex(url) {
   const [index, setIndex] = useState(new Map());
   const [completeness, setCompleteness] = useState(new Map());
   const [reductionGraphByName, setReductionGraphByName] = useState({});
+  const [codeToName, setCodeToName] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -370,6 +378,7 @@ export function useCatalogIndex(url) {
         setIndex(map);
         setCompleteness(completenessMap);
         setReductionGraphByName(buildReductionGraphByName(reductionGraph ?? {}, codeToName));
+        setCodeToName(codeToName);
       } catch (caughtError) {
         if (!cancelled) setError(caughtError);
       } finally {
@@ -382,5 +391,5 @@ export function useCatalogIndex(url) {
     };
   }, [url]);
 
-  return { index, completeness, reductionGraphByName, loading, error };
+  return { index, completeness, reductionGraphByName, codeToName, loading, error };
 }
