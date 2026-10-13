@@ -15,79 +15,31 @@
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
 import StepScrubber from "../detail/StepScrubber";
 import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import Legend from "./Legend";
-import {
-  COMPACT_MEDIA,
-  cardSx,
-  controlLabelSx,
-  SHARED_CONTROL_WIDTH,
-  secondaryButtonSx,
-} from "./layout";
+import { COMPACT_MEDIA, cardSx, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
+import TaggedSelect from "./TaggedSelect";
 
 const PICTURE_MIN_HEIGHT = 440;
 
 /**
- * The Visualization Type label and dropdown at a picture's top right. With a single choice it
- * still shows (so every picture says what type it is) but cannot be changed.
+ * The Visualization Type label and dropdown at a picture's top right, its list opening
+ * aligned to the right edge. With a single choice it still shows (so every picture says what
+ * type it is, with its tags and info card) but cannot be opened.
  */
 function VisualizationTypeControl({ id, options, value, onChange }) {
-  const labelId = `${id}-label`;
   return (
-    <Box
-      sx={{
-        width: SHARED_CONTROL_WIDTH,
-        flex: "none",
-        display: "flex",
-        flexDirection: "column",
-        gap: 0.5,
-        [COMPACT_MEDIA]: { width: "100%" },
-      }}
-    >
-      <Box component="label" id={labelId} sx={controlLabelSx}>
-        Visualization Type
-      </Box>
-      <Select
-        id={id}
-        labelId={labelId}
-        size="small"
-        value={value}
-        disabled={!onChange || options.length < 2}
-        onChange={(event) => onChange?.(event.target.value)}
-        SelectDisplayProps={{ id: `${id}-button` }}
-        MenuProps={{
-          anchorOrigin: { vertical: "bottom", horizontal: "right" },
-          transformOrigin: { vertical: "top", horizontal: "right" },
-        }}
-        sx={{
-          width: "100%",
-          minHeight: 44,
-          backgroundColor: "surface.input",
-          borderRadius: "8px",
-          "& .MuiOutlinedInput-notchedOutline": { borderColor: "border.main" },
-          "& .MuiSelect-select": {
-            py: "10px",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          },
-          // A fixed single choice still reads as text, not as a greyed-out control.
-          "& .MuiSelect-select.Mui-disabled": {
-            WebkitTextFillColor: "currentColor",
-            color: "text.primary",
-          },
-        }}
-      >
-        {options.map((option) => (
-          <MenuItem key={option.value} value={option.value} sx={{ minHeight: 44 }}>
-            {option.label}
-          </MenuItem>
-        ))}
-      </Select>
-    </Box>
+    <TaggedSelect
+      id={id}
+      label="Visualization Type"
+      hue="cyan"
+      align="right"
+      options={options}
+      value={value}
+      onChange={options.length > 1 ? onChange : undefined}
+      boxSx={{ width: SHARED_CONTROL_WIDTH, flex: "none", [COMPACT_MEDIA]: { width: "100%" } }}
+    />
   );
 }
 

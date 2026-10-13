@@ -211,8 +211,12 @@ export async function openPanel(page, panelKey, { expect }) {
  * which for many problems is an exponential brute force.
  */
 export async function selectSolverByName(page, solverName, { expect }) {
-  const combobox = page.locator("#workbench-solver-button");
-  await combobox.click();
-  await page.getByRole("option", { name: solverName, exact: true }).click();
-  await expect(combobox).toHaveText(solverName);
+  const button = page.locator("#workbench-solver-button");
+  await button.click();
+  await page
+    .locator("#workbench-solver-listbox")
+    .getByRole("option", { name: solverName, exact: true })
+    .click();
+  // #229 stage 2: the box also shows the solver's tags, so read the name on its own.
+  await expect(page.locator("#workbench-solver-value")).toHaveText(solverName);
 }

@@ -120,7 +120,7 @@ test("after Run, Result gets a dot instead of opening, and opening Result clears
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
 
-  const solverName = ((await page.locator("#workbench-solver-button").textContent()) ?? "").trim();
+  const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
   const showing = page.locator("#workbench-showing");
   await expect(showing).toHaveText(NOT_RUN);
   await expect(page.locator("#workbench-rail-result-dot")).toHaveCount(0);
@@ -151,7 +151,7 @@ test("editing the instance after a run resets the picture to the base instance",
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
 
-  const solverName = ((await page.locator("#workbench-solver-button").textContent()) ?? "").trim();
+  const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
   const showing = page.locator("#workbench-showing");
 
   await page.locator("#workbench-run").click();
@@ -231,10 +231,8 @@ test("Reduce mode shows To and Using, and Run builds the target picture", async 
   await page.locator("#workbench-mode-reduce").click();
   await expect(page.locator("#workbench-mode-reduce")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#workbench-solver-button")).toHaveCount(0);
-  const target = ((await page.locator("#workbench-target-button").textContent()) ?? "").trim();
-  const reduction = (
-    (await page.locator("#workbench-reduction-button").textContent()) ?? ""
-  ).trim();
+  const target = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
+  const reduction = ((await page.locator("#workbench-reduction-value").textContent()) ?? "").trim();
   expect(target).not.toBe("");
   expect(reduction).not.toBe("");
 

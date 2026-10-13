@@ -5,10 +5,9 @@
 // and Using dropdowns, and Run on the right. Instance errors and the run's own status show
 // under it.
 //
-// Stage 1 of #229 keeps two things simple on purpose, both replaced by later stages:
-//   - The instance shows as one line of text, truncated. Labeled pieces per part are stage 5.
-//   - The dropdowns are MUI Selects. Stage 2 swaps them for tagged listboxes with info
-//     cards; they already have their final widths (DROPDOWN_WIDTH) and layout.
+// Stage 1 of #229 kept the instance simple on purpose: it shows as one line of text,
+// truncated. Labeled pieces per part are stage 5. The dropdowns are the tagged listboxes of
+// stage 2 (./TaggedSelect.js), each with its tags and info card.
 //
 // On phones and tablets (COMPACT_MEDIA) the bar is not sticky (it never is: it scrolls with
 // the page so the picture gets the screen), and Edit and Run drop to their own lines on the
@@ -16,17 +15,15 @@
 
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import Box from "@mui/material/Box";
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
 import {
   COMPACT_MEDIA,
   cardSx,
-  controlLabelSx,
   DROPDOWN_WIDTH,
   MONO_FONT,
   SHARED_CONTROL_WIDTH,
   secondaryButtonSx,
 } from "./layout";
+import TaggedSelect from "./TaggedSelect";
 
 // Forces the next item onto its own line, only on phones and tablets.
 function CompactLineBreak() {
@@ -35,59 +32,6 @@ function CompactLineBreak() {
       aria-hidden="true"
       sx={{ display: "none", [COMPACT_MEDIA]: { display: "block", flexBasis: "100%", height: 0 } }}
     />
-  );
-}
-
-const selectSx = {
-  width: "100%",
-  minHeight: 44,
-  backgroundColor: "surface.input",
-  borderRadius: "8px",
-  "& .MuiOutlinedInput-notchedOutline": { borderColor: "border.main" },
-  "& .MuiSelect-select": {
-    py: "10px",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-};
-
-/**
- * Everything one labelled dropdown needs. `labelId` ties the visible label to the Select's
- * combobox (MUI sets `aria-labelledby` from it and focuses the combobox on a label click);
- * the combobox itself gets `${id}-button`.
- */
-function selectSpec({ id, label, value, options, onChange, disabled }) {
-  return { labelId: `${id}-label`, label, id, value, options, onChange, disabled };
-}
-
-function SelectControl({ spec }) {
-  return (
-    <Select
-      id={spec.id}
-      labelId={spec.labelId}
-      size="small"
-      value={spec.value}
-      onChange={(event) => spec.onChange(event.target.value)}
-      disabled={spec.disabled}
-      SelectDisplayProps={{ id: `${spec.id}-button` }}
-      sx={selectSx}
-      MenuProps={{ slotProps: { paper: { sx: { maxWidth: "min(460px, calc(100vw - 32px))" } } } }}
-    >
-      {spec.options.map((option) => (
-        <MenuItem key={option.value} value={option.value} sx={{ minHeight: 44 }}>
-          {option.label}
-        </MenuItem>
-      ))}
-    </Select>
-  );
-}
-
-function ControlLabel({ spec }) {
-  return (
-    <Box component="label" id={spec.labelId} sx={controlLabelSx}>
-      {spec.label}
-    </Box>
   );
 }
 
@@ -127,8 +71,9 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
  * @param {() => void} props.onEdit Opens the Instance panel.
  * @param {"solve"|"reduce"} props.mode
  * @param {(mode: "solve"|"reduce") => void} props.onModeChange
- * @param {{value: string, options: {value: string, label: string}[], onChange: Function}|null}
- *   props.solver The Solver dropdown, or null when the problem declares no solver.
+ * @param {{value: string, options: {value: string, label: string, tags: Array, card: Object}[],
+ *   onChange: Function}|null} props.solver The Solver dropdown (options as TaggedSelect
+ *   takes them), or null when the problem declares no solver.
  * @param {{value: string, options: Array, onChange: Function}|null} props.target The To
  *   dropdown, or null when the problem has no reductions.
  * @param {{value: string, options: Array, onChange: Function}|null} props.reduction The
@@ -157,15 +102,6 @@ export default function CommandBar({
   status,
 }) {
   const instanceLabelId = `${idPrefix}-instance-label`;
-  const solverSpec = solver
-    ? selectSpec({ id: `${idPrefix}-solver`, label: "Solver", ...solver })
-    : null;
-  const targetSpec = target
-    ? selectSpec({ id: `${idPrefix}-target`, label: "To", ...target })
-    : null;
-  const reductionSpec = reduction
-    ? selectSpec({ id: `${idPrefix}-reduction`, label: "Using", ...reduction })
-    : null;
 
   return (
     <Box
@@ -280,16 +216,28 @@ export default function CommandBar({
           </ModeButton>
         </Box>
 
-        {mode === "solve" && solverSpec && (
-          <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 8px" }}>
-            <ControlLabel spec={solverSpec} />
-            <Box sx={{ width: DROPDOWN_WIDTH, maxWidth: "100%" }}>
-              <SelectControl spec={solverSpec} />
-            </Box>
+        {mode === "solve" && solver && (
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "6px 8px",
+              minWidth: 0,
+            }}
+          >
+            <TaggedSelect
+              id={`${idPrefix}-solver`}
+              label="Solver"
+              hue="blue"
+              labelPlacement="row"
+              boxSx={{ width: DROPDOWN_WIDTH, maxWidth: "100%" }}
+              {...solver}
+            />
           </Box>
         )}
 
-        {mode === "reduce" && targetSpec && reductionSpec && (
+        {mode === "reduce" && target && reduction && (
           <Box
             sx={{
               display: "grid",
@@ -300,10 +248,20 @@ export default function CommandBar({
               minWidth: 0,
             }}
           >
-            <ControlLabel spec={targetSpec} />
-            <SelectControl spec={targetSpec} />
-            <ControlLabel spec={reductionSpec} />
-            <SelectControl spec={reductionSpec} />
+            <TaggedSelect
+              id={`${idPrefix}-target`}
+              label="To"
+              hue="violet"
+              labelPlacement="row"
+              {...target}
+            />
+            <TaggedSelect
+              id={`${idPrefix}-reduction`}
+              label="Using"
+              hue="violet"
+              labelPlacement="row"
+              {...reduction}
+            />
           </Box>
         )}
 

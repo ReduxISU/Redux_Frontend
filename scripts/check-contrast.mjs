@@ -103,6 +103,26 @@ function pairsFor(t) {
     add(`tag ${name}: filled label`, f.onStrong, f.strong, TEXT);
   }
 
+  // #229 stage 2: the workbench's tagged dropdowns. Tags sit in the closed box (input), on the
+  // open list (surface), on the chosen option (raised) and on the active option (raised2);
+  // the chosen option carries a 3px accent mark and the list's text sits on raised2 too.
+  for (const hue of ["blue", "violet", "cyan"]) {
+    const f = t.tag[hue];
+    for (const [bgName, bg] of [
+      ["input", s.input],
+      ["raised", s.raised],
+      ["raised2", s.raised2],
+    ]) {
+      add(`dropdown tag ${hue}: text on tag bg over ${bgName}`, f.text, over(f.bg, bg), TEXT);
+      add(`dropdown tag ${hue}: border on ${bgName}`, f.rowBorder, bg, UI);
+    }
+  }
+  add("dropdown text on active option (raised2)", t.text.primary, s.raised2, TEXT);
+  add("dropdown selected mark (accent line) on raised", t.brand.line, s.raised, UI);
+  add("dropdown selected mark (accent line) on raised2", t.brand.line, s.raised2, UI);
+  add("dropdown list border on surface", t.border.main, s.main, UI);
+  add("info card border on surface", t.border.strong, s.main, UI);
+
   const v = t.viz;
   for (const key of ["background", "solution", "elementHighlight", "clauseHighlight"]) {
     for (const [bgName, bg] of [
