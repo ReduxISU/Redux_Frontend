@@ -45,13 +45,17 @@ import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import { useColorScheme } from "@mui/material/styles";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
 import { THEME_ATTRIBUTE } from "./theme";
 
 const LOGO_ALT = "Idaho State University, Computer Science";
+// The logo is a plain <img> (MUI Box component="img"), not next/image. It was already
+// `unoptimized`, so next/image added nothing here, and on Next 16.4.0 importing next/image
+// in this shared component makes Turbopack's dev server leave @mui/material out of the client
+// chunks for /help, /aboutus and /reduction-graph ("module factory is not available" for
+// Box.mjs). Production builds were fine and the bug is gone in 16.5.0-canary.9.
 // Trimmed logo files in public/ are 289 x 120; shown 40px tall.
 const LOGO_WIDTH = 289;
 const LOGO_HEIGHT = 120;
@@ -139,19 +143,14 @@ function IsuLogo() {
         { scheme: "light", src: "/ISULogo-Light.png", id: "navbar-isu-logo-light" },
       ].map(({ scheme, src, id }) => (
         <Box key={scheme} component="span" sx={onlyInSx(scheme, "block")}>
-          <Image
+          <Box
+            component="img"
             id={id}
             src={src}
             alt={LOGO_ALT}
             width={LOGO_WIDTH}
             height={LOGO_HEIGHT}
-            unoptimized
-            loading="eager"
-            style={{
-              display: "block",
-              height: LOGO_DISPLAY_HEIGHT,
-              width: "auto",
-            }}
+            sx={{ display: "block", height: LOGO_DISPLAY_HEIGHT, width: "auto" }}
           />
         </Box>
       ))}
