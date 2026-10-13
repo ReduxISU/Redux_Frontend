@@ -9,7 +9,8 @@
 //     problem's answer and map that answer onto the target (ProblemProvider/mapSolution). The
 //     mapped certificate gets its own Verify This Answer, checked against the target.
 //   - Verify at the bottom (./VerifyBox.js), which works before anything has run.
-// Gadgets (Reduce mode) are stage 4.
+//   - Gadgets (Reduce mode, stage 4, ./GadgetsSection.js): what the reduction built for each
+//     piece of the source, at the bottom of the reduction's result; hidden when it lists none.
 //
 // Time is the round trip this browser measured, network included, and is labelled that way:
 // Redux reports no running time of its own for a solve (#95).
@@ -20,6 +21,7 @@ import { COMPUTE_FAILED } from "../../../hooks/useComputeRequest";
 import ComputeStatus from "../../detail/ComputeStatus";
 import { MONO_FONT, secondaryButtonSx } from "../layout";
 import TaggedSelect from "../TaggedSelect";
+import GadgetsSection from "./GadgetsSection";
 import VerifyBox from "./VerifyBox";
 
 function formatSeconds(milliseconds) {
@@ -95,6 +97,9 @@ function CodeBlock({ id, label, children, maxHeight }) {
  * @param {Object|null} props.map "Map a solution across" (Reduce mode): `{select, onMap,
  *   disabled, hint, request, mapped: {certificate, solverName, reused}|null, onVerifyMapped}`.
  * @param {Object} props.verifyProps Everything ./VerifyBox.js takes, except its idPrefix.
+ * @param {Object|null} [props.gadgets] The Gadgets section (Reduce mode): `{runId, gadgets,
+ *   sourceFrame, targetFrame, activeIndex, onHighlight}`, everything ./GadgetsSection.js takes
+ *   except its idPrefix. `runId` remounts the section per run, so a new run starts it closed.
  */
 export default function ResultPanel({
   idPrefix,
@@ -106,6 +111,7 @@ export default function ResultPanel({
   onVerifyAnswer,
   map,
   verifyProps,
+  gadgets,
 }) {
   const result = mode === "solve" ? solveResult : reduceResult;
   const changed = Boolean(result) && result.instance !== instance;
@@ -266,6 +272,18 @@ export default function ResultPanel({
                 </Box>
               )}
             </Box>
+          )}
+
+          {gadgets && (
+            <GadgetsSection
+              key={gadgets.runId}
+              idPrefix={`${idPrefix}-gadgets`}
+              gadgets={gadgets.gadgets}
+              sourceFrame={gadgets.sourceFrame}
+              targetFrame={gadgets.targetFrame}
+              activeIndex={gadgets.activeIndex}
+              onHighlight={gadgets.onHighlight}
+            />
           )}
         </Box>
       )}

@@ -193,6 +193,10 @@ export const THEME_TOKENS = {
       edge: "#6B6B6B",
       // De-emphasis is a color, never low opacity: still at least 3:1 on the canvas.
       dim: "#6B6B6B",
+      // #229 stage 4: the ring (nodes, literals, clauses) and underlay (edges) a gadget row
+      // draws on the pictures while it is hovered or focused. Reduce mode's gold, which no
+      // color key uses, so it reads as "this gadget" and not as an answer or a step.
+      gadget: ISU_GOLD,
       label: WHITE,
       blue: "#60A5FA",
       orange: "#FB923C",
@@ -263,6 +267,7 @@ export const THEME_TOKENS = {
       nodeBorder: "#525252",
       edge: "#8A8A8A",
       dim: "#8A8A8A",
+      gadget: "#B45309",
       label: BLACK,
       blue: "#1D4ED8",
       orange: "#C2410C",

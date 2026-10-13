@@ -93,6 +93,9 @@ function CannotRender({ idPrefix, reason, violations }) {
  *   straight through -- see `RecursiveSetRenderer`'s own doc comment.
  * @param {(op: Object) => void} [props.onCircuitEdit] Forwarded straight through -- see
  *   `QuantumCircuitRenderer`'s own doc comment for the edit-descriptor shape.
+ * @param {string[]} [props.highlightIds] #229 stage 4: ids of the pieces the hovered or
+ *   focused gadget row names. Forwarded straight through; `GraphRenderer` and
+ *   `BooleanSatisfiabilityRenderer` draw them, the other renderers ignore it for now.
  */
 export default function VisualizationCanvas({
   idPrefix,
@@ -105,6 +108,7 @@ export default function VisualizationCanvas({
   onGraphEdit,
   onDataChange,
   onCircuitEdit,
+  highlightIds,
 }) {
   const universalType = resolveVisualizationType(backendType, frame);
   const Renderer = universalType ? RENDERERS[universalType] : null;
@@ -159,6 +163,7 @@ export default function VisualizationCanvas({
       onGraphEdit={onGraphEdit}
       onDataChange={onDataChange}
       onCircuitEdit={onCircuitEdit}
+      highlightIds={highlightIds}
     />
   );
 }

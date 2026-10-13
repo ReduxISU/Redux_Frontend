@@ -74,6 +74,11 @@ const LAYOUT_WIDTH = 640;
 const LAYOUT_HEIGHT = 380;
 const SIMULATION_TICKS = 300;
 const DEFAULT_STROKE = getVisualizationColor("");
+// #229 stage 4: a gadget row in the Result panel rings the nodes and underlines the edges it
+// names. A separate ring and underlay in its own color (never opacity), so the node's own
+// fill, outline and the link's color keep saying what they said.
+const GADGET_STROKE = paletteVars.viz.gadget;
+const GADGET_RING_GAP = 5;
 
 function isTruthyFlag(value) {
   return value === "true" || value === true;
@@ -106,7 +111,7 @@ function layoutGraph(nodes, links) {
   return { simNodes, simLinks };
 }
 
-function LinkMark({ link, idPrefix, highlighted, editable }) {
+function LinkMark({ link, idPrefix, highlighted, gadgetHighlighted, editable }) {
   const source = link.source;
   const target = link.target;
   if (!source || !target || source.x === undefined || target.x === undefined) {
@@ -124,7 +129,17 @@ function LinkMark({ link, idPrefix, highlighted, editable }) {
     : computeEdgePath(source, target, NODE_RADIUS, link.curvature ?? 0);
 
   return (
-    <g>
+    <g data-link-id={link.id} data-gadget-highlighted={gadgetHighlighted ? "true" : undefined}>
+      {gadgetHighlighted && (
+        <path
+          d={geo.path}
+          fill="none"
+          stroke={GADGET_STROKE}
+          strokeWidth={7}
+          strokeLinecap="round"
+          style={{ pointerEvents: "none" }}
+        />
+      )}
       {editable && (
         <path
           d={geo.path}
@@ -171,7 +186,7 @@ function LinkMark({ link, idPrefix, highlighted, editable }) {
   );
 }
 
-function GraphNodeMark({ node, highlighted, onEnter, onLeave }) {
+function GraphNodeMark({ node, highlighted, gadgetHighlighted, onEnter, onLeave }) {
   // #156: the node body uses the key's fill and its label the matching on-fill color, so a
   // label never sits light on light or dark on dark; the outline uses the key's line color.
   const fill = getVisualizationFill(node.color);
@@ -186,6 +201,8 @@ function GraphNodeMark({ node, highlighted, onEnter, onLeave }) {
       tabIndex={0}
       role="img"
       aria-label={node.name}
+      data-node-id={node.id}
+      data-gadget-highlighted={gadgetHighlighted ? "true" : undefined}
       transform={`translate(${node.x}, ${node.y})`}
       style={{ cursor: "default" }}
       onMouseEnter={onEnter}
@@ -200,6 +217,14 @@ function GraphNodeMark({ node, highlighted, onEnter, onLeave }) {
         />
       )}
       {isAccept && <circle r={NODE_RADIUS + 3} fill="none" stroke={stroke} strokeWidth={1.5} />}
+      {gadgetHighlighted && (
+        <circle
+          r={NODE_RADIUS + (isAccept ? 3 : 0) + GADGET_RING_GAP}
+          fill="none"
+          stroke={GADGET_STROKE}
+          strokeWidth={3}
+        />
+      )}
       <circle
         r={NODE_RADIUS}
         fill={fill}
@@ -237,6 +262,8 @@ function GraphNodeMark({ node, highlighted, onEnter, onLeave }) {
  *   structural edit -- `{type: "addNode", id}`, `{type: "removeNode", id}`,
  *   `{type: "renameNode", from, to}`, `{type: "addEdge", source, target}`, or
  *   `{type: "removeEdge", id}`. Required when `editable` is true.
+ * @param {string[]} [props.highlightIds] #229 stage 4: node ids and edge ids ("a-b", either
+ *   order) to ring and underline, for the gadget row being hovered or focused.
  */
 export default function GraphRenderer({
   idPrefix,
@@ -244,6 +271,7 @@ export default function GraphRenderer({
   frame,
   editable = false,
   onGraphEdit,
+  highlightIds,
 }) {
   const reactId = useId().replace(/:/g, "");
   const scopeId = `${idPrefix}-${reactId}`;
@@ -252,6 +280,11 @@ export default function GraphRenderer({
   const menuRef = useRef(null);
 
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
+  const gadgetIds = useMemo(() => new Set(highlightIds ?? []), [highlightIds]);
+  const linkInGadget = (link) =>
+    gadgetIds.has(link.id) ||
+    gadgetIds.has(`${link.source?.id}-${link.target?.id}`) ||
+    gadgetIds.has(`${link.target?.id}-${link.source?.id}`);
   const [positionOverride, setPositionOverride] = useState({});
   const [curvatureOverride, setCurvatureOverride] = useState({});
   const [drag, setDrag] = useState({ kind: "none" });
@@ -563,6 +596,7 @@ export default function GraphRenderer({
               }}
               idPrefix={scopeId}
               editable={editable}
+              gadgetHighlighted={gadgetIds.size > 0 && linkInGadget(link)}
               highlighted={
                 hoveredNodeId != null &&
                 (link.source?.id === hoveredNodeId || link.target?.id === hoveredNodeId)
@@ -595,6 +629,7 @@ export default function GraphRenderer({
             key={node.id}
             node={node}
             highlighted={node.id === hoveredNodeId}
+            gadgetHighlighted={gadgetIds.has(node.id)}
             onEnter={() => setHoveredNodeId(node.id)}
             onLeave={() => setHoveredNodeId((current) => (current === node.id ? null : current))}
           />

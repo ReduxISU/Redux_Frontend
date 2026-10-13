@@ -45,11 +45,13 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
 
 /**
  * What goes inside one picture box.
- * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object}
+ * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object,
+ *     highlightIds?: string[]}
  *   | {kind: "loading", text: string}
  *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
  *      action?: {id: string, label: string, onClick: Function}}} PictureContent
  *   `compact` draws a short box (no picture is coming, so no room is held for one).
+ *   `highlightIds` are the pieces the hovered or focused gadget row names (#229 stage 4).
  */
 function PictureBox({ idPrefix, content }) {
   let inner;
@@ -64,6 +66,7 @@ function PictureBox({ idPrefix, content }) {
           frame={content.frame}
           editable={Boolean(edit?.editable)}
           maxLiteralsPerClause={edit?.maxLiteralsPerClause}
+          highlightIds={content.highlightIds}
           {...(edit?.handlers ?? {})}
         />
       </Box>
@@ -113,6 +116,9 @@ function PictureBox({ idPrefix, content }) {
     <Box
       id={`${idPrefix}-picture`}
       data-picture-kind={content.kind}
+      data-gadget-highlight-count={
+        content.kind === "frame" && content.highlightIds ? content.highlightIds.length : undefined
+      }
       sx={{
         minHeight: content.compact ? 160 : PICTURE_MIN_HEIGHT,
         display: "flex",
