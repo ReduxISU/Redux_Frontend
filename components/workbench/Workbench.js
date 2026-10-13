@@ -1,6 +1,7 @@
 // components/workbench/Workbench.js
 //
-// #229 stage 1: the problem page as a workbench with the picture at the center. A rail of
+// #229 stage 1 (stage 2 added the tagged dropdowns and info cards, components/workbench/
+// TaggedSelect.js and infoCards.js): the problem page as a workbench with the picture at the center. A rail of
 // panel buttons on the left (Details, Instance, Result), one panel open at a time beside the
 // picture, the command bar above the picture and the picture pane under it. Replaces the old
 // page's five draggable sections (components/ProblemDetailLayout.js, retired here); the
@@ -43,6 +44,16 @@ import {
 } from "../../lib/redux";
 import ComputeStatus from "../detail/ComputeStatus";
 import CommandBar from "./CommandBar";
+import {
+  reductionCard,
+  reductionTags,
+  solverCard,
+  solverTags,
+  targetCard,
+  targetTags,
+  visualizationCard,
+  visualizationTags,
+} from "./infoCards";
 import { COMPACT_MEDIA, cardSx, PANEL_WIDTH } from "./layout";
 import DetailsPanel from "./panels/DetailsPanel";
 import InstancePanel from "./panels/InstancePanel";
@@ -424,6 +435,8 @@ export default function Workbench({ problem }) {
         options: visualizations.map((visualization, index) => ({
           value: String(index),
           label: visualization.name,
+          tags: visualizationTags(visualization),
+          card: visualizationCard(visualization, "source"),
         })),
         value: String(vizIndex),
         onChange: (value) => setVizIndex(Number(value)),
@@ -466,7 +479,19 @@ export default function Workbench({ problem }) {
     }
     target = {
       title: `Target: ${targetLabel}`,
-      type: targetViz ? { options: [{ value: "0", label: targetViz.name }], value: "0" } : null,
+      type: targetViz
+        ? {
+            options: [
+              {
+                value: "0",
+                label: targetViz.name,
+                tags: visualizationTags(targetViz),
+                card: visualizationCard(targetViz, "target"),
+              },
+            ],
+            value: "0",
+          }
+        : null,
       content,
     };
   }
@@ -791,6 +816,8 @@ export default function Workbench({ problem }) {
                     options: solvers.map((solver, index) => ({
                       value: String(index),
                       label: solver.name,
+                      tags: solverTags(solver),
+                      card: solverCard(solver),
                     })),
                     onChange: (value) => setSolverIndex(Number(value)),
                   }
@@ -800,7 +827,17 @@ export default function Workbench({ problem }) {
               targets.length > 0
                 ? {
                     value: targetName ?? targets[0],
-                    options: targets.map((name) => ({ value: name, label: name })),
+                    options: targets.map((name) => {
+                      const targetProblem = reductions.find(
+                        (reduction) => reduction.target === name,
+                      )?.targetProblem;
+                      return {
+                        value: name,
+                        label: name,
+                        tags: targetTags(targetProblem),
+                        card: targetCard(name, targetProblem),
+                      };
+                    }),
                     onChange: selectTarget,
                   }
                 : null
@@ -812,6 +849,8 @@ export default function Workbench({ problem }) {
                     options: reductionsForTarget.map((reduction) => ({
                       value: reduction.className,
                       label: reduction.name,
+                      tags: reductionTags(reduction),
+                      card: reductionCard(reduction, problem.name),
                     })),
                     onChange: setReductionClassName,
                   }

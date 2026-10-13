@@ -111,15 +111,32 @@ function withFilledState(facets, onStrong) {
 }
 
 // The mockup's per-hue tag tokens (--tag-{hue}-{border,bg,text}), named by hue for the
-// workbench page (#229). Same values as the facet families they match.
-function tagHues(facets) {
-  return {
+// workbench page (#229). Same values as the facet families they match, plus `rowBorder`: the
+// border a tag gets inside the workbench's dropdowns (#229 stage 2), where it also sits on
+// the raised grey of a chosen or active option. The dark theme's 60% border drops under 3:1
+// on those greys, so it is 75% there; the light theme's solid border already holds.
+const DARK_TAG_ROW_BORDERS = {
+  orange: "rgba(251, 146, 60, 0.75)",
+  blue: "rgba(96, 165, 250, 0.75)",
+  cyan: "rgba(34, 211, 238, 0.75)",
+  violet: "rgba(192, 132, 252, 0.75)",
+  green: "rgba(74, 222, 128, 0.75)",
+};
+
+function tagHues(facets, rowBorders) {
+  const hues = {
     orange: facets.amber,
     blue: facets.blue,
     cyan: facets.cyan,
     violet: facets.violet,
     green: facets.green,
   };
+  return Object.fromEntries(
+    Object.entries(hues).map(([hue, family]) => [
+      hue,
+      { ...family, rowBorder: rowBorders?.[hue] ?? family.border },
+    ]),
+  );
 }
 
 const DARK_FACET_FAMILIES = withFilledState(DARK_FACETS, BLACK);
@@ -163,7 +180,7 @@ export const THEME_TOKENS = {
       onStatus: BLACK,
     },
     facet: DARK_FACET_FAMILIES,
-    tag: tagHues(DARK_FACET_FAMILIES),
+    tag: tagHues(DARK_FACET_FAMILIES, DARK_TAG_ROW_BORDERS),
     viz: {
       // Visualization color keys (ai_documentation/VISUALIZATION_TYPE_CONTRACTS.md section 4.3).
       // `line` stands on the canvas (strokes, marks, colored text), `fill` fills a node or

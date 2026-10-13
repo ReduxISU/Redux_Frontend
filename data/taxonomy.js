@@ -517,3 +517,54 @@ export function buildOptionsFromBackendNames(facetKey, backendMemberNames) {
 
   return options;
 }
+
+/**
+ * #229: the display label for one raw backend enum member, read the same way the sidebar
+ * reads it (buildOptionsFromBackendNames above), so the workbench's dropdown tags and info
+ * cards name a solver type, complexity bucket, reduction type, reduction cost or complexity
+ * class exactly as the catalog does: `("solverType", "BruteForce")` -> "Brute Force",
+ * `("reductionType", "ComponentDesign")` -> "Component Design", `("complexityClass",
+ * "NPComplete")` -> "NP-Complete". Complexity buckets use the "solverComplexity" facet's
+ * labels for reductions too, since both carry the same backend bucket names.
+ *
+ * @param {string} facetKey One of TAXONOMY's facet keys.
+ * @param {string|null|undefined} memberName The raw backend value.
+ * @returns {string|undefined} Undefined when the backend sent nothing or "Unclassified".
+ */
+export function backendEnumLabel(facetKey, memberName) {
+  if (typeof memberName !== "string" || !memberName || memberName === UNCLASSIFIED) {
+    return undefined;
+  }
+  return buildOptionsFromBackendNames(facetKey, [memberName])[0]?.label;
+}
+
+// #229: the backend's `pictureType` (what a visualization draws under
+// `visualize?format=frames`, e.g. "Graph", "GroupedGraph"; /info sends it beside
+// `visualizationType`) -> its display label. Shown as the Visualization Type dropdown's tag
+// and in that type's info card. A picture type missing here is labelled from its own name.
+export const PICTURE_TYPE_LABELS = {
+  Automaton: "Automaton",
+  BipartiteGraph: "Bipartite Graph",
+  Board: "Board",
+  CodeTree: "Code Tree",
+  FlowNetwork: "Flow Network",
+  Geometry: "Geometry",
+  Graph: "Graph",
+  GroupedGraph: "Grouped Graph",
+  LayeredGraph: "Layered Graph",
+  Packing: "Packing",
+  QuantumCircuit: "Quantum Circuit",
+  Schedule: "Schedule",
+  SearchTree: "Search Tree",
+  Table: "Table",
+  TripartiteMatching: "Tripartite Matching",
+};
+
+/**
+ * @param {string|null|undefined} pictureType The backend's `pictureType`.
+ * @returns {string|undefined} Undefined when the visualization declares none.
+ */
+export function pictureTypeLabel(pictureType) {
+  if (typeof pictureType !== "string" || !pictureType) return undefined;
+  return PICTURE_TYPE_LABELS[pictureType] ?? autoLabelFromBackendName(pictureType);
+}

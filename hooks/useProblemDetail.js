@@ -77,6 +77,12 @@ function slugify(name) {
 // (T37/#95) needs it: ProblemProvider/solve is keyed by the solver's class
 // name ("CliqueBruteForce"), which is what allSolvers lists, not by the
 // human-readable solverName ("Clique Brute Force Solver") the UI shows.
+//
+// #229: the raw backend fields the workbench's Solver dropdown tags and info card read are
+// carried too: `description` (solverDefinition), `solverTypeName` and `complexityBucketName`
+// (the backend's own enum members, labelled through data/taxonomy.js's backendEnumLabel),
+// and `timeComplexity` / `spaceComplexity` (see normalizeComplexity). No solver declares
+// `spaceComplexity` yet, so it is null today.
 function buildSolvers(solverClassNames, info) {
   return (solverClassNames ?? []).map((className) => {
     const solverInfo = info[className] ?? {};
@@ -86,8 +92,39 @@ function buildSolvers(solverClassNames, info) {
       type: SOLVER_TYPE_MAP[solverInfo.solverType],
       complexityBucket: SOLVER_COMPLEXITY_MAP[solverInfo.complexityBucket],
       bigO: solverInfo.complexity || undefined,
+      description: solverInfo.solverDefinition || "",
+      solverTypeName: solverInfo.solverType ?? null,
+      complexityBucketName: solverInfo.complexityBucket ?? null,
+      timeComplexity: normalizeComplexity(solverInfo.timeComplexity),
+      spaceComplexity: normalizeComplexity(solverInfo.spaceComplexity),
     };
   });
+}
+
+/**
+ * #229: a solver's declared `timeComplexity` / `spaceComplexity`, as /info sends it
+ * (`{Function: "2^n * |phi|", Description: ", n = number of variables, ...",
+ * VariableNames: ["n", "phi"]}`), in the shape the info card reads. The Description starts
+ * with ", " because the backend writes it to follow the Big-O; that is trimmed here. A bare
+ * string is taken as the function itself.
+ *
+ * @returns {{function: string, variables: string, variableNames: string[]}|null} Null when
+ *   the solver declares nothing.
+ */
+function normalizeComplexity(value) {
+  if (typeof value === "string") {
+    return value ? { function: value, variables: "", variableNames: [] } : null;
+  }
+  if (!value || typeof value !== "object") return null;
+  const fn = value.Function ?? value.function;
+  if (typeof fn !== "string" || !fn) return null;
+  const description = value.Description ?? value.description;
+  const variableNames = value.VariableNames ?? value.variableNames;
+  return {
+    function: fn,
+    variables: typeof description === "string" ? description.replace(/^[\s,]+/, "") : "",
+    variableNames: Array.isArray(variableNames) ? variableNames : [],
+  };
 }
 
 // `className` and `backendType` are carried alongside the display name because T48
@@ -109,6 +146,13 @@ function buildVisualizations(visualizationClassNames, info, visualizationTypesBy
       backendType:
         visualizationTypesByInstance[className] ?? visualizationInfo.visualizationType ?? "",
       caption: visualizationInfo.visualizationDefinition ?? "",
+      // #229: what the Visualization Type info card reads. `pictureType` is what the
+      // visualization draws ("Graph", "SearchTree"; null when it serves no frames, or on a
+      // backend older than the field). `solverName` / `verifierName` are the solver whose
+      // steps it plays and the verifier whose checks it draws, when it declares one.
+      pictureType: visualizationInfo.pictureType ?? null,
+      solverName: visualizationInfo.solver?.solverName ?? null,
+      verifierName: visualizationInfo.verifier?.verifierName ?? null,
     };
   });
 }
@@ -192,6 +236,17 @@ function buildReductions(
             // the way solvers/visualizations/verifiers require.
             name: edge.reductionName ?? edge.className,
             targetVisualization: targetVisualization ?? null,
+            // #229: what the Using and To dropdowns' tags and info cards read. The raw enum
+            // members (labelled through data/taxonomy.js's backendEnumLabel); `bigO` is the
+            // reduction's own declared cost ("O(n^2), n = 3 * |SAT3.clauses| ..."), which
+            // only /info carries; `description` is its reductionDefinition.
+            costName: edge.cost ?? null,
+            reductionTypeName: edge.reductionType ?? null,
+            complexityBucketName:
+              edge.complexityBucket ?? info[edge.className]?.complexityBucket ?? null,
+            bigO: info[edge.className]?.complexity || "",
+            description: info[edge.className]?.reductionDefinition || "",
+            targetProblem: buildTargetProblem(toCode, info, codeToName),
           });
         }
         if (toCode === problemCode) {
@@ -206,6 +261,24 @@ function buildReductions(
   }
 
   return { to, from };
+}
+
+/**
+ * #229: the facts the To dropdown's tags and info card show about a reduction's target
+ * problem: its one-line definition and its complexity class and problem type, resolved the
+ * same way as this problem's own title-row tags (mergeSupplementalTags), so the two can never
+ * disagree.
+ */
+function buildTargetProblem(problemCode, info, codeToName) {
+  const problemInfo = info[problemCode] ?? {};
+  const name = codeToName.get(problemCode) ?? problemCode;
+  const tags = mergeSupplementalTags(name, { complexityClass: problemInfo.complexityClass });
+  return {
+    name,
+    description: problemInfo.problemDefinition || "",
+    complexityClass: tags.complexityClass,
+    problemType: tags.problemType,
+  };
 }
 
 function buildProblem(problemCode, info, batches, codeToName) {
