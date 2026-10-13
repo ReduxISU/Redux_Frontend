@@ -112,7 +112,7 @@ export default function ContributorList() {
                 borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
-                "&:hover": { borderColor: "primary.light" },
+                "&:hover": { borderColor: "brand.line" },
               }}
             >
               {githubProfile ? (
@@ -161,7 +161,7 @@ export default function ContributorList() {
                   minHeight: { xs: 44, md: "auto" },
                   flex: { xs: 1, md: "none" },
                   color: "text.primary",
-                  "&:hover": { color: "primary.light" },
+                  "&:hover": { color: "brand.text" },
                 }}
               >
                 {name}

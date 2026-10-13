@@ -36,7 +36,8 @@
 //
 // No visual reference exists for the non-interactive treatment: both Home
 // mockups predate the 2026-08-31 amendment that introduced the rule. The
-// choice made here (reduced opacity + dashed border, so the difference
+// choice made here (dashed border, no fill, greyscale tags; #156 dropped the reduced
+// opacity, which failed text contrast; so the difference
 // doesn't rely on color alone) is recorded as a decision comment on #16, not
 // assumed silently -- see this task's handback summary.
 //
@@ -336,10 +337,14 @@ export default function ProblemCatalogCard({
         color: "inherit",
         textDecoration: "none",
         cursor: complete ? "pointer" : "default",
-        opacity: complete ? 1 : 0.55,
+        // #156: de-emphasized without opacity (faded text failed 4.5:1 in both themes): a
+        // dashed border, no panel fill, and greyscale tags. Text keeps its full contrast.
         borderStyle: complete ? "solid" : "dashed",
+        borderColor: complete ? "divider" : "border.main",
+        backgroundColor: complete ? "background.paper" : "transparent",
+        filter: complete ? "none" : "grayscale(1)",
         transition: "border-color 0.15s ease",
-        "&:hover": complete ? { borderColor: "primary.light" } : undefined,
+        "&:hover": complete ? { borderColor: "brand.line" } : undefined,
       }}
     >
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 0.25 }}>

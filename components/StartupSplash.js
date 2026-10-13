@@ -96,6 +96,7 @@
 import { keyframes } from "@emotion/react";
 import Box from "@mui/material/Box";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { tint } from "./theme";
 
 // localStorage key holding the server boot id (lib/serverBootId.js) this
 // browser last played the splash for.
@@ -560,11 +561,11 @@ export default function StartupSplash({ ready, bootId }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: theme.palette.background.default,
+        backgroundColor: theme.vars.palette.background.default,
         // Same warm top-edge glow the page itself has (theme.js's
         // MuiCssBaseline override), so the fade lands on a background that
         // matches instead of brightening as the overlay clears.
-        backgroundImage: `radial-gradient(1400px 480px at 18% -12%, ${theme.palette.primary.main}29, transparent 60%)`,
+        backgroundImage: `radial-gradient(1400px 480px at 18% -12%, ${tint(theme.vars.palette.brand.fill, 14)}, transparent 60%)`,
         backgroundRepeat: "no-repeat",
         opacity: fading ? 0 : 1,
         transition: `opacity ${FADE_MS}ms ${EASE_EMERGE}`,
@@ -645,7 +646,7 @@ export default function StartupSplash({ ready, bootId }) {
                   width: "100%",
                   height: "100%",
                   borderRadius: 999,
-                  backgroundColor: theme.palette.primary.main,
+                  backgroundColor: theme.vars.palette.primary.main,
                   // Grows out of the vertex itself rather than the bottom of
                   // the box, so the bar emerges from the point the whole
                   // glyph is built around.
@@ -676,7 +677,7 @@ export default function StartupSplash({ ready, bootId }) {
                   width: "100%",
                   height: "100%",
                   borderRadius: 999,
-                  backgroundColor: theme.palette.primary.main,
+                  backgroundColor: theme.vars.palette.primary.main,
                   transformOrigin: ARM_PIVOT,
                   animation: `${drawLine} ${STEPS.draw.duration}ms ${EASE_LAUNCH} ${STEPS.draw.delay}ms both`,
                 })}
@@ -707,7 +708,7 @@ export default function StartupSplash({ ready, bootId }) {
               component="span"
               sx={(theme) => ({
                 display: "inline-block",
-                color: theme.palette.text.primary,
+                color: theme.vars.palette.text.primary,
                 // Inherited from the wrapper (TYPE_SIZE) rather than set here,
                 // so the wordmark and the geometry above cannot drift apart.
                 fontWeight: 700,
@@ -742,7 +743,7 @@ export default function StartupSplash({ ready, bootId }) {
               width: "100%",
               height: "100%",
               borderRadius: 999,
-              backgroundColor: theme.palette.primary.main,
+              backgroundColor: theme.vars.palette.primary.main,
               animation: holding ? `${idleBreath} 2200ms ease-in-out infinite` : "none",
             })}
           />

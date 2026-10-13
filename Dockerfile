@@ -36,6 +36,8 @@ COPY --from=builder /app/package.json ./package.json
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Files served from the site root (the ISU logos, #156). Standalone output leaves public/ out.
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 

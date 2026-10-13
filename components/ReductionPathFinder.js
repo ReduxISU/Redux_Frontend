@@ -35,7 +35,6 @@
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
-import { alpha } from "@mui/material/styles";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useMemo } from "react";
@@ -48,7 +47,7 @@ import {
 } from "../hooks/useComputeRequest";
 import { REDUX_API_BASE_URL, requestReductionPath } from "../lib/redux";
 import ComputeStatus from "./detail/ComputeStatus";
-import { getFacetAccentColor, thinScrollbarSx } from "./theme";
+import { getFacetTagColors, thinScrollbarSx } from "./theme";
 
 const SOURCE_INPUT_ID = "reduction-path-source-input";
 const TARGET_INPUT_ID = "reduction-path-target-input";
@@ -171,7 +170,7 @@ export default function ReductionPathFinder({
       : `No path found between ${source} and ${target}.`;
   }
 
-  const pathAccent = getFacetAccentColor("green");
+  const pathColors = getFacetTagColors("green");
   const bothPicked = Boolean(source) && Boolean(target);
 
   return (
@@ -227,8 +226,8 @@ export default function ReductionPathFinder({
           variant="outlined"
           sx={{
             p: 1.5,
-            backgroundColor: alpha(pathAccent, 0.06),
-            borderColor: alpha(pathAccent, 0.4),
+            backgroundColor: pathColors.bg,
+            borderColor: pathColors.border,
           }}
         >
           <Typography variant="overline" sx={{ color: "text.secondary" }}>

@@ -71,7 +71,7 @@ function NotFound() {
           component={Link}
           href="/playlists"
           sx={{
-            color: "primary.main",
+            color: "brand.text",
             fontWeight: 600,
             mt: 1,
             display: "inline-flex",
@@ -222,7 +222,7 @@ export default function CustomPlaylistDetail() {
                   id={`custom-playlist-problem-link-${index}`}
                   component={Link}
                   href={`/${encodeURIComponent(entry.name)}?playlist=custom&p=${encodeURIComponent(rawPayload)}${buildPlaylistStepQuerySuffix(entry)}`}
-                  sx={{ color: "primary.main", fontWeight: 600 }}
+                  sx={{ color: "brand.text", fontWeight: 600 }}
                 >
                   {entry.name}
                 </Box>

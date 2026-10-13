@@ -43,14 +43,14 @@ import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { TAXONOMY } from "../data/taxonomy";
 import ReductionReachabilityFilter from "./ReductionReachabilityFilter";
-import { getFacetAccentColor } from "./theme";
+import { getFacetTagColors } from "./theme";
 
 function FacetFilterGroup({ facet, options, selected, onChange, loading }) {
   const [expanded, setExpanded] = useState(false);
   const toggleId = `facet-${facet.key}-toggle`;
   const listId = `facet-${facet.key}-options`;
   const selectedCount = selected.size;
-  const accentColor = getFacetAccentColor(facet.accentColor);
+  const facetColors = getFacetTagColors(facet.accentColor);
 
   const toggleOption = (optionKey) => {
     const next = new Set(selected);
@@ -110,7 +110,7 @@ function FacetFilterGroup({ facet, options, selected, onChange, loading }) {
             width: 8,
             height: 8,
             borderRadius: "50%",
-            backgroundColor: accentColor,
+            backgroundColor: facetColors.main,
             flexShrink: 0,
           }}
         />
@@ -136,8 +136,8 @@ function FacetFilterGroup({ facet, options, selected, onChange, loading }) {
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
-              color: "#FFFFFF",
-              backgroundColor: accentColor,
+              color: facetColors.onStrong,
+              backgroundColor: facetColors.strong,
             }}
           >
             {selectedCount}
@@ -173,7 +173,13 @@ function FacetFilterGroup({ facet, options, selected, onChange, loading }) {
             return (
               <FormControlLabel
                 key={optionKey}
-                sx={{ mx: 0, opacity: !loading && count === 0 ? 0.5 : 1 }}
+                // #156: a zero-count option is dimmed by color (text.disabled, still 4.5:1), not opacity.
+                sx={{
+                  mx: 0,
+                  "& .MuiFormControlLabel-label": {
+                    color: !loading && count === 0 ? "text.disabled" : undefined,
+                  },
+                }}
                 control={
                   <Checkbox
                     id={optionId}

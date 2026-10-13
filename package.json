@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test:e2e": "playwright test",
+    "check:contrast": "node scripts/check-contrast.mjs",
     "format": "biome check --write .",
     "format:check": "biome check .",
     "postinstall": "next telemetry disable"

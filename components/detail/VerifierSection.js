@@ -349,19 +349,19 @@ function VerdictBanner({ id, valid, headline, detail }) {
     valid === true
       ? {
           color: "success.light",
-          background: "rgba(74, 222, 128, 0.12)",
-          border: "rgba(74, 222, 128, 0.4)",
+          background: "status.okBg",
+          border: "status.ok",
         }
       : valid === false
         ? {
             color: "error.light",
-            background: "rgba(248, 113, 113, 0.12)",
-            border: "rgba(248, 113, 113, 0.4)",
+            background: "status.errBg",
+            border: "status.err",
           }
         : {
             color: "text.primary",
-            background: "rgba(148, 163, 184, 0.12)",
-            border: "rgba(148, 163, 184, 0.4)",
+            background: "surface.raised",
+            border: "border.main",
           };
 
   const Icon = valid === true ? CheckCircleIcon : valid === false ? CancelIcon : InfoOutlinedIcon;

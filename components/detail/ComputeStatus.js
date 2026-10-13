@@ -118,9 +118,9 @@ export default function ComputeStatus({
             p: 1.5,
             borderRadius: 1,
             color: "error.light",
-            backgroundColor: "rgba(248, 113, 113, 0.12)",
+            backgroundColor: "status.errBg",
             border: "1px solid",
-            borderColor: "rgba(248, 113, 113, 0.4)",
+            borderColor: "status.err",
           }}
         >
           <Typography variant="body2" sx={{ color: "inherit", fontWeight: 700 }}>

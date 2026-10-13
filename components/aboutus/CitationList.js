@@ -11,7 +11,7 @@ import Typography from "@mui/material/Typography";
 
 // "[DOI]" / "[PDF]" style links after a citation; 44px touch targets below md (#179).
 export const bracketLinkSx = {
-  color: "primary.light",
+  color: "brand.text",
   fontWeight: 600,
   ml: 0.5,
   display: { xs: "inline-flex", md: "inline" },

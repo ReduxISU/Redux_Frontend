@@ -37,13 +37,12 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
-import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { TAXONOMY } from "../data/taxonomy";
-import { getFacetAccentColor } from "./theme";
+import { facetTagSx } from "./theme";
 
 const TAXONOMY_BY_KEY = new Map(TAXONOMY.map((facet) => [facet.key, facet]));
-const REACHABILITY_ACCENT = getFacetAccentColor("magenta");
+const REACHABILITY_ACCENT = "magenta"; // a facet color name, resolved by facetTagSx
 
 function optionLabel(facetKey, optionKey) {
   const option = TAXONOMY_BY_KEY.get(facetKey)?.options.find((candidate) => {
@@ -52,7 +51,7 @@ function optionLabel(facetKey, optionKey) {
   return option?.label ?? optionKey;
 }
 
-function Chip({ label, accentColor, removeId, ariaLabel, onRemove }) {
+function Chip({ label, colorName, removeId, ariaLabel, onRemove }) {
   return (
     <Box
       sx={{
@@ -67,9 +66,7 @@ function Chip({ label, accentColor, removeId, ariaLabel, onRemove }) {
         maxWidth: "100%",
         minWidth: 0,
         borderRadius: 999,
-        color: "#FFFFFF",
-        backgroundColor: alpha(accentColor, 0.12),
-        border: `1px solid ${alpha(accentColor, 0.55)}`,
+        ...facetTagSx(colorName),
         fontSize: "0.8125rem",
         fontWeight: 600,
       }}
@@ -109,14 +106,14 @@ function Chip({ label, accentColor, removeId, ariaLabel, onRemove }) {
 }
 
 function FilterChip({ facet, optionKey, onRemove }) {
-  const accentColor = getFacetAccentColor(facet.accentColor);
+  const colorName = facet.accentColor;
   const label = optionLabel(facet.key, optionKey);
   const removeId = `active-filter-chip-${facet.key}-${optionKey}-remove`;
 
   return (
     <Chip
       label={label}
-      accentColor={accentColor}
+      colorName={colorName}
       removeId={removeId}
       ariaLabel={`Remove ${label} filter`}
       onRemove={() => onRemove(facet.key, optionKey)}
@@ -186,7 +183,7 @@ export default function ActiveFilterChips({
       {reachabilitySource && (
         <Chip
           label={reachabilityLabel(reachabilitySource, reachabilityMode)}
-          accentColor={REACHABILITY_ACCENT}
+          colorName={REACHABILITY_ACCENT}
           removeId="active-filter-chip-reachability-remove"
           ariaLabel={`Remove ${reachabilityLabel(reachabilitySource, reachabilityMode)} filter`}
           onRemove={onRemoveReachability}

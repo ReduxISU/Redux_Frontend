@@ -75,7 +75,7 @@ export default function AboutUsPage() {
               target="_blank"
               rel="noopener noreferrer"
               underline="hover"
-              sx={{ color: "primary.light", fontWeight: 600 }}
+              sx={{ color: "brand.text", fontWeight: 600 }}
             >
               &quot;Reducibility Among Combinatorial Problems&quot;
             </Link>{" "}
@@ -130,7 +130,7 @@ export default function AboutUsPage() {
               target="_blank"
               rel="noopener noreferrer"
               underline="hover"
-              sx={{ color: "primary.light", fontWeight: 600 }}
+              sx={{ color: "brand.text", fontWeight: 600 }}
             >
               {FOUNDER.name}
             </Link>
@@ -199,7 +199,7 @@ export default function AboutUsPage() {
               target="_blank"
               rel="noopener noreferrer"
               underline="hover"
-              sx={{ color: "primary.light", fontWeight: 600 }}
+              sx={{ color: "brand.text", fontWeight: 600 }}
             >
               BSD 3-Clause License
             </Link>
