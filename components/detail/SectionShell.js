@@ -1,5 +1,8 @@
 // components/detail/SectionShell.js
 //
+// #229: the problem page no longer uses sections; this frame is still used by the sections
+// /compare shows. Its drag grip is inert there (no dragHandleProps).
+//
 // T15 (#20) — the shared frame around all five Problem Detail sections
 // (Overview, Visualizations, Solvers, Verifier, Reductions). Built before
 // the sections themselves so all five can be worked on in parallel once it

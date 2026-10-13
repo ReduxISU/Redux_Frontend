@@ -82,6 +82,9 @@ test("the toggle stays usable at phone width, at least 44px", async ({ page }) =
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto(PAGE);
 
+  // boundingBox() does not wait, and under a busy parallel run the toggle can still be
+  // mounting when the page's load event fires.
+  await expect(toggle(page)).toBeVisible();
   const box = await toggle(page).boundingBox();
   expect(box.width).toBeGreaterThanOrEqual(44);
   expect(box.height).toBeGreaterThanOrEqual(44);

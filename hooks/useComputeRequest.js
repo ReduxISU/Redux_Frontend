@@ -64,7 +64,9 @@ function isAbort(error) {
  * @param {Error} error
  * @param {string} subject What was being sent, for the copy: "instance" or
  *   "certificate".
- * @returns {{headline: string, detail: string, expected?: string}}
+ * @returns {{headline: string, detail: string, expected?: string, code?: string}} `code` is
+ *   set to "instance_parse_error" when Redux could not read the instance, so the workbench
+ *   (#229) can mark the instance itself as the problem.
  */
 export function describeComputeFailure(error, subject = "instance") {
   if (!(error instanceof ReduxRequestError)) {
@@ -114,6 +116,7 @@ export function describeComputeFailure(error, subject = "instance") {
 
   if (apiError === "instance_parse_error") {
     return {
+      code: apiError,
       headline: "Redux could not read this instance",
       detail: apiDetail || "The instance is not in the format this problem expects.",
       expected,

@@ -240,6 +240,12 @@ function buildProblem(problemCode, info, batches, codeToName) {
       output: problemInfo.certificateFormat || undefined,
       source: problemInfo.source || undefined,
       contributedBy: contributors.length > 0 ? contributors.join(", ") : undefined,
+      // #229: the workbench's Details panel shows the backend's own one-line Input and
+      // Output descriptions ("G, a directed graph") and links the source when a link is
+      // declared. `input`/`output` above keep their older fallback chain for /compare.
+      inputDescription: problemInfo.inputDescription || undefined,
+      outputDescription: problemInfo.outputDescription || undefined,
+      sourceLink: problemInfo.sourceLink || undefined,
     },
     // T35 (#93): the instance the Solvers and Verifier sections show, and
     // the prose format describing it, both straight off allInfo. Kept as

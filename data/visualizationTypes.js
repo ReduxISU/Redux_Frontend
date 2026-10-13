@@ -35,6 +35,8 @@ export const VISUALIZATION_TYPE_MAP = {
   Unimplemented: null,
 };
 
+const UNIVERSAL_TYPES = new Set(Object.values(VISUALIZATION_TYPE_MAP).filter(Boolean));
+
 /**
  * Resolves a frame to one of the 6 universal type keys (VISUALIZATION_TYPE_CONTRACTS.md
  * §1), or `null` when nothing in this contract can render it.
@@ -52,7 +54,11 @@ export const VISUALIZATION_TYPE_MAP = {
  * @returns {string|null}
  */
 export function resolveVisualizationType(backendType, payload) {
-  if (payload && typeof payload.kind === "string" && payload.kind) {
+  // #229: only a `kind` naming one of this contract's universal types wins. Some backends
+  // already send their own short kinds (3SAT frames arrive as `kind: "sat"`), and letting an
+  // unrecognized kind override a backend type this map does know turned a drawable picture
+  // into "No renderer built yet".
+  if (payload && typeof payload.kind === "string" && UNIVERSAL_TYPES.has(payload.kind)) {
     return payload.kind;
   }
   const universalType = VISUALIZATION_TYPE_MAP[backendType] ?? null;

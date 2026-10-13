@@ -107,38 +107,6 @@ export async function gotoFirstProblemDetail(page, { expect }) {
 }
 
 /**
- * Picks up the Overview section's drag grip with the keyboard, moves it
- * down one position, and drops it -- @dnd-kit's own KeyboardSensor
- * start/move/end sequence (Space, ArrowDown, Space; see
- * components/ProblemDetailLayout.js's own T18 comment on why a
- * KeyboardSensor is registered at all).
- *
- * The short pauses between key presses are load-bearing, not padding:
- * @dnd-kit recomputes every sortable item's position on an animation frame,
- * and the drop's collision detection reads that just-recomputed position --
- * three `press()` calls fired back-to-back (no yield to the event loop in
- * between) can deliver the drop before the preceding move has actually been
- * measured, which drops the item back where it started with no visible
- * reorder. Confirmed by hand: the same three presses with a wait after each
- * one reorders correctly every time; with no wait, the drop is a same-
- * position no-op. `page.waitForTimeout` is normally the wrong tool in a
- * Playwright test (locator assertions auto-retry, so waiting is usually
- * unnecessary) -- this is the genuine exception, since there's no DOM
- * signal to await between "the move was requested" and "@dnd-kit finished
- * measuring it," only real time.
- */
-export async function reorderFirstSectionWithKeyboard(page) {
-  const grip = page.locator("#section-overview-grip");
-  await grip.focus();
-  await grip.press("Space");
-  await page.waitForTimeout(300);
-  await grip.press("ArrowDown");
-  await page.waitForTimeout(300);
-  await grip.press("Space");
-  await page.waitForTimeout(300);
-}
-
-/**
  * Expands a sidebar facet group by its facet key, if it isn't already
  * expanded. Facet groups default to collapsed (components/FacetSidebar.js),
  * so any test that needs to click one of a group's checkboxes must open the
@@ -222,33 +190,29 @@ export async function gotoProblemDetail(page, problemName, { expect }) {
 }
 
 /**
- * Expands one detail-page section by its key ("solvers", "verifier", ...),
- * if it isn't already expanded. Sections default to collapsed
- * (components/detail/SectionShell.js).
+ * #229: opens one workbench panel ("details", "instance" or "result") from the rail, if it
+ * isn't already open, and confirms the rail button reports it open.
  */
-export async function expandSection(page, sectionKey, { expect }) {
-  const toggle = page.locator(`#section-${sectionKey}-toggle`);
-  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
-    await toggle.click();
+export async function openPanel(page, panelKey, { expect }) {
+  const button = page.locator(`#workbench-rail-${panelKey}`);
+  if ((await button.getAttribute("aria-expanded")) !== "true") {
+    await button.click();
   }
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(button).toHaveAttribute("aria-expanded", "true");
 }
 
 /**
- * Selects a solver in the Solvers rail by its displayed name rather than by
+ * Selects a solver in the command bar's Solver dropdown by its displayed name rather than by
  * its position, and confirms it really is the selected one.
  *
- * The by-name part is this issue's own done-when ("no test depends on which
- * solver the catalog happens to return first"). The rail selects index 0 on
- * mount, so a test that just pressed Run would silently be testing whatever
- * solver the backend happened to list first, which for many problems is an
- * exponential brute force.
+ * The by-name part is T39's own done-when ("no test depends on which solver the catalog
+ * happens to return first"). The dropdown starts on the first solver, so a test that just
+ * pressed Run would silently be testing whatever solver the backend happened to list first,
+ * which for many problems is an exponential brute force.
  */
 export async function selectSolverByName(page, solverName, { expect }) {
-  // `role="option"` takes its accessible name from its contents, which here
-  // is the solver name plus its solver-type chip -- so this is a substring
-  // match on purpose, not an exact one.
-  const option = page.getByRole("option", { name: solverName });
-  await option.click();
-  await expect(option).toHaveAttribute("aria-selected", "true");
+  const combobox = page.locator("#workbench-solver-button");
+  await combobox.click();
+  await page.getByRole("option", { name: solverName, exact: true }).click();
+  await expect(combobox).toHaveText(solverName);
 }

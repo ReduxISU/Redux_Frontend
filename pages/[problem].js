@@ -1,8 +1,9 @@
 // pages/[problem].js
 //
-// T19 (#28) — Detail shell: NavBar, Breadcrumb, the problem H1, its
-// one-line description, a complexity + problem type badge row, a hairline
-// divider, then ProblemDetailLayout (T18/#27)'s five draggable sections.
+// T19 (#28) built the detail shell. #229 (stage 1) turned it into the workbench: NavBar,
+// then a title row (the problem name at the far left, its tags on the right; no breadcrumb,
+// the site banner handles going back), then components/workbench/Workbench.js filling the
+// window with a 20px side margin.
 //
 // Route sits at the top level (`/{slug}`, not `/catalog/{slug}`) per
 // ARCHITECTURE.md's Directory / Route Structure section — this project's
@@ -41,9 +42,8 @@
 // fetch failure never gets misreported as "no such problem."
 //
 // #151: when the route carries `?playlist=<slug>`, a PlaylistRail renders below
-// Breadcrumb and above ProblemDetailLayout -- see components/PlaylistRail.js's own
-// header for why that's a separate piece of UI from ProblemDetailLayout's section
-// state, not a change to it. The rail only renders once the slug names a real
+// the title row and above the workbench -- see components/PlaylistRail.js's own
+// header for why that's a separate piece of UI from the workbench's own state. The rail only renders once the slug names a real
 // playlist AND this problem is actually one of its entries; either check failing
 // (unknown slug, or a stale/hand-edited link naming a playlist this problem isn't
 // in) omits the rail entirely rather than showing broken navigation, per the
@@ -62,12 +62,12 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import Breadcrumb from "../components/Breadcrumb";
 import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
 import PlaylistRail from "../components/PlaylistRail";
-import ProblemDetailLayout from "../components/ProblemDetailLayout";
 import { isProblemComplete } from "../components/StatusIcon";
+import { COMPACT_MEDIA } from "../components/workbench/layout";
+import Workbench from "../components/workbench/Workbench";
 import { PLAYLISTS } from "../data/playlists";
 import { TAXONOMY } from "../data/taxonomy";
 import { useProblemDetail } from "../hooks/useProblemDetail";
@@ -119,7 +119,7 @@ function resolvePlaylist(query) {
   };
 }
 
-// Badge row order per the mockup (NP-Complete, NP, Boolean Logic): complexity
+// Tag row order per the mockup (NP-Complete, then the problem type): complexity
 // badges first, then problem type. Chip variant is keyed straight off
 // facetKey (`${facetKey}Outlined`), same as ProblemCatalogCard's TagRow
 // (components/theme.js registers one outlined/filled pair per facet.key) so
@@ -262,33 +262,43 @@ export default function ProblemDetail() {
           display: "flex",
           flexDirection: "column",
           gap: 2,
-          px: { xs: 3, sm: 5 },
-          py: 4,
+          px: "20px",
+          pt: 2,
+          pb: 6,
+          [COMPACT_MEDIA]: { px: 2, pt: 1.5, pb: 11 },
         }}
       >
-        <Box>
-          <Breadcrumb problemName={problem.name} />
-          <Typography variant="h1" component="h1">
+        <Box
+          component="header"
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "10px 16px",
+          }}
+        >
+          <Typography variant="h1" component="h1" sx={{ m: 0 }}>
             {problem.name}
           </Typography>
-          <Typography variant="body1" sx={{ color: "text.secondary", mt: 0.5 }}>
-            {problem.oneLiner}
-          </Typography>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1.5 }}>
+          <Box
+            component="ul"
+            aria-label="Tags"
+            sx={{ listStyle: "none", m: 0, p: 0, display: "flex", flexWrap: "wrap", gap: 1 }}
+          >
             {BADGE_FACET_KEYS.flatMap((facetKey) =>
               (problem.tags[facetKey] ?? []).map((optionKey) => (
-                <Chip
-                  key={`${facetKey}-${optionKey}`}
-                  size="small"
-                  variant={`${facetKey}Outlined`}
-                  label={optionLabel(facetKey, optionKey)}
-                />
+                <Box component="li" key={`${facetKey}-${optionKey}`}>
+                  <Chip
+                    size="small"
+                    variant={`${facetKey}Outlined`}
+                    label={optionLabel(facetKey, optionKey)}
+                  />
+                </Box>
               )),
             )}
           </Box>
         </Box>
-
-        <Box sx={{ borderBottom: "1px solid", borderColor: "divider" }} />
 
         {playlist && playlistIndex !== -1 && (
           <PlaylistRail
@@ -300,7 +310,9 @@ export default function ProblemDetail() {
           />
         )}
 
-        <ProblemDetailLayout problem={problem} />
+        {/* Keyed by name so moving to another problem (a playlist step, for one) starts a
+            fresh workbench rather than carrying one problem's instance into the next. */}
+        <Workbench key={problem.name} problem={problem} />
       </Box>
     </PageShell>
   );
