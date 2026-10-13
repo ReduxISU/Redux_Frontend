@@ -1,5 +1,8 @@
 // components/detail/OverviewSection.js
 //
+// #229: still used by /compare (components/ComparisonColumn.js); the problem page's own
+// Details panel is components/workbench/panels/DetailsPanel.js.
+//
 // T16a (#21) — the Overview section of a Problem Detail page: the problem
 // statement (left) and source/contributor metadata (right).
 //

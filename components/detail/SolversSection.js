@@ -1,5 +1,10 @@
 // components/detail/SolversSection.js
 //
+// #229: the problem page is now the workbench (components/workbench/); this section is still
+// used by /compare (components/ComparisonColumn.js). Notes below that mention
+// ProblemDetailLayout.js, VisualizationsSection.js or ReductionsSection.js describe the old
+// page, which #229 removed.
+//
 // T16c (#23) — the Solvers section of a Problem Detail page: a "paste an
 // instance" block (format description + pre-filled input), a left rail of
 // declared solvers, and a right detail pane with a canned Run.

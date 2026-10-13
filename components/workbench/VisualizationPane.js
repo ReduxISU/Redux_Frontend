@@ -1,0 +1,330 @@
+// components/workbench/VisualizationPane.js
+//
+// #229: the picture pane. From top to bottom:
+//   - a Showing line naming what drew the picture ("3SAT Backtracking", "3SAT -> CLIQUE
+//     (...)", or "Not run yet. Showing the default picture of the instance.");
+//   - the picture, with its Visualization Type label and dropdown at its top right. In Reduce
+//     mode the source and target pictures sit side by side, and stack when a panel is open
+//     (or when the screen is too narrow for both);
+//   - step controls under the picture (components/detail/StepScrubber.js) when the run
+//     recorded steps, otherwise one line saying what the picture is;
+//   - the Legend, open by default.
+//
+// The pictures themselves come from the existing renderers through VisualizationCanvas; this
+// file only lays them out.
+
+import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import StepScrubber from "../detail/StepScrubber";
+import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
+import Legend from "./Legend";
+import {
+  COMPACT_MEDIA,
+  cardSx,
+  controlLabelSx,
+  SHARED_CONTROL_WIDTH,
+  secondaryButtonSx,
+} from "./layout";
+
+const PICTURE_MIN_HEIGHT = 440;
+
+/**
+ * The Visualization Type label and dropdown at a picture's top right. With a single choice it
+ * still shows (so every picture says what type it is) but cannot be changed.
+ */
+function VisualizationTypeControl({ id, options, value, onChange }) {
+  const labelId = `${id}-label`;
+  return (
+    <Box
+      sx={{
+        width: SHARED_CONTROL_WIDTH,
+        flex: "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: 0.5,
+        [COMPACT_MEDIA]: { width: "100%" },
+      }}
+    >
+      <Box component="label" id={labelId} sx={controlLabelSx}>
+        Visualization Type
+      </Box>
+      <Select
+        id={id}
+        labelId={labelId}
+        size="small"
+        value={value}
+        disabled={!onChange || options.length < 2}
+        onChange={(event) => onChange?.(event.target.value)}
+        SelectDisplayProps={{ id: `${id}-button` }}
+        MenuProps={{
+          anchorOrigin: { vertical: "bottom", horizontal: "right" },
+          transformOrigin: { vertical: "top", horizontal: "right" },
+        }}
+        sx={{
+          width: "100%",
+          minHeight: 44,
+          backgroundColor: "surface.input",
+          borderRadius: "8px",
+          "& .MuiOutlinedInput-notchedOutline": { borderColor: "border.main" },
+          "& .MuiSelect-select": {
+            py: "10px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          },
+          // A fixed single choice still reads as text, not as a greyed-out control.
+          "& .MuiSelect-select.Mui-disabled": {
+            WebkitTextFillColor: "currentColor",
+            color: "text.primary",
+          },
+        }}
+      >
+        {options.map((option) => (
+          <MenuItem key={option.value} value={option.value} sx={{ minHeight: 44 }}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </Box>
+  );
+}
+
+/**
+ * What goes inside one picture box.
+ * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object}
+ *   | {kind: "loading", text: string}
+ *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
+ *      action?: {id: string, label: string, onClick: Function}}} PictureContent
+ *   `compact` draws a short box (no picture is coming, so no room is held for one).
+ */
+function PictureBox({ idPrefix, content }) {
+  let inner;
+  if (content.kind === "frame") {
+    const edit = content.edit;
+    inner = (
+      <Box sx={{ width: "100%", minWidth: 0 }}>
+        <VisualizationCanvas
+          idPrefix={`${idPrefix}-canvas`}
+          instanceName={content.name}
+          backendType={content.backendType}
+          frame={content.frame}
+          editable={Boolean(edit?.editable)}
+          maxLiteralsPerClause={edit?.maxLiteralsPerClause}
+          {...(edit?.handlers ?? {})}
+        />
+      </Box>
+    );
+  } else if (content.kind === "loading") {
+    inner = (
+      <Box
+        sx={{ display: "flex", alignItems: "center", gap: 1.5, color: "text.secondary" }}
+        role="status"
+      >
+        <CircularProgress size={18} aria-hidden="true" />
+        {content.text}
+      </Box>
+    );
+  } else {
+    inner = (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 1.5,
+          maxWidth: 360,
+          textAlign: "center",
+          color: content.tone === "error" ? "error.light" : "text.secondary",
+        }}
+      >
+        <Box component="p" sx={{ m: 0 }}>
+          {content.text}
+        </Box>
+        {content.action && (
+          <Box
+            id={content.action.id}
+            component="button"
+            type="button"
+            onClick={content.action.onClick}
+            sx={secondaryButtonSx}
+          >
+            {content.action.label}
+          </Box>
+        )}
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      id={`${idPrefix}-picture`}
+      data-picture-kind={content.kind}
+      sx={{
+        minHeight: content.compact ? 160 : PICTURE_MIN_HEIGHT,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        overflowX: "auto",
+        backgroundColor: "surface.input",
+        borderRadius: "10px",
+        p: 2,
+        boxSizing: "border-box",
+        [COMPACT_MEDIA]: { minHeight: content.compact ? 160 : 320 },
+      }}
+    >
+      {inner}
+    </Box>
+  );
+}
+
+function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
+  return (
+    <Box
+      sx={{
+        flex: `1 1 ${basis}`,
+        minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: 1,
+        [COMPACT_MEDIA]: { flexBasis: "380px" },
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+          alignItems: "flex-end",
+          gap: 1,
+        }}
+      >
+        <Box sx={{ fontWeight: 600, pb: 1.25 }}>{title}</Box>
+        {typeControl}
+      </Box>
+      <PictureBox idPrefix={idPrefix} content={content} />
+    </Box>
+  );
+}
+
+/**
+ * @param {Object} props
+ * @param {string} props.idPrefix Prefixes every id rendered here.
+ * @param {string} props.showing The Showing line's text.
+ * @param {boolean} [props.showingIsError] Draws the Showing text in the error color.
+ * @param {boolean} props.stack Stack the source and target pictures (a panel is open).
+ * @param {{title: string, type: {options: Array, value: string, onChange?: Function}|null,
+ *   content: PictureContent}} props.source The (only, in Solve mode) picture.
+ * @param {{title: string, type: {options: Array, value: string}|null,
+ *   content: PictureContent}|null} props.target The reduction's target picture, Reduce mode only.
+ * @param {{frameCount: number, currentStep: number, onStepChange: Function}|null} props.steps
+ * @param {{text: string, tone: "muted"|"warning"|"error"}|null} props.note The line shown in
+ *   place of the step controls.
+ * @param {Object[]} props.legendFrames Every frame on screen, for the Legend.
+ */
+export default function VisualizationPane({
+  idPrefix,
+  showing,
+  showingIsError,
+  stack,
+  source,
+  target,
+  steps,
+  note,
+  legendFrames,
+}) {
+  const basis = target && stack ? "100%" : "380px";
+  const noteColor =
+    note?.tone === "error"
+      ? "error.light"
+      : note?.tone === "warning"
+        ? "viz.orange"
+        : "text.secondary";
+
+  return (
+    <Box
+      component="section"
+      aria-label="Visualization"
+      id={`${idPrefix}-pane`}
+      sx={{ ...cardSx, p: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "baseline",
+          gap: "4px 10px",
+          fontSize: "0.875rem",
+        }}
+      >
+        <Box
+          component="span"
+          sx={{
+            fontSize: "0.75rem",
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "text.secondary",
+          }}
+        >
+          Showing
+        </Box>
+        <Box
+          component="span"
+          id={`${idPrefix}-showing`}
+          aria-live="polite"
+          sx={{ fontWeight: 600, color: showingIsError ? "error.light" : "text.primary" }}
+        >
+          {showing}
+        </Box>
+      </Box>
+
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
+        <PictureColumn
+          idPrefix={`${idPrefix}-source`}
+          title={source.title}
+          basis={basis}
+          content={source.content}
+          typeControl={
+            source.type && (
+              <VisualizationTypeControl id={`${idPrefix}-source-type`} {...source.type} />
+            )
+          }
+        />
+        {target && (
+          <PictureColumn
+            idPrefix={`${idPrefix}-target`}
+            title={target.title}
+            basis={basis}
+            content={target.content}
+            typeControl={
+              target.type && (
+                <VisualizationTypeControl id={`${idPrefix}-target-type`} {...target.type} />
+              )
+            }
+          />
+        )}
+      </Box>
+
+      {steps && steps.frameCount > 1 && (
+        <StepScrubber
+          idPrefix={`${idPrefix}-steps`}
+          frameCount={steps.frameCount}
+          currentStep={steps.currentStep}
+          onStepChange={steps.onStepChange}
+        />
+      )}
+      {note && (
+        <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.875rem", color: noteColor }}>
+          {note.text}
+        </Box>
+      )}
+
+      {legendFrames.some(Boolean) && (
+        <Legend idPrefix={`${idPrefix}-legend`} frames={legendFrames} />
+      )}
+    </Box>
+  );
+}

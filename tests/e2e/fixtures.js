@@ -74,6 +74,15 @@ export const test = base.extend({
     page.on("requestfailed", onRequestFailed);
     page.on("response", onResponse);
 
+    // #229: the proxy allows 10 compute requests a minute per visitor, keyed on
+    // `x-forwarded-for` (pages/api/redux/[...path].js). Every spec runs from the same
+    // 127.0.0.1, and the workbench asks for a default picture on every problem page, so
+    // the whole parallel suite would otherwise share one visitor's budget and start
+    // getting 429s partway through. Each test gets its own made-up address instead: each
+    // test is its own visitor, which is what the limit is meant to model.
+    const octet = () => Math.floor(Math.random() * 250) + 1;
+    await page.setExtraHTTPHeaders({ "x-forwarded-for": `10.${octet()}.${octet()}.${octet()}` });
+
     await provideFixture(page);
 
     page.off("requestfailed", onRequestFailed);

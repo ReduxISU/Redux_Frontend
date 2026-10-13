@@ -1,5 +1,8 @@
 // components/detail/StepScrubber.js
 //
+// #229: now used by the workbench's picture pane (components/workbench/VisualizationPane.js);
+// the two sections named below were replaced by it.
+//
 // T47 (#110) — the shared step-playback scrubber used by both
 // VisualizationsSection.js and ReductionsSection.js. Purely a rendering/
 // navigation concern (INTERACTIVE_LAYER_DESIGN.md §1): walks whatever

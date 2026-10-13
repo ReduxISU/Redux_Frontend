@@ -1,5 +1,10 @@
 // components/detail/VerifierSection.js
 //
+// #229: the problem page is now the workbench (components/workbench/); this section is still
+// used by /compare (components/ComparisonColumn.js), and its verdict helpers by the
+// workbench's Verify box. Notes below that mention ProblemDetailLayout.js describe the old
+// page, which #229 removed.
+//
 // T16d (#24) — the Verifier section of a Problem Detail page: the
 // certificate format a solution takes, plus a "check a certificate" demo.
 //
@@ -73,8 +78,10 @@ const INSTANCE_INPUT_ID = "verifier-instance-input";
  * string today (checked against the live API on 2026-09-02). Anything else
  * comes back as `valid: null` so the banner can show it plainly instead of
  * rounding an unrecognised answer to a pass or a fail.
+ *
+ * Exported (#229) so the workbench's Verify box reads verdicts the same way.
  */
-function readVerdict(raw) {
+export function readVerdict(raw) {
   const text = typeof raw === "string" ? raw.trim() : JSON.stringify(raw);
   if (/^true$/i.test(text)) return { valid: true, text };
   if (/^false$/i.test(text)) return { valid: false, text };
@@ -342,9 +349,9 @@ const verifyButtonSx = {
 /**
  * Pass/fail (or "cannot tell") shown as an icon plus wording, never colour
  * alone (T16d/#24). `valid` is `true`, `false`, or `null` for a verdict
- * this page cannot read as either.
+ * this page cannot read as either. Exported (#229) for the workbench's Verify box.
  */
-function VerdictBanner({ id, valid, headline, detail }) {
+export function VerdictBanner({ id, valid, headline, detail }) {
   const palette =
     valid === true
       ? {
