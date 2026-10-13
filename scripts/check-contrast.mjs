@@ -152,6 +152,13 @@ function pairsFor(t) {
     add(`pump ${key}: label on fill`, v.pump.onFill, v.pump[key], TEXT);
   }
   add("pump tank bar on track", v.pump.tankNormal, s.track, UI);
+
+  // #229 stage 4: the gadget highlight ring and edge underlay, on the picture's canvas (input)
+  // and next to the background node fill it rings. The active gadget row's border in the
+  // Result panel sits on the input grey too.
+  add("gadget highlight on canvas (input)", v.gadget, s.input, UI);
+  add("gadget highlight on surface", v.gadget, s.main, UI);
+  add("gadget highlight next to background node fill", v.gadget, v.background.fill, UI);
   return pairs;
 }
 

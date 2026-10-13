@@ -19,6 +19,9 @@
 //     across, as the old Reductions section did.
 //   - The default picture before Run (hooks/useDefaultPicture.js), which is also how an
 //     unreadable instance is found before anyone presses Run.
+//   - Which gadget the pictures highlight (#229 stage 4): the Result panel's Gadgets rows say
+//     which one is hovered or focused, and both pictures draw its pieces. The gadgets come
+//     with ProblemProvider/reduce's answer (lib/gadgets.js), so they cost no extra request.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -37,6 +40,7 @@ import {
 } from "../../hooks/useComputeRequest";
 import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
+import { highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
 import {
   REDUX_API_BASE_URL,
   requestMappedSolution,
@@ -133,6 +137,8 @@ export default function Workbench({ problem }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [serializeError, setSerializeError] = useState(null);
   const [lastRun, setLastRun] = useState(null);
+  // The gadget row being hovered or focused, by the run it belongs to: `{runId, index}`.
+  const [gadgetHighlight, setGadgetHighlight] = useState(null);
   const runIdRef = useRef(0);
 
   const selectedSolver = solvers[solverIndex] ?? null;
@@ -356,22 +362,27 @@ export default function Workbench({ problem }) {
         // The target instance's text (for the Result panel and Check against: target) comes
         // from ProblemProvider/reduce, which needs no answer, so it is asked for alongside the
         // solve. Without it the run still draws; the target side of Verify just stays locked.
-        const targetInstance = requestReduction(
+        // The same answer carries the reduction's gadgets on a backend that has them (#229
+        // stage 4); without them the Gadgets section stays hidden.
+        const builtReduction = requestReduction(
           REDUX_API_BASE_URL,
           reduction.className,
           runInstance,
           signal,
         ).then(
-          (built) =>
-            typeof built?.reductionTo?.instance === "string" ? built.reductionTo.instance : null,
+          (built) => ({
+            instance:
+              typeof built?.reductionTo?.instance === "string" ? built.reductionTo.instance : null,
+            gadgets: normalizeGadgets(built?.gadgets),
+          }),
           (error) => {
             if (error?.name === "AbortError") throw error;
-            return null;
+            return { instance: null, gadgets: [] };
           },
         );
         // The solve below may throw first; this keeps the request running alongside it from
         // also surfacing as an unhandled rejection. Awaiting it later still sees the result.
-        targetInstance.catch(() => {});
+        builtReduction.catch(() => {});
         const output = await requestSolvedInstance(
           REDUX_API_BASE_URL,
           solver.className,
@@ -386,7 +397,7 @@ export default function Workbench({ problem }) {
           certificate,
           signal,
         );
-        const target = await targetInstance;
+        const built = await builtReduction;
         succeeded = true;
         return {
           frames: Array.isArray(frames) ? frames : [],
@@ -395,7 +406,8 @@ export default function Workbench({ problem }) {
           targetName: reduction.target,
           targetVisualization: reduction.targetVisualization,
           targetVerifier: reduction.targetVerifier ?? null,
-          targetInstance: target,
+          targetInstance: built.instance,
+          gadgets: built.gadgets,
           solverName: solver.name,
           solverClassName: solver.className,
           certificate,
@@ -684,6 +696,48 @@ export default function Workbench({ problem }) {
         : null,
       content,
     };
+  }
+
+  // --- Gadgets (#229 stage 4) ----------------------------------------------------------------
+  // Only a current reduction's gadgets, in Reduce mode. The hovered or focused row's pieces
+  // are drawn on each picture that has them (lib/gadgets.js picks the ids each picture uses).
+  const reduceGadgets = mode === "reduce" && reduceCurrent ? (reduceResult.gadgets ?? []) : [];
+  const activeGadget =
+    gadgetHighlight && reduceCurrent && gadgetHighlight.runId === reduceResult.runId
+      ? (reduceGadgets[gadgetHighlight.index] ?? null)
+      : null;
+  if (activeGadget && sourceContent.kind === "frame") {
+    sourceContent = {
+      ...sourceContent,
+      highlightIds: highlightIdsOn(
+        sourceContent.frame,
+        activeGadget.sourceIds,
+        activeGadget.legacySourceIds,
+      ),
+    };
+  }
+  if (activeGadget && target?.content.kind === "frame") {
+    target = {
+      ...target,
+      content: {
+        ...target.content,
+        highlightIds: highlightIdsOn(
+          target.content.frame,
+          activeGadget.targetIds,
+          activeGadget.legacyTargetIds,
+        ),
+      },
+    };
+  }
+
+  function handleGadgetHighlight(index, leaving) {
+    if (index !== null) {
+      if (reduceCurrent) setGadgetHighlight({ runId: reduceResult.runId, index });
+      return;
+    }
+    setGadgetHighlight((current) =>
+      leaving === undefined || current?.index === leaving ? null : current,
+    );
   }
 
   // The line under the picture when there are no steps to play.
@@ -1029,6 +1083,18 @@ export default function Workbench({ problem }) {
                 targetName: reduceTargetName,
                 targetLockReason,
               }}
+              gadgets={
+                reduceGadgets.length > 0
+                  ? {
+                      runId: reduceResult.runId,
+                      gadgets: reduceGadgets,
+                      sourceFrame: sourceContent.kind === "frame" ? sourceContent.frame : null,
+                      targetFrame: reduceResult.frames[1] ?? null,
+                      activeIndex: activeGadget ? gadgetHighlight.index : null,
+                      onHighlight: handleGadgetHighlight,
+                    }
+                  : null
+              }
             />
           </Box>
         </Box>

@@ -64,9 +64,20 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useCallback, useId, useMemo, useRef, useState } from "react";
-import { getVisualizationColor } from "../../theme";
+import { createContext, useCallback, useContext, useId, useMemo, useRef, useState } from "react";
+import { getVisualizationColor, paletteVars } from "../../theme";
 import { FloatingMenu, useCloseFloatingMenu } from "./floatingMenu";
+
+// #229 stage 4: the clause and literal ids the hovered or focused gadget row names. A context
+// rather than a prop, so the editable tree's sortable pieces read it without threading it
+// through each level. Drawn as an outline in its own color (never opacity) around the clause
+// or literal, so the literal's own color keeps saying what it said.
+const GadgetIdsContext = createContext(new Set());
+const GADGET_OUTLINE = `3px solid ${paletteVars.viz.gadget}`;
+
+function gadgetOutlineSx(on) {
+  return on ? { outline: GADGET_OUTLINE, outlineOffset: "2px", borderRadius: "4px" } : {};
+}
 
 const CONJUNCTION = "∧"; // AND, between literals within a clause (T40's finding, see header)
 const DISJUNCTION = "∨"; // OR, between clauses
@@ -120,6 +131,7 @@ function LiteralMark({
   dragListeners,
 }) {
   const color = getVisualizationColor(literal.color);
+  const gadgetOn = useContext(GadgetIdsContext).has(literal.id);
   return (
     <Box
       id={id}
@@ -127,6 +139,8 @@ function LiteralMark({
       component="span"
       tabIndex={0}
       aria-label={literal.literal}
+      data-literal-id={literal.id}
+      data-gadget-highlighted={gadgetOn ? "true" : undefined}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onFocus={onEnter}
@@ -145,6 +159,7 @@ function LiteralMark({
         borderRadius: 0.5,
         px: 0.25,
         cursor: dragListeners ? "grab" : "default",
+        ...gadgetOutlineSx(gadgetOn),
       }}
     >
       {literal.literal}
@@ -224,13 +239,16 @@ function SortableClause({
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+  const gadgetOn = useContext(GadgetIdsContext).has(clause.id);
 
   return (
     <Box
       ref={setNodeRef}
       component="span"
       style={style}
-      sx={{ display: "inline-flex", alignItems: "center", gap: 0.25 }}
+      data-clause-id={clause.id}
+      data-gadget-highlighted={gadgetOn ? "true" : undefined}
+      sx={{ display: "inline-flex", alignItems: "center", gap: 0.25, ...gadgetOutlineSx(gadgetOn) }}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -303,6 +321,8 @@ function SortableClause({
  *   (INTERACTIVE_LAYER_DESIGN.md §2.1.2). Required when `editable` is true.
  * @param {number} [props.maxLiteralsPerClause] SAT3's 3-literal-per-clause cap, enforced
  *   in this UI rather than left for the backend to reject. Omitted (no cap) for SAT.
+ * @param {string[]} [props.highlightIds] #229 stage 4: clause and literal ids to outline, for
+ *   the gadget row being hovered or focused.
  */
 export default function BooleanSatisfiabilityRenderer({
   idPrefix,
@@ -311,8 +331,10 @@ export default function BooleanSatisfiabilityRenderer({
   editable = false,
   onClausesChange,
   maxLiteralsPerClause,
+  highlightIds,
 }) {
   const reactId = useId().replace(/:/g, "");
+  const gadgetIds = useMemo(() => new Set(highlightIds ?? []), [highlightIds]);
   const scopeId = `${idPrefix}-${reactId}`;
   const [hoveredVariable, setHoveredVariable] = useState(null);
   const [menu, setMenu] = useState(null);
@@ -503,260 +525,288 @@ export default function BooleanSatisfiabilityRenderer({
 
   if (!editable) {
     return (
-      <Box
-        id={scopeId}
-        role="img"
-        aria-label={summary}
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 1,
-          p: 2,
-          minHeight: "100%",
-          boxSizing: "border-box",
-        }}
-      >
-        {clauseCount === 0 ? (
-          <Box component="span" sx={{ color: "text.secondary", fontStyle: "italic" }}>
-            No clauses.
-          </Box>
-        ) : (
-          clauses.map((clause, clauseIndex) => (
-            <Box
-              key={clause.id}
-              component="span"
-              sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}
-            >
-              {clauseIndex > 0 && (
-                <Box component="span" aria-hidden="true" sx={{ color: "text.secondary", mx: 0.5 }}>
-                  {DISJUNCTION}
-                </Box>
-              )}
-              <Box component="span" sx={{ color: "text.secondary" }}>
-                (
-              </Box>
-              {clause.literals.map((literal, literalIndex) => {
-                const variable = literalVariable(literal.literal);
-                return (
+      <GadgetIdsContext.Provider value={gadgetIds}>
+        <Box
+          id={scopeId}
+          role="img"
+          aria-label={summary}
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 1,
+            p: 2,
+            minHeight: "100%",
+            boxSizing: "border-box",
+          }}
+        >
+          {clauseCount === 0 ? (
+            <Box component="span" sx={{ color: "text.secondary", fontStyle: "italic" }}>
+              No clauses.
+            </Box>
+          ) : (
+            clauses.map((clause, clauseIndex) => (
+              <Box
+                key={clause.id}
+                component="span"
+                sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}
+              >
+                {clauseIndex > 0 && (
                   <Box
-                    key={literal.id}
                     component="span"
-                    sx={{ display: "inline-flex", alignItems: "center" }}
+                    aria-hidden="true"
+                    sx={{ color: "text.secondary", mx: 0.5 }}
                   >
-                    {literalIndex > 0 && (
+                    {DISJUNCTION}
+                  </Box>
+                )}
+                <Box
+                  component="span"
+                  data-clause-id={clause.id}
+                  data-gadget-highlighted={gadgetIds.has(clause.id) ? "true" : undefined}
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    ...gadgetOutlineSx(gadgetIds.has(clause.id)),
+                  }}
+                >
+                  <Box component="span" sx={{ color: "text.secondary" }}>
+                    (
+                  </Box>
+                  {clause.literals.map((literal, literalIndex) => {
+                    const variable = literalVariable(literal.literal);
+                    return (
+                      <Box
+                        key={literal.id}
+                        component="span"
+                        sx={{ display: "inline-flex", alignItems: "center" }}
+                      >
+                        {literalIndex > 0 && (
+                          <Box
+                            component="span"
+                            aria-hidden="true"
+                            sx={{ color: "text.secondary", mx: 0.5 }}
+                          >
+                            {CONJUNCTION}
+                          </Box>
+                        )}
+                        <LiteralMark
+                          id={`${scopeId}-literal-${literal.id}`}
+                          literal={literal}
+                          highlighted={hoveredVariable != null && variable === hoveredVariable}
+                          onEnter={() => setHoveredVariable(variable)}
+                          onLeave={() =>
+                            setHoveredVariable((current) => (current === variable ? null : current))
+                          }
+                        />
+                      </Box>
+                    );
+                  })}
+                  <Box component="span" sx={{ color: "text.secondary" }}>
+                    )
+                  </Box>
+                </Box>
+              </Box>
+            ))
+          )}
+        </Box>
+      </GadgetIdsContext.Provider>
+    );
+  }
+
+  return (
+    <GadgetIdsContext.Provider value={gadgetIds}>
+      <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+          accessibility={{ announcements }}
+        >
+          <SortableContext
+            items={clauses.map((clause) => clause.id)}
+            strategy={rectSortingStrategy}
+          >
+            <Box
+              id={scopeId}
+              role="img"
+              aria-label={summary}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                openMenu({ kind: "createClause", x: event.clientX, y: event.clientY });
+              }}
+              sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 1,
+                p: 2,
+                minHeight: 120,
+                boxSizing: "border-box",
+              }}
+            >
+              {clauseCount === 0 ? (
+                <Box component="span" sx={{ color: "text.secondary", fontStyle: "italic" }}>
+                  No clauses. Right-click to add one.
+                </Box>
+              ) : (
+                clauses.map((clause, clauseIndex) => (
+                  <Box
+                    key={clause.id}
+                    component="span"
+                    sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}
+                  >
+                    {clauseIndex > 0 && (
                       <Box
                         component="span"
                         aria-hidden="true"
                         sx={{ color: "text.secondary", mx: 0.5 }}
                       >
-                        {CONJUNCTION}
+                        {DISJUNCTION}
                       </Box>
                     )}
-                    <LiteralMark
-                      id={`${scopeId}-literal-${literal.id}`}
-                      literal={literal}
-                      highlighted={hoveredVariable != null && variable === hoveredVariable}
-                      onEnter={() => setHoveredVariable(variable)}
-                      onLeave={() =>
-                        setHoveredVariable((current) => (current === variable ? null : current))
-                      }
+                    <SortableClause
+                      clause={clause}
+                      clauseIndex={clauseIndex}
+                      hoveredVariable={hoveredVariable}
+                      setHoveredVariable={setHoveredVariable}
+                      openMenu={openMenu}
+                      idPrefix={scopeId}
                     />
                   </Box>
-                );
-              })}
-              <Box component="span" sx={{ color: "text.secondary" }}>
-                )
-              </Box>
+                ))
+              )}
             </Box>
-          ))
+          </SortableContext>
+        </DndContext>
+
+        <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
+          Drag the grip to reorder clauses, or drag a literal to reorder it within its clause.
+          Right-click a literal, a clause, or empty space to add, negate, or remove.
+        </Typography>
+
+        {menu?.kind === "literal" &&
+          (() => {
+            const clause = clauses[menu.clauseIndex];
+            const literal = clause?.literals[menu.literalIndex];
+            if (!literal) return null;
+            const canRemove = clause.literals.length > 1;
+            const negated = isNegated(literal.literal);
+            return (
+              <FloatingMenu menuRef={menuRef} x={menu.x} y={menu.y}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "text.primary" }}>
+                  {literal.literal}
+                </Typography>
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <Button size="small" variant="outlined" onClick={submitToggleNegate}>
+                    {negated ? "Remove negation" : "Negate"}
+                  </Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    disabled={!canRemove}
+                    onClick={submitRemoveLiteral}
+                  >
+                    Remove
+                  </Button>
+                </Box>
+              </FloatingMenu>
+            );
+          })()}
+
+        {menu?.kind === "clause" &&
+          (() => {
+            const clause = clauses[menu.clauseIndex];
+            if (!clause) return null;
+            const atCap =
+              typeof maxLiteralsPerClause === "number" &&
+              clause.literals.length >= maxLiteralsPerClause;
+            return (
+              <FloatingMenu menuRef={menuRef} x={menu.x} y={menu.y}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "text.primary" }}>
+                  Clause {menu.clauseIndex + 1}
+                </Typography>
+                <TextField
+                  id={`${scopeId}-add-literal`}
+                  size="small"
+                  autoFocus
+                  label="Add variable"
+                  placeholder="x1"
+                  value={menuValue}
+                  disabled={atCap}
+                  onChange={(event) => setMenuValue(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && submitAddLiteralToClause()}
+                />
+                {atCap && (
+                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                    Up to {maxLiteralsPerClause} literals per clause.
+                  </Typography>
+                )}
+                {menuError && (
+                  <Typography variant="caption" color="error">
+                    {menuError}
+                  </Typography>
+                )}
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={atCap}
+                    onClick={submitAddLiteralToClause}
+                  >
+                    Add literal
+                  </Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    onClick={submitRemoveClause}
+                  >
+                    Remove clause
+                  </Button>
+                  <Button size="small" onClick={closeMenu}>
+                    Cancel
+                  </Button>
+                </Box>
+              </FloatingMenu>
+            );
+          })()}
+
+        {menu?.kind === "createClause" && (
+          <FloatingMenu menuRef={menuRef} x={menu.x} y={menu.y}>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.primary" }}>
+              New clause
+            </Typography>
+            <TextField
+              id={`${scopeId}-add-clause`}
+              size="small"
+              autoFocus
+              label="First variable"
+              placeholder="x1"
+              value={menuValue}
+              onChange={(event) => setMenuValue(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && submitCreateClause()}
+            />
+            {menuError && (
+              <Typography variant="caption" color="error">
+                {menuError}
+              </Typography>
+            )}
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <Button size="small" variant="contained" onClick={submitCreateClause}>
+                Add clause
+              </Button>
+              <Button size="small" onClick={closeMenu}>
+                Cancel
+              </Button>
+            </Box>
+          </FloatingMenu>
         )}
       </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-        accessibility={{ announcements }}
-      >
-        <SortableContext items={clauses.map((clause) => clause.id)} strategy={rectSortingStrategy}>
-          <Box
-            id={scopeId}
-            role="img"
-            aria-label={summary}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              openMenu({ kind: "createClause", x: event.clientX, y: event.clientY });
-            }}
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: 1,
-              p: 2,
-              minHeight: 120,
-              boxSizing: "border-box",
-            }}
-          >
-            {clauseCount === 0 ? (
-              <Box component="span" sx={{ color: "text.secondary", fontStyle: "italic" }}>
-                No clauses. Right-click to add one.
-              </Box>
-            ) : (
-              clauses.map((clause, clauseIndex) => (
-                <Box
-                  key={clause.id}
-                  component="span"
-                  sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}
-                >
-                  {clauseIndex > 0 && (
-                    <Box
-                      component="span"
-                      aria-hidden="true"
-                      sx={{ color: "text.secondary", mx: 0.5 }}
-                    >
-                      {DISJUNCTION}
-                    </Box>
-                  )}
-                  <SortableClause
-                    clause={clause}
-                    clauseIndex={clauseIndex}
-                    hoveredVariable={hoveredVariable}
-                    setHoveredVariable={setHoveredVariable}
-                    openMenu={openMenu}
-                    idPrefix={scopeId}
-                  />
-                </Box>
-              ))
-            )}
-          </Box>
-        </SortableContext>
-      </DndContext>
-
-      <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-        Drag the grip to reorder clauses, or drag a literal to reorder it within its clause.
-        Right-click a literal, a clause, or empty space to add, negate, or remove.
-      </Typography>
-
-      {menu?.kind === "literal" &&
-        (() => {
-          const clause = clauses[menu.clauseIndex];
-          const literal = clause?.literals[menu.literalIndex];
-          if (!literal) return null;
-          const canRemove = clause.literals.length > 1;
-          const negated = isNegated(literal.literal);
-          return (
-            <FloatingMenu menuRef={menuRef} x={menu.x} y={menu.y}>
-              <Typography variant="caption" sx={{ fontWeight: 700, color: "text.primary" }}>
-                {literal.literal}
-              </Typography>
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Button size="small" variant="outlined" onClick={submitToggleNegate}>
-                  {negated ? "Remove negation" : "Negate"}
-                </Button>
-                <Button
-                  size="small"
-                  color="error"
-                  variant="outlined"
-                  disabled={!canRemove}
-                  onClick={submitRemoveLiteral}
-                >
-                  Remove
-                </Button>
-              </Box>
-            </FloatingMenu>
-          );
-        })()}
-
-      {menu?.kind === "clause" &&
-        (() => {
-          const clause = clauses[menu.clauseIndex];
-          if (!clause) return null;
-          const atCap =
-            typeof maxLiteralsPerClause === "number" &&
-            clause.literals.length >= maxLiteralsPerClause;
-          return (
-            <FloatingMenu menuRef={menuRef} x={menu.x} y={menu.y}>
-              <Typography variant="caption" sx={{ fontWeight: 700, color: "text.primary" }}>
-                Clause {menu.clauseIndex + 1}
-              </Typography>
-              <TextField
-                id={`${scopeId}-add-literal`}
-                size="small"
-                autoFocus
-                label="Add variable"
-                placeholder="x1"
-                value={menuValue}
-                disabled={atCap}
-                onChange={(event) => setMenuValue(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && submitAddLiteralToClause()}
-              />
-              {atCap && (
-                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  Up to {maxLiteralsPerClause} literals per clause.
-                </Typography>
-              )}
-              {menuError && (
-                <Typography variant="caption" color="error">
-                  {menuError}
-                </Typography>
-              )}
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Button
-                  size="small"
-                  variant="contained"
-                  disabled={atCap}
-                  onClick={submitAddLiteralToClause}
-                >
-                  Add literal
-                </Button>
-                <Button size="small" color="error" variant="outlined" onClick={submitRemoveClause}>
-                  Remove clause
-                </Button>
-                <Button size="small" onClick={closeMenu}>
-                  Cancel
-                </Button>
-              </Box>
-            </FloatingMenu>
-          );
-        })()}
-
-      {menu?.kind === "createClause" && (
-        <FloatingMenu menuRef={menuRef} x={menu.x} y={menu.y}>
-          <Typography variant="caption" sx={{ fontWeight: 700, color: "text.primary" }}>
-            New clause
-          </Typography>
-          <TextField
-            id={`${scopeId}-add-clause`}
-            size="small"
-            autoFocus
-            label="First variable"
-            placeholder="x1"
-            value={menuValue}
-            onChange={(event) => setMenuValue(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && submitCreateClause()}
-          />
-          {menuError && (
-            <Typography variant="caption" color="error">
-              {menuError}
-            </Typography>
-          )}
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <Button size="small" variant="contained" onClick={submitCreateClause}>
-              Add clause
-            </Button>
-            <Button size="small" onClick={closeMenu}>
-              Cancel
-            </Button>
-          </Box>
-        </FloatingMenu>
-      )}
-    </Box>
+    </GadgetIdsContext.Provider>
   );
 }
