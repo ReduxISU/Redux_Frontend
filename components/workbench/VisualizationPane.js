@@ -166,6 +166,10 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {string} props.showing The Showing line's text.
  * @param {boolean} [props.showingIsError] Draws the Showing text in the error color.
+ * @param {{id: string, text: string, valid: boolean|null, button: {id: string, label: string,
+ *   pressed: boolean, disabled: boolean, reason: string, onClick: Function}|null}|null}
+ *   [props.verdict] Verify's verdict, at the right of the Showing line (#229 stage 3), with
+ *   the "Show where it fails" / "Back to ..." button when it has one.
  * @param {boolean} props.stack Stack the source and target pictures (a panel is open).
  * @param {{title: string, type: {options: Array, value: string, onChange?: Function}|null,
  *   content: PictureContent}} props.source The (only, in Solve mode) picture.
@@ -180,6 +184,7 @@ export default function VisualizationPane({
   idPrefix,
   showing,
   showingIsError,
+  verdict,
   stack,
   source,
   target,
@@ -231,6 +236,63 @@ export default function VisualizationPane({
         >
           {showing}
         </Box>
+        {verdict && (
+          <Box
+            component="span"
+            sx={{
+              ml: "auto",
+              display: "inline-flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "6px 10px",
+            }}
+          >
+            <Box
+              component="span"
+              id={verdict.id}
+              role="status"
+              data-valid={String(verdict.valid)}
+              sx={{
+                fontWeight: 600,
+                color:
+                  verdict.valid === true
+                    ? "success.light"
+                    : verdict.valid === false
+                      ? "error.light"
+                      : "text.primary",
+              }}
+            >
+              {verdict.text}
+            </Box>
+            {verdict.button && (
+              <>
+                <Box
+                  id={verdict.button.id}
+                  component="button"
+                  type="button"
+                  aria-pressed={verdict.button.pressed}
+                  disabled={verdict.button.disabled}
+                  aria-describedby={
+                    verdict.button.reason ? `${verdict.button.id}-reason` : undefined
+                  }
+                  onClick={verdict.button.onClick}
+                  sx={{ ...secondaryButtonSx, px: 1.5 }}
+                >
+                  {verdict.button.label}
+                </Box>
+                {verdict.button.reason && (
+                  <Box
+                    component="span"
+                    id={`${verdict.button.id}-reason`}
+                    sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
+                  >
+                    {verdict.button.reason}
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
+        )}
       </Box>
 
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>

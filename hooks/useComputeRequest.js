@@ -125,6 +125,8 @@ export function describeComputeFailure(error, subject = "instance") {
 
   if (apiError === "certificate_parse_error") {
     return {
+      // #229 stage 3: the workbench tells an unreadable certificate from a failed check.
+      code: apiError,
       headline: "Redux could not read this certificate",
       detail: apiDetail || "The certificate is not in the format this problem expects.",
       expected,

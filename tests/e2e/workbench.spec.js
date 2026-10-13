@@ -7,7 +7,7 @@
 // bottom sheet).
 //
 // The catalog comes from the real backend, like the rest of the suite. Every compute
-// request (solve, visualize, visualizeReduction) is answered here instead, for two reasons:
+// request (solve, visualize, visualizeReduction, reduce) is answered here instead, for two reasons:
 // these tests are about the page's layout and state, not about what Redux computes (that is
 // live-compute.spec.js's job), and the proxy allows only 10 compute requests a minute, which
 // a suite that presses Run this often would otherwise run into.
@@ -26,6 +26,7 @@ const ANSWER = "(x1:True,x2:False,x3:True)";
 const VISUALIZE_REQUEST = /\/api\/redux\/ProblemProvider\/visualize\?/;
 const VISUALIZE_REDUCTION_REQUEST = /\/api\/redux\/ProblemProvider\/visualizeReduction/;
 const SOLVE_REQUEST = /\/api\/redux\/ProblemProvider\/solve/;
+const REDUCE_REQUEST = /\/api\/redux\/ProblemProvider\/reduce\?/;
 
 function satFrame(firstColor) {
   return {
@@ -52,6 +53,9 @@ async function answerCompute(page) {
   await page.route(SOLVE_REQUEST, (route) => route.fulfill({ json: ANSWER }));
   await page.route(VISUALIZE_REDUCTION_REQUEST, (route) =>
     route.fulfill({ json: [satFrame("Background"), satFrame("Solution")] }),
+  );
+  await page.route(REDUCE_REQUEST, (route) =>
+    route.fulfill({ json: { reductionTo: { instance: "(({a,b},{{a,b}}),2)" } } }),
   );
 }
 
