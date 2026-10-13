@@ -39,7 +39,7 @@ function BackgroundReadingList({ links }) {
             target="_blank"
             rel="noopener noreferrer"
             underline="hover"
-            sx={{ color: "primary.light", fontWeight: 600, ...listLinkSx }}
+            sx={{ color: "brand.text", fontWeight: 600, ...listLinkSx }}
           >
             {link.label}
           </Link>
@@ -53,7 +53,7 @@ function BackgroundReadingList({ links }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     underline="hover"
-                    sx={{ color: "primary.light", fontWeight: 600, ...listLinkSx }}
+                    sx={{ color: "brand.text", fontWeight: 600, ...listLinkSx }}
                   >
                     {child.label}
                   </Link>

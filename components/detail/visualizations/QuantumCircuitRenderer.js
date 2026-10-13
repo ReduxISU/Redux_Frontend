@@ -64,7 +64,12 @@ import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useCallback, useId, useMemo, useRef, useState } from "react";
-import { getVisualizationColor } from "../../theme";
+import {
+  getVisualizationColor,
+  getVisualizationFill,
+  getVisualizationOnFill,
+  paletteVars,
+} from "../../theme";
 import { FloatingMenu, useCloseFloatingMenu } from "./floatingMenu";
 import { addGateAtCell, moveGateToCell } from "./quantumCircuitGrid";
 import ZoomPanSurface, { useViewScale } from "./ZoomPanSurface";
@@ -75,9 +80,14 @@ const ROW_SPACING = 60;
 const COLUMN_SPACING = 80;
 const MARGIN = { top: 24, right: 40, bottom: 24, left: 60 };
 const CLASSICAL_GAP = 40;
-const LABEL_COLOR = "#F5F1EA";
+// #156: theme-following colors. A gate body uses the ElementHighlight fill with its matching
+// on-fill label; wires, connectors and highlighted wires use line colors that stand on the
+// canvas in both themes.
 const WIRE_COLOR = getVisualizationColor("");
-const GATE_FILL = getVisualizationColor("ElementHighlight");
+const GATE_FILL = getVisualizationFill("ElementHighlight");
+const LABEL_COLOR = getVisualizationOnFill("ElementHighlight");
+const GATE_LINE = getVisualizationColor("ElementHighlight");
+const GATE_HIGHLIGHT_STROKE = paletteVars.text.primary;
 const OVERLAY_COLOR = getVisualizationColor("ClauseHighlight");
 
 // Assigns one x column per distinct `time` value across every gate and
@@ -141,7 +151,7 @@ function GateMark({ idPrefix, gate, x, targetYs, classicalY, highlighted, onEnte
   const dotYs = sortedYs.slice(0, -1);
   const hasClassicalLink =
     classicalY != null && Array.isArray(gate.classical) && gate.classical.length > 0;
-  const stroke = highlighted ? GATE_FILL : WIRE_COLOR;
+  const stroke = highlighted ? GATE_LINE : WIRE_COLOR;
 
   return (
     <g
@@ -190,7 +200,7 @@ function GateMark({ idPrefix, gate, x, targetYs, classicalY, highlighted, onEnte
         rx={5}
         ry={5}
         fill={GATE_FILL}
-        stroke={highlighted ? "#FFFFFF" : WIRE_COLOR}
+        stroke={highlighted ? GATE_HIGHLIGHT_STROKE : WIRE_COLOR}
         strokeWidth={highlighted ? 2 : 1.5}
       />
       <text
@@ -291,7 +301,7 @@ function DraggableHandle({
           rx={5}
           ry={5}
           fill={GATE_FILL}
-          stroke={highlighted ? "#FFFFFF" : stroke}
+          stroke={highlighted ? GATE_HIGHLIGHT_STROKE : stroke}
           strokeWidth={highlighted ? 2 : 1.5}
         />
         <text
@@ -348,7 +358,7 @@ function EditableGateMark({
   const label = gate.label ?? gate.type ?? "?";
   const hasClassicalLink =
     classicalY != null && Array.isArray(gate.classical) && gate.classical.length > 0;
-  const stroke = highlighted ? GATE_FILL : WIRE_COLOR;
+  const stroke = highlighted ? GATE_LINE : WIRE_COLOR;
 
   function handleContextMenu(event) {
     event.preventDefault();
@@ -425,7 +435,7 @@ function GridCell({ wireId, columnIndex, x, y, onContextMenu }) {
       y={y - ROW_SPACING / 2}
       width={COLUMN_SPACING}
       height={ROW_SPACING}
-      fill={isOver ? "rgba(255,255,255,0.08)" : "transparent"}
+      fill={isOver ? paletteVars.action.hover : "transparent"}
       stroke={isOver ? WIRE_COLOR : "none"}
       strokeDasharray="3 2"
       onContextMenu={onContextMenu}

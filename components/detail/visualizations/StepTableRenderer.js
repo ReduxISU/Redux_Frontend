@@ -18,9 +18,8 @@
 // with the first column pinned so the row label stays visible while the rest scrolls.
 
 import Box from "@mui/material/Box";
-import { alpha } from "@mui/material/styles";
 import { useId } from "react";
-import { getVisualizationColor } from "../../theme";
+import { getVisualizationColor, tint } from "../../theme";
 
 // Opaque, so scrolled cells never show through the pinned column; a cell's own tint is layered
 // over it with a gradient.
@@ -128,12 +127,12 @@ export default function StepTableRenderer({ idPrefix, instanceName, frame }) {
                         borderColor: "divider",
                         p: 1,
                         textAlign: "center",
-                        backgroundColor: cellColor ? alpha(cellColor, 0.22) : "transparent",
+                        backgroundColor: cellColor ? tint(cellColor, 22) : "transparent",
                         ...(columnIndex === 0
                           ? {
                               ...stickyFirstColumnSx,
                               backgroundImage: cellColor
-                                ? `linear-gradient(${alpha(cellColor, 0.22)}, ${alpha(cellColor, 0.22)})`
+                                ? `linear-gradient(${tint(cellColor, 22)}, ${tint(cellColor, 22)})`
                                 : undefined,
                             }
                           : {}),

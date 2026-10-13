@@ -62,7 +62,6 @@
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -88,7 +87,7 @@ import {
   useComputeRequest,
 } from "../../hooks/useComputeRequest";
 import { REDUX_API_BASE_URL, requestVisualizedInstance } from "../../lib/redux";
-import { getFacetAccentColor, thinScrollbarSx } from "../theme";
+import { facetTagSx, thinScrollbarSx } from "../theme";
 import ComputeStatus from "./ComputeStatus";
 import SectionShell from "./SectionShell";
 import StepScrubber from "./StepScrubber";
@@ -141,7 +140,7 @@ function parseStepParam(rawStep) {
 }
 
 function TypeBadge({ typeKey }) {
-  const accentColor = getFacetAccentColor(VISUALIZATION_TYPE_FACET.accentColor);
+  const accentColor = VISUALIZATION_TYPE_FACET.accentColor;
   return (
     <Box
       component="span"
@@ -152,9 +151,7 @@ function TypeBadge({ typeKey }) {
         borderRadius: 999,
         fontSize: "0.75rem",
         fontWeight: 600,
-        color: "#FFFFFF",
-        backgroundColor: alpha(accentColor, 0.12),
-        border: `1px solid ${alpha(accentColor, 0.55)}`,
+        ...facetTagSx(accentColor),
       }}
     >
       {visualizationTypeLabel(typeKey)}
@@ -521,12 +518,12 @@ export default function VisualizationsSection({
                       borderLeft: "3px solid",
                       borderLeftColor: isSelected ? "primary.main" : "transparent",
                       backgroundColor: isSelected
-                        ? alpha(theme.palette.primary.main, 0.1)
+                        ? theme.vars.palette.surface.raised
                         : "transparent",
                       "&:hover": {
                         backgroundColor: isSelected
-                          ? alpha(theme.palette.primary.main, 0.1)
-                          : alpha(theme.palette.common.white, 0.04),
+                          ? theme.vars.palette.surface.raised
+                          : theme.vars.palette.action.hover,
                       },
                       color: "inherit",
                       font: "inherit",

@@ -127,7 +127,7 @@ export default function ContributePage() {
               id="contribute-maintainer-email"
               href={`mailto:${MAINTAINER_CONTACT_EMAIL}`}
               underline="hover"
-              sx={{ color: "primary.light", fontWeight: 600 }}
+              sx={{ color: "brand.text", fontWeight: 600 }}
             >
               {MAINTAINER_CONTACT_EMAIL}
             </Link>

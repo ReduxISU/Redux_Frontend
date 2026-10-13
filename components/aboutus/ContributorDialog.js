@@ -194,7 +194,7 @@ export default function ContributorDialog({
                   target="_blank"
                   rel="noopener noreferrer"
                   underline="hover"
-                  sx={{ color: "primary.light", fontWeight: 600 }}
+                  sx={{ color: "brand.text", fontWeight: 600 }}
                 >
                   {githubProfile.github.replace("https://", "")}
                 </Link>

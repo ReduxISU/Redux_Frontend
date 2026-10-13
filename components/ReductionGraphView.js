@@ -27,15 +27,16 @@
 // --- #148: highlighting a computed shortest path -----------------------------------------
 // `pathNodeNames`/`pathHops` (from ReductionPathFinder.js's `requestReductionPath` result)
 // get their own visual channel, deliberately separate from the existing hover highlight
-// above: hover just boosts the existing violet/blue accent's stroke-width and opacity (a
-// transient "what's this node connected to" cue), where a found path is a persistent answer
+// above: hover just boosts the existing violet/blue accent's stroke width (a transient
+// "what's this node connected to" cue; #156: never by opacity, so every edge stays at least
+// 3:1 on the canvas in both themes, and an isolated node is drawn in the dim grey with a
+// dashed outline instead of faded), where a found path is a persistent answer
 // to a question the visitor asked, so it gets FACET_ACCENT_COLORS.green -- the same hue
 // `theme.js`'s VISUALIZATION_COLOR_KEYS.Solution already uses for "this is the answer" across
 // every per-problem visualization, reused here for the same reason rather than inventing a
 // third color. A hop is matched by (from, to, className) rather than array index/order,
 // since `hops` and this component's own `links` are built independently.
 
-import { alpha, useTheme } from "@mui/material/styles";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
 import { useRouter } from "next/router";
 import { useId, useMemo, useState } from "react";
@@ -45,7 +46,7 @@ import {
   distanceBetween,
   effectiveCurvature,
 } from "./detail/visualizations/graphGeometry";
-import { getFacetAccentColor } from "./theme";
+import { getFacetAccentColor, paletteVars, tint } from "./theme";
 
 const NODE_RADIUS = 15;
 const LAYOUT_WIDTH = 1200;
@@ -152,7 +153,6 @@ function ReductionEdge({
       fill="none"
       stroke={onPath ? pathStroke : stroke}
       strokeWidth={onPath ? 3 : highlighted ? 2.5 : 1.25}
-      strokeOpacity={onPath ? 1 : highlighted ? 0.95 : 0.55}
       markerEnd={`url(#${idPrefix}-${onPath ? "arrow-path" : "arrow"})`}
     >
       <title>{edgeTooltip(link)}</title>
@@ -196,10 +196,10 @@ function ReductionNode({
     >
       <circle
         r={NODE_RADIUS}
-        fill={onPath ? alpha(pathAccent, 0.28) : "#17140F"}
-        stroke={onPath ? pathAccent : accent}
+        fill={onPath ? tint(pathAccent, 28) : paletteVars.background.paper}
+        stroke={onPath ? pathAccent : isolated && !highlighted ? paletteVars.viz.dim : accent}
         strokeWidth={onPath ? 3.5 : highlighted ? 3 : 1.5}
-        opacity={isolated ? 0.55 : 1}
+        strokeDasharray={isolated && !onPath && !highlighted ? "3 2" : undefined}
       />
       <text
         textAnchor="middle"
@@ -256,7 +256,6 @@ export default function ReductionGraphView({
 }) {
   const idPrefix = useId().replace(/:/g, "");
   const router = useRouter();
-  const theme = useTheme();
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
 
   const nodeAccent = getFacetAccentColor("blue");
@@ -390,8 +389,8 @@ export default function ReductionGraphView({
             onPath={pathNodeIdSet.has(node.id)}
             accent={nodeAccent}
             pathAccent={pathAccent}
-            textColor={theme.palette.text.primary}
-            mutedTextColor={theme.palette.text.secondary}
+            textColor={paletteVars.text.primary}
+            mutedTextColor={paletteVars.text.secondary}
             onOpen={handleOpen}
           />
         ))}

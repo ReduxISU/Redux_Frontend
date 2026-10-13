@@ -530,7 +530,7 @@ export default function ProblemDetailLayout({ problem }) {
             border: "none",
             background: "none",
             p: 0,
-            color: "primary.main",
+            color: "brand.text",
             font: "inherit",
             fontWeight: 600,
             cursor: "pointer",

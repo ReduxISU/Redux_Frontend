@@ -52,7 +52,12 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
 import { useCallback, useId, useMemo, useRef, useState } from "react";
-import { getVisualizationColor } from "../../theme";
+import {
+  getVisualizationColor,
+  getVisualizationFill,
+  getVisualizationOnFill,
+  paletteVars,
+} from "../../theme";
 import { FloatingMenu, useCloseFloatingMenu } from "./floatingMenu";
 import {
   computeEdgePath,
@@ -156,7 +161,7 @@ function LinkMark({ link, idPrefix, highlighted, editable }) {
           cx={geo.handleX}
           cy={geo.handleY}
           r={4}
-          fill="rgba(255,255,255,0.15)"
+          fill={paletteVars.surface.raised}
           stroke={DEFAULT_STROKE}
           strokeWidth={1}
           style={{ cursor: "grab" }}
@@ -167,8 +172,11 @@ function LinkMark({ link, idPrefix, highlighted, editable }) {
 }
 
 function GraphNodeMark({ node, highlighted, onEnter, onLeave }) {
-  const fill = getVisualizationColor(node.color) || "#17140F";
-  const stroke = getVisualizationColor(node.outline) || "#F5F1EA";
+  // #156: the node body uses the key's fill and its label the matching on-fill color, so a
+  // label never sits light on light or dark on dark; the outline uses the key's line color.
+  const fill = getVisualizationFill(node.color);
+  const labelColor = getVisualizationOnFill(node.color);
+  const stroke = getVisualizationColor(node.outline);
   const isAccept = isTruthyFlag(node.accept_state);
   const isInitial = isTruthyFlag(node.initial);
   const strokeDasharray = isTruthyFlag(node.dashed) ? "3 2" : undefined;
@@ -203,7 +211,7 @@ function GraphNodeMark({ node, highlighted, onEnter, onLeave }) {
         textAnchor="middle"
         dominantBaseline="central"
         fontSize={10}
-        fill="#F5F1EA"
+        fill={labelColor}
         style={{ pointerEvents: "none" }}
       >
         {node.name}

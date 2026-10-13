@@ -21,14 +21,19 @@ import Chip from "@mui/material/Chip";
 import LinearProgress from "@mui/material/LinearProgress";
 import Typography from "@mui/material/Typography";
 import { useId } from "react";
+import { paletteVars } from "../../theme";
 
-const PUMP_ON_COLOR = "#2E7D32";
-const PUMP_OFF_COLOR = "#4B5563";
-const PEAK_COLOR = "#C0392B";
-const OFF_PEAK_COLOR = "#2E7D32";
-const TANK_LOW_COLOR = "#C0392B";
-const TANK_HIGH_COLOR = "#D96C1E";
-const TANK_NORMAL_COLOR = "#2F6FB3";
+// #156: this renderer's own palette lives in the theme (palette.viz.pump), with a light and a
+// dark variant; every colored fill carries the matching on-fill text color.
+const PUMP_COLORS = paletteVars.viz.pump;
+const PUMP_ON_COLOR = PUMP_COLORS.on;
+const PUMP_OFF_COLOR = PUMP_COLORS.off;
+const PEAK_COLOR = PUMP_COLORS.peak;
+const OFF_PEAK_COLOR = PUMP_COLORS.offPeak;
+const TANK_LOW_COLOR = PUMP_COLORS.tankLow;
+const TANK_HIGH_COLOR = PUMP_COLORS.tankHigh;
+const TANK_NORMAL_COLOR = PUMP_COLORS.tankNormal;
+const ON_FILL_COLOR = PUMP_COLORS.onFill;
 
 function tankColor(fillRatio) {
   if (fillRatio < 0.2) return TANK_LOW_COLOR;
@@ -86,7 +91,7 @@ export default function PumpScheduleRenderer({ idPrefix, frame }) {
           label={metrics.isPeakHour ? "Peak" : "Off-Peak"}
           sx={{
             backgroundColor: metrics.isPeakHour ? PEAK_COLOR : OFF_PEAK_COLOR,
-            color: "#FFFFFF",
+            color: ON_FILL_COLOR,
             fontWeight: 700,
           }}
         />
@@ -123,7 +128,7 @@ export default function PumpScheduleRenderer({ idPrefix, frame }) {
                 borderRadius: 1.5,
                 p: 1,
                 backgroundColor: pump.isOn ? PUMP_ON_COLOR : PUMP_OFF_COLOR,
-                color: "#FFFFFF",
+                color: ON_FILL_COLOR,
               }}
             >
               <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -133,7 +138,7 @@ export default function PumpScheduleRenderer({ idPrefix, frame }) {
                 {pump.isOn ? "ON" : "OFF"}
               </Typography>
               {pump.isOn && (
-                <Typography variant="caption" sx={{ display: "block", opacity: 0.85 }}>
+                <Typography variant="caption" sx={{ display: "block" }}>
                   {pump.flowGph.toLocaleString()} gph, {pump.powerKw.toFixed(1)} kW
                 </Typography>
               )}
@@ -155,7 +160,7 @@ export default function PumpScheduleRenderer({ idPrefix, frame }) {
           sx={{
             height: 10,
             borderRadius: 5,
-            backgroundColor: "action.disabledBackground",
+            backgroundColor: "surface.track",
             "& .MuiLinearProgress-bar": { backgroundColor: tankColor(fillRatio) },
           }}
         />

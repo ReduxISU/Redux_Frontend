@@ -45,7 +45,6 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
-import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -70,7 +69,7 @@ import {
   useComputeRequest,
 } from "../../hooks/useComputeRequest";
 import { REDUX_API_BASE_URL, requestReducedInstance } from "../../lib/redux";
-import { getFacetAccentColor, thinScrollbarSx } from "../theme";
+import { facetTagSx, thinScrollbarSx } from "../theme";
 import ComputeStatus from "./ComputeStatus";
 import SectionShell from "./SectionShell";
 import StepScrubber from "./StepScrubber";
@@ -93,7 +92,7 @@ const REDUCTION_COST_FACET = TAXONOMY.find((facet) => facet.key === "reductionCo
 const REDUCTION_COST_LABELS = new Map(
   REDUCTION_COST_FACET.options.map((option) => [option.key, option.label]),
 );
-const REDUCTION_COST_ACCENT = getFacetAccentColor(REDUCTION_COST_FACET.accentColor);
+const REDUCTION_COST_ACCENT = REDUCTION_COST_FACET.accentColor;
 
 function costLabel(costKey) {
   return REDUCTION_COST_LABELS.get(costKey) ?? costKey;
@@ -115,9 +114,7 @@ function CostBadge({ costKey }) {
         borderRadius: 999,
         fontSize: "0.75rem",
         fontWeight: 700,
-        color: "#FFFFFF",
-        backgroundColor: alpha(REDUCTION_COST_ACCENT, 0.12),
-        border: `1px solid ${alpha(REDUCTION_COST_ACCENT, 0.55)}`,
+        ...facetTagSx(REDUCTION_COST_ACCENT),
       }}
     >
       {costLabel(costKey)}
@@ -573,13 +570,11 @@ export default function ReductionsSection({
                     border: "none",
                     borderLeft: "3px solid",
                     borderLeftColor: isSelected ? "primary.main" : "transparent",
-                    backgroundColor: isSelected
-                      ? alpha(theme.palette.primary.main, 0.12)
-                      : "transparent",
+                    backgroundColor: isSelected ? theme.vars.palette.surface.raised : "transparent",
                     "&:hover": {
                       backgroundColor: isSelected
-                        ? alpha(theme.palette.primary.main, 0.12)
-                        : alpha(theme.palette.common.white, 0.04),
+                        ? theme.vars.palette.surface.raised
+                        : theme.vars.palette.action.hover,
                     },
                   })}
                 >

@@ -174,11 +174,7 @@ export default function ComparisonColumn({
         {relatedNotes.length > 0 && (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mt: 1 }}>
             {relatedNotes.map((note) => (
-              <Typography
-                key={note}
-                variant="body2"
-                sx={{ color: "primary.light", fontWeight: 600 }}
-              >
+              <Typography key={note} variant="body2" sx={{ color: "brand.text", fontWeight: 600 }}>
                 {note}
               </Typography>
             ))}

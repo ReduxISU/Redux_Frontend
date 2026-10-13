@@ -99,7 +99,7 @@ export default function PlaylistIndex() {
                 component={Link}
                 href={`/playlists/${playlist.slug}`}
                 sx={{
-                  color: "primary.main",
+                  color: "brand.text",
                   fontWeight: 700,
                   display: "inline-flex",
                   alignItems: "center",
@@ -145,7 +145,7 @@ export default function PlaylistIndex() {
                     id={`my-playlist-link-${index}`}
                     component={Link}
                     href={`/playlists/custom?p=${entry.query}`}
-                    sx={{ flex: 1, minWidth: 0, color: "primary.main", fontWeight: 600 }}
+                    sx={{ flex: 1, minWidth: 0, color: "brand.text", fontWeight: 600 }}
                   >
                     {entry.title}
                   </Box>

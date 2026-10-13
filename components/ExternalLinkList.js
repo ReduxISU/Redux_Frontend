@@ -39,7 +39,7 @@ export default function ExternalLinkList({ idPrefix, links, trailingItem }) {
             rel="noopener noreferrer"
             underline="hover"
             sx={{
-              color: "primary.light",
+              color: "brand.text",
               fontWeight: 600,
               fontSize: "0.875rem",
               // 44px touch target below md (#179): the whole row width is the link.

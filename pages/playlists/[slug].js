@@ -65,7 +65,7 @@ function NotFound() {
           id="playlist-not-found-home-link"
           component={Link}
           href="/"
-          sx={{ color: "primary.main", fontWeight: 600, mt: 1 }}
+          sx={{ color: "brand.text", fontWeight: 600, mt: 1 }}
         >
           Back to Home
         </Box>
@@ -152,7 +152,7 @@ export default function PlaylistDetail() {
                   id={`playlist-problem-link-${index}`}
                   component={Link}
                   href={`/${encodeURIComponent(entry.name)}?playlist=${encodeURIComponent(playlist.slug)}${buildPlaylistStepQuerySuffix(entry)}`}
-                  sx={{ color: "primary.main", fontWeight: 600 }}
+                  sx={{ color: "brand.text", fontWeight: 600 }}
                 >
                   {entry.name}
                 </Box>

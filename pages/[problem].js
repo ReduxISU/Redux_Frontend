@@ -200,7 +200,7 @@ function NotFound() {
           id="not-found-home-link"
           component={Link}
           href="/"
-          sx={{ color: "primary.main", fontWeight: 600, mt: 1 }}
+          sx={{ color: "brand.text", fontWeight: 600, mt: 1 }}
         >
           Back to Home
         </Box>

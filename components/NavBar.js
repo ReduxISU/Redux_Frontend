@@ -26,15 +26,138 @@
 // a menu button, by project-owner request: five links plus the wordmark
 // wrapped onto two or three lines at phone width. The desktop links keep their
 // ids; the menu items get a `-menu` suffix so ids stay unique.
+//
+// #156: the right end of the bar holds the theme toggle and, at the far right, the ISU
+// Computer Science logo. Both have a dark and a light version rendered together, with the
+// inactive one hidden by the color-scheme CSS selector (theme.applyStyles), so the server
+// render and the first paint already match the theme the visitor sees: no hydration
+// mismatch and no flash of the wrong logo or label. The toggle shows what it switches TO
+// (sun + "Light" while dark, moon + "Dark" while light) and its accessible name says the
+// same; the hidden half is display:none, so it is out of the accessibility tree too. Below
+// `sm` the toggle drops its text label and stays a 44px icon button beside the menu button.
 
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuIcon from "@mui/icons-material/Menu";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import { useColorScheme } from "@mui/material/styles";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
+import { THEME_ATTRIBUTE } from "./theme";
+
+const LOGO_ALT = "Idaho State University, Computer Science";
+// Trimmed logo files in public/ are 289 x 120; shown 40px tall.
+const LOGO_WIDTH = 289;
+const LOGO_HEIGHT = 120;
+const LOGO_DISPLAY_HEIGHT = 40;
+
+const visuallyHiddenSx = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  p: 0,
+  m: -0.125,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
+
+// Shown only while the given scheme is active; hidden (display:none) in the other one.
+function onlyInSx(scheme, display = "inline-flex") {
+  const other = scheme === "dark" ? "light" : "dark";
+  return (theme) => ({ display, ...theme.applyStyles(other, { display: "none" }) });
+}
+
+function ThemeToggleFace({ scheme, icon, label, accessibleName }) {
+  return (
+    <Box component="span" sx={[onlyInSx(scheme), { alignItems: "center", gap: 0.75 }]}>
+      {icon}
+      <Box component="span" aria-hidden="true" sx={{ display: { xs: "none", sm: "inline" } }}>
+        {label}
+      </Box>
+      <Box component="span" sx={visuallyHiddenSx}>
+        {accessibleName}
+      </Box>
+    </Box>
+  );
+}
+
+function ThemeToggle() {
+  const { setMode } = useColorScheme();
+  const toggle = () => {
+    // The attribute on <html> is the scheme actually showing (InitColorSchemeScript sets it
+    // before the first paint, MUI keeps it current), whether it came from a saved choice or
+    // from prefers-color-scheme.
+    const current = document.documentElement.getAttribute(THEME_ATTRIBUTE);
+    setMode(current === "light" ? "dark" : "light");
+  };
+
+  return (
+    <Button
+      id="navbar-theme-toggle"
+      variant="outlined"
+      color="inherit"
+      onClick={toggle}
+      sx={{
+        minHeight: 44,
+        minWidth: 44,
+        px: { xs: 1, sm: 1.75 },
+        flexShrink: 0,
+        color: "text.primary",
+        borderColor: "border.main",
+        "&:hover": { borderColor: "border.strong", backgroundColor: "action.hover" },
+      }}
+    >
+      <ThemeToggleFace
+        scheme="dark"
+        icon={<LightModeIcon aria-hidden="true" fontSize="small" />}
+        label="Light"
+        accessibleName="Switch to the light theme"
+      />
+      <ThemeToggleFace
+        scheme="light"
+        icon={<DarkModeIcon aria-hidden="true" fontSize="small" />}
+        label="Dark"
+        accessibleName="Switch to the dark theme"
+      />
+    </Button>
+  );
+}
+
+function IsuLogo() {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+      {[
+        { scheme: "dark", src: "/ISULogo-Dark.png", id: "navbar-isu-logo-dark" },
+        { scheme: "light", src: "/ISULogo-Light.png", id: "navbar-isu-logo-light" },
+      ].map(({ scheme, src, id }) => (
+        <Box key={scheme} component="span" sx={onlyInSx(scheme, "block")}>
+          <Image
+            id={id}
+            src={src}
+            alt={LOGO_ALT}
+            width={LOGO_WIDTH}
+            height={LOGO_HEIGHT}
+            unoptimized
+            loading="eager"
+            style={{
+              display: "block",
+              height: LOGO_DISPLAY_HEIGHT,
+              width: "auto",
+            }}
+          />
+        </Box>
+      ))}
+    </Box>
+  );
+}
 
 const NAV_LINKS = [
   { id: "navbar-home-link", href: "/", label: "Home" },
@@ -61,6 +184,7 @@ export default function NavBar() {
         py: { xs: 1.5, md: 2.5 },
         borderBottom: "1px solid",
         borderColor: "divider",
+        backgroundColor: "surface.nav",
       }}
     >
       <Box
@@ -160,6 +284,8 @@ export default function NavBar() {
           );
         })}
       </Menu>
+      <ThemeToggle />
+      <IsuLogo />
     </Box>
   );
 }

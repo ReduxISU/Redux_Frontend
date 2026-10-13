@@ -72,7 +72,6 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
-import { alpha } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -85,7 +84,7 @@ import {
   useComputeRequest,
 } from "../../hooks/useComputeRequest";
 import { REDUX_API_BASE_URL, requestSolvedInstance } from "../../lib/redux";
-import { getFacetAccentColor, thinScrollbarSx } from "../theme";
+import { facetTagSx, thinScrollbarSx } from "../theme";
 import ComputeStatus from "./ComputeStatus";
 import SectionShell from "./SectionShell";
 
@@ -115,7 +114,7 @@ function optionLabel(facetKey, optionKey) {
 // facet-colored chips.
 function ComplexityBucketBadge({ bucketKey }) {
   const facet = TAXONOMY_BY_KEY.get("solverComplexity");
-  const accentColor = getFacetAccentColor(facet?.accentColor);
+  const accentColor = facet?.accentColor;
   return (
     <Box
       component="span"
@@ -125,9 +124,7 @@ function ComplexityBucketBadge({ bucketKey }) {
         px: 1.25,
         py: 0.375,
         borderRadius: 999,
-        color: "#FFFFFF",
-        backgroundColor: alpha(accentColor, 0.12),
-        border: `1px solid ${alpha(accentColor, 0.55)}`,
+        ...facetTagSx(accentColor),
         fontSize: "0.8125rem",
         fontWeight: 700,
       }}
@@ -429,12 +426,12 @@ export default function SolversSection({
                         borderLeft: "3px solid",
                         borderLeftColor: isSelected ? "primary.main" : "transparent",
                         backgroundColor: isSelected
-                          ? alpha(theme.palette.primary.main, 0.14)
+                          ? theme.vars.palette.surface.raised
                           : "transparent",
                         "&:hover": {
                           backgroundColor: isSelected
-                            ? alpha(theme.palette.primary.main, 0.14)
-                            : alpha(theme.palette.common.white, 0.04),
+                            ? theme.vars.palette.surface.raised
+                            : theme.vars.palette.action.hover,
                         },
                       })}
                     >
