@@ -9,8 +9,9 @@
 //
 // The catalog comes from the real backend; the default picture's compute request is answered
 // here, the same way workbench.spec.js does, so these tests never spend the proxy's compute
-// budget. Pinned to 3SAT: it has several solvers (so the list has somewhere to move), more than
-// one visualization and several reductions.
+// budget. Pinned to 3SAT: it has several solvers (so the list has somewhere to move) and
+// several reductions. Its visualizations depend on the backend, so ensureVisualizationChoices
+// below makes sure there is more than one, and a target picture to name, on any backend.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
@@ -38,6 +39,63 @@ async function answerDefaultPicture(page) {
   );
 }
 
+// The Visualization Type tests need 3SAT to offer more than one visualization and its first
+// reduction target to have one. A backend with the newer visualizations declares both;
+// upstream Redux (what CI tests against) gives 3SAT a single visualization and gives some
+// of its reduction targets none, where the page rightly shows a fixed box and no target
+// box. So the catalog is topped up here: a stand-in visualization is added only where one
+// is missing, and every real entry is left as the backend sent it.
+const PROBLEM_CODE = "SAT3";
+const EXTRA_SOURCE_VIZ = "E2eSat3SecondVisualization";
+const EXTRA_TARGET_VIZ = "E2eTargetVisualization";
+const EXTRA_VIZ_TYPES = {
+  [EXTRA_SOURCE_VIZ]: "BooleanSatisfiability",
+  [EXTRA_TARGET_VIZ]: "GraphD3",
+};
+
+async function patchJson(page, pattern, patch) {
+  await page.route(pattern, async (route) => {
+    const response = await route.fetch();
+    const body = await patch(await response.json(), route);
+    await route.fulfill({ response, json: body });
+  });
+}
+
+async function ensureVisualizationChoices(page) {
+  await patchJson(
+    page,
+    /\/api\/redux\/Navigation\/Batch\/allVisualizations$/,
+    async (body, route) => {
+      const reductionsUrl = route
+        .request()
+        .url()
+        .replace(/Navigation\/Batch\/allVisualizations$/, "Navigation/Reductions");
+      const graph = await (await route.fetch({ url: reductionsUrl })).json();
+      if ((body[PROBLEM_CODE] ?? []).length < 2) {
+        body[PROBLEM_CODE] = [...(body[PROBLEM_CODE] ?? []), EXTRA_SOURCE_VIZ];
+      }
+      for (const target of Object.keys(graph[PROBLEM_CODE] ?? {})) {
+        if (!body[target]?.length) body[target] = [EXTRA_TARGET_VIZ];
+      }
+      return body;
+    },
+  );
+  await patchJson(page, /\/api\/redux\/Navigation\/Batch\/allVisualizationTypes$/, (body) => ({
+    ...body,
+    ...EXTRA_VIZ_TYPES,
+  }));
+  await patchJson(page, /\/api\/redux\/Navigation\/Batch\/allInfo$/, (body) => {
+    for (const [className, visualizationType] of Object.entries(EXTRA_VIZ_TYPES)) {
+      body[className] = {
+        visualizationName: `${className} (test stand-in)`,
+        visualizationDefinition: "A stand-in visualization the e2e tests add.",
+        visualizationType,
+      };
+    }
+    return body;
+  });
+}
+
 const solverButton = (page) => page.locator("#workbench-solver-button");
 const solverList = (page) => page.locator("#workbench-solver-listbox");
 const solverOptions = (page) => solverList(page).getByRole("option");
@@ -49,6 +107,7 @@ async function optionNames(page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await ensureVisualizationChoices(page);
   await answerDefaultPicture(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
 });
