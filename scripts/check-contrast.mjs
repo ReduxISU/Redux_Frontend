@@ -123,6 +123,14 @@ function pairsFor(t) {
   add("dropdown list border on surface", t.border.main, s.main, UI);
   add("info card border on surface", t.border.strong, s.main, UI);
 
+  // #229 stage 3: Result & Verify. The certificate box's placeholder (an example certificate)
+  // on the input, the gold-bordered Map button and Check-against target side on the raised
+  // grey, the mapped certificate's green border on the input, and the verdict on the Showing
+  // line (on the surface; covered by the success / error text pairs above).
+  add("certificate placeholder (muted2) on input", t.text.muted2, s.input, TEXT);
+  add("gold line on raised (Map button, target side)", t.brand.goldLine, s.raised, UI);
+  add("success border on input (mapped certificate)", t.status.ok, s.input, UI);
+
   const v = t.viz;
   for (const key of ["background", "solution", "elementHighlight", "clauseHighlight"]) {
     for (const [bgName, bg] of [

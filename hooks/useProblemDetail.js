@@ -210,6 +210,7 @@ function buildReductions(
   visualizationsByProblem,
   info,
   visualizationTypesByInstance,
+  verifiersByProblem,
 ) {
   const to = [];
   const from = [];
@@ -247,6 +248,9 @@ function buildReductions(
             bigO: info[edge.className]?.complexity || "",
             description: info[edge.className]?.reductionDefinition || "",
             targetProblem: buildTargetProblem(toCode, info, codeToName),
+            // #229 stage 3: Verify's "Check against: target" checks with the target
+            // problem's own verifier, against the instance the reduction built.
+            targetVerifier: buildVerifier(verifiersByProblem?.[toCode], info, info[toCode] ?? {}),
           });
         }
         if (toCode === problemCode) {
@@ -346,6 +350,7 @@ function buildProblem(problemCode, info, batches, codeToName) {
       visualizationsByProblem,
       info,
       visualizationTypesByInstance,
+      verifiersByProblem,
     ),
   };
 }

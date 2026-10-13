@@ -27,6 +27,7 @@ import Box from "@mui/material/Box";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { VISUALIZATION_TYPE_MAP } from "../../data/visualizationTypes";
+import { CHECK_SOURCE, CHECK_TARGET, useCertificateCheck } from "../../hooks/useCertificateCheck";
 import {
   COMPUTE_CANCELLED,
   COMPUTE_DONE,
@@ -38,7 +39,9 @@ import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
 import {
   REDUX_API_BASE_URL,
+  requestMappedSolution,
   requestReducedInstance,
+  requestReduction,
   requestSolvedInstance,
   requestVisualizedInstance,
 } from "../../lib/redux";
@@ -67,6 +70,17 @@ const PANEL_TITLES = { details: "Details", instance: "Instance", result: "Result
 const INSTANCE_URL_DEBOUNCE_MS = 400;
 const NOT_RUN_TEXT = "Not run yet. Showing the default picture of the instance.";
 const ARROW = "→";
+
+// #229 stage 3: drawing a certificate on the picture. Before any Run, Check is meant to draw
+// the certificate right away; after a Run, a well-formed but invalid one offers "Show where it
+// fails". No Redux endpoint draws a given certificate yet: ProblemProvider/visualize only draws
+// a solver's own answer, and ProblemProvider/verify answers a bare True or False with nothing
+// about which parts fail. So the verdict, the button and its Back flow are built, the button
+// stays disabled with this reason, and the picture is left as it is. Flip this (and fetch the
+// frame) once the backend can draw a certificate. Faking it here per picture type would mean
+// re-implementing every verifier in the browser.
+const CERTIFICATE_DRAWING_SUPPORTED = false;
+const CERTIFICATE_DRAWING_REASON = "Redux can't draw a certificate on this picture yet.";
 
 function findIndexByName(items, name) {
   if (typeof name !== "string" || !name) return 0;
@@ -147,6 +161,43 @@ export default function Workbench({ problem }) {
     Boolean(reduceResult) &&
     reduceResult.instance === instance &&
     reduceResult.reductionClassName === selectedReduction?.className;
+
+  // --- Verify (#229 stage 3) --------------------------------------------------------------
+  // The target side is the reduction's target problem, checked against the instance the
+  // reduction built; it has an instance (and so unlocks) only while that run is current.
+  const reduceTargetName = reduceCurrent
+    ? reduceResult.targetName
+    : (selectedReduction?.target ?? targetName ?? null);
+  const verifyContext = `${mode}:${lastRun?.id ?? 0}`;
+  const verify = useCertificateCheck({
+    source: {
+      name: problem.name,
+      label: `${problem.name} instance`,
+      verifier: problem.verifier ?? null,
+      instance,
+    },
+    target:
+      mode === "reduce" && reduceTargetName
+        ? {
+            name: reduceTargetName,
+            label: `${reduceTargetName} target`,
+            verifier: reduceCurrent
+              ? reduceResult.targetVerifier
+              : (selectedReduction?.targetVerifier ?? null),
+            instance: reduceCurrent ? reduceResult.targetInstance : null,
+          }
+        : null,
+    context: verifyContext,
+  });
+
+  // Which verdict (by its id) has "Show where it fails" switched on.
+  const [overlayFor, setOverlayFor] = useState(null);
+
+  // --- Map a solution across (#229 stage 3) -----------------------------------------------
+  const mapRun = useComputeRequest({ subject: "certificate" });
+  const [mapSolverIndex, setMapSolverIndex] = useState(solverIndex);
+  const mapResult = mapRun.status === COMPUTE_DONE ? mapRun.result : null;
+  const mapCurrent = Boolean(mapResult) && reduceCurrent && mapResult.runId === reduceResult.runId;
 
   // A new run's picture starts at its first step.
   const [stepsFor, setStepsFor] = useState(pictureRun.result);
@@ -302,6 +353,25 @@ export default function Workbench({ problem }) {
     } else {
       const reduction = selectedReduction;
       finished = reduceRun.start(async (signal) => {
+        // The target instance's text (for the Result panel and Check against: target) comes
+        // from ProblemProvider/reduce, which needs no answer, so it is asked for alongside the
+        // solve. Without it the run still draws; the target side of Verify just stays locked.
+        const targetInstance = requestReduction(
+          REDUX_API_BASE_URL,
+          reduction.className,
+          runInstance,
+          signal,
+        ).then(
+          (built) =>
+            typeof built?.reductionTo?.instance === "string" ? built.reductionTo.instance : null,
+          (error) => {
+            if (error?.name === "AbortError") throw error;
+            return null;
+          },
+        );
+        // The solve below may throw first; this keeps the request running alongside it from
+        // also surfacing as an unhandled rejection. Awaiting it later still sees the result.
+        targetInstance.catch(() => {});
         const output = await requestSolvedInstance(
           REDUX_API_BASE_URL,
           solver.className,
@@ -316,6 +386,7 @@ export default function Workbench({ problem }) {
           certificate,
           signal,
         );
+        const target = await targetInstance;
         succeeded = true;
         return {
           frames: Array.isArray(frames) ? frames : [],
@@ -323,15 +394,134 @@ export default function Workbench({ problem }) {
           reductionName: reduction.name,
           targetName: reduction.target,
           targetVisualization: reduction.targetVisualization,
+          targetVerifier: reduction.targetVerifier ?? null,
+          targetInstance: target,
           solverName: solver.name,
+          solverClassName: solver.className,
           certificate,
           instance: runInstance,
+          runId,
         };
       });
     }
+    // After a reduction, Verify checks against the target it built (the mockup's default),
+    // when the target problem has a verifier to check with.
+    const checkTargetAfter = mode === "reduce" && Boolean(selectedReduction?.targetVerifier);
     finished.then(() => {
-      if (succeeded && runIdRef.current === runId) setResultNew(true);
+      if (!succeeded || runIdRef.current !== runId) return;
+      setResultNew(true);
+      if (checkTargetAfter) verify.setCheckOn(CHECK_TARGET);
     });
+  }
+
+  // --- Verify This Answer and Map a solution across ----------------------------------------
+  function handleVerifyAnswer() {
+    if (!solveCurrent) return;
+    verify.check(asCertificate(solveResult.output), CHECK_SOURCE);
+  }
+
+  const mapSolver = solvers[mapSolverIndex] ?? null;
+  const mapReuses = reduceCurrent && mapSolver?.className === reduceResult.solverClassName;
+  const mapDisabled =
+    !reduceCurrent || !mapSolver?.className || mapRun.isRunning || reduceRun.isRunning;
+
+  function handleMap() {
+    if (mapDisabled) return;
+    const run = reduceResult;
+    const solver = mapSolver;
+    const reuse = mapReuses;
+    mapRun.start(async (signal) => {
+      const answer = reuse
+        ? run.certificate
+        : asCertificate(
+            await requestSolvedInstance(REDUX_API_BASE_URL, solver.className, run.instance, signal),
+          );
+      const mapped = await requestMappedSolution(
+        REDUX_API_BASE_URL,
+        run.reductionClassName,
+        run.instance,
+        answer,
+        signal,
+      );
+      return {
+        certificate: asCertificate(mapped),
+        solverName: solver.name,
+        reused: reuse,
+        runId: run.runId,
+      };
+    });
+  }
+
+  function handleVerifyMapped() {
+    if (!mapCurrent || verify.targetLocked) return;
+    verify.check(mapResult.certificate, CHECK_TARGET);
+  }
+
+  let mapHint = "";
+  if (!reduceCurrent) {
+    mapHint = reduceRun.isRunning
+      ? "Waiting for the reduction to build the target instance."
+      : "The instance changed. Run the reduction again to map an answer onto the new target.";
+  } else if (!mapSolver) {
+    mapHint = `${problem.name} has no solver to produce an answer to map.`;
+  } else if (!mapSolver.className) {
+    mapHint = "This solver cannot be run: the catalog did not say which backend solver it is.";
+  } else if (mapReuses) {
+    mapHint = `Uses ${mapSolver.name}'s answer from this run. Nothing new runs.`;
+  } else {
+    mapHint = `There's no ${mapSolver.name} answer from this run, so this solves the ${problem.name} instance first. That's the expensive step.`;
+  }
+  let mapAnnouncement = "";
+  if (mapRun.status === COMPUTE_RUNNING) mapAnnouncement = "Mapping the answer across.";
+  else if (mapRun.status === COMPUTE_DONE)
+    mapAnnouncement = `Mapped ${mapResult.solverName}'s answer onto the target.`;
+  else if (mapRun.status === COMPUTE_FAILED)
+    mapAnnouncement = `The answer was not mapped. ${mapRun.failure?.headline ?? ""}`;
+  else if (mapRun.status === COMPUTE_CANCELLED) mapAnnouncement = "Mapping cancelled.";
+
+  // --- The verdict on the Showing line ------------------------------------------------------
+  // A check never touches the picture's own state (the run, its current step). Its verdict
+  // shows only while it still describes what is on screen: the same mode and run, and the
+  // instance it was checked against. A new Run or an instance edit retires it.
+  const checked = verify.verdict;
+  const checkedSideInstance =
+    checked?.side === CHECK_TARGET
+      ? reduceCurrent
+        ? reduceResult.targetInstance
+        : null
+      : instance;
+  const verdictCurrent =
+    Boolean(checked) &&
+    checked.context === verifyContext &&
+    checked.instance === checkedSideInstance;
+  // Whether the picture holds a run's answer worth protecting (solved, or reduced).
+  const pictureRan = mode === "solve" ? showingRunPicture : reduceCurrent;
+  let verdictLine = null;
+  if (verdictCurrent) {
+    const text =
+      checked.valid === null
+        ? `Verifier: Redux answered "${checked.text}" for your certificate on the ${checked.label}`
+        : `Verifier: your certificate on the ${checked.label} is ${checked.valid ? "valid" : "not valid"}`;
+    let button = null;
+    // After a Run, only a well-formed but invalid certificate offers to show where it fails;
+    // a valid one gets the verdict alone (the picture already shows a correct answer). A new
+    // Check is a new verdict, so it starts with the overlay off.
+    if (pictureRan && checked.valid === false) {
+      const on = CERTIFICATE_DRAWING_SUPPORTED && overlayFor === checked.id;
+      button = {
+        id: `${ID}-verdict-overlay`,
+        label: on
+          ? mode === "solve"
+            ? "Back to the solver's answer"
+            : "Back to the reduction"
+          : "Show where it fails",
+        pressed: on,
+        disabled: !CERTIFICATE_DRAWING_SUPPORTED,
+        reason: CERTIFICATE_DRAWING_SUPPORTED ? "" : CERTIFICATE_DRAWING_REASON,
+        onClick: () => setOverlayFor(on ? null : checked.id),
+      };
+    }
+    verdictLine = { id: `${ID}-verdict`, text, valid: checked.valid, button };
   }
 
   // --- What the command bar and picture pane show ------------------------------------------
@@ -511,6 +701,12 @@ export default function Workbench({ problem }) {
   } else if (instanceError) {
     // The error itself is shown under the command bar (or in the Instance panel).
     note = null;
+  } else if (verdictLine && !pictureRan && checked.valid !== null && selectedViz) {
+    // Before any Run the certificate would be drawn on the picture right away.
+    note = {
+      text: `${CERTIFICATE_DRAWING_REASON} The picture still shows the instance.`,
+      tone: "muted",
+    };
   } else if (showingRunPicture && pictureResult.frames.length <= 1) {
     note = { text: "This run recorded no steps.", tone: "muted" };
   } else if (showingRunPicture) {
@@ -626,7 +822,18 @@ export default function Workbench({ problem }) {
     </>
   );
 
+  let targetLockReason = "";
+  if (mode === "reduce" && reduceTargetName) {
+    if (reduceRun.isRunning) targetLockReason = `Building the ${reduceTargetName} instance.`;
+    else if (reduceCurrent && !reduceResult.targetInstance)
+      targetLockReason = `Redux did not send the ${reduceTargetName} instance it built, so there is nothing to check against.`;
+    else
+      targetLockReason = `Run the reduction first: checking against ${reduceTargetName} needs the target instance it builds.`;
+  }
+
   // --- Rail dots ---------------------------------------------------------------------------
+  // Only a Run sets the Result dot. A Check or a mapping happens with the panel open, so
+  // neither adds one.
   const accentLine = mode === "solve" ? "brand.line" : "brand.goldLine";
   const dots = {
     instance: instanceError ? { label: "The instance has errors", color: "status.err" } : null,
@@ -789,6 +996,39 @@ export default function Workbench({ problem }) {
               instance={instance}
               solveResult={solveSummary}
               reduceResult={reduceSummary}
+              onVerifyAnswer={handleVerifyAnswer}
+              map={
+                mode === "reduce" && reduceSummary
+                  ? {
+                      select:
+                        solvers.length > 0
+                          ? {
+                              value: String(mapSolverIndex),
+                              options: solvers.map((solver, index) => ({
+                                value: String(index),
+                                label: solver.name,
+                                tags: solverTags(solver),
+                                card: solverCard(solver),
+                              })),
+                              onChange: (value) => setMapSolverIndex(Number(value)),
+                            }
+                          : null,
+                      onMap: handleMap,
+                      disabled: mapDisabled,
+                      hint: mapHint,
+                      request: mapRun,
+                      announcement: mapAnnouncement,
+                      mapped: mapCurrent ? mapResult : null,
+                      onVerifyMapped: verify.targetLocked ? null : handleVerifyMapped,
+                    }
+                  : null
+              }
+              verifyProps={{
+                verify,
+                sourceName: problem.name,
+                targetName: reduceTargetName,
+                targetLockReason,
+              }}
             />
           </Box>
         </Box>
@@ -867,6 +1107,7 @@ export default function Workbench({ problem }) {
             idPrefix={ID}
             showing={showing}
             showingIsError={Boolean(instanceError)}
+            verdict={verdictLine}
             stack={Boolean(panel)}
             source={{
               title: mode === "solve" ? `${problem.name} instance` : `Source: ${problem.name}`,

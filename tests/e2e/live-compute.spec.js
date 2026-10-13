@@ -328,7 +328,9 @@ test("a problem with no declared instance keeps Run and Verify unavailable", asy
   await openPanel(page, "result", { expect });
   await page.locator(CERTIFICATE_INPUT).fill(WRONG_CERTIFICATE);
   await expect(page.locator(VERIFY_BUTTON)).toBeDisabled();
-  await expect(page.getByText("Check needs both an instance and a certificate.")).toBeVisible();
+  await expect(
+    page.getByText("There is no instance to check against. Press Edit to write one."),
+  ).toBeVisible();
 
   // Unavailable, not enabled-and-failing: nothing was ever sent, so no
   // failure notice and no verdict should exist either.

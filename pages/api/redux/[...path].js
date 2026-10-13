@@ -79,6 +79,11 @@ const rateLimitBuckets = new Map();
  * compute profile and was deliberately left out until T53 (#116) gave it a real caller
  * (`requestReducedInstance`, `lib/redux/index.js`) -- it is allowed below now.
  *
+ * `ProblemProvider/reduce` and `ProblemProvider/mapSolution` (#229 stage 3) give the
+ * workbench's Result panel the target instance's text and "Map a solution across". Both
+ * build a reduction on the backend, so they are compute endpoints: rate-limited, body-capped
+ * and on the 60s timeout like the rest of ProblemProvider.
+ *
  * `Navigation/Reductions/path` (#148) is its own exact entry rather than folded into
  * `Navigation/Reductions` above: it is a genuinely different endpoint (a weighted
  * shortest-path lookup taking `source`/`target` query parameters) that happens to share
@@ -107,6 +112,8 @@ const ALLOWED_ENDPOINTS = new Map([
   ["ProblemProvider/verify", ["POST"]],
   ["ProblemProvider/visualize", ["POST"]],
   ["ProblemProvider/visualizeReduction", ["POST"]],
+  ["ProblemProvider/reduce", ["POST"]],
+  ["ProblemProvider/mapSolution", ["POST"]],
 ]);
 
 /**
@@ -150,6 +157,8 @@ const COMPUTE_ENDPOINTS = new Set([
   "ProblemProvider/verify",
   "ProblemProvider/visualize",
   "ProblemProvider/visualizeReduction",
+  "ProblemProvider/reduce",
+  "ProblemProvider/mapSolution",
 ]);
 
 export const config = {
