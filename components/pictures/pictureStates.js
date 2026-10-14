@@ -18,23 +18,23 @@ import { paletteVars } from "../theme";
  * dashed CSS border) for the states that are drawn faded.
  */
 export const PICTURE_STATES = [
-  { name: "ElementHighlight", token: "elementHighlight", legend: "Being looked at now" },
+  { name: "ElementHighlight", token: "elementHighlight", legend: "Highlighted (looked at now)" },
   { name: "Solution", token: "solution", legend: "Solution (answer)" },
   // Not sent by Redux yet (a backend batch adds it): pieces an incremental solver has kept so
   // far but not confirmed (queens placed so far, items packed so far). Solution is only the
   // confirmed answer.
   { name: "Committed", token: "committed", legend: "Committed (kept so far)", dash: "6 3" },
-  { name: "Covered", token: "covered", legend: "A rule that is met" },
-  { name: "Rejected", token: "rejected", legend: "Failed or ruled out" },
+  { name: "Covered", token: "covered", legend: "Covered (rule met)" },
+  { name: "Rejected", token: "rejected", legend: "Rejected (failed or ruled out)" },
   {
     name: "Blocked",
     token: "blocked",
-    legend: "Can't be picked without breaking a rule",
+    legend: "Blocked (can't be picked)",
     dash: "4 3",
   },
-  { name: "False", token: "false", legend: "Assigned false" },
-  { name: "Untraveled", token: "untraveled", legend: "Never reached in this run", dash: "2 3" },
-  { name: "Background", token: "background", legend: "Nothing has happened to it yet" },
+  { name: "False", token: "false", legend: "False (assigned false)" },
+  { name: "Untraveled", token: "untraveled", legend: "Untraveled (never reached)", dash: "2 3" },
+  { name: "Background", token: "background", legend: "Background (nothing yet)" },
 ];
 
 const BY_NAME = new Map(PICTURE_STATES.map((state) => [state.name, state]));

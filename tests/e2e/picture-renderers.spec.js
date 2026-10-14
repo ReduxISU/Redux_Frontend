@@ -154,7 +154,7 @@ test("the step controls walk a format=frames run, with each step's caption and s
 
   // The key lists the states the whole run uses, in the state table's words.
   const legend = page.locator("#workbench-legend-body");
-  await expect(legend).toContainText("Being looked at now");
+  await expect(legend).toContainText("Highlighted (looked at now)");
   await expect(legend).toContainText("Solution (answer)");
 
   await page.locator("#workbench-steps-previous").click();
