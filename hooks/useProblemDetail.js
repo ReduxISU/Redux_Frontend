@@ -147,10 +147,12 @@ function buildVisualizations(visualizationClassNames, info, visualizationTypesBy
         visualizationTypesByInstance[className] ?? visualizationInfo.visualizationType ?? "",
       caption: visualizationInfo.visualizationDefinition ?? "",
       // #229: what the Visualization Type info card reads. `pictureType` is what the
-      // visualization draws ("Graph", "SearchTree"; null when it serves no frames, or on a
-      // backend older than the field). `solverName` / `verifierName` are the solver whose
+      // visualization draws ("Graph", "SearchTree"; null when it serves no frames). Left
+      // undefined on a backend older than the field, so lib/pictureRequest.js can tell "no
+      // frames picture" from "not said". `solverName` / `verifierName` are the solver whose
       // steps it plays and the verifier whose checks it draws, when it declares one.
-      pictureType: visualizationInfo.pictureType ?? null,
+      pictureType:
+        "pictureType" in visualizationInfo ? (visualizationInfo.pictureType ?? null) : undefined,
       solverName: visualizationInfo.solver?.solverName ?? null,
       verifierName: visualizationInfo.verifier?.verifierName ?? null,
     };

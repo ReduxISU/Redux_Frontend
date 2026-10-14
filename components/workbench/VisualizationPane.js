@@ -10,13 +10,15 @@
 //     recorded steps, otherwise one line saying what the picture is;
 //   - the Legend, open by default.
 //
-// The pictures themselves come from the existing renderers through VisualizationCanvas; this
-// file only lays them out.
+// The pictures themselves come from the renderers: a format=frames picture through
+// components/pictures/PictureCanvas.js (#199), every other one through the older
+// VisualizationCanvas. This file only lays them out.
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import StepScrubber from "../detail/StepScrubber";
 import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
+import PictureCanvas from "../pictures/PictureCanvas";
 import Legend from "./Legend";
 import { COMPACT_MEDIA, cardSx, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
 import TaggedSelect from "./TaggedSelect";
@@ -47,11 +49,14 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
  * What goes inside one picture box.
  * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object,
  *     highlightIds?: string[]}
+ *   | {kind: "picture", type: string, payload: Object|null, frame: Object, frameIndex: number,
+ *      frameCount: number, name: string, showCaption: boolean}
  *   | {kind: "loading", text: string}
  *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
  *      action?: {id: string, label: string, onClick: Function}}} PictureContent
  *   `compact` draws a short box (no picture is coming, so no room is held for one).
  *   `highlightIds` are the pieces the hovered or focused gadget row names (#229 stage 4).
+ *   "picture" is a format=frames picture (#199), drawn by the renderer for its `type`.
  */
 function PictureBox({ idPrefix, content }) {
   let inner;
@@ -70,6 +75,19 @@ function PictureBox({ idPrefix, content }) {
           {...(edit?.handlers ?? {})}
         />
       </Box>
+    );
+  } else if (content.kind === "picture") {
+    inner = (
+      <PictureCanvas
+        idPrefix={`${idPrefix}-frames`}
+        name={content.name}
+        type={content.type}
+        payload={content.payload}
+        frame={content.frame}
+        frameIndex={content.frameIndex}
+        frameCount={content.frameCount}
+        showCaption={content.showCaption}
+      />
     );
   } else if (content.kind === "loading") {
     inner = (
@@ -116,6 +134,7 @@ function PictureBox({ idPrefix, content }) {
     <Box
       id={`${idPrefix}-picture`}
       data-picture-kind={content.kind}
+      data-picture-type={content.kind === "picture" ? content.type : undefined}
       data-gadget-highlight-count={
         content.kind === "frame" && content.highlightIds ? content.highlightIds.length : undefined
       }
@@ -185,6 +204,8 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  * @param {{text: string, tone: "muted"|"warning"|"error"}|null} props.note The line shown in
  *   place of the step controls.
  * @param {Object[]} props.legendFrames Every frame on screen, for the Legend.
+ * @param {Set<string>|null} [props.legendStates] The picture states a format=frames picture
+ *   uses (#199), for the Legend.
  */
 export default function VisualizationPane({
   idPrefix,
@@ -197,6 +218,7 @@ export default function VisualizationPane({
   steps,
   note,
   legendFrames,
+  legendStates,
 }) {
   const basis = target && stack ? "100%" : "380px";
   const noteColor =
@@ -342,8 +364,8 @@ export default function VisualizationPane({
         </Box>
       )}
 
-      {legendFrames.some(Boolean) && (
-        <Legend idPrefix={`${idPrefix}-legend`} frames={legendFrames} />
+      {(legendFrames.some(Boolean) || legendStates) && (
+        <Legend idPrefix={`${idPrefix}-legend`} frames={legendFrames} states={legendStates} />
       )}
     </Box>
   );
