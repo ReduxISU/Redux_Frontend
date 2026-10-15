@@ -3,10 +3,10 @@
 // T49 (#112) -- the `booleanSatisfiability` universal type's renderer
 // (ai_documentation/VISUALIZATION_TYPE_CONTRACTS.md §3.3), covering SAT and SAT3 (2 of
 // 48 declared instances). Ported from Redux_GUI's StandardSATSvgReact: each clause in
-// parentheses, literals joined with U+2227, clauses joined with U+2228 -- T40's
-// documented reading of what the original renderer actually draws, kept as-is rather
-// than "corrected" against standard CNF notation, since this is a port of an observed
-// renderer, not a re-derivation from first principles.
+// parentheses, literals joined with OR (U+2228) inside a clause, clauses joined with AND
+// (U+2227): Redux's instances are CNF (`(x1 | !x2 | x3) & ...`). #224: an earlier note (T40)
+// misread StandardSATSvgReact and had the two swapped; that renderer draws OR inside a clause
+// and AND between clauses, which is what this draws now.
 //
 // No `d3.selectAll`/`d3.select` against `document` or a hardcoded id (§4.1): this is
 // plain React-owned markup, nothing to scope beyond the one root id `useId()` already
@@ -79,8 +79,8 @@ function gadgetOutlineSx(on) {
   return on ? { outline: GADGET_OUTLINE, outlineOffset: "2px", borderRadius: "4px" } : {};
 }
 
-const CONJUNCTION = "∧"; // AND, between literals within a clause (T40's finding, see header)
-const DISJUNCTION = "∨"; // OR, between clauses
+const CONJUNCTION = "∧"; // AND, between clauses
+const DISJUNCTION = "∨"; // OR, between the literals of one clause
 
 // A bare CNF variable name: a letter, then letters/digits/underscores. Deliberately not
 // restricted to the "x<number>" shape the observed contract examples ("x1", "!x2") use --
@@ -278,8 +278,13 @@ function SortableClause({
             sx={{ display: "inline-flex", alignItems: "center" }}
           >
             {literalIndex > 0 && (
-              <Box component="span" aria-hidden="true" sx={{ color: "text.secondary", mx: 0.5 }}>
-                {CONJUNCTION}
+              <Box
+                component="span"
+                aria-hidden="true"
+                data-connective="or"
+                sx={{ color: "text.secondary", mx: 0.5 }}
+              >
+                {DISJUNCTION}
               </Box>
             )}
             <SortableLiteral
@@ -556,9 +561,10 @@ export default function BooleanSatisfiabilityRenderer({
                   <Box
                     component="span"
                     aria-hidden="true"
+                    data-connective="and"
                     sx={{ color: "text.secondary", mx: 0.5 }}
                   >
-                    {DISJUNCTION}
+                    {CONJUNCTION}
                   </Box>
                 )}
                 <Box
@@ -587,9 +593,10 @@ export default function BooleanSatisfiabilityRenderer({
                           <Box
                             component="span"
                             aria-hidden="true"
+                            data-connective="or"
                             sx={{ color: "text.secondary", mx: 0.5 }}
                           >
-                            {CONJUNCTION}
+                            {DISJUNCTION}
                           </Box>
                         )}
                         <LiteralMark
@@ -663,9 +670,10 @@ export default function BooleanSatisfiabilityRenderer({
                       <Box
                         component="span"
                         aria-hidden="true"
+                        data-connective="and"
                         sx={{ color: "text.secondary", mx: 0.5 }}
                       >
-                        {DISJUNCTION}
+                        {CONJUNCTION}
                       </Box>
                     )}
                     <SortableClause
