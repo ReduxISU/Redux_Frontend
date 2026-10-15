@@ -948,14 +948,10 @@ for (const scheme of ["light", "dark"]) {
       const svg = page.locator(`${CLAUSES}-svg`);
       await expect(svg).toBeVisible();
       const box = await svg.boundingBox();
-      expect(box.width).toBeGreaterThan(280);
-      // A three-clause formula fits even a phone: scaled down, never scrolling sideways, and
-      // its labels no smaller than 8 px (graphPieces.js MIN_LABEL_PX).
-      expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
-      await expect(page.locator(`${CLAUSES}-scroll`)).toHaveAttribute("data-fit", "fit");
-      expect(await boxScrolls(page, `${CLAUSES}-scroll`)).toBe(false);
-      await expect(page.locator(`${CLAUSES}-swipe`)).toHaveCount(0);
-      expect(12.5 * (await diagramScale(page, `${CLAUSES}-svg`))).toBeGreaterThanOrEqual(7.95);
+      expect(box.width).toBeGreaterThan(250);
+      // The whole formula fits the width it has, at every width: nothing scrolls sideways.
+      await expectFits(page, `${CLAUSES}-svg`);
+      await expect(page.locator(`${CLAUSES}-zoom`)).toHaveAttribute("data-zoom", "1.00");
       // An unassigned variable's chip text follows the theme.
       const ink = await variableChip(page, "v:x3")
         .locator("text")
@@ -965,3 +961,29 @@ for (const scheme of ["light", "dark"]) {
     });
   }
 }
+
+test("Grouped Graph: the clause graph zooms like a graph, and a tap still traces when zoomed", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  const zoom = page.locator(`${CLAUSES}-zoom`);
+  await page.locator(`${CLAUSES}-zoom-in`).click();
+  await expect(zoom).toHaveAttribute("data-zoom", "1.50");
+  // The Edges switch changes what is drawn, not where, so the zoom stays.
+  await page.locator(`${CLAUSES}-edges-all`).click();
+  await expect(zoom).toHaveAttribute("data-zoom", "1.50");
+  await page.locator(`${CLAUSES}-edges-complements`).click();
+
+  // Focusing a literal brings it into view; tapping it traces its variable.
+  await literal(page, "c0-0").focus();
+  await literal(page, "c0-0").blur();
+  await literal(page, "c0-0").click();
+  await expect(literal(page, "c0-0")).toHaveAttribute("aria-pressed", "true");
+  await expect(literal(page, "c1-0")).toHaveAttribute("data-traced", "trace");
+  await expectFits(page, `${CLAUSES}-svg`);
+
+  await page.locator(`${CLAUSES}-zoom-reset`).click();
+  await expect(zoom).toHaveAttribute("data-zoom", "1.00");
+});

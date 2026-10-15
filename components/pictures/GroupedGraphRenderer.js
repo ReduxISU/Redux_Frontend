@@ -13,19 +13,18 @@
 // states (`groups`), the assignment so far, and the focus (the variable being tried).
 //
 // Hovering, focusing or tapping a literal or a variable chip traces that variable everywhere it
-// appears. The node and edge looks are the Graph renderer's (graphPieces.js).
+// appears. The node and edge looks are the Graph renderer's (graphPieces.js), and the diagram
+// opens fitted to its box and zooms and pans with DiagramZoom.js, as the Graph's does.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
 import { LITERAL_RADIUS, layoutClauseGraph } from "./clauseGraphLayout";
-import DiagramSvg from "./DiagramSvg";
+import DiagramZoom from "./DiagramZoom";
 import {
-  DiagramScroll,
   diagramMaxWidth,
   edgeLook,
   FAINT_EDGE,
   FAINT_FILTER,
-  fitMinWidth,
   MONO,
   NodeLabel,
   nodeLook,
@@ -125,234 +124,231 @@ export default function GroupedGraphRenderer({ idPrefix, name, payload, frame })
       data-edges={edgeChoice}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
     >
-      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-        <PictureToggle
-          id={`${idPrefix}-edges`}
-          label="Edges"
-          options={EDGE_CHOICES}
-          value={edgeChoice}
-          onChange={setEdgeChoice}
-        />
-      </Box>
-      <DiagramScroll id={`${idPrefix}-scroll`} hintId={`${idPrefix}-swipe`}>
-        <DiagramSvg
-          id={`${idPrefix}-svg`}
-          label={label}
-          viewBox={`${layout.minX} ${layout.minY} ${layout.width} ${layout.height}`}
-          interactive
-          minWidth={fitMinWidth(layout.width, LABEL_SIZE)}
-          maxWidth={diagramMaxWidth(layout.width)}
-        >
-          <g data-layer="clauses">
-            {layout.groups.map((group, index) => {
-              const state = stateOf(frame?.groups, group.id);
-              const look = hullLook(state);
-              const labelDistance = group.hull + 16;
-              return (
-                <g
-                  key={group.id}
-                  id={`${idPrefix}-clause-${index}`}
-                  data-clause-id={group.id}
-                  data-state={state}
+      <DiagramZoom
+        idPrefix={idPrefix}
+        label={label}
+        box={layout}
+        maxWidth={diagramMaxWidth(layout.width)}
+        resetOn={[payload]}
+        toolbar={
+          <PictureToggle
+            id={`${idPrefix}-edges`}
+            label="Edges"
+            options={EDGE_CHOICES}
+            value={edgeChoice}
+            onChange={setEdgeChoice}
+          />
+        }
+      >
+        <g data-layer="clauses">
+          {layout.groups.map((group, index) => {
+            const state = stateOf(frame?.groups, group.id);
+            const look = hullLook(state);
+            const labelDistance = group.hull + 16;
+            return (
+              <g
+                key={group.id}
+                id={`${idPrefix}-clause-${index}`}
+                data-clause-id={group.id}
+                data-state={state}
+              >
+                <circle
+                  cx={group.x}
+                  cy={group.y}
+                  r={group.hull}
+                  fill={look.fill}
+                  stroke={look.line}
+                  strokeWidth={look.width}
+                  strokeDasharray={look.dash}
+                />
+                <text
+                  x={group.x + labelDistance * Math.cos(group.angle)}
+                  y={group.y + labelDistance * Math.sin(group.angle)}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill={look.text}
+                  fontFamily={MONO}
+                  fontSize={13}
+                  fontWeight={state === "Background" ? 500 : 700}
                 >
-                  <circle
-                    cx={group.x}
-                    cy={group.y}
-                    r={group.hull}
-                    fill={look.fill}
-                    stroke={look.line}
-                    strokeWidth={look.width}
-                    strokeDasharray={look.dash}
-                  />
-                  <text
-                    x={group.x + labelDistance * Math.cos(group.angle)}
-                    y={group.y + labelDistance * Math.sin(group.angle)}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fill={look.text}
-                    fontFamily={MONO}
-                    fontSize={13}
-                    fontWeight={state === "Background" ? 500 : 700}
-                  >
-                    {group.label}
-                  </text>
-                </g>
-              );
-            })}
-          </g>
-          <g data-layer="edges">
-            {edgeSets.map(({ kind, edges }) =>
-              edges.map((edge) => {
-                const a = pos.get(edge?.a);
-                const b = pos.get(edge?.b);
-                if (!a || !b) return null;
-                const variable = literalById.get(edge.a)?.variable;
-                const faint = traced !== null && variable !== traced;
-                let line = edgeLook("Background").line;
-                let width = 1.3;
-                let dash = kind === "clause" ? "3 3" : undefined;
-                if (traced !== null) {
-                  if (faint) {
-                    line = FAINT_EDGE.line;
-                    dash = FAINT_EDGE.dash;
-                  } else {
-                    line = TRACE_COLOR;
-                    width = 2.4;
-                  }
-                }
-                let d;
-                if (kind === "complement") {
-                  // Bowed halfway towards the ring's centre, as the design draws them.
-                  const mx = (a.x + b.x) / 2;
-                  const my = (a.y + b.y) / 2;
-                  const qx = mx + (layout.cx - mx) * 0.5;
-                  const qy = my + (layout.cy - my) * 0.5;
-                  d = `M${a.x},${a.y} Q${qx},${qy} ${b.x},${b.y}`;
+                  {group.label}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+        <g data-layer="edges">
+          {edgeSets.map(({ kind, edges }) =>
+            edges.map((edge) => {
+              const a = pos.get(edge?.a);
+              const b = pos.get(edge?.b);
+              if (!a || !b) return null;
+              const variable = literalById.get(edge.a)?.variable;
+              const faint = traced !== null && variable !== traced;
+              let line = edgeLook("Background").line;
+              let width = 1.3;
+              let dash = kind === "clause" ? "3 3" : undefined;
+              if (traced !== null) {
+                if (faint) {
+                  line = FAINT_EDGE.line;
+                  dash = FAINT_EDGE.dash;
                 } else {
-                  d = `M${a.x},${a.y} L${b.x},${b.y}`;
+                  line = TRACE_COLOR;
+                  width = 2.4;
                 }
-                return (
-                  <path
-                    key={`${kind}-${edge.id}`}
-                    data-edge-id={edge.id}
-                    data-edge-kind={kind}
-                    data-traced={traced ? (faint ? "faint" : "trace") : undefined}
-                    d={d}
-                    fill="none"
-                    stroke={line}
-                    strokeWidth={width}
-                    strokeDasharray={dash}
-                  />
-                );
-              }),
-            )}
-          </g>
-          <g data-layer="literals">
-            {literals.map((literal, index) => {
-              const p = pos.get(literal.id);
-              if (!p) return null;
-              const state = stateOf(frame?.nodes, literal.id);
-              const look = nodeLook(state);
-              const tried = focus.has(literal.variable);
-              const faint = traced !== null && literal.variable !== traced;
-              const isTraced = traced !== null && literal.variable === traced;
-              const clause = groupLabels.get(literal.group) ?? literal.group;
-              const parts = [`Literal ${literal.label} in ${clause}`];
-              if (state !== "Background") parts.push(pictureStateStyle(state).legend);
-              if (tried) parts.push("its variable is being tried");
+              }
+              let d;
+              if (kind === "complement") {
+                // Bowed halfway towards the ring's centre, as the design draws them.
+                const mx = (a.x + b.x) / 2;
+                const my = (a.y + b.y) / 2;
+                const qx = mx + (layout.cx - mx) * 0.5;
+                const qy = my + (layout.cy - my) * 0.5;
+                d = `M${a.x},${a.y} Q${qx},${qy} ${b.x},${b.y}`;
+              } else {
+                d = `M${a.x},${a.y} L${b.x},${b.y}`;
+              }
               return (
-                // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
-                <g
-                  key={literal.id}
-                  id={`${idPrefix}-literal-${index}`}
-                  data-node-id={literal.id}
-                  data-variable={literal.variable}
-                  data-state={state}
-                  data-tried={tried ? "true" : undefined}
+                <path
+                  key={`${kind}-${edge.id}`}
+                  data-edge-id={edge.id}
+                  data-edge-kind={kind}
                   data-traced={traced ? (faint ? "faint" : "trace") : undefined}
-                  data-focusable=""
-                  tabIndex={0}
-                  role="button"
-                  aria-pressed={pinned === literal.variable}
-                  aria-label={parts.join(", ")}
-                  style={faint ? { filter: FAINT_FILTER } : undefined}
-                  {...traceHandlers(literal.variable)}
-                >
+                  d={d}
+                  fill="none"
+                  stroke={line}
+                  strokeWidth={width}
+                  strokeDasharray={dash}
+                />
+              );
+            }),
+          )}
+        </g>
+        <g data-layer="literals">
+          {literals.map((literal, index) => {
+            const p = pos.get(literal.id);
+            if (!p) return null;
+            const state = stateOf(frame?.nodes, literal.id);
+            const look = nodeLook(state);
+            const tried = focus.has(literal.variable);
+            const faint = traced !== null && literal.variable !== traced;
+            const isTraced = traced !== null && literal.variable === traced;
+            const clause = groupLabels.get(literal.group) ?? literal.group;
+            const parts = [`Literal ${literal.label} in ${clause}`];
+            if (state !== "Background") parts.push(pictureStateStyle(state).legend);
+            if (tried) parts.push("its variable is being tried");
+            return (
+              // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
+              <g
+                key={literal.id}
+                id={`${idPrefix}-literal-${index}`}
+                data-node-id={literal.id}
+                data-variable={literal.variable}
+                data-state={state}
+                data-tried={tried ? "true" : undefined}
+                data-traced={traced ? (faint ? "faint" : "trace") : undefined}
+                data-focusable=""
+                tabIndex={0}
+                role="button"
+                aria-pressed={pinned === literal.variable}
+                aria-label={parts.join(", ")}
+                style={faint ? { filter: FAINT_FILTER } : undefined}
+                {...traceHandlers(literal.variable)}
+              >
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={LITERAL_RADIUS}
+                  fill={look.fill}
+                  stroke={look.line}
+                  strokeWidth={look.strokeWidth}
+                  strokeDasharray={look.dash}
+                />
+                {(tried || isTraced) && (
                   <circle
                     cx={p.x}
                     cy={p.y}
-                    r={LITERAL_RADIUS}
-                    fill={look.fill}
-                    stroke={look.line}
-                    strokeWidth={look.strokeWidth}
-                    strokeDasharray={look.dash}
+                    r={LITERAL_RADIUS + 4.5}
+                    fill="none"
+                    stroke={isTraced ? TRACE_COLOR : pictureStateStyle("ElementHighlight").line}
+                    strokeWidth={2.4}
+                    pointerEvents="none"
                   />
-                  {(tried || isTraced) && (
-                    <circle
-                      cx={p.x}
-                      cy={p.y}
-                      r={LITERAL_RADIUS + 4.5}
-                      fill="none"
-                      stroke={isTraced ? TRACE_COLOR : pictureStateStyle("ElementHighlight").line}
-                      strokeWidth={2.4}
-                      pointerEvents="none"
-                    />
-                  )}
-                  <NodeLabel
-                    x={p.x}
-                    y={p.y}
-                    text={literal.label}
-                    color={look.ink}
-                    bold={look.bold}
-                    size={LABEL_SIZE}
-                  />
-                </g>
-              );
-            })}
-          </g>
-          <g data-layer="variables">
-            {layout.variables.map((variable, index) => {
-              const value = assignment[variable.id];
-              const assigned = typeof value === "boolean";
-              const tried = focus.has(variable.id);
-              const faint = traced !== null && traced !== variable.id;
-              const isTraced = traced === variable.id;
-              const falseStyle = pictureStateStyle("False");
-              const plain = pictureStateStyle("Background");
-              const fill = assigned && !value ? falseStyle.fill : "none";
-              const ink = assigned && !value ? falseStyle.ink : plain.text;
-              let line = assigned && !value ? falseStyle.line : plain.line;
-              let width = assigned && value ? 2.4 : 1.4;
-              if (tried) {
-                line = pictureStateStyle("ElementHighlight").line;
-                width = 3;
-              }
-              if (isTraced) {
-                line = TRACE_COLOR;
-                width = 3;
-              }
-              const valueText = assigned ? (value ? "T" : "F") : "-";
-              const spoken = assigned ? (value ? "true" : "false") : "not assigned yet";
-              return (
-                // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
-                <g
-                  key={variable.id}
-                  id={`${idPrefix}-variable-${index}`}
-                  data-variable-id={variable.id}
-                  data-value={assigned ? String(value) : "unassigned"}
-                  data-tried={tried ? "true" : undefined}
-                  data-focusable=""
-                  tabIndex={0}
-                  role="button"
-                  aria-pressed={pinned === variable.id}
-                  aria-label={`Variable ${variableLabels.get(variable.id)}: ${spoken}${tried ? ", being tried" : ""}`}
-                  style={faint ? { filter: FAINT_FILTER } : undefined}
-                  {...traceHandlers(variable.id)}
-                >
-                  <rect
-                    x={variable.x}
-                    y={variable.y}
-                    width={variable.width}
-                    height={variable.height}
-                    rx={7}
-                    fill={fill}
-                    stroke={line}
-                    strokeWidth={width}
-                  />
-                  <NodeLabel
-                    x={variable.x + variable.width / 2}
-                    y={variable.y + variable.height / 2}
-                    text={`${variable.label} ${valueText}`}
-                    color={ink}
-                    bold={assigned && value}
-                    size={LABEL_SIZE}
-                  />
-                </g>
-              );
-            })}
-          </g>
-        </DiagramSvg>
-      </DiagramScroll>
+                )}
+                <NodeLabel
+                  x={p.x}
+                  y={p.y}
+                  text={literal.label}
+                  color={look.ink}
+                  bold={look.bold}
+                  size={LABEL_SIZE}
+                />
+              </g>
+            );
+          })}
+        </g>
+        <g data-layer="variables">
+          {layout.variables.map((variable, index) => {
+            const value = assignment[variable.id];
+            const assigned = typeof value === "boolean";
+            const tried = focus.has(variable.id);
+            const faint = traced !== null && traced !== variable.id;
+            const isTraced = traced === variable.id;
+            const falseStyle = pictureStateStyle("False");
+            const plain = pictureStateStyle("Background");
+            const fill = assigned && !value ? falseStyle.fill : "none";
+            const ink = assigned && !value ? falseStyle.ink : plain.text;
+            let line = assigned && !value ? falseStyle.line : plain.line;
+            let width = assigned && value ? 2.4 : 1.4;
+            if (tried) {
+              line = pictureStateStyle("ElementHighlight").line;
+              width = 3;
+            }
+            if (isTraced) {
+              line = TRACE_COLOR;
+              width = 3;
+            }
+            const valueText = assigned ? (value ? "T" : "F") : "-";
+            const spoken = assigned ? (value ? "true" : "false") : "not assigned yet";
+            return (
+              // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
+              <g
+                key={variable.id}
+                id={`${idPrefix}-variable-${index}`}
+                data-variable-id={variable.id}
+                data-value={assigned ? String(value) : "unassigned"}
+                data-tried={tried ? "true" : undefined}
+                data-focusable=""
+                tabIndex={0}
+                role="button"
+                aria-pressed={pinned === variable.id}
+                aria-label={`Variable ${variableLabels.get(variable.id)}: ${spoken}${tried ? ", being tried" : ""}`}
+                style={faint ? { filter: FAINT_FILTER } : undefined}
+                {...traceHandlers(variable.id)}
+              >
+                <rect
+                  x={variable.x}
+                  y={variable.y}
+                  width={variable.width}
+                  height={variable.height}
+                  rx={7}
+                  fill={fill}
+                  stroke={line}
+                  strokeWidth={width}
+                />
+                <NodeLabel
+                  x={variable.x + variable.width / 2}
+                  y={variable.y + variable.height / 2}
+                  text={`${variable.label} ${valueText}`}
+                  color={ink}
+                  bold={assigned && value}
+                  size={LABEL_SIZE}
+                />
+              </g>
+            );
+          })}
+        </g>
+      </DiagramZoom>
     </Box>
   );
 }
