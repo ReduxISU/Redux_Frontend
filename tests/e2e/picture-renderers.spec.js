@@ -27,6 +27,7 @@ import {
   DFA_AUTOMATON_LIST,
   DFA_TABLE_FRAMES,
   DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
+  ILP_TABLE_FRAMES_WITH_BLANK,
   LARGE_GRAPH_FRAMES,
   MAX_CUT_GRAPH_FRAMES,
   SAT3_CLAUSE_GRAPH_FRAMES,
@@ -105,7 +106,8 @@ test("a picture type with a renderer is drawn from format=frames, and one withou
   await expect(picture).toHaveAttribute("data-picture-kind", "picture");
   await expect(picture).toHaveAttribute("data-picture-type", "Table");
   await expect(page.locator(`${TABLE_PREFIX}-table`)).toHaveAttribute("data-table-shape", "trace");
-  // Before Run it is the plain picture: the first step's cell text, but none of its states.
+  // Before Run it is the plain picture. This capture has no payload.blank (a backend older than
+  // it), so the first step's cell text stands in, but none of its states.
   await expect(picture.locator("[data-plain]")).toHaveAttribute("data-plain", "true");
   await expect(page.locator(`${TABLE_PREFIX}-r0`)).toHaveAttribute("data-state", "Background");
   await expect(page.locator(`${TABLE_PREFIX}-r0c3`)).toHaveText("1");
@@ -121,6 +123,44 @@ test("a picture type with a renderer is drawn from format=frames, and one withou
     `${AUTOMATON_VIZ} frames`,
     `${AUTOMATON_VIZ} list`,
   ]);
+});
+
+test("before Run a table draws the payload's blank, not the first step's work", async ({
+  page,
+}) => {
+  // An ILP-like capture whose payload carries the blank: x is "?", the coefficients and bounds
+  // are there, and no totals. Its first frame is the brute force's first try, with totals.
+  const capture = ILP_TABLE_FRAMES_WITH_BLANK;
+  await setPictureTypes(page, { [TABLE_VIZ]: "Table" });
+  await answerPictures(page, { tableFrames: capture });
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  const picture = page.locator(PICTURE);
+  await expect(picture).toHaveAttribute("data-picture-type", "Table");
+  await expect(page.locator(`${TABLE_PREFIX}-table`)).toHaveAttribute("data-table-shape", "matrix");
+  await expect(picture.locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+
+  const cell = (id) => page.locator(`${TABLE_PREFIX}-${id}`);
+  // x is not tried yet.
+  await expect(cell("r0c0")).toHaveText("?");
+  await expect(cell("r0c1")).toHaveText("?");
+  // The coefficients and the bounds are the instance's.
+  await expect(cell("r1c0")).toHaveText("1");
+  await expect(cell("r1c1")).toHaveText("-1");
+  await expect(cell("r1c3")).toHaveText("-1");
+  await expect(cell("r2c3")).toHaveText("1");
+  // No totals or verdicts: the first frame has them (row 1 adds up to 0, and does not hold).
+  expect(capture.frames[0].values[1][2]).toBe("0");
+  for (const id of ["r1c2", "r1c4", "r2c2", "r2c4"]) await expect(cell(id)).toHaveText("");
+  // Nothing marked: no states, no underlines.
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator("[data-changed]")).toHaveCount(0);
+
+  // Run draws the first frame: the first try, with its totals.
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[0].caption);
+  // (A highlighted cell also says its state, for screen readers.)
+  await expect(cell("r0c0")).toHaveText(/^0(\s|$)/);
+  await expect(cell("r1c2")).toHaveText(/^0(\s|$)/);
 });
 
 test("when pictureType already names a type with no renderer, only the old list is asked for", async ({

@@ -2542,3 +2542,176 @@ export const LARGE_GRAPH_FRAMES = (() => {
     ],
   };
 })();
+
+/**
+ * format=frames for IntProgrammingVisualization (0-1 Integer Linear Programming), instance
+ * `(1 -1),(0 1)<=(-1 1)` with the brute force, captured on 2026-10-15 from a local build that
+ * sends the payload's `blank` (the instance with nothing tried: x is "?", no totals). Its first
+ * frame is the first try, with totals, which must not show before Run.
+ */
+export const ILP_TABLE_FRAMES_WITH_BLANK = {
+  type: "Table",
+  payload: {
+    kind: "table",
+    shape: "matrix",
+    columns: [
+      {
+        id: "c0",
+        label: "x1",
+        key: "x1",
+      },
+      {
+        id: "c1",
+        label: "x2",
+        key: "x2",
+      },
+      {
+        id: "c2",
+        label: "Total",
+        key: "total",
+      },
+      {
+        id: "c3",
+        label: "Bound",
+        key: "bound",
+      },
+      {
+        id: "c4",
+        label: "Holds?",
+        key: "holds",
+      },
+    ],
+    rows: [
+      {
+        id: "r0",
+        label: "x =",
+      },
+      {
+        id: "r1",
+        label: "row 1",
+      },
+      {
+        id: "r2",
+        label: "row 2",
+      },
+    ],
+    blank: {
+      values: [
+        ["?", "?", null, null, null],
+        ["1", "-1", null, "-1", null],
+        ["0", "1", null, "1", null],
+      ],
+    },
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try (0 0): row 1 adds up to 0, over its bound -1.",
+      focus: ["r1"],
+      values: [
+        ["0", "0", null, null, null],
+        ["1", "-1", "0", "-1", "no"],
+        ["0", "1", "0", "1", "yes"],
+      ],
+      rows: {
+        r1: {
+          state: "Rejected",
+        },
+        r2: {
+          state: "Covered",
+        },
+      },
+      cells: {
+        r0c0: {
+          state: "ElementHighlight",
+        },
+        r0c1: {
+          state: "ElementHighlight",
+        },
+      },
+      changed: [],
+    },
+    {
+      event: "Reject",
+      caption: "Try (1 0): row 1 adds up to 1, over its bound -1.",
+      focus: ["r1"],
+      values: [
+        ["1", "0", null, null, null],
+        ["1", "-1", "1", "-1", "no"],
+        ["0", "1", "0", "1", "yes"],
+      ],
+      rows: {
+        r1: {
+          state: "Rejected",
+        },
+        r2: {
+          state: "Covered",
+        },
+      },
+      cells: {
+        r0c0: {
+          state: "ElementHighlight",
+        },
+        r0c1: {
+          state: "ElementHighlight",
+        },
+      },
+      changed: [],
+    },
+    {
+      event: "Accept",
+      caption: "Try (0 1): every row stays within its bound.",
+      focus: [],
+      values: [
+        ["0", "1", null, null, null],
+        ["1", "-1", "-1", "-1", "yes"],
+        ["0", "1", "1", "1", "yes"],
+      ],
+      rows: {
+        r1: {
+          state: "Solution",
+        },
+        r2: {
+          state: "Solution",
+        },
+      },
+      cells: {
+        r0c0: {
+          state: "Solution",
+        },
+        r0c1: {
+          state: "Solution",
+        },
+      },
+      changed: [],
+    },
+    {
+      event: "Done",
+      caption: "(0 1) satisfies every row, found on try 3 of 4.",
+      focus: [],
+      values: [
+        ["0", "1", null, null, null],
+        ["1", "-1", "-1", "-1", "yes"],
+        ["0", "1", "1", "1", "yes"],
+      ],
+      rows: {
+        r1: {
+          state: "Solution",
+        },
+        r2: {
+          state: "Solution",
+        },
+      },
+      cells: {
+        r0c0: {
+          state: "Solution",
+        },
+        r0c1: {
+          state: "Solution",
+        },
+      },
+      changed: [],
+      ok: true,
+    },
+  ],
+};
