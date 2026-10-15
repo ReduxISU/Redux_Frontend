@@ -12,8 +12,8 @@
 // remove a visualization's `pictureType`, which decides whether the frames request is made.
 //
 // #201: the Graph renderer, below the foundation's tests, on one small captured run per shape.
-// Before Run the picture is the plain instance (no step's states or annotations), and a
-// diagram scales down to fit a phone, scrolling only when its labels would get too small.
+// Before Run the picture is the plain instance (no step's states or annotations); a diagram
+// always opens fitted to its width, and zooms and pans (DiagramZoom.js).
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
@@ -486,14 +486,11 @@ for (const scheme of ["light", "dark"]) {
       const svg = page.locator(`${GRAPH}-svg`);
       await expect(svg).toBeVisible();
       const box = await svg.boundingBox();
-      expect(box.width).toBeGreaterThan(300);
+      expect(box.width).toBeGreaterThan(250);
       expect(box.height).toBeGreaterThan(150);
-      // The page never scrolls sideways, and a graph this small fits even a phone: it is drawn
-      // smaller instead of scrolling in its own box.
-      expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
-      await expect(page.locator(`${GRAPH}-scroll`)).toHaveAttribute("data-fit", "fit");
-      expect(await boxScrolls(page, `${GRAPH}-scroll`)).toBe(false);
-      await expect(page.locator(`${GRAPH}-swipe`)).toHaveCount(0);
+      // The whole graph fits the width it has, at every width: nothing scrolls sideways.
+      await expectFits(page, `${GRAPH}-svg`);
+      await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");
       // Every node is Background in the plain picture: a dark label on the light canvas, a
       // light one on the dark.
       const ink = await graphNode(page, "1")
@@ -502,27 +499,30 @@ for (const scheme of ["light", "dark"]) {
         .evaluate((el) => getComputedStyle(el).fill);
       const [r, g, b] = ink.match(/\d+/g).map(Number);
       expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+      // The zoom buttons' text follows the theme too (dark on light, light on dark).
+      const buttonInk = await page
+        .locator(`${GRAPH}-zoom-in`)
+        .evaluate((el) => getComputedStyle(el).color);
+      const [br, bg, bb] = buttonInk.match(/\d+/g).map(Number);
+      expect((br + bg + bb) / 3 > 128).toBe(scheme === "dark");
     });
   }
 }
 
-/** How far the page scrolls sideways (0 or less: it doesn't). */
-function pageOverflow(page) {
-  return page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-}
-
-/** True when the box `selector` names scrolls sideways. */
-function boxScrolls(page, selector) {
-  return page.locator(selector).evaluate((el) => el.scrollWidth > el.clientWidth);
-}
-
-/** How much the diagram `selector` names is scaled on screen (CSS px per viewBox unit). */
-function diagramScale(page, selector) {
-  return page
-    .locator(selector)
-    .evaluate((svg) => svg.getBoundingClientRect().width / svg.viewBox.baseVal.width);
+/**
+ * The diagram `selector` names fits: the page doesn't scroll sideways, and the diagram is no
+ * wider than the box it sits in.
+ */
+async function expectFits(page, selector) {
+  const sizes = await page.locator(selector).evaluate((svg) => ({
+    page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    svg: svg.getBoundingClientRect().width,
+    box: svg.parentElement.getBoundingClientRect().width,
+    boxScrolls: svg.parentElement.scrollWidth > svg.parentElement.clientWidth,
+  }));
+  expect(sizes.page).toBeLessThanOrEqual(0);
+  expect(sizes.svg).toBeLessThanOrEqual(sizes.box + 0.5);
+  expect(sizes.boxScrolls).toBe(false);
 }
 
 /** Each node's (or literal's) drawn centre, by id, in viewBox units. */
@@ -592,41 +592,199 @@ test("Graph: a tour's plain picture has no order badges, and step 1 keeps every 
   expect(await nodeCentres(page, `${GRAPH}-graph`)).toEqual(before);
 });
 
-test("Graph: a graph too big to fit a phone readably scrolls sideways with the swipe hint", async ({
+// --- Zoom and pan (DiagramZoom.js) ----------------------------------------------------------
+
+const zoomOf = (page) => page.locator(`${GRAPH}-zoom`).getAttribute("data-zoom");
+const viewBoxOf = (page) => page.locator(`${GRAPH}-svg`).getAttribute("viewBox");
+
+/** Drags across the middle of `selector` with the mouse (scrolled into view first). */
+async function dragAcross(page, selector, dx, dy) {
+  await page.locator(selector).scrollIntoViewIfNeeded();
+  const box = await page.locator(selector).boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx / 2, y + dy / 2, { steps: 4 });
+  await page.mouse.move(x + dx, y + dy, { steps: 4 });
+  await page.mouse.up();
+}
+
+test("Graph: a graph of 16 nodes still fits a 390 px phone whole, with nothing to scroll", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openPicture(page, "Clique", LARGE_GRAPH_FRAMES);
-  await expect(page.locator(`${GRAPH}-scroll`)).toHaveAttribute("data-fit", "scroll");
-  expect(await boxScrolls(page, `${GRAPH}-scroll`)).toBe(true);
-  await expect(page.locator(`${GRAPH}-swipe`)).toBeVisible();
-  expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
-  // It stops shrinking where a 13-unit node label is 8 px on screen (graphPieces.js MIN_LABEL_PX).
-  expect(13 * (await diagramScale(page, `${GRAPH}-svg`))).toBeGreaterThanOrEqual(7.95);
-  // Keyboard focus still reaches a node out of view, and still traces it.
-  const far = graphNode(page, "9");
-  await far.focus();
-  await expect(far).toHaveAttribute("data-traced", "trace");
-
-  // On a wide screen the same graph fits.
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await expect(page.locator(`${GRAPH}-scroll`)).toHaveAttribute("data-fit", "fit");
-  await expect(page.locator(`${GRAPH}-swipe`)).toHaveCount(0);
+  await expect(page.locator(`${GRAPH}-graph [data-node-id]`)).toHaveCount(16);
+  await expectFits(page, `${GRAPH}-svg`);
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");
 });
 
-test("Graph: tapping a node on a phone still traces it when the diagram is scaled to fit", async ({
+test("Graph: the zoom buttons zoom in and out, and Fit goes back to the whole graph", async ({
+  page,
+}) => {
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const fit = await viewBoxOf(page);
+  // At fit there is nothing to zoom out of or reset.
+  await expect(page.locator(`${GRAPH}-zoom-out`)).toBeDisabled();
+  await expect(page.locator(`${GRAPH}-zoom-reset`)).toBeDisabled();
+  await expect(page.locator(`${GRAPH}-zoom-in`)).toHaveAttribute("aria-label", "Zoom in");
+
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  expect(await viewBoxOf(page)).not.toBe(fit);
+  // Keyboard: the buttons are plain buttons in the tab order.
+  await page.locator(`${GRAPH}-zoom-in`).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.25");
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  // Clamped at 4x (2.25 x 1.5 x 1.5 would be 5.06).
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "4.00");
+  await expect(page.locator(`${GRAPH}-zoom-in`)).toBeDisabled();
+  await page.locator(`${GRAPH}-zoom-out`).click();
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.67");
+
+  await page.locator(`${GRAPH}-zoom-reset`).click();
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  expect(await viewBoxOf(page)).toBe(fit);
+  await expectFits(page, `${GRAPH}-svg`);
+});
+
+test("Graph: Ctrl + wheel zooms the diagram, and a plain wheel still scrolls the page", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const box = await page.locator(`${GRAPH}-svg`).boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  const scrolled = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 200);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrolled);
+  expect(await zoomOf(page)).toBe("1.00");
+
+  const svgBox = await page.locator(`${GRAPH}-svg`).boundingBox();
+  await page.mouse.move(svgBox.x + svgBox.width / 2, svgBox.y + svgBox.height / 2);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -200);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => Number(await zoomOf(page))).toBeGreaterThan(1.2);
+});
+
+test("Graph: zoom is kept while stepping and goes back to fit when the layout changes", async ({
+  page,
+}) => {
+  const capture = CLIQUE_GRAPH_FRAMES;
+  await openPicture(page, "Clique", capture);
+  await runToFrame(page, capture, 0);
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  await dragAcross(page, `${GRAPH}-svg`, -60, 0);
+  const zoomed = await viewBoxOf(page);
+  expect(await zoomOf(page)).toBe("1.50");
+
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[1].caption);
+  expect(await zoomOf(page)).toBe("1.50");
+  expect(await viewBoxOf(page)).toBe(zoomed);
+
+  await page.locator(`${GRAPH}-layout-circle`).click();
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+});
+
+test("Graph: a drag pans only when zoomed in; at fit it leaves the diagram where it is", async ({
+  page,
+}) => {
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const fit = await viewBoxOf(page);
+  await dragAcross(page, `${GRAPH}-svg`, -80, -40);
+  expect(await viewBoxOf(page)).toBe(fit);
+  // At fit a touch drag belongs to the page (it scrolls); zoomed, it is the diagram's.
+  const touchAction = () =>
+    page.locator(`${GRAPH}-svg`).evaluate((svg) => getComputedStyle(svg).touchAction);
+  expect(await touchAction()).toBe("pan-x pan-y");
+
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  const before = await viewBoxOf(page);
+  expect(await touchAction()).toBe("none");
+  await dragAcross(page, `${GRAPH}-svg`, -80, -40);
+  const after = await viewBoxOf(page);
+  expect(after).not.toBe(before);
+  // Dragged left and up, the window moves right and down, but never off the drawing.
+  const [fx, fy, fw, fh] = fit.split(" ").map(Number);
+  const [x, y, w, h] = after.split(" ").map(Number);
+  expect(x).toBeGreaterThanOrEqual(fx - 0.01);
+  expect(y).toBeGreaterThanOrEqual(fy - 0.01);
+  expect(x + w).toBeLessThanOrEqual(fx + fw + 0.01);
+  expect(y + h).toBeLessThanOrEqual(fy + fh + 0.01);
+  // Dragging on past the edge stops at it.
+  for (let drag = 0; drag < 6; drag += 1) await dragAcross(page, `${GRAPH}-svg`, -300, -150);
+  const [ex, ey] = (await viewBoxOf(page)).split(" ").map(Number);
+  expect(ex).toBeCloseTo(fx + fw - w, 1);
+  expect(ey).toBeCloseTo(fy + fh - h, 1);
+});
+
+test("Graph: on a phone a tap still traces a node after zooming, and focus brings a node into view", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
-  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
-  await expect(page.locator(`${GRAPH}-scroll`)).toHaveAttribute("data-fit", "fit");
-  expect(await diagramScale(page, `${GRAPH}-svg`)).toBeLessThan(1);
-  // The node's hit area shrinks with it but stays a usable target (24 px, WCAG 2.2's minimum).
-  const target = await graphNode(page, "4").locator("[data-body]").boundingBox();
-  expect(target.width).toBeGreaterThanOrEqual(24);
+  await openPicture(page, "Clique", LARGE_GRAPH_FRAMES);
   // (A phone opens the Details panel as a sheet over the picture; close it first.)
   await page.locator("#workbench-panel-close").click();
-  await graphNode(page, "4").click();
-  await expect(graphNode(page, "4")).toHaveAttribute("aria-pressed", "true");
-  await expect(graphEdge(page, "3-4")).toHaveAttribute("data-traced", "trace");
+  for (let press = 0; press < 3; press += 1) await page.locator(`${GRAPH}-zoom-in`).click();
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "3.38");
+
+  // Zoomed in on the middle, node 1 (top of the circle) is out of the window. Focusing it pans
+  // it into view, and tracing follows the focus.
+  const inWindow = (id) =>
+    graphNode(page, id).evaluate((node) => {
+      const svg = node.ownerSVGElement;
+      const view = svg.viewBox.baseVal;
+      const box = node.getBBox();
+      return (
+        box.x >= view.x - 0.01 &&
+        box.y >= view.y - 0.01 &&
+        box.x + box.width <= view.x + view.width + 0.01 &&
+        box.y + box.height <= view.y + view.height + 0.01
+      );
+    });
+  expect(await inWindow("1")).toBe(false);
+  await graphNode(page, "1").focus();
+  await expect.poll(() => inWindow("1")).toBe(true);
+  await expect(graphNode(page, "1")).toHaveAttribute("data-traced", "trace");
+  await graphNode(page, "1").blur();
+
+  // A tap on the zoomed node pins its trace, and its hit area grew with the zoom.
+  const target = await graphNode(page, "1").locator("[data-body]").boundingBox();
+  expect(target.width).toBeGreaterThanOrEqual(24);
+  await graphNode(page, "1").click();
+  await expect(graphNode(page, "1")).toHaveAttribute("aria-pressed", "true");
+  await expect(graphEdge(page, "1-2")).toHaveAttribute("data-traced", "trace");
+  await expectFits(page, `${GRAPH}-svg`);
+});
+
+test("Graph: a two-finger pinch zooms on a touch screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await page.locator(`${GRAPH}-svg`).scrollIntoViewIfNeeded();
+  const box = await page.locator(`${GRAPH}-svg`).boundingBox();
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  // Raw touches through the DevTools protocol: Playwright has no multi-touch gesture.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 2 });
+  const touches = (spread) => [
+    { x: cx - spread, y: cy, id: 0 },
+    { x: cx + spread, y: cy, id: 1 },
+  ];
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: touches(20) });
+  for (const spread of [30, 40, 50, 60]) {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: touches(spread) });
+  }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  // The fingers spread to three times their distance: 3x, within the 4x limit.
+  await expect.poll(async () => Number(await zoomOf(page))).toBeGreaterThan(2.5);
+  expect(Number(await zoomOf(page))).toBeLessThanOrEqual(4);
 });
