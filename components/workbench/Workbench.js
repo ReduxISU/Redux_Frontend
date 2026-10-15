@@ -629,9 +629,10 @@ export default function Workbench({ problem }) {
       kind: "picture",
       type: defaultPicture.picture.type,
       payload: defaultPicture.picture.payload,
+      // The plain frame (hooks/useDefaultPicture.js): the instance, not a step of a run.
       frame: defaultPicture.picture.frame,
-      frameIndex: 0,
-      frameCount: 1,
+      frameIndex: null,
+      frameCount: 0,
       name: selectedViz.name,
       showCaption: false,
     };
