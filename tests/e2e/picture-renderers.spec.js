@@ -830,3 +830,91 @@ test("Graph: a two-finger pinch zooms on a touch screen", async ({ page }) => {
   await expect.poll(async () => Number(await zoomOf(page))).toBeGreaterThan(2.5);
   expect(Number(await zoomOf(page))).toBeLessThanOrEqual(4);
 });
+
+// --- The picture area (DiagramZoom.js) -------------------------------------------------------
+
+/** The picture box's width inside its padding, and the svg's place on screen. */
+function areaSizes(page, svgSelector) {
+  return page.locator(svgSelector).evaluate((svg) => {
+    const picture = document.querySelector("#workbench-source-picture");
+    const style = getComputedStyle(picture);
+    const content =
+      picture.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const rect = svg.getBoundingClientRect();
+    const view = svg.viewBox.baseVal;
+    return {
+      content,
+      width: rect.width,
+      height: rect.height,
+      top: rect.top,
+      bottom: rect.bottom,
+      viewport: window.innerHeight,
+      viewAspect: view.width / view.height,
+    };
+  });
+}
+
+/** Scrolls the page so the picture box's top is at the top of the screen. */
+async function scrollPictureToTop(page) {
+  await page
+    .locator(PICTURE)
+    .evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY));
+}
+
+for (const [width, height] of [
+  [1280, 800],
+  [1920, 1080],
+]) {
+  test(`Graph: at ${width}x${height} the picture fills the pane's width and fits the screen's height`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+    const svg = `${GRAPH}-svg`;
+    await expect(page.locator(svg)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const sizes = await areaSizes(page, svg);
+        return Math.abs(sizes.width - sizes.content);
+      })
+      .toBeLessThanOrEqual(2);
+    await scrollPictureToTop(page);
+    const sizes = await areaSizes(page, svg);
+    expect(sizes.bottom).toBeLessThanOrEqual(sizes.viewport);
+    expect(sizes.height).toBeGreaterThanOrEqual(200);
+    // The window onto the drawing has the area's shape, at fit and zoomed: no clipped column.
+    expect(sizes.viewAspect).toBeCloseTo(sizes.width / sizes.height, 2);
+    await page.locator(`${GRAPH}-zoom-in`).click();
+    await page.locator(`${GRAPH}-zoom-in`).click();
+    const zoomed = await areaSizes(page, svg);
+    expect(zoomed.width).toBeCloseTo(sizes.width, 0);
+    expect(zoomed.viewAspect).toBeCloseTo(zoomed.width / zoomed.height, 2);
+  });
+}
+
+test("Graph: zoomed in, a pan reaches both the drawing's left and right edges", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  for (let press = 0; press < 3; press += 1) await page.locator(`${GRAPH}-zoom-in`).click();
+  // The outermost nodes' left and right edges, and whether the window shows them.
+  const edges = () =>
+    page.locator(`${GRAPH}-svg`).evaluate((svg) => {
+      const view = svg.viewBox.baseVal;
+      const boxes = [...svg.querySelectorAll("[data-node-id] [data-body]")].map((body) =>
+        body.getBBox(),
+      );
+      const left = Math.min(...boxes.map((box) => box.x));
+      const right = Math.max(...boxes.map((box) => box.x + box.width));
+      return {
+        leftShown: view.x <= left + 0.01,
+        rightShown: view.x + view.width >= right - 0.01,
+      };
+    });
+  expect(await edges()).toEqual({ leftShown: false, rightShown: false });
+  for (let drag = 0; drag < 5; drag += 1) await dragAcross(page, `${GRAPH}-svg`, 300, 0);
+  expect((await edges()).leftShown).toBe(true);
+  for (let drag = 0; drag < 10; drag += 1) await dragAcross(page, `${GRAPH}-svg`, -300, 0);
+  expect((await edges()).rightShown).toBe(true);
+});

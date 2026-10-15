@@ -29,7 +29,6 @@ import DiagramZoom from "./DiagramZoom";
 import { layoutGraph, NODE_RADIUS, nodeWidth } from "./graphLayout";
 import {
   Badge,
-  diagramMaxWidth,
   edgeGeometry,
   edgeLook,
   FAINT_EDGE,
@@ -166,8 +165,7 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
       <DiagramZoom
         idPrefix={idPrefix}
         label={label}
-        box={layout}
-        maxWidth={diagramMaxWidth(layout.width)}
+        drawing={layout}
         resetOn={[payload, layoutMode]}
         toolbar={
           <PictureToggle

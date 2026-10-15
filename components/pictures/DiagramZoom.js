@@ -1,8 +1,16 @@
 // components/pictures/DiagramZoom.js
 //
-// #201, #202: zoom and pan for every SVG picture renderer. A diagram always opens fitted to the
-// width it has (and at most 70% of the screen's height), so nothing ever scrolls sideways, and
-// a reader who wants a closer look zooms in:
+// #201, #202: zoom and pan for every SVG picture renderer.
+//
+// The picture area fills the width of its box. Its height follows the drawing's shape at that
+// width, but never more than the screen can show below the toolbar (and never under
+// MIN_AREA_HEIGHT), so the whole picture is on screen at once and nothing scrolls sideways. The
+// fitted window onto the drawing takes the AREA's shape: the drawing's box is padded on its
+// short side, so the drawing is as large as the area allows, centred, and zooming and panning
+// use the whole area (nothing is clipped to a narrower column). A small drawing on a wide screen
+// is not blown up past MAX_FIT_SCALE.
+//
+// A reader who wants a closer look zooms in:
 //   - the +, - and Fit buttons above the diagram (keyboard reachable, labelled);
 //   - Ctrl (Cmd on a Mac) + mouse wheel, or a trackpad pinch, zooming at the pointer. A plain
 //     wheel is left alone, so it still scrolls the page;
@@ -23,10 +31,46 @@
 
 import Box from "@mui/material/Box";
 import { useEffect, useRef, useState } from "react";
+import { COMPACT_MEDIA } from "../workbench/layout";
 import DiagramSvg from "./DiagramSvg";
 
 /** The furthest a diagram zooms in, as a multiple of fit. */
 export const MAX_ZOOM = 4;
+
+/**
+ * The largest a drawing is drawn at fit, in CSS px per drawing unit: twice its design size, so
+ * a four-node graph on a 1920 px screen gets node circles about 76 px across, not 200.
+ */
+export const MAX_FIT_SCALE = 2;
+
+/** The shortest the picture area gets, in CSS px. */
+const MIN_AREA_HEIGHT = 200;
+
+/**
+ * The tallest the picture area gets: the screen's height less room for the toolbar above it and
+ * a margin below (and, on a phone or tablet, the bottom tab bar), so with the picture scrolled
+ * to its top its bottom edge is on screen.
+ */
+const AREA_MAX_HEIGHT = "calc(100dvh - 96px)";
+const AREA_MAX_HEIGHT_COMPACT = "calc(100dvh - 168px)";
+
+/**
+ * The fitted window onto `drawing` for an area `area` CSS px in size: the drawing's box grown on
+ * its short side to the area's shape (and grown both ways when the area would draw it larger
+ * than MAX_FIT_SCALE), centred on the drawing. The drawing's own box until the area is measured.
+ */
+function fitBox(drawing, area) {
+  if (!area || area.width <= 0 || area.height <= 0) return drawing;
+  const scale = Math.min(area.width / drawing.width, area.height / drawing.height, MAX_FIT_SCALE);
+  const width = area.width / scale;
+  const height = area.height / scale;
+  return {
+    minX: drawing.minX + drawing.width / 2 - width / 2,
+    minY: drawing.minY + drawing.height / 2 - height / 2,
+    width,
+    height,
+  };
+}
 
 /** How much one press of + or - zooms. */
 const BUTTON_STEP = 1.5;
@@ -101,23 +145,40 @@ const zoomButtonSx = {
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here (`-svg`, `-zoom-in`, ...).
  * @param {string} props.label What the diagram shows, for screen readers.
- * @param {{minX: number, minY: number, width: number, height: number}} props.box The whole
- *   drawing, in its own units (the fitted viewBox).
- * @param {number} [props.maxWidth] Widest the diagram may get (see DiagramSvg).
+ * @param {{minX: number, minY: number, width: number, height: number}} props.drawing The
+ *   whole drawing's box, in its own units.
  * @param {Array} props.resetOn Back to fit when any of these changes (compared with Object.is).
  * @param {import("react").ReactNode} [props.toolbar] The renderer's controls, at the right.
  * @param {import("react").ReactNode} props.children The diagram's elements.
  */
-export default function DiagramZoom({
-  idPrefix,
-  label,
-  box,
-  maxWidth,
-  resetOn,
-  toolbar,
-  children,
-}) {
+export default function DiagramZoom({ idPrefix, label, drawing, resetOn, toolbar, children }) {
   const svgRef = useRef(null);
+  // The picture area's size in CSS px, measured (null until it is).
+  const areaRef = useRef(null);
+  const [area, setArea] = useState(null);
+  useEffect(() => {
+    const element = areaRef.current;
+    if (!element) return undefined;
+    const measure = () => {
+      const width = element.clientWidth;
+      const height = element.clientHeight;
+      setArea((current) =>
+        current && current.width === width && current.height === height
+          ? current
+          : { width, height },
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  // The area's height before the screen's cap: the drawing's shape at the area's width.
+  const naturalHeight = area
+    ? Math.round(drawing.height * Math.min(area.width / drawing.width, MAX_FIT_SCALE))
+    : null;
+  const box = fitBox(drawing, area);
   const [stored, setStored] = useState(FIT);
   const [storedFor, setStoredFor] = useState(resetOn);
   // React's "adjust state when a prop changes" pattern: a new instance or layout starts at fit.
@@ -297,7 +358,7 @@ export default function DiagramZoom({
     <Box
       id={`${idPrefix}-zoom`}
       data-zoom={view.k.toFixed(2)}
-      sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
+      sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1.5 }}
     >
       <Box
         sx={{
@@ -355,20 +416,32 @@ export default function DiagramZoom({
         </Box>
         {toolbar}
       </Box>
-      <Box sx={{ width: "100%", overflow: "hidden" }}>
+      <Box
+        ref={areaRef}
+        id={`${idPrefix}-area`}
+        sx={{
+          width: "100%",
+          // Measured: the drawing's shape at this width. Before that, the same by CSS.
+          height: naturalHeight ?? undefined,
+          aspectRatio: naturalHeight ? undefined : `${drawing.width} / ${drawing.height}`,
+          minHeight: MIN_AREA_HEIGHT,
+          maxHeight: AREA_MAX_HEIGHT,
+          [COMPACT_MEDIA]: { maxHeight: AREA_MAX_HEIGHT_COMPACT },
+          overflow: "hidden",
+        }}
+      >
         <DiagramSvg
           id={`${idPrefix}-svg`}
           svgRef={svgRef}
           label={label}
           viewBox={`${box.minX + view.x} ${box.minY + view.y} ${w} ${h}`}
           interactive
-          maxWidth={maxWidth}
-          maxHeight="70vh"
           data-zoomed={zoomed ? "true" : undefined}
           extraSx={{
             // At fit the browser keeps one-finger panning (the page scrolls); a pinch is ours.
             // Zoomed in, every touch gesture is ours.
             touchAction: zoomed ? "none" : "pan-x pan-y",
+            height: "100%",
             userSelect: "none",
             cursor: zoomed ? "grab" : undefined,
           }}

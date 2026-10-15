@@ -359,14 +359,6 @@ export function PictureToggle({ id, label, options, value, onChange }) {
   );
 }
 
-/**
- * The widest (CSS px) a diagram is drawn: 15% over its viewBox, so a small drawing isn't blown
- * up on a wide screen, but at least 560 px, so a small drawing still fills a narrow column.
- */
-export function diagramMaxWidth(viewBoxWidth) {
-  return Math.max(560, Math.round(viewBoxWidth * 1.15));
-}
-
 /** An ordinal for screen readers: 1st, 2nd, 3rd, 4th, 11th, 21st. */
 export function ordinal(n) {
   const tens = n % 100;
