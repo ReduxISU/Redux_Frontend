@@ -99,13 +99,14 @@ export function tablePlainFrame(payload, frames) {
  * @param {Object} props See components/pictures/registry.js for the props every renderer gets.
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {string} props.name The visualization's name, for the caption.
+ * @param {number|null} [props.frameIndex] The frame shown, or null for the plain frame before Run.
  * @param {{shape?: string, columns: Array<{id: string, label: string, key?: string}>,
  *   rows: Array<{id: string, label?: string}>, title?: string, rowAxis?: string,
  *   columnAxis?: string, blank?: {values: Array<Array<string|null>>}}} props.payload
  * @param {{values?: Array<Array<string|null>>, rows?: Object, cells?: Object,
  *   changed?: string[], arrows?: Array<{from: string, to: string, best: boolean}>}} props.frame
  */
-export default function TableRenderer({ idPrefix, name, payload, frame }) {
+export default function TableRenderer({ idPrefix, name, payload, frame, frameIndex }) {
   const columns = Array.isArray(payload?.columns) ? payload.columns : [];
   const rows = Array.isArray(payload?.rows) ? payload.rows : [];
   const values = Array.isArray(frame?.values) ? frame.values : [];
@@ -115,11 +116,16 @@ export default function TableRenderer({ idPrefix, name, payload, frame }) {
   const hasRowLabels = rows.some((row) => typeof row.label === "string");
   const hasAxes = Boolean(payload?.rowAxis || payload?.columnAxis);
 
+  // Before Run (the plain frame, frameIndex null) only the rows drawn are counted: "1 of 2 rows"
+  // would give away how long the run's trace is.
+  const plain = frameIndex === null;
   const caption =
     payload?.title ||
-    `${name}: ${shownCount < rows.length ? `${shownCount} of ${rows.length}` : rows.length} row${
-      rows.length === 1 ? "" : "s"
-    }`;
+    (plain
+      ? `${name}: ${shownCount} row${shownCount === 1 ? "" : "s"}`
+      : `${name}: ${shownCount < rows.length ? `${shownCount} of ${rows.length}` : rows.length} row${
+          rows.length === 1 ? "" : "s"
+        }`);
 
   const headCellSx = {
     position: "sticky",

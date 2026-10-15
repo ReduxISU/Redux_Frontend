@@ -108,6 +108,8 @@ test("a picture type with a renderer is drawn from format=frames, and one withou
   await expect(page.locator(`${TABLE_PREFIX}-r0`)).toHaveAttribute("data-state", "Background");
   await expect(page.locator(`${TABLE_PREFIX}-r0c3`)).toHaveText("1");
   await expect(page.locator(`${TABLE_PREFIX}-r0c3`)).not.toHaveAttribute("data-changed", /./);
+  // The caption counts only the row drawn, not the trace's length ("1 of 2 rows" would give it away).
+  await expect(page.locator(`${TABLE_PREFIX}-table-caption`)).toHaveText(/: 1 row$/);
   expect(asked).toEqual([`${TABLE_VIZ} frames`]);
 
   // The Automaton type has none yet: the frames answer is set aside, the list is asked for,
