@@ -192,6 +192,8 @@ test("Committed draws apart from Solution, dashed, and has its own Legend entry"
       },
     ],
   };
+  // No color transitions, so the colors read below are the step's own (see openPicture).
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await setPictureTypes(page, { [TABLE_VIZ]: "Table" });
   await answerPictures(page, { tableFrames: handMade });
   await gotoProblemDetail(page, PROBLEM, { expect });
@@ -238,8 +240,13 @@ async function answerWith(page, capture) {
   await page.route(SOLVE_REQUEST, (route) => route.fulfill({ json: "stub" }));
 }
 
-/** Opens `problem` with its pictures answered by `capture`, and waits for the picture. */
+/**
+ * Opens `problem` with its pictures answered by `capture`, and waits for the picture. Reduced
+ * motion switches the pictures' color transitions off, so a color read straight after a step
+ * changes is the step's own, not one partway through the fade.
+ */
 async function openPicture(page, problem, capture) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await answerWith(page, capture);
   await gotoProblemDetail(page, problem, { expect });
   await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", capture.type, {
