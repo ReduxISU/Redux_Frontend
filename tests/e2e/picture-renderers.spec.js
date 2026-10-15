@@ -12,6 +12,7 @@
 // remove a visualization's `pictureType`, which decides whether the frames request is made.
 //
 // #201: the Graph renderer, below the foundation's tests, on one small captured run per shape.
+// #202: the Grouped Graph renderer (SAT and 3SAT's clause graph), after it.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
@@ -24,6 +25,8 @@ import {
   DFA_TABLE_FRAMES,
   DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
   MAX_CUT_GRAPH_FRAMES,
+  SAT3_CLAUSE_GRAPH_FRAMES,
+  SAT3_FAILED_CLAUSE_GRAPH_FRAMES,
   STEINER_GRAPH_FRAMES,
 } from "./picture-payloads";
 
@@ -489,6 +492,159 @@ for (const scheme of ["light", "dark"]) {
       const ink = await graphNode(page, "1")
         .locator("text")
         .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+// --- #202: the Grouped Graph renderer (the clause graph) -----------------------------------
+
+const CLAUSES = "#workbench-source-frames-groupedgraph";
+
+const literal = (page, id) => page.locator(`${CLAUSES}-graph [data-node-id="${id}"]`);
+const clause = (page, id) => page.locator(`${CLAUSES}-graph [data-clause-id="${id}"]`);
+const variableChip = (page, id) => page.locator(`${CLAUSES}-graph [data-variable-id="${id}"]`);
+
+test("Grouped Graph: one cluster per clause, its literals, complement edges and a chip per variable", async ({
+  page,
+}) => {
+  const capture = SAT3_CLAUSE_GRAPH_FRAMES;
+  await openPicture(page, "3SAT", capture);
+  const { payload } = capture;
+  await expect(page.locator(`${CLAUSES}-graph [data-clause-id]`)).toHaveCount(
+    payload.groups.length,
+  );
+  await expect(page.locator(`${CLAUSES}-graph [data-node-id]`)).toHaveCount(payload.nodes.length);
+  await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="complement"]`)).toHaveCount(
+    payload.edges.length,
+  );
+  await expect(page.locator(`${CLAUSES}-graph [data-variable-id]`)).toHaveCount(
+    payload.variables.length,
+  );
+  // Every focusable piece says what it is.
+  for (const piece of await page.locator(`${CLAUSES}-graph [data-focusable]`).all()) {
+    await expect(piece).toHaveAttribute("aria-label", /^(Literal \S+ in C\d+|Variable \S+: )/);
+    await expect(piece).toHaveAttribute("tabindex", "0");
+  }
+
+  // The Edges switch adds the edges inside each clause (the 3SAT to Independent Set graph).
+  await page.locator(`${CLAUSES}-edges-all`).click();
+  await expect(page.locator(`${CLAUSES}-edges-all`)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="clause"]`)).toHaveCount(
+    payload.clauseEdges.length,
+  );
+  await page.locator(`${CLAUSES}-edges-complements`).click();
+  await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="clause"]`)).toHaveCount(0);
+});
+
+test("Grouped Graph: the steps show False literals, Covered clauses, Committed true literals and the answer", async ({
+  page,
+}) => {
+  const capture = SAT3_CLAUSE_GRAPH_FRAMES;
+  await openPicture(page, "3SAT", capture);
+
+  // Frame 5: x1 = True is kept so far, x2 is being tried.
+  await runToFrame(page, capture, 4);
+  await expect(literal(page, "c0-0")).toHaveAttribute("data-state", "Committed");
+  await expect(literal(page, "c0-0")).toHaveAttribute("aria-label", /Committed \(kept so far\)/);
+  await expect(literal(page, "c1-0")).toHaveAttribute("data-state", "False");
+  await expect(literal(page, "c2-0")).toHaveAttribute("data-tried", "true");
+  await expect(clause(page, "c0")).toHaveAttribute("data-state", "Covered");
+  await expect(variableChip(page, "v:x1")).toHaveAttribute("data-value", "true");
+  await expect(variableChip(page, "v:x2")).toHaveAttribute("data-tried", "true");
+  await expect(variableChip(page, "v:x3")).toHaveAttribute("data-value", "unassigned");
+  await expect(variableChip(page, "v:x3")).toHaveAttribute("aria-label", /not assigned yet/);
+
+  // The last frame: one true literal per clause, confirmed.
+  await page.locator("#workbench-steps-next").click();
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  const done = capture.frames.at(-1);
+  for (const [id, entry] of Object.entries(done.nodes)) {
+    await expect(literal(page, id)).toHaveAttribute("data-state", entry.state);
+  }
+  for (const group of capture.payload.groups) {
+    await expect(clause(page, group.id)).toHaveAttribute("data-state", "Covered");
+  }
+  await expect(variableChip(page, "v:x3")).toHaveAttribute("data-value", "false");
+
+  const legend = legendBody(page);
+  await expect(legend).toContainText("False (assigned false)");
+  await expect(legend).toContainText("Committed (kept so far)");
+  await expect(legend).toContainText("Complement edge");
+  await expect(legend).toContainText("Ring (the variable being tried)");
+});
+
+test("Grouped Graph: an unsatisfiable formula shows the failing clause Rejected and ends on no", async ({
+  page,
+}) => {
+  const capture = SAT3_FAILED_CLAUSE_GRAPH_FRAMES;
+  await openPicture(page, "3SAT", capture);
+  await runToFrame(page, capture, 1);
+  await expect(clause(page, "c1")).toHaveAttribute("data-state", "Rejected");
+  await expect(literal(page, "c1-0")).toHaveAttribute("data-state", "Rejected");
+  await expect(clause(page, "c0")).toHaveAttribute("data-state", "Covered");
+  for (let step = 2; step < capture.frames.length; step += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(page.locator(`${CLAUSES}-graph [data-state="Solution"]`)).toHaveCount(0);
+});
+
+test("Grouped Graph: hovering a literal or focusing a variable traces that variable everywhere", async ({
+  page,
+}) => {
+  await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+  await literal(page, "c0-0").hover();
+  // x1 appears in all three clauses; its literals are traced and the others fade by color.
+  for (const id of ["c0-0", "c1-0", "c1-2", "c2-2"]) {
+    await expect(literal(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(literal(page, "c0-1")).toHaveAttribute("data-traced", "faint");
+  const faded = await literal(page, "c0-1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(page.locator(`${CLAUSES}-graph [data-edge-id="c0-0~c1-0"]`)).toHaveAttribute(
+    "data-traced",
+    "trace",
+  );
+
+  await page.mouse.move(0, 0);
+  await variableChip(page, "v:x2").focus();
+  await expect(literal(page, "c0-1")).toHaveAttribute("data-traced", "trace");
+  await expect(literal(page, "c0-0")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(variableChip(page, "v:x2")).toHaveAttribute("aria-pressed", "true");
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Grouped Graph: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+      const svg = page.locator(`${CLAUSES}-svg`);
+      await expect(svg).toBeVisible();
+      const box = await svg.boundingBox();
+      expect(box.width).toBeGreaterThan(300);
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+      const scrolls = await page
+        .locator(`${CLAUSES}-scroll`)
+        .evaluate((el) => el.scrollWidth > el.clientWidth);
+      expect(scrolls).toBe(width === 390);
+      // An unassigned variable's chip text follows the theme.
+      const ink = await variableChip(page, "v:x3")
+        .locator("text")
         .evaluate((el) => getComputedStyle(el).fill);
       const [r, g, b] = ink.match(/\d+/g).map(Number);
       expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
