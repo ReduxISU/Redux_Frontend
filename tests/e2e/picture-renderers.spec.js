@@ -643,6 +643,24 @@ test("Graph: a tour's plain picture has no order badges, and step 1 keeps every 
 const zoomOf = (page) => page.locator(`${GRAPH}-zoom`).getAttribute("data-zoom");
 const viewBoxOf = (page) => page.locator(`${GRAPH}-svg`).getAttribute("viewBox");
 
+/**
+ * The fitted viewBox once the picture area has been measured and has stopped changing (the
+ * area is measured after it first draws, and the fitted window takes its shape).
+ */
+async function settledViewBox(page) {
+  await page.locator(`${GRAPH}-svg`).scrollIntoViewIfNeeded();
+  let last = null;
+  await expect
+    .poll(async () => {
+      const now = await viewBoxOf(page);
+      const same = now === last;
+      last = now;
+      return same;
+    })
+    .toBe(true);
+  return last;
+}
+
 /** Drags across the middle of `selector` with the mouse (scrolled into view first). */
 async function dragAcross(page, selector, dx, dy) {
   await page.locator(selector).scrollIntoViewIfNeeded();
@@ -670,7 +688,7 @@ test("Graph: the zoom buttons zoom in and out, and Fit goes back to the whole gr
   page,
 }) => {
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
-  const fit = await viewBoxOf(page);
+  const fit = await settledViewBox(page);
   // At fit there is nothing to zoom out of or reset.
   await expect(page.locator(`${GRAPH}-zoom-out`)).toBeDisabled();
   await expect(page.locator(`${GRAPH}-zoom-reset`)).toBeDisabled();
@@ -742,7 +760,7 @@ test("Graph: a drag pans only when zoomed in; at fit it leaves the diagram where
   page,
 }) => {
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
-  const fit = await viewBoxOf(page);
+  const fit = await settledViewBox(page);
   await dragAcross(page, `${GRAPH}-svg`, -80, -40);
   expect(await viewBoxOf(page)).toBe(fit);
   // At fit a touch drag belongs to the page (it scrolls); zoomed, it is the diagram's.
