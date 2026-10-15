@@ -1322,9 +1322,12 @@ const LAYERED_CASES = {
     viz: ["NodeSetDefaultVisualization"],
     capture: NODE_SET_LAYERED_FRAMES,
   },
+  // Strongly Connected Components is newer than the backend CI's catalog comes from
+  // (ghcr.io/reduxisu/redux:latest has no such problem page yet), so its capture is drawn on
+  // another directed-graph problem's page: the picture is the capture's, whatever the page.
   scc: {
-    problem: "Strongly Connected Components",
-    viz: ["SCCVisualization"],
+    problem: "Topological Sort",
+    viz: ["TopologicalSortDefaultVisualization", "SCCVisualization"],
     capture: SCC_LAYERED_FRAMES,
   },
   sssp: {
@@ -1385,7 +1388,7 @@ function layeredColumns(page) {
 }
 
 for (const [key, testCase] of Object.entries(LAYERED_CASES)) {
-  test(`Layered Graph: ${testCase.problem} (${key}) draws every node in its layer, every edge and every step`, async ({
+  test(`Layered Graph: the ${testCase.capture.payload.rule} capture (${key}) draws every node in its layer, every edge and every step`, async ({
     page,
   }) => {
     const { capture } = testCase;
