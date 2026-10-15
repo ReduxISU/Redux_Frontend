@@ -18,8 +18,9 @@
 //      (#239; ignore them until then). Before Run, `frame` is the plain frame (plainFrame()
 //      below; `{}` unless the type registers one) and `frameIndex` is null: the renderer must
 //      draw the whole instance from the payload alone, every piece in Background, and place
-//      it exactly where the run's steps will (a layout that is a pure function of the payload). Draw with React-owned SVG inside DiagramSvg.js (or plain
-//      HTML when the picture is text, as the Table is), take every color from
+//      it exactly where the run's steps will (a layout that is a pure function of the payload).
+//      Draw with React-owned SVG inside DiagramZoom.js (DiagramSvg.js with fit, zoom and pan;
+//      or plain HTML when the picture is text, as the Table is), take every color from
 //      pictureStates.js's pictureStateStyle(), and give every focusable piece an aria-label.
 //   2. Add it to PICTURE_RENDERERS below under the exact `type` Redux sends.
 //   3. If the picture draws annotations that are not states (group colors, order badges,

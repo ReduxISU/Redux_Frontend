@@ -151,9 +151,6 @@ function PictureBox({ idPrefix, content }) {
         p: 2,
         boxSizing: "border-box",
         [COMPACT_MEDIA]: { minHeight: content.compact ? 160 : 320 },
-        // A phone gives the picture every pixel it can, so a diagram scaled to fit the width
-        // (components/pictures/graphPieces.js, DiagramScroll) stays as large as it can.
-        "@media (max-width:600px)": { p: 1 },
       }}
     >
       {inner}

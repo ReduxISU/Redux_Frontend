@@ -20,21 +20,20 @@
 //
 // Layout is graphLayout.js's pure function (force or circle, as the payload says, with a
 // Force / Circle switch to override it). Hovering, focusing or tapping a node traces it: its
-// edges in the trace color, everything not touching it faded by color.
+// edges in the trace color, everything not touching it faded by color. The diagram opens fitted
+// to its box and zooms and pans with DiagramZoom.js.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
-import DiagramSvg from "./DiagramSvg";
+import DiagramZoom from "./DiagramZoom";
 import { layoutGraph, NODE_RADIUS, nodeWidth } from "./graphLayout";
 import {
   Badge,
-  DiagramScroll,
   diagramMaxWidth,
   edgeGeometry,
   edgeLook,
   FAINT_EDGE,
   FAINT_FILTER,
-  fitMinWidth,
   groupColors,
   NodeBody,
   NodeLabel,
@@ -46,9 +45,6 @@ import {
   WeightTag,
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
-
-/** A node label's size, in viewBox units (NodeLabel's default). */
-const LABEL_SIZE = 13;
 
 const LAYOUTS = [
   { value: "force", label: "Force" },
@@ -167,226 +163,218 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
       data-graph-layout={layoutMode}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
     >
-      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-        <PictureToggle
-          id={`${idPrefix}-layout`}
-          label="Layout"
-          options={LAYOUTS}
-          value={layoutMode}
-          onChange={(value) => setLayoutChoice(value)}
-        />
-      </Box>
-      <DiagramScroll id={`${idPrefix}-scroll`} hintId={`${idPrefix}-swipe`}>
-        <DiagramSvg
-          id={`${idPrefix}-svg`}
-          label={label}
-          viewBox={`${layout.minX} ${layout.minY} ${layout.width} ${layout.height}`}
-          interactive
-          minWidth={fitMinWidth(layout.width, LABEL_SIZE)}
-          maxWidth={diagramMaxWidth(layout.width)}
-        >
-          <g data-layer="edges">
-            {graph.edges.map((edge, index) => {
-              const a = pos.get(edge.a);
-              const b = pos.get(edge.b);
+      <DiagramZoom
+        idPrefix={idPrefix}
+        label={label}
+        box={layout}
+        maxWidth={diagramMaxWidth(layout.width)}
+        resetOn={[payload, layoutMode]}
+        toolbar={
+          <PictureToggle
+            id={`${idPrefix}-layout`}
+            label="Layout"
+            options={LAYOUTS}
+            value={layoutMode}
+            onChange={(value) => setLayoutChoice(value)}
+          />
+        }
+      >
+        <g data-layer="edges">
+          {graph.edges.map((edge, index) => {
+            const a = pos.get(edge.a);
+            const b = pos.get(edge.b);
+            if (!a || !b) return null;
+            const state = stateOf(frame?.edges, edge.id);
+            const faint = traced !== null && !touches(edge);
+            const look = traced
+              ? faint
+                ? FAINT_EDGE
+                : { ...edgeLook(state), line: TRACE_COLOR, width: 3 }
+              : edgeLook(state);
+            const geometry = edgeGeometry(
+              a,
+              b,
+              graph.widths.get(edge.a),
+              graph.widths.get(edge.b),
+              { directed: graph.directed, bend: edge.bend },
+            );
+            return (
+              <g
+                key={edge.id}
+                id={`${idPrefix}-edge-${index}`}
+                data-edge-id={edge.id}
+                data-state={state}
+                data-traced={traced ? (faint ? "faint" : "trace") : undefined}
+              >
+                <path
+                  d={geometry.path}
+                  fill="none"
+                  stroke={look.line}
+                  strokeWidth={look.width}
+                  strokeDasharray={look.dash}
+                  strokeLinecap="round"
+                />
+                {geometry.arrow && <polygon points={geometry.arrow} fill={look.line} />}
+              </g>
+            );
+          })}
+        </g>
+        {traced === null && (
+          <g data-layer="phantoms">
+            {phantoms.map((phantom, index) => {
+              const a = pos.get(phantom?.a);
+              const b = pos.get(phantom?.b);
               if (!a || !b) return null;
-              const state = stateOf(frame?.edges, edge.id);
-              const faint = traced !== null && !touches(edge);
-              const look = traced
-                ? faint
-                  ? FAINT_EDGE
-                  : { ...edgeLook(state), line: TRACE_COLOR, width: 3 }
-                : edgeLook(state);
+              const state = typeof phantom.state === "string" ? phantom.state : "Rejected";
               const geometry = edgeGeometry(
                 a,
                 b,
-                graph.widths.get(edge.a),
-                graph.widths.get(edge.b),
-                { directed: graph.directed, bend: edge.bend },
+                graph.widths.get(phantom.a),
+                graph.widths.get(phantom.b),
+                { directed: graph.directed },
               );
+              const line = pictureStateStyle(state).line;
               return (
                 <g
-                  key={edge.id}
-                  id={`${idPrefix}-edge-${index}`}
-                  data-edge-id={edge.id}
+                  // Phantoms have no id of their own; their ends and place in the list do.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: phantoms are a plain list.
+                  key={`${phantom.a}|${phantom.b}|${index}`}
+                  id={`${idPrefix}-phantom-${index}`}
+                  data-phantom={`${phantom.a}|${phantom.b}`}
                   data-state={state}
-                  data-traced={traced ? (faint ? "faint" : "trace") : undefined}
                 >
                   <path
                     d={geometry.path}
                     fill="none"
-                    stroke={look.line}
-                    strokeWidth={look.width}
-                    strokeDasharray={look.dash}
-                    strokeLinecap="round"
+                    stroke={line}
+                    strokeWidth={2.4}
+                    strokeDasharray="6 5"
                   />
-                  {geometry.arrow && <polygon points={geometry.arrow} fill={look.line} />}
+                  {geometry.arrow && <polygon points={geometry.arrow} fill={line} />}
                 </g>
               );
             })}
           </g>
-          {traced === null && (
-            <g data-layer="phantoms">
-              {phantoms.map((phantom, index) => {
-                const a = pos.get(phantom?.a);
-                const b = pos.get(phantom?.b);
-                if (!a || !b) return null;
-                const state = typeof phantom.state === "string" ? phantom.state : "Rejected";
-                const geometry = edgeGeometry(
-                  a,
-                  b,
-                  graph.widths.get(phantom.a),
-                  graph.widths.get(phantom.b),
-                  { directed: graph.directed },
-                );
-                const line = pictureStateStyle(state).line;
-                return (
-                  <g
-                    // Phantoms have no id of their own; their ends and place in the list do.
-                    // biome-ignore lint/suspicious/noArrayIndexKey: phantoms are a plain list.
-                    key={`${phantom.a}|${phantom.b}|${index}`}
-                    id={`${idPrefix}-phantom-${index}`}
-                    data-phantom={`${phantom.a}|${phantom.b}`}
-                    data-state={state}
-                  >
-                    <path
-                      d={geometry.path}
-                      fill="none"
-                      stroke={line}
-                      strokeWidth={2.4}
-                      strokeDasharray="6 5"
-                    />
-                    {geometry.arrow && <polygon points={geometry.arrow} fill={line} />}
-                  </g>
-                );
-              })}
-            </g>
-          )}
-          <g data-layer="weights">
-            {graph.edges.map((edge) => {
-              if (edge.tag === null) return null;
-              const a = pos.get(edge.a);
-              const b = pos.get(edge.b);
-              if (!a || !b) return null;
-              const geometry = edgeGeometry(
-                a,
-                b,
-                graph.widths.get(edge.a),
-                graph.widths.get(edge.b),
-                { bend: edge.bend },
-              );
-              return (
-                <WeightTag
-                  key={edge.id}
-                  x={geometry.label.x}
-                  y={geometry.label.y}
-                  text={edge.tag}
-                  state={stateOf(frame?.edges, edge.id)}
-                  faint={traced !== null && !touches(edge)}
+        )}
+        <g data-layer="weights">
+          {graph.edges.map((edge) => {
+            if (edge.tag === null) return null;
+            const a = pos.get(edge.a);
+            const b = pos.get(edge.b);
+            if (!a || !b) return null;
+            const geometry = edgeGeometry(
+              a,
+              b,
+              graph.widths.get(edge.a),
+              graph.widths.get(edge.b),
+              { bend: edge.bend },
+            );
+            return (
+              <WeightTag
+                key={edge.id}
+                x={geometry.label.x}
+                y={geometry.label.y}
+                text={edge.tag}
+                state={stateOf(frame?.edges, edge.id)}
+                faint={traced !== null && !touches(edge)}
+              />
+            );
+          })}
+        </g>
+        <g data-layer="nodes">
+          {graph.nodes.map((node, index) => {
+            const p = pos.get(node.id);
+            if (!p) return null;
+            const state = stateOf(frame?.nodes, node.id);
+            const group = Number.isInteger(groups?.[node.id]) ? groups[node.id] : undefined;
+            const look = nodeLook(state, group);
+            const width = graph.widths.get(node.id);
+            const text = graph.labels.get(node.id);
+            const position = positionOf.get(node.id);
+            const repeats = repeatsOf.get(node.id);
+            const faint = near !== null && !near.has(node.id);
+            const isTraced = traced === node.id;
+            const terminal = node.terminal === true;
+
+            const parts = [`Node ${text}`];
+            if (state !== "Background") parts.push(pictureStateStyle(state).legend);
+            if (group !== undefined) parts.push(groupName(payload, group));
+            if (terminal) parts.push("terminal");
+            if (position !== undefined) parts.push(`visited ${ordinal(position)}`);
+            if (repeats) parts.push(`visited ${repeats} times`);
+            const neighbours = graph.neighbours.get(node.id) ?? [];
+            parts.push(
+              neighbours.length
+                ? `joined to ${neighbours.map((id) => graph.labels.get(id)).join(", ")}`
+                : "no edges",
+            );
+
+            const badgeX = p.x + width / 2 - 2;
+            const badgeY = p.y - NODE_RADIUS + 2;
+            return (
+              // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
+              <g
+                key={node.id}
+                id={`${idPrefix}-node-${index}`}
+                data-node-id={node.id}
+                data-state={state}
+                data-group={group}
+                data-order={position}
+                data-terminal={terminal ? "true" : undefined}
+                data-traced={near ? (faint ? "faint" : "trace") : undefined}
+                data-focusable=""
+                tabIndex={0}
+                role="button"
+                aria-pressed={pinned === node.id}
+                aria-label={parts.join(", ")}
+                style={faint ? { filter: FAINT_FILTER } : undefined}
+                onPointerEnter={(event) => {
+                  if (event.pointerType === "mouse") setHover(node.id);
+                }}
+                onPointerLeave={(event) => {
+                  if (event.pointerType === "mouse") setHover(null);
+                }}
+                onFocus={() => setHover(node.id)}
+                onBlur={() => setHover(null)}
+                onClick={() => setPinned((current) => (current === node.id ? null : node.id))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setPinned((current) => (current === node.id ? null : node.id));
+                  }
+                }}
+              >
+                <NodeBody
+                  x={p.x}
+                  y={p.y}
+                  width={width}
+                  look={
+                    isTraced
+                      ? { ...look, line: TRACE_COLOR, strokeWidth: 3, dash: undefined }
+                      : look
+                  }
                 />
-              );
-            })}
-          </g>
-          <g data-layer="nodes">
-            {graph.nodes.map((node, index) => {
-              const p = pos.get(node.id);
-              if (!p) return null;
-              const state = stateOf(frame?.nodes, node.id);
-              const group = Number.isInteger(groups?.[node.id]) ? groups[node.id] : undefined;
-              const look = nodeLook(state, group);
-              const width = graph.widths.get(node.id);
-              const text = graph.labels.get(node.id);
-              const position = positionOf.get(node.id);
-              const repeats = repeatsOf.get(node.id);
-              const faint = near !== null && !near.has(node.id);
-              const isTraced = traced === node.id;
-              const terminal = node.terminal === true;
-
-              const parts = [`Node ${text}`];
-              if (state !== "Background") parts.push(pictureStateStyle(state).legend);
-              if (group !== undefined) parts.push(groupName(payload, group));
-              if (terminal) parts.push("terminal");
-              if (position !== undefined) parts.push(`visited ${ordinal(position)}`);
-              if (repeats) parts.push(`visited ${repeats} times`);
-              const neighbours = graph.neighbours.get(node.id) ?? [];
-              parts.push(
-                neighbours.length
-                  ? `joined to ${neighbours.map((id) => graph.labels.get(id)).join(", ")}`
-                  : "no edges",
-              );
-
-              const badgeX = p.x + width / 2 - 2;
-              const badgeY = p.y - NODE_RADIUS + 2;
-              return (
-                // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
-                <g
-                  key={node.id}
-                  id={`${idPrefix}-node-${index}`}
-                  data-node-id={node.id}
-                  data-state={state}
-                  data-group={group}
-                  data-order={position}
-                  data-terminal={terminal ? "true" : undefined}
-                  data-traced={near ? (faint ? "faint" : "trace") : undefined}
-                  data-focusable=""
-                  tabIndex={0}
-                  role="button"
-                  aria-pressed={pinned === node.id}
-                  aria-label={parts.join(", ")}
-                  style={faint ? { filter: FAINT_FILTER } : undefined}
-                  onPointerEnter={(event) => {
-                    if (event.pointerType === "mouse") setHover(node.id);
-                  }}
-                  onPointerLeave={(event) => {
-                    if (event.pointerType === "mouse") setHover(null);
-                  }}
-                  onFocus={() => setHover(node.id)}
-                  onBlur={() => setHover(null)}
-                  onClick={() => setPinned((current) => (current === node.id ? null : node.id))}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      setPinned((current) => (current === node.id ? null : node.id));
-                    }
-                  }}
-                >
-                  <NodeBody
+                {terminal && (
+                  <Ring
                     x={p.x}
                     y={p.y}
                     width={width}
-                    look={
-                      isTraced
-                        ? { ...look, line: TRACE_COLOR, strokeWidth: 3, dash: undefined }
-                        : look
-                    }
+                    gap={5}
+                    color={pictureStateStyle("Background").text}
                   />
-                  {terminal && (
-                    <Ring
-                      x={p.x}
-                      y={p.y}
-                      width={width}
-                      gap={5}
-                      color={pictureStateStyle("Background").text}
-                    />
-                  )}
-                  <NodeLabel x={p.x} y={p.y} text={text} color={look.ink} bold={look.bold} />
-                  {position !== undefined && (
-                    <Badge x={badgeX} y={badgeY} text={position} testId="order" />
-                  )}
-                  {repeats && (
-                    <Badge
-                      x={p.x - width / 2 + 2}
-                      y={badgeY}
-                      text={`×${repeats}`}
-                      testId="repeat"
-                    />
-                  )}
-                </g>
-              );
-            })}
-          </g>
-        </DiagramSvg>
-      </DiagramScroll>
+                )}
+                <NodeLabel x={p.x} y={p.y} text={text} color={look.ink} bold={look.bold} />
+                {position !== undefined && (
+                  <Badge x={badgeX} y={badgeY} text={position} testId="order" />
+                )}
+                {repeats && (
+                  <Badge x={p.x - width / 2 + 2} y={badgeY} text={`×${repeats}`} testId="repeat" />
+                )}
+              </g>
+            );
+          })}
+        </g>
+      </DiagramZoom>
     </Box>
   );
 }
