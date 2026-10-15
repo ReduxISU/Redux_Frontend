@@ -159,6 +159,23 @@ function pairsFor(t) {
   add("gadget highlight on canvas (input)", v.gadget, s.input, UI);
   add("gadget highlight on surface", v.gadget, s.main, UI);
   add("gadget highlight next to background node fill", v.gadget, v.background.fill, UI);
+
+  // #199: the picture states (components/pictures/pictureStates.js). Pictures sit on the
+  // canvas (input) and the Legend on the pane (surface). Each state's line and its own text
+  // color stand on both, and its ink is the text drawn on its fill (a node body, a table cell).
+  // The gadget ring also lands on a stated piece's fill.
+  for (const [name, state] of Object.entries(v.state)) {
+    for (const [bgName, bg] of [
+      ["canvas (input)", s.input],
+      ["surface", s.main],
+    ]) {
+      add(`state ${name}: line on ${bgName}`, state.line, bg, UI);
+      add(`state ${name}: text on ${bgName}`, state.text, bg, TEXT);
+    }
+    add(`state ${name}: ink on its fill`, state.ink, state.fill, TEXT);
+  }
+  add("state cell text (primary) on canvas", t.text.primary, s.input, TEXT);
+  add("table header text on raised", t.text.primary, s.raised, TEXT);
   return pairs;
 }
 

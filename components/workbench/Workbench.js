@@ -22,6 +22,10 @@
 //   - Which gadget the pictures highlight (#229 stage 4): the Result panel's Gadgets rows say
 //     which one is hovered or focused, and both pictures draw its pieces. The gadgets come
 //     with ProblemProvider/reduce's answer (lib/gadgets.js), so they cost no extra request.
+//   - Which format the picture comes in (#199): the run's picture and the default picture are
+//     asked for through lib/pictureRequest.js, so a picture type with a format=frames renderer
+//     (components/pictures/registry.js) is drawn by it, with the step controls walking its
+//     frames and each step's caption under it, and every other type keeps its old renderer.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -41,15 +45,16 @@ import {
 import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
 import { highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
+import { requestPicture } from "../../lib/pictureRequest";
 import {
   REDUX_API_BASE_URL,
   requestMappedSolution,
   requestReducedInstance,
   requestReduction,
   requestSolvedInstance,
-  requestVisualizedInstance,
 } from "../../lib/redux";
 import ComputeStatus from "../detail/ComputeStatus";
+import { statesInFrames } from "../pictures/pictureStates";
 import CommandBar from "./CommandBar";
 import {
   reductionCard,
@@ -339,15 +344,15 @@ export default function Workbench({ problem }) {
       });
       const picture = visualization
         ? pictureRun.start(async (signal) => {
-            const frames = await requestVisualizedInstance(
-              REDUX_API_BASE_URL,
-              visualization.className,
-              runInstance,
+            // #199: {format, frames} plus, for a format=frames picture, its type and payload.
+            const picture = await requestPicture({
+              visualization,
+              instance: runInstance,
+              solver: solver.className,
               signal,
-              solver.className,
-            );
+            });
             return {
-              frames: Array.isArray(frames) ? frames : [],
+              ...picture,
               vizClassName: visualization.className,
               solverName: solver.name,
               instance: runInstance,
@@ -597,9 +602,38 @@ export default function Workbench({ problem }) {
     };
   } else if (showingRunPicture) {
     const frame = pictureResult.frames[currentStep] ?? null;
-    sourceContent = frame
-      ? { kind: "frame", frame, backendType: selectedViz.backendType, name: selectedViz.name }
-      : { kind: "message", text: "This run came back without a picture." };
+    if (!frame) {
+      sourceContent = { kind: "message", text: "This run came back without a picture." };
+    } else if (pictureResult.format === "frames") {
+      sourceContent = {
+        kind: "picture",
+        type: pictureResult.type,
+        payload: pictureResult.payload,
+        frame,
+        frameIndex: currentStep,
+        frameCount: pictureResult.frames.length,
+        name: selectedViz.name,
+        showCaption: true,
+      };
+    } else {
+      sourceContent = {
+        kind: "frame",
+        frame,
+        backendType: selectedViz.backendType,
+        name: selectedViz.name,
+      };
+    }
+  } else if (defaultPicture.picture) {
+    sourceContent = {
+      kind: "picture",
+      type: defaultPicture.picture.type,
+      payload: defaultPicture.picture.payload,
+      frame: defaultPicture.picture.frame,
+      frameIndex: 0,
+      frameCount: 1,
+      name: selectedViz.name,
+      showCaption: false,
+    };
   } else if (defaultPicture.frame) {
     sourceContent = {
       kind: "frame",
@@ -788,6 +822,12 @@ export default function Workbench({ problem }) {
     sourceContent.kind === "frame" ? sourceContent.frame : null,
     target?.content.kind === "frame" ? target.content.frame : null,
   ];
+  // #199: a format=frames picture's key lists the states its whole run uses, so the key does
+  // not change while stepping.
+  let legendStates = null;
+  if (sourceContent.kind === "picture") {
+    legendStates = statesInFrames(showingRunPicture ? pictureResult.frames : [sourceContent.frame]);
+  }
 
   // --- Status under the command bar ------------------------------------------------------
   const solverName =
@@ -900,9 +940,13 @@ export default function Workbench({ problem }) {
         output: solveResult.output,
         elapsedMs: solveRun.elapsedMs,
         instance: solveResult.instance,
+        // An old flat list is [base, ...steps, solved]; a format=frames run is one frame per
+        // step, its last one the solved picture (#199).
         stepCount:
           pictureResult && pictureResult.runId === solveResult.runId
-            ? Math.max(pictureResult.frames.length - 2, 0)
+            ? pictureResult.format === "frames"
+              ? pictureResult.frames.length
+              : Math.max(pictureResult.frames.length - 2, 0)
             : null,
       }
     : null;
@@ -1192,6 +1236,7 @@ export default function Workbench({ problem }) {
             }
             note={note}
             legendFrames={legendFrames}
+            legendStates={legendStates}
           />
         </Box>
       </Box>

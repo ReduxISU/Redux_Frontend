@@ -6,6 +6,10 @@
 // first frame, which is the base picture of the instance (VISUALIZATION_TYPE_CONTRACTS.md
 // section 2: base state, then steps, then the solved state).
 //
+// #199: the picture is asked for through lib/pictureRequest.js, so a picture type with a
+// format=frames renderer comes back as that response (its first frame is the default picture)
+// and every other type as the old flat list, as before.
+//
 // That call is a compute request, so it counts toward the proxy's 10-a-minute limit. Two
 // things keep it from eating a visitor's Run budget:
 //   - Answers are cached for the session by (visualization, instance), so switching back
@@ -18,7 +22,7 @@
 // dot on the Instance rail button.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { REDUX_API_BASE_URL, requestVisualizedInstance } from "../lib/redux";
+import { requestPicture } from "../lib/pictureRequest";
 import {
   COMPUTE_DONE,
   COMPUTE_FAILED,
@@ -28,8 +32,9 @@ import {
 
 const EDIT_DEBOUNCE_MS = 900;
 
-// Session cache: `${className}\u0000${instance}` -> base frame (or null for an empty frame
-// list). Module scope so it survives leaving and coming back to a problem page.
+// Session cache: `${className}\u0000${instance}` -> `{frame, picture}` (see the hook's return
+// value; both null for an empty frame list). Module scope so it survives leaving and coming
+// back to a problem page.
 const pictureCache = new Map();
 
 function cacheKey(className, instance) {
@@ -38,19 +43,22 @@ function cacheKey(className, instance) {
 
 /**
  * @param {Object} options
- * @param {{className: string}|null} options.visualization The visualization to draw with.
+ * @param {{className: string, pictureType?: string|null}|null} options.visualization The
+ *   visualization to draw with.
  * @param {string} options.instance The instance text to draw.
  * @param {boolean} [options.enabled] False skips the request (for example while a run's own
  *   picture for this exact instance is already on screen).
  * @returns {{
  *   frame: Object|null,
+ *   picture: {type: string, payload: Object|null, frame: Object}|null,
  *   instance: string|null,
  *   status: "idle"|"running"|"done"|"failed",
  *   failure: {headline: string, detail: string, expected?: string, code?: string}|null,
  *   instanceError: {headline: string, detail: string, expected?: string}|null,
  *   retry: () => void,
- * }} `instance` is the text the frame was drawn from (needed to turn a diagram edit back
- *   into instance text).
+ * }} `frame` is the first frame of an old flat-list picture and `picture` the first frame of
+ *   a format=frames one (#199); at most one of them is set. `instance` is the text the frame
+ *   was drawn from (needed to turn a diagram edit back into instance text).
  */
 export function useDefaultPicture({ visualization, instance, enabled = true }) {
   const request = useComputeRequest({ subject: "instance" });
@@ -59,6 +67,10 @@ export function useDefaultPicture({ visualization, instance, enabled = true }) {
   const key = className && hasInstance ? cacheKey(className, instance) : null;
   const cached = key !== null && pictureCache.has(key);
 
+  // Kept as plain values, so a new visualization object for the same class (the problem data
+  // re-rendering) is not a new picture to fetch.
+  const pictureType = visualization?.pictureType;
+
   const firstRequestRef = useRef(true);
   // Which (visualization, instance) the last failed request was for, so a failure is only
   // shown while that pair is still the one on screen.
@@ -66,18 +78,26 @@ export function useDefaultPicture({ visualization, instance, enabled = true }) {
   const { start } = request;
 
   const fetchPicture = useCallback(
-    (requestKey, requestClassName, requestInstance) => {
+    (requestKey, requestClassName, requestPictureType, requestInstance) => {
       start(async (signal) => {
         try {
-          const frames = await requestVisualizedInstance(
-            REDUX_API_BASE_URL,
-            requestClassName,
-            requestInstance,
+          const response = await requestPicture({
+            visualization: { className: requestClassName, pictureType: requestPictureType },
+            instance: requestInstance,
             signal,
-          );
-          const frame = Array.isArray(frames) && frames.length > 0 ? frames[0] : null;
-          pictureCache.set(requestKey, frame);
-          return { key: requestKey, frame };
+          });
+          const first = response.frames[0] ?? null;
+          const entry =
+            response.format === "frames"
+              ? {
+                  frame: null,
+                  picture: first
+                    ? { type: response.type, payload: response.payload, frame: first }
+                    : null,
+                }
+              : { frame: first, picture: null };
+          pictureCache.set(requestKey, entry);
+          return { key: requestKey, ...entry };
         } catch (error) {
           setFailedKey(requestKey);
           throw error;
@@ -92,18 +112,20 @@ export function useDefaultPicture({ visualization, instance, enabled = true }) {
     const delay = firstRequestRef.current ? 0 : EDIT_DEBOUNCE_MS;
     const timeoutId = setTimeout(() => {
       firstRequestRef.current = false;
-      fetchPicture(key, className, instance);
+      fetchPicture(key, className, pictureType, instance);
     }, delay);
     return () => clearTimeout(timeoutId);
-  }, [key, cached, enabled, className, instance, fetchPicture]);
+  }, [key, cached, enabled, className, pictureType, instance, fetchPicture]);
 
   function retry() {
-    if (key) fetchPicture(key, className, instance);
+    if (key) fetchPicture(key, className, pictureType, instance);
   }
 
   if (cached) {
+    const entry = pictureCache.get(key);
     return {
-      frame: pictureCache.get(key),
+      frame: entry.frame,
+      picture: entry.picture,
       instance,
       status: COMPUTE_DONE,
       failure: null,
@@ -119,6 +141,7 @@ export function useDefaultPicture({ visualization, instance, enabled = true }) {
 
   return {
     frame: null,
+    picture: null,
     instance: null,
     status: isRunning ? "running" : failure ? "failed" : "idle",
     failure,

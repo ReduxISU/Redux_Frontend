@@ -7,10 +7,15 @@
 // appear in the pictures on screen, each with the same theme color the renderers use for it.
 // A picture with no color keys at all (the pump schedule, for one) says so instead of
 // listing colors it does not use.
+//
+// #199: a format=frames picture names its pieces with the shared picture states instead
+// (components/pictures/pictureStates.js). Those are listed from `states`, in that table's
+// order, wording and colors, with the faded states' swatches dashed as they are drawn.
 
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import { useState } from "react";
+import { PICTURE_STATES, pictureStateStyle } from "../pictures/pictureStates";
 import { getVisualizationColor, getVisualizationFill } from "../theme";
 
 // Order and wording of each color key's legend entry.
@@ -51,14 +56,32 @@ function collectKeys(value, found, parentKey) {
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {Object[]} props.frames Every frame currently drawn (one per picture on screen).
+ * @param {Set<string>|null} [props.states] Picture states a format=frames picture uses.
  */
-export default function Legend({ idPrefix, frames }) {
+export default function Legend({ idPrefix, frames, states }) {
   const [open, setOpen] = useState(true);
   const found = new Set();
   for (const frame of frames) {
     if (frame) collectKeys(frame, found, null);
   }
-  const entries = KEY_TEXT.filter(([key]) => found.has(key));
+  const entries = KEY_TEXT.filter(([key]) => found.has(key)).map(([key, text]) => ({
+    key,
+    text,
+    fill: getVisualizationFill(key),
+    line: getVisualizationColor(key),
+    dashed: false,
+  }));
+  for (const state of PICTURE_STATES) {
+    if (!states?.has(state.name)) continue;
+    const style = pictureStateStyle(state.name);
+    entries.push({
+      key: `state-${state.name}`,
+      text: style.legend,
+      fill: style.fill,
+      line: style.line,
+      dashed: Boolean(style.dash),
+    });
+  }
   const bodyId = `${idPrefix}-body`;
 
   return (
@@ -116,10 +139,11 @@ export default function Legend({ idPrefix, frames }) {
         {entries.length === 0 ? (
           <Box component="span">This picture uses no highlight colors.</Box>
         ) : (
-          entries.map(([key, text]) => (
+          entries.map(({ key, text, fill, line, dashed }) => (
             <Box
               key={key}
               component="span"
+              data-legend-key={key}
               sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}
             >
               <Box
@@ -129,9 +153,9 @@ export default function Legend({ idPrefix, frames }) {
                   width: 22,
                   height: 16,
                   borderRadius: "4px",
-                  backgroundColor: getVisualizationFill(key),
-                  border: "2px solid",
-                  borderColor: getVisualizationColor(key),
+                  backgroundColor: fill,
+                  border: `2px ${dashed ? "dashed" : "solid"}`,
+                  borderColor: line,
                   boxSizing: "border-box",
                   flex: "none",
                 }}

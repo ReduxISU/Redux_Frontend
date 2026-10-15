@@ -139,6 +139,41 @@ function tagHues(facets, rowBorders) {
   );
 }
 
+// #199: the shared picture states (Redux's PictureState, which every format=frames picture type
+// names its pieces with), one family per state, read through components/pictures/pictureStates.js.
+//   line: a piece's outline, an edge or a mark on the canvas (at least 3:1 on the canvas).
+//   fill: a piece's body (a node, a cell, a row).
+//   ink:  text drawn on `fill` (at least 4.5:1 on it).
+//   text: the state's own color for text straight on the canvas (at least 4.5:1).
+// Fading is done by color, never by opacity: Untraveled and Blocked use a grey line and grey
+// text that still clear the contrast minimums, and draw dashed so they never rely on color alone.
+// Committed (kept so far by an incremental solver, not yet confirmed) is a lighter green than
+// Solution with a tinted, not solid, fill and a dashed line, so it never reads as the answer.
+// ElementHighlight keeps the blue the older renderers use for it; gold is the gadget ring's.
+const DARK_PICTURE_STATES = {
+  background: { line: "#A6A6A6", fill: "#262626", ink: WHITE, text: "#D9D9D9" },
+  elementHighlight: { line: "#60A5FA", fill: "#172A45", ink: "#DBEAFE", text: "#60A5FA" },
+  solution: { line: "#4ADE80", fill: "#4ADE80", ink: BLACK, text: "#4ADE80" },
+  committed: { line: "#86EFAC", fill: "#0E2416", ink: "#DCFCE7", text: "#86EFAC" },
+  rejected: { line: "#F87171", fill: "#3F1717", ink: "#FECACA", text: "#F87171" },
+  untraveled: { line: "#6B6B6B", fill: "#0A0A0A", ink: "#8C8C8C", text: "#8C8C8C" },
+  covered: { line: "#4ADE80", fill: "#123620", ink: "#BBF7D0", text: "#4ADE80" },
+  blocked: { line: "#8C8C8C", fill: "#0A0A0A", ink: "#A6A6A6", text: "#A6A6A6" },
+  false: { line: "#8C8C8C", fill: "#1F1F1F", ink: "#A6A6A6", text: "#A6A6A6" },
+};
+
+const LIGHT_PICTURE_STATES = {
+  background: { line: "#737373", fill: "#F2F2F2", ink: BLACK, text: "#262626" },
+  elementHighlight: { line: "#1D4ED8", fill: "#E3ECFF", ink: "#1E3A8A", text: "#1D4ED8" },
+  solution: { line: "#15803D", fill: "#15803D", ink: WHITE, text: "#166534" },
+  committed: { line: "#16A34A", fill: "#F0FDF4", ink: "#14532D", text: "#15803D" },
+  rejected: { line: "#B91C1C", fill: "#FDE4E4", ink: "#7F1D1D", text: "#B91C1C" },
+  untraveled: { line: "#8A8A8A", fill: WHITE, ink: "#666666", text: "#666666" },
+  covered: { line: "#15803D", fill: "#E3F5EA", ink: "#14532D", text: "#166534" },
+  blocked: { line: "#737373", fill: WHITE, ink: "#525252", text: "#525252" },
+  false: { line: "#8A8A8A", fill: "#E6E6E6", ink: "#525252", text: "#525252" },
+};
+
 const DARK_FACET_FAMILIES = withFilledState(DARK_FACETS, BLACK);
 const LIGHT_FACET_FAMILIES = withFilledState(LIGHT_FACETS, WHITE);
 
@@ -197,6 +232,7 @@ export const THEME_TOKENS = {
       // draws on the pictures while it is hovered or focused. Reduce mode's gold, which no
       // color key uses, so it reads as "this gadget" and not as an answer or a step.
       gadget: ISU_GOLD,
+      state: DARK_PICTURE_STATES,
       label: WHITE,
       blue: "#60A5FA",
       orange: "#FB923C",
@@ -268,6 +304,7 @@ export const THEME_TOKENS = {
       edge: "#8A8A8A",
       dim: "#8A8A8A",
       gadget: "#B45309",
+      state: LIGHT_PICTURE_STATES,
       label: BLACK,
       blue: "#1D4ED8",
       orange: "#C2410C",
