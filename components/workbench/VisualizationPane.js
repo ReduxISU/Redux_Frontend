@@ -49,14 +49,15 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
  * What goes inside one picture box.
  * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object,
  *     highlightIds?: string[]}
- *   | {kind: "picture", type: string, payload: Object|null, frame: Object, frameIndex: number,
- *      frameCount: number, name: string, showCaption: boolean}
+ *   | {kind: "picture", type: string, payload: Object|null, frame: Object,
+ *      frameIndex: number|null, frameCount: number, name: string, showCaption: boolean}
  *   | {kind: "loading", text: string}
  *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
  *      action?: {id: string, label: string, onClick: Function}}} PictureContent
  *   `compact` draws a short box (no picture is coming, so no room is held for one).
  *   `highlightIds` are the pieces the hovered or focused gadget row names (#229 stage 4).
- *   "picture" is a format=frames picture (#199), drawn by the renderer for its `type`.
+ *   "picture" is a format=frames picture (#199), drawn by the renderer for its `type`;
+ *   `frameIndex` is null for the default picture before Run (the plain frame).
  */
 function PictureBox({ idPrefix, content }) {
   let inner;
@@ -206,6 +207,8 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  * @param {Object[]} props.legendFrames Every frame on screen, for the Legend.
  * @param {Set<string>|null} [props.legendStates] The picture states a format=frames picture
  *   uses (#199), for the Legend.
+ * @param {Array<{key: string, text: string, swatch: Object}>|null} [props.legendAnnotations]
+ *   What a format=frames picture draws besides states (#201), for the Legend.
  */
 export default function VisualizationPane({
   idPrefix,
@@ -219,6 +222,7 @@ export default function VisualizationPane({
   note,
   legendFrames,
   legendStates,
+  legendAnnotations,
 }) {
   const basis = target && stack ? "100%" : "380px";
   const noteColor =
@@ -365,7 +369,12 @@ export default function VisualizationPane({
       )}
 
       {(legendFrames.some(Boolean) || legendStates) && (
-        <Legend idPrefix={`${idPrefix}-legend`} frames={legendFrames} states={legendStates} />
+        <Legend
+          idPrefix={`${idPrefix}-legend`}
+          frames={legendFrames}
+          states={legendStates}
+          annotations={legendAnnotations}
+        />
       )}
     </Box>
   );

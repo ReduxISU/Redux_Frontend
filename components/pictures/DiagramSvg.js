@@ -23,12 +23,30 @@ import { pictureFocusSx, pictureMotionSx } from "./pictureSx";
  * @param {string} props.viewBox The SVG viewBox ("0 0 width height").
  * @param {boolean} [props.interactive] True when pieces inside can be focused.
  * @param {number} [props.minWidth] Narrowest the diagram may get before its box scrolls.
+ * @param {number} [props.maxWidth] Widest the diagram may get (it is centred in a wider box),
+ *   so a small drawing isn't blown up on a wide screen.
+ * @param {Object} [props.svgRef] A ref to the <svg> (DiagramZoom.js reads its screen position).
+ * @param {Object} [props.extraSx] More `sx` for the <svg> (DiagramZoom.js's touch-action).
  * @param {import("react").ReactNode} props.children The diagram's elements.
+ * Any other prop (event handlers, data attributes) goes on the <svg>.
  */
-export default function DiagramSvg({ id, label, viewBox, interactive, minWidth, children }) {
+export default function DiagramSvg({
+  id,
+  label,
+  viewBox,
+  interactive,
+  minWidth,
+  maxWidth,
+  svgRef,
+  extraSx,
+  children,
+  ...rest
+}) {
   return (
     <Box
       component="svg"
+      ref={svgRef}
+      {...rest}
       id={id}
       viewBox={viewBox}
       role={interactive ? "group" : "img"}
@@ -39,8 +57,11 @@ export default function DiagramSvg({ id, label, viewBox, interactive, minWidth, 
         width: "100%",
         height: "auto",
         minWidth: minWidth ?? undefined,
+        maxWidth: maxWidth ?? undefined,
+        mx: maxWidth ? "auto" : undefined,
         ...pictureMotionSx,
         "& [data-focusable]": { ...pictureFocusSx, cursor: "pointer" },
+        ...extraSx,
       }}
     >
       {children}

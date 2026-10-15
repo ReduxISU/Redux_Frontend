@@ -1,9 +1,10 @@
 // tests/e2e/picture-payloads.js
 //
-// #199: ProblemProvider/visualize answers for DFA Acceptance, captured from a local build of the
-// full Redux backend (local/viz-integration) on 2026-10-14, so tests/e2e/picture-renderers.spec.js
-// can answer the picture requests itself and CI needs no backend that serves format=frames.
-// Instance: the problem's default, 3 frames with the DFASolver.
+// #199: ProblemProvider/visualize answers captured from a local build of the full Redux backend
+// (local/viz-integration) on 2026-10-14, so tests/e2e/picture-renderers.spec.js can answer the
+// picture requests itself and CI needs no backend that serves format=frames.
+// DFA Acceptance: the problem's default instance, 3 frames with the DFASolver. The Graph
+// pictures (#201) follow at the end, each with its instance and solver.
 
 /** format=frames for DFATableVisualization: picture type Table (has a renderer). */
 export const DFA_TABLE_FRAMES = {
@@ -641,3 +642,1327 @@ export const DFA_AUTOMATON_LIST = [
     ],
   },
 ];
+
+// #201: Graph pictures, one small instance per shape, captured the same way on 2026-10-14
+// (POST /ProblemProvider/visualize?visualization=<name>&format=frames&solver=<name>).
+
+/** format=frames, Clique, instance (({1,2,3,4},{{1,2},{1,3},{2,3},{3,4}}),3), CarraghanPardalos (branch and bound): subset shape; Committed nodes and edges, then the confirmed answer. */
+export const CLIQUE_GRAPH_FRAMES = {
+  type: "Graph",
+  payload: {
+    kind: "graph",
+    subtype: "undirected",
+    layout: "force",
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+      },
+      {
+        id: "2",
+        label: "2",
+      },
+      {
+        id: "3",
+        label: "3",
+      },
+      {
+        id: "4",
+        label: "4",
+      },
+    ],
+    edges: [
+      {
+        id: "1-2",
+        a: "1",
+        b: "2",
+      },
+      {
+        id: "1-3",
+        a: "1",
+        b: "3",
+      },
+      {
+        id: "2-3",
+        a: "2",
+        b: "3",
+      },
+      {
+        id: "3-4",
+        a: "3",
+        b: "4",
+      },
+    ],
+    shape: "subset",
+    rule: "clique",
+    k: 3,
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Skip 4: with it only 2 vertices could ever join, but the clique needs 3.",
+      focus: ["4"],
+      nodes: {
+        4: {
+          state: "Rejected",
+        },
+      },
+      edges: {},
+      phantoms: [],
+    },
+    {
+      event: "Accept",
+      caption: "Add 1 to the clique. 2 vertices are joined to every member so far.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      phantoms: [],
+    },
+    {
+      event: "Accept",
+      caption: "Add 2 to the clique. 1 vertices are joined to every member so far.",
+      focus: ["2"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1-2": {
+          state: "Committed",
+        },
+      },
+      phantoms: [],
+    },
+    {
+      event: "Accept",
+      caption: "Add 3 to the clique. 0 vertices are joined to every member so far.",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1-2": {
+          state: "Solution",
+        },
+        "1-3": {
+          state: "Solution",
+        },
+        "2-3": {
+          state: "Solution",
+        },
+      },
+      phantoms: [],
+    },
+    {
+      event: "Done",
+      caption: "{1,2,3} is a clique of size 3.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1-2": {
+          state: "Solution",
+        },
+        "1-3": {
+          state: "Solution",
+        },
+        "2-3": {
+          state: "Solution",
+        },
+      },
+      phantoms: [],
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Clique, instance (({1,2,3,4},{{1,2},{2,3},{3,4}}),3), CliqueBruteForce: a run that finds nothing; each candidate shows its missing edges as Rejected phantoms, and the Done has ok: false. */
+export const CLIQUE_FAILED_GRAPH_FRAMES = {
+  type: "Graph",
+  payload: {
+    kind: "graph",
+    subtype: "undirected",
+    layout: "force",
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+      },
+      {
+        id: "2",
+        label: "2",
+      },
+      {
+        id: "3",
+        label: "3",
+      },
+      {
+        id: "4",
+        label: "4",
+      },
+    ],
+    edges: [
+      {
+        id: "1-2",
+        a: "1",
+        b: "2",
+      },
+      {
+        id: "2-3",
+        a: "2",
+        b: "3",
+      },
+      {
+        id: "3-4",
+        a: "3",
+        b: "4",
+      },
+    ],
+    shape: "subset",
+    rule: "clique",
+    k: 3,
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try {1,2,3}: 1 and 3 aren't joined.",
+      focus: ["1", "2", "3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1-2": {
+          state: "ElementHighlight",
+        },
+        "2-3": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [
+        {
+          a: "1",
+          b: "3",
+          state: "Rejected",
+        },
+      ],
+    },
+    {
+      event: "Reject",
+      caption: "Try {1,2,4}: 1 and 4 aren't joined.",
+      focus: ["1", "2", "4"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1-2": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [
+        {
+          a: "1",
+          b: "4",
+          state: "Rejected",
+        },
+        {
+          a: "2",
+          b: "4",
+          state: "Rejected",
+        },
+      ],
+    },
+    {
+      event: "Reject",
+      caption: "Try {1,3,4}: 1 and 3 aren't joined.",
+      focus: ["1", "3", "4"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "3-4": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [
+        {
+          a: "1",
+          b: "3",
+          state: "Rejected",
+        },
+        {
+          a: "1",
+          b: "4",
+          state: "Rejected",
+        },
+      ],
+    },
+    {
+      event: "Reject",
+      caption: "Try {2,3,4}: 2 and 4 aren't joined.",
+      focus: ["2", "3", "4"],
+      nodes: {
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "2-3": {
+          state: "ElementHighlight",
+        },
+        "3-4": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [
+        {
+          a: "2",
+          b: "4",
+          state: "Rejected",
+        },
+      ],
+    },
+    {
+      event: "Done",
+      caption: "Checked all 4 candidate sets. None is a clique of size 3.",
+      focus: [],
+      nodes: {},
+      edges: {},
+      phantoms: [],
+      ok: false,
+    },
+  ],
+};
+
+/** format=frames, Steiner Tree, instance (({1,2,3,4},{{1,2},{2,3},{3,4},{1,4}}),{1,3},2), SteinerTreeBruteForce: edges shape; nodes 1 and 3 are terminals. */
+export const STEINER_GRAPH_FRAMES = {
+  type: "Graph",
+  payload: {
+    kind: "graph",
+    subtype: "undirected",
+    layout: "force",
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        terminal: true,
+      },
+      {
+        id: "2",
+        label: "2",
+      },
+      {
+        id: "3",
+        label: "3",
+        terminal: true,
+      },
+      {
+        id: "4",
+        label: "4",
+      },
+    ],
+    edges: [
+      {
+        id: "1-2",
+        a: "1",
+        b: "2",
+      },
+      {
+        id: "2-3",
+        a: "2",
+        b: "3",
+      },
+      {
+        id: "3-4",
+        a: "3",
+        b: "4",
+      },
+      {
+        id: "1-4",
+        a: "1",
+        b: "4",
+      },
+    ],
+    shape: "edges",
+    rule: "steinerTree",
+    k: 2,
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try edges 1-2: terminal 3 isn't reached.",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Rejected",
+        },
+      },
+      edges: {
+        "1-2": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [],
+    },
+    {
+      event: "Reject",
+      caption: "Try edges 2-3: terminal 1 isn't reached.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "Rejected",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "2-3": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [],
+    },
+    {
+      event: "Reject",
+      caption: "Try edges 3-4: terminal 1 isn't reached.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "Rejected",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "3-4": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [],
+    },
+    {
+      event: "Reject",
+      caption: "Try edges 1-4: terminal 3 isn't reached.",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Rejected",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1-4": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [],
+    },
+    {
+      event: "Accept",
+      caption: "Try edges 1-2, 2-3. They connect every terminal.",
+      focus: ["1-2", "2-3"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1-2": {
+          state: "ElementHighlight",
+        },
+        "2-3": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [],
+    },
+    {
+      event: "Done",
+      caption: "2 edges connect every terminal, found after 5 tries.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1-2": {
+          state: "Solution",
+        },
+        "2-3": {
+          state: "Solution",
+        },
+      },
+      phantoms: [],
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Max Cut, instance ({1,2,3,4},{({1,2},3),({2,3},1),({3,4},2),({1,4},2)}), MaxCutSolver: cut shape; the two sides as groups, weighted edges. */
+export const MAX_CUT_GRAPH_FRAMES = {
+  type: "Graph",
+  payload: {
+    kind: "graph",
+    subtype: "undirected",
+    layout: "force",
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+      },
+      {
+        id: "2",
+        label: "2",
+      },
+      {
+        id: "3",
+        label: "3",
+      },
+      {
+        id: "4",
+        label: "4",
+      },
+    ],
+    edges: [
+      {
+        id: "1-2",
+        a: "1",
+        b: "2",
+        weight: 3,
+      },
+      {
+        id: "2-3",
+        a: "2",
+        b: "3",
+        weight: 1,
+      },
+      {
+        id: "3-4",
+        a: "3",
+        b: "4",
+        weight: 2,
+      },
+      {
+        id: "1-4",
+        a: "1",
+        b: "4",
+        weight: 2,
+      },
+    ],
+    shape: "cut",
+    rule: "maxCut",
+  },
+  frames: [
+    {
+      event: "Accept",
+      caption: "Put {1} against {2,3,4}: the crossing edges weigh 5, the most so far.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1-2": {
+          state: "Committed",
+        },
+        "1-4": {
+          state: "Committed",
+        },
+      },
+      phantoms: [],
+      groups: {
+        1: 0,
+        2: 1,
+        3: 1,
+        4: 1,
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Put {1,3} against {2,4}: the crossing edges weigh 8, the most so far.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1-2": {
+          state: "Solution",
+        },
+        "1-4": {
+          state: "Solution",
+        },
+        "2-3": {
+          state: "Solution",
+        },
+        "3-4": {
+          state: "Solution",
+        },
+      },
+      phantoms: [],
+      groups: {
+        1: 0,
+        2: 1,
+        3: 0,
+        4: 1,
+      },
+    },
+    {
+      event: "Done",
+      caption:
+        "The heaviest cut weighs 8: {1,3} against {2,4}, after trying all 14 choices of the S side.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1-2": {
+          state: "Solution",
+        },
+        "1-4": {
+          state: "Solution",
+        },
+        "2-3": {
+          state: "Solution",
+        },
+        "3-4": {
+          state: "Solution",
+        },
+      },
+      phantoms: [],
+      ok: true,
+      groups: {
+        1: 0,
+        2: 1,
+        3: 0,
+        4: 1,
+      },
+    },
+  ],
+};
+
+/** format=frames, Clique Cover, instance (({1,2,3,4},{{1,2},{3,4}}),2), CliqueCoverBruteForce: groups shape; missing edges inside a group as Rejected phantoms. */
+export const CLIQUE_COVER_GRAPH_FRAMES = {
+  type: "Graph",
+  payload: {
+    kind: "graph",
+    subtype: "undirected",
+    layout: "force",
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+      },
+      {
+        id: "2",
+        label: "2",
+      },
+      {
+        id: "3",
+        label: "3",
+      },
+      {
+        id: "4",
+        label: "4",
+      },
+    ],
+    edges: [
+      {
+        id: "1-2",
+        a: "1",
+        b: "2",
+      },
+      {
+        id: "3-4",
+        a: "3",
+        b: "4",
+      },
+    ],
+    shape: "groups",
+    rule: "cliqueCover",
+    k: 2,
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try {1,2,3,4},{}: 1 and 3 are in one group but aren't joined.",
+      focus: ["1", "3"],
+      nodes: {
+        1: {
+          state: "Rejected",
+        },
+        3: {
+          state: "Rejected",
+        },
+      },
+      edges: {
+        "1-2": {
+          state: "ElementHighlight",
+        },
+        "3-4": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [
+        {
+          a: "1",
+          b: "3",
+          state: "Rejected",
+        },
+        {
+          a: "1",
+          b: "4",
+          state: "Rejected",
+        },
+        {
+          a: "2",
+          b: "3",
+          state: "Rejected",
+        },
+        {
+          a: "2",
+          b: "4",
+          state: "Rejected",
+        },
+      ],
+      groups: {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+      },
+    },
+    {
+      event: "Reject",
+      caption: "Try {2,3,4},{1}: 2 and 3 are in one group but aren't joined.",
+      focus: ["2", "3"],
+      nodes: {
+        2: {
+          state: "Rejected",
+        },
+        3: {
+          state: "Rejected",
+        },
+      },
+      edges: {
+        "3-4": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [
+        {
+          a: "2",
+          b: "3",
+          state: "Rejected",
+        },
+        {
+          a: "2",
+          b: "4",
+          state: "Rejected",
+        },
+      ],
+      groups: {
+        1: 1,
+        2: 0,
+        3: 0,
+        4: 0,
+      },
+    },
+    {
+      event: "Reject",
+      caption: "Try {2,3,4},{}: 2 and 3 are in one group but aren't joined.",
+      focus: ["2", "3"],
+      nodes: {
+        2: {
+          state: "Rejected",
+        },
+        3: {
+          state: "Rejected",
+        },
+      },
+      edges: {
+        "3-4": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [
+        {
+          a: "2",
+          b: "3",
+          state: "Rejected",
+        },
+        {
+          a: "2",
+          b: "4",
+          state: "Rejected",
+        },
+      ],
+      groups: {
+        2: 0,
+        3: 0,
+        4: 0,
+      },
+    },
+    {
+      event: "Reject",
+      caption: "Try {1,3,4},{2}: 1 and 3 are in one group but aren't joined.",
+      focus: ["1", "3"],
+      nodes: {
+        1: {
+          state: "Rejected",
+        },
+        3: {
+          state: "Rejected",
+        },
+      },
+      edges: {
+        "3-4": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [
+        {
+          a: "1",
+          b: "3",
+          state: "Rejected",
+        },
+        {
+          a: "1",
+          b: "4",
+          state: "Rejected",
+        },
+      ],
+      groups: {
+        1: 0,
+        2: 1,
+        3: 0,
+        4: 0,
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Try {3,4},{1,2}. Every group is a clique.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1-2": {
+          state: "Solution",
+        },
+        "3-4": {
+          state: "Solution",
+        },
+      },
+      phantoms: [],
+      groups: {
+        1: 1,
+        2: 1,
+        3: 0,
+        4: 0,
+      },
+    },
+    {
+      event: "Done",
+      caption: "{3,4},{1,2} covers the nodes with cliques, found after 5 tries.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1-2": {
+          state: "Solution",
+        },
+        "3-4": {
+          state: "Solution",
+        },
+      },
+      phantoms: [],
+      ok: true,
+      groups: {
+        1: 1,
+        2: 1,
+        3: 0,
+        4: 0,
+      },
+    },
+  ],
+};
+
+/** format=frames, Directed Hamiltonian Cycle, instance ({1,2,3,4},{(1,2),(2,1),(2,3),(3,4),(4,1)}), DirectedHamiltonianBruteForce: tour shape on a directed graph (circle layout, order badges, a pair of opposite edges). */
+export const DIRECTED_HAMILTONIAN_GRAPH_FRAMES = {
+  type: "Graph",
+  payload: {
+    kind: "graph",
+    subtype: "directed",
+    layout: "circle",
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+      },
+      {
+        id: "2",
+        label: "2",
+      },
+      {
+        id: "3",
+        label: "3",
+      },
+      {
+        id: "4",
+        label: "4",
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+      },
+      {
+        id: "2>1",
+        a: "2",
+        b: "1",
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+      },
+      {
+        id: "4>1",
+        a: "4",
+        b: "1",
+      },
+    ],
+    shape: "tour",
+    rule: "hamiltonianCycle",
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start the tour at 1.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      phantoms: [],
+      order: ["1"],
+    },
+    {
+      event: "Accept",
+      caption: "Go 1 → 2: the path is 1 → 2.",
+      focus: ["2", "1>2"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [],
+      order: ["1", "2"],
+    },
+    {
+      event: "Accept",
+      caption: "Go 2 → 3: the path is 1 → 2 → 3.",
+      focus: ["3", "2>3"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "2>3": {
+          state: "ElementHighlight",
+        },
+      },
+      phantoms: [],
+      order: ["1", "2", "3"],
+    },
+    {
+      event: "Accept",
+      caption:
+        "Close the tour 4 → 1: every node is visited once, so 1 → 2 → 3 → 4 → 1 is a Hamiltonian cycle.",
+      focus: ["4", "1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+        "3>4": {
+          state: "Solution",
+        },
+        "4>1": {
+          state: "Solution",
+        },
+      },
+      phantoms: [],
+      order: ["1", "2", "3", "4", "1"],
+    },
+    {
+      event: "Done",
+      caption: "Found the Hamiltonian cycle 1 → 2 → 3 → 4 → 1 after checking 1 complete tour.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+        "3>4": {
+          state: "Solution",
+        },
+        "4>1": {
+          state: "Solution",
+        },
+      },
+      phantoms: [],
+      ok: true,
+      order: ["1", "2", "3", "4", "1"],
+    },
+  ],
+};
+
+/**
+ * Not captured: a Graph made here, big enough that it can't fit a phone at a readable size
+ * (16 nodes on a circle, each joined to the next two), so its diagram has to scroll sideways at
+ * 390 px. One frame, highlighting node 1. The shape and field names are the captures' own.
+ */
+export const LARGE_GRAPH_FRAMES = (() => {
+  const count = 16;
+  const ids = Array.from({ length: count }, (_, i) => String(i + 1));
+  const edges = [];
+  for (let i = 0; i < count; i += 1) {
+    for (const step of [1, 2]) {
+      const a = ids[i];
+      const b = ids[(i + step) % count];
+      edges.push({ id: `${a}-${b}`, a, b });
+    }
+  }
+  return {
+    type: "Graph",
+    payload: {
+      kind: "graph",
+      subtype: "undirected",
+      layout: "circle",
+      nodes: ids.map((id) => ({ id, label: id })),
+      edges,
+      shape: "subset",
+      rule: "clique",
+      k: 3,
+    },
+    frames: [
+      {
+        event: "Try",
+        caption: "Try 1.",
+        focus: ["1"],
+        nodes: { 1: { state: "ElementHighlight" } },
+        edges: {},
+        phantoms: [],
+      },
+    ],
+  };
+})();
+
+/**
+ * format=frames for IntProgrammingVisualization (0-1 Integer Linear Programming), instance
+ * `(1 -1),(0 1)<=(-1 1)` with the brute force, captured on 2026-10-15 from a local build that
+ * sends the payload's `blank` (the instance with nothing tried: x is "?", no totals). Its first
+ * frame is the first try, with totals, which must not show before Run.
+ */
+export const ILP_TABLE_FRAMES_WITH_BLANK = {
+  type: "Table",
+  payload: {
+    kind: "table",
+    shape: "matrix",
+    columns: [
+      {
+        id: "c0",
+        label: "x1",
+        key: "x1",
+      },
+      {
+        id: "c1",
+        label: "x2",
+        key: "x2",
+      },
+      {
+        id: "c2",
+        label: "Total",
+        key: "total",
+      },
+      {
+        id: "c3",
+        label: "Bound",
+        key: "bound",
+      },
+      {
+        id: "c4",
+        label: "Holds?",
+        key: "holds",
+      },
+    ],
+    rows: [
+      {
+        id: "r0",
+        label: "x =",
+      },
+      {
+        id: "r1",
+        label: "row 1",
+      },
+      {
+        id: "r2",
+        label: "row 2",
+      },
+    ],
+    blank: {
+      values: [
+        ["?", "?", null, null, null],
+        ["1", "-1", null, "-1", null],
+        ["0", "1", null, "1", null],
+      ],
+    },
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try (0 0): row 1 adds up to 0, over its bound -1.",
+      focus: ["r1"],
+      values: [
+        ["0", "0", null, null, null],
+        ["1", "-1", "0", "-1", "no"],
+        ["0", "1", "0", "1", "yes"],
+      ],
+      rows: {
+        r1: {
+          state: "Rejected",
+        },
+        r2: {
+          state: "Covered",
+        },
+      },
+      cells: {
+        r0c0: {
+          state: "ElementHighlight",
+        },
+        r0c1: {
+          state: "ElementHighlight",
+        },
+      },
+      changed: [],
+    },
+    {
+      event: "Reject",
+      caption: "Try (1 0): row 1 adds up to 1, over its bound -1.",
+      focus: ["r1"],
+      values: [
+        ["1", "0", null, null, null],
+        ["1", "-1", "1", "-1", "no"],
+        ["0", "1", "0", "1", "yes"],
+      ],
+      rows: {
+        r1: {
+          state: "Rejected",
+        },
+        r2: {
+          state: "Covered",
+        },
+      },
+      cells: {
+        r0c0: {
+          state: "ElementHighlight",
+        },
+        r0c1: {
+          state: "ElementHighlight",
+        },
+      },
+      changed: [],
+    },
+    {
+      event: "Accept",
+      caption: "Try (0 1): every row stays within its bound.",
+      focus: [],
+      values: [
+        ["0", "1", null, null, null],
+        ["1", "-1", "-1", "-1", "yes"],
+        ["0", "1", "1", "1", "yes"],
+      ],
+      rows: {
+        r1: {
+          state: "Solution",
+        },
+        r2: {
+          state: "Solution",
+        },
+      },
+      cells: {
+        r0c0: {
+          state: "Solution",
+        },
+        r0c1: {
+          state: "Solution",
+        },
+      },
+      changed: [],
+    },
+    {
+      event: "Done",
+      caption: "(0 1) satisfies every row, found on try 3 of 4.",
+      focus: [],
+      values: [
+        ["0", "1", null, null, null],
+        ["1", "-1", "-1", "-1", "yes"],
+        ["0", "1", "1", "1", "yes"],
+      ],
+      rows: {
+        r1: {
+          state: "Solution",
+        },
+        r2: {
+          state: "Solution",
+        },
+      },
+      cells: {
+        r0c0: {
+          state: "Solution",
+        },
+        r0c1: {
+          state: "Solution",
+        },
+      },
+      changed: [],
+      ok: true,
+    },
+  ],
+};
