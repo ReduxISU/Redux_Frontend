@@ -14,6 +14,8 @@
 // #201: the Graph renderer, below the foundation's tests, on one small captured run per shape.
 // Before Run the picture is the plain instance (no step's states or annotations); a diagram
 // always opens fitted to its width, and zooms and pans (DiagramZoom.js).
+// #203: the Bipartite Graph renderer (Set Cover, Exact Cover, Hitting Set and SAT's factor
+// graph) at the end, with the same plain picture before Run and the same fit and zoom.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
@@ -25,9 +27,14 @@ import {
   DFA_AUTOMATON_LIST,
   DFA_TABLE_FRAMES,
   DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
+  EXACT_COVER_BIPARTITE_FRAMES,
+  HITTING_SET_BIPARTITE_FRAMES,
   ILP_TABLE_FRAMES_WITH_BLANK,
   LARGE_GRAPH_FRAMES,
   MAX_CUT_GRAPH_FRAMES,
+  SAT3_FACTOR_GRAPH_FRAMES,
+  SET_COVER_BIPARTITE_FRAMES,
+  SET_COVER_FAILED_BIPARTITE_FRAMES,
   STEINER_GRAPH_FRAMES,
 } from "./picture-payloads";
 
@@ -936,3 +943,342 @@ test("Graph: zoomed in, a pan reaches both the drawing's left and right edges", 
   for (let drag = 0; drag < 10; drag += 1) await dragAcross(page, `${GRAPH}-svg`, -300, 0);
   expect((await edges()).rightShown).toBe(true);
 });
+
+// --- #203: the Bipartite Graph renderer (set problems, and SAT's factor graph) --------------
+
+const BIPARTITE = "#workbench-source-frames-bipartitegraph";
+
+/**
+ * Each bipartite capture with the problem page it is opened on and that problem's default
+ * visualization, which allInfo is made to name BipartiteGraph so the test doesn't depend on the
+ * backend the catalog comes from (3SAT's default picture is the clause graph; its factor graph
+ * is a second visualization).
+ */
+const BIPARTITE_CASES = [
+  {
+    problem: "Set Cover",
+    viz: "SetCoverDefaultVisualization",
+    capture: SET_COVER_BIPARTITE_FRAMES,
+  },
+  {
+    problem: "Exact Cover",
+    viz: "ExactCoverDefaultVisualization",
+    capture: EXACT_COVER_BIPARTITE_FRAMES,
+  },
+  {
+    problem: "Hitting Set",
+    viz: "HittingSetDefaultVisualization",
+    capture: HITTING_SET_BIPARTITE_FRAMES,
+  },
+  { problem: "3SAT", viz: "Sat3DefaultVisualization", capture: SAT3_FACTOR_GRAPH_FRAMES },
+];
+
+async function openBipartite(page, { problem, viz, capture }) {
+  await setPictureTypes(page, { [viz]: "BipartiteGraph" });
+  await openPicture(page, problem, capture);
+  await expect(page.locator(`${BIPARTITE}-graph`)).toBeVisible();
+}
+
+const bipartiteNode = (page, id) => page.locator(`${BIPARTITE}-graph [data-node-id="${id}"]`);
+const bipartiteEdge = (page, id) => page.locator(`${BIPARTITE}-graph [data-edge-id="${id}"]`);
+
+/** Frame `index`'s states, checked piece by piece against the picture (absent = Background). */
+async function expectBipartiteStates(page, capture, index) {
+  const frame = capture.frames[index];
+  for (const node of [...capture.payload.elements, ...capture.payload.sets]) {
+    await expect(bipartiteNode(page, node.id)).toHaveAttribute(
+      "data-state",
+      frame.nodes[node.id]?.state ?? "Background",
+    );
+  }
+  for (const edge of capture.payload.edges) {
+    await expect(bipartiteEdge(page, edge.id)).toHaveAttribute(
+      "data-state",
+      frame.edges[edge.id]?.state ?? "Background",
+    );
+  }
+}
+
+for (const testCase of BIPARTITE_CASES) {
+  test(`Bipartite Graph: ${testCase.problem} draws both columns, every membership and the picked side`, async ({
+    page,
+  }) => {
+    const { payload } = testCase.capture;
+    await openBipartite(page, testCase);
+    const graph = page.locator(`${BIPARTITE}-graph`);
+    await expect(graph).toHaveAttribute("data-pick-side", payload.pickSide);
+    await expect(graph.locator('[data-side="left"]')).toHaveCount(payload.elements.length);
+    await expect(graph.locator('[data-side="right"]')).toHaveCount(payload.sets.length);
+    await expect(graph.locator("[data-edge-id]")).toHaveCount(payload.edges.length);
+    // One header marks the column the answer picks from (the factor graph's assigned variables).
+    const picked = graph.locator("[data-picked-head]");
+    await expect(picked).toHaveCount(1);
+    await expect(picked).toHaveText(payload.pickSide === "assignment" ? /ASSIGNED/ : /PICKED/);
+    // Every node says what it is, and can be reached by keyboard.
+    const named =
+      payload.pickSide === "assignment"
+        ? /^(Variable \S+, (true|false|not assigned yet)|Clause C\d+: )/
+        : /^(Element \S+|Set S\d+ \{)/;
+    for (const piece of await graph.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("aria-label", named);
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+  });
+}
+
+test("Bipartite Graph: before Run the picture is the plain instance, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  // The brute force's first step already tries S1, covers 1-3 and rejects 4 and 5.
+  const capture = SET_COVER_BIPARTITE_FRAMES;
+  await openBipartite(page, BIPARTITE_CASES[0]);
+  const graph = page.locator(`${BIPARTITE}-graph`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(graph.locator("[data-hits]")).toHaveCount(0);
+  await expect(graph.locator("[data-badge]")).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  // The member lists are the instance's, so they show.
+  await expect(bipartiteNode(page, "S1")).toContainText("{1,2,3}");
+  await expect(legendBody(page)).not.toContainText("×N");
+
+  const before = await nodeCentres(page, `${BIPARTITE}-graph`);
+  await runToFrame(page, capture, 0);
+  await expectBipartiteStates(page, capture, 0);
+  expect(await nodeCentres(page, `${BIPARTITE}-graph`)).toEqual(before);
+});
+
+test("Bipartite Graph: the factor graph's plain picture has no values or counts, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  const capture = SAT3_FACTOR_GRAPH_FRAMES;
+  await openBipartite(page, BIPARTITE_CASES[3]);
+  const graph = page.locator(`${BIPARTITE}-graph`);
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(graph.locator('[data-value]:not([data-value="unassigned"])')).toHaveCount(0);
+  await expect(graph.locator("[data-value-text]")).toHaveCount(0);
+  await expect(graph.locator("[data-hits-pill]")).toHaveCount(0);
+  // The dashed ¬x edges are the formula's own, so they show, and the Legend says what they are.
+  await expect(legendBody(page)).toContainText("Dashed edge (the clause has ¬x)");
+  await expect(legendBody(page)).not.toContainText("T / F");
+
+  const before = await nodeCentres(page, `${BIPARTITE}-graph`);
+  await runToFrame(page, capture, 0);
+  await expect(bipartiteNode(page, "v:x1")).toHaveAttribute("data-value", "true");
+  expect(await nodeCentres(page, `${BIPARTITE}-graph`)).toEqual(before);
+});
+
+test("Bipartite Graph: the steps walk the brute force's tries, the ×2 hits and the confirmed answer", async ({
+  page,
+}) => {
+  const capture = SET_COVER_BIPARTITE_FRAMES;
+  await openBipartite(page, BIPARTITE_CASES[0]);
+  // Frame 5 tries {S1,S2}: 2 is in both, and 5 is in neither.
+  await runToFrame(page, capture, 4);
+  await expectBipartiteStates(page, capture, 4);
+  await expect(bipartiteNode(page, "e:2")).toHaveAttribute("data-hits", "2");
+  await expect(bipartiteNode(page, "e:2").locator('[data-badge="hits"]')).toHaveText("×2");
+  await expect(bipartiteNode(page, "e:2")).toHaveAttribute("aria-label", /hit by 2 picked sets/);
+  await expect(bipartiteNode(page, "e:1").locator("[data-badge]")).toHaveCount(0);
+  await expect(bipartiteNode(page, "e:5")).toHaveAttribute(
+    "aria-label",
+    /Rejected \(failed or ruled out\)/,
+  );
+  await expect(legendBody(page)).toContainText("×N (hit by N picked sets)");
+
+  for (let index = 5; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+    await expectBipartiteStates(page, capture, index);
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(bipartiteNode(page, "S1")).toHaveAttribute("data-state", "Solution");
+  await expect(bipartiteNode(page, "S4")).toHaveAttribute("data-state", "Solution");
+  await expect(bipartiteNode(page, "S2")).toHaveAttribute("data-state", "Background");
+});
+
+test("Bipartite Graph: Exact Cover shows Blocked sets, a Committed set and the answer", async ({
+  page,
+}) => {
+  const capture = EXACT_COVER_BIPARTITE_FRAMES;
+  await openBipartite(page, BIPARTITE_CASES[1]);
+  await runToFrame(page, capture, 1);
+  await expectBipartiteStates(page, capture, 1);
+  await expect(bipartiteNode(page, "S1")).toHaveAttribute("data-state", "Committed");
+  await expect(bipartiteNode(page, "S2")).toHaveAttribute("data-state", "Blocked");
+  await expect(bipartiteNode(page, "e:4")).toHaveAttribute("data-state", "Rejected");
+  // Blocked and Committed are told apart by their dashes as well as their colors.
+  const dash = (id) =>
+    bipartiteNode(page, id).locator("[data-body]").getAttribute("stroke-dasharray");
+  expect(await dash("S1")).toBeTruthy();
+  expect(await dash("S2")).toBeTruthy();
+  expect(await dash("S1")).not.toBe(await dash("S2"));
+  const legend = legendBody(page);
+  await expect(legend).toContainText("Blocked (can't be picked)");
+  await expect(legend).toContainText("Committed (kept so far)");
+  for (let index = 2; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expectBipartiteStates(page, capture, index);
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Bipartite Graph: Hitting Set picks elements, and its answer blocks the rest", async ({
+  page,
+}) => {
+  const capture = HITTING_SET_BIPARTITE_FRAMES;
+  await openBipartite(page, BIPARTITE_CASES[2]);
+  await expect(page.locator(`${BIPARTITE}-graph [data-picked-head]`)).toHaveText(/PICKED/);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await expectBipartiteStates(page, capture, capture.frames.length - 1);
+  await expect(bipartiteNode(page, "e:1")).toHaveAttribute("data-state", "Solution");
+  await expect(bipartiteNode(page, "e:3")).toHaveAttribute("data-state", "Blocked");
+  await expect(bipartiteNode(page, "S2")).toHaveAttribute("aria-label", /hit by 1 picked element/);
+});
+
+test("Bipartite Graph: a Set Cover with an element in no set ends on no, with nothing as the answer", async ({
+  page,
+}) => {
+  const capture = SET_COVER_FAILED_BIPARTITE_FRAMES;
+  await openBipartite(page, { ...BIPARTITE_CASES[0], capture });
+  await expect(bipartiteNode(page, "e:5")).toHaveAttribute("aria-label", /in no set$/);
+  await runToFrame(page, capture, 0);
+  await expect(bipartiteNode(page, "e:5")).toHaveAttribute("data-state", "Rejected");
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(page.locator(`${BIPARTITE}-graph [data-state="Solution"]`)).toHaveCount(0);
+});
+
+test("Bipartite Graph: the factor graph draws ¬x dashed, a repeated variable twice, T / F and n true", async ({
+  page,
+}) => {
+  const capture = SAT3_FACTOR_GRAPH_FRAMES;
+  await openBipartite(page, BIPARTITE_CASES[3]);
+  // C2 is (¬x1 ∨ x3 ∨ x1): x1 twice, so two edges between the same two nodes, both visible.
+  await expect(bipartiteNode(page, "c1")).toHaveAttribute(
+    "aria-label",
+    /^Clause C2: ¬x1 ∨ x3 ∨ x1/,
+  );
+  const first = await bipartiteEdge(page, "c1-0").getAttribute("d");
+  const second = await bipartiteEdge(page, "c1-2").getAttribute("d");
+  expect(first).not.toBe(second);
+  await expect(bipartiteEdge(page, "c1-0")).toHaveAttribute("data-positive", "false");
+  await expect(bipartiteEdge(page, "c1-0")).toHaveAttribute("stroke-dasharray", "5 4");
+  await expect(bipartiteEdge(page, "c1-2")).toHaveAttribute("data-positive", "true");
+
+  // Frame 5: x1 = True is kept so far, x2 = True is being tried.
+  await runToFrame(page, capture, 4);
+  await expectBipartiteStates(page, capture, 4);
+  await expect(bipartiteNode(page, "v:x1")).toHaveAttribute("data-state", "Committed");
+  await expect(bipartiteNode(page, "v:x1").locator("[data-value-text]")).toHaveText("T");
+  await expect(bipartiteNode(page, "v:x3")).toHaveAttribute("data-value", "unassigned");
+  await expect(bipartiteNode(page, "c0").locator("[data-hits-pill]")).toHaveText("1 true");
+  await expect(bipartiteEdge(page, "c0-1")).toHaveAttribute("data-state", "False");
+
+  // The answer: x3 = False, every clause Covered, C3 with two true literals.
+  await page.locator("#workbench-steps-next").click();
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expectBipartiteStates(page, capture, capture.frames.length - 1);
+  await expect(bipartiteNode(page, "v:x3").locator("[data-value-text]")).toHaveText("F");
+  await expect(bipartiteNode(page, "c2").locator("[data-hits-pill]")).toHaveText("2 true");
+  const legend = legendBody(page);
+  await expect(legend).toContainText("False (assigned false)");
+  await expect(legend).toContainText("T / F (the variable's value so far)");
+  await expect(legend).toContainText("n true (how many of the clause's literals are true)");
+});
+
+test("Bipartite Graph: hovering, focusing or tapping a node traces its edges and fades the rest by color", async ({
+  page,
+}) => {
+  await openBipartite(page, BIPARTITE_CASES[0]);
+  await bipartiteNode(page, "S1").hover();
+  for (const id of ["e:1~S1", "e:2~S1", "e:3~S1"]) {
+    await expect(bipartiteEdge(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(bipartiteEdge(page, "e:2~S2")).toHaveAttribute("data-traced", "faint");
+  await expect(bipartiteNode(page, "e:1")).toHaveAttribute("data-traced", "trace");
+  await expect(bipartiteNode(page, "e:5")).toHaveAttribute("data-traced", "faint");
+  const faded = await bipartiteNode(page, "e:5").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+
+  // Keyboard: focusing an element traces it; Enter pins it.
+  await page.mouse.move(0, 0);
+  await bipartiteNode(page, "e:4").focus();
+  await expect(bipartiteEdge(page, "e:4~S2")).toHaveAttribute("data-traced", "trace");
+  await expect(bipartiteNode(page, "S1")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(bipartiteNode(page, "e:4")).toHaveAttribute("aria-pressed", "true");
+  await expect(bipartiteNode(page, "e:4")).toHaveAttribute("aria-label", /in S2, S3, S4$/);
+});
+
+test("Bipartite Graph: on a phone a tap traces a node, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openBipartite(page, BIPARTITE_CASES[3]);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${BIPARTITE}-svg`);
+  await page.locator(`${BIPARTITE}-zoom-in`).click();
+  await expect(page.locator(`${BIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await bipartiteNode(page, "v:x2").focus();
+  await bipartiteNode(page, "v:x2").blur();
+  await bipartiteNode(page, "v:x2").click();
+  await expect(bipartiteNode(page, "v:x2")).toHaveAttribute("aria-pressed", "true");
+  await expect(bipartiteEdge(page, "c0-1")).toHaveAttribute("data-traced", "trace");
+  await expectFits(page, `${BIPARTITE}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1280]) {
+    test(`Bipartite Graph: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openBipartite(page, BIPARTITE_CASES[0]);
+      const svg = page.locator(`${BIPARTITE}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${BIPARTITE}-svg`);
+      await expect(page.locator(`${BIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The column headers follow the theme: no dark-on-dark, no light-on-white.
+      const ink = await page
+        .locator(`${BIPARTITE}-graph [data-layer="heads"] text`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+for (const [width, height] of [
+  [1280, 800],
+  [1920, 1080],
+]) {
+  test(`Bipartite Graph: at ${width}x${height} the picture fills the pane and fits the screen`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await openBipartite(page, BIPARTITE_CASES[0]);
+    const svg = `${BIPARTITE}-svg`;
+    await expect(page.locator(svg)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const sizes = await areaSizes(page, svg);
+        return Math.abs(sizes.width - sizes.content);
+      })
+      .toBeLessThanOrEqual(2);
+    await scrollPictureToTop(page);
+    const sizes = await areaSizes(page, svg);
+    expect(sizes.bottom).toBeLessThanOrEqual(sizes.viewport);
+    expect(sizes.viewAspect).toBeCloseTo(sizes.width / sizes.height, 2);
+    await page.locator(`${BIPARTITE}-zoom-in`).click();
+    await page.locator(`${BIPARTITE}-zoom-in`).click();
+    const zoomed = await areaSizes(page, svg);
+    expect(zoomed.viewAspect).toBeCloseTo(zoomed.width / zoomed.height, 2);
+  });
+}
