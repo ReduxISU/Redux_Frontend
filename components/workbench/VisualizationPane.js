@@ -49,14 +49,15 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
  * What goes inside one picture box.
  * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object,
  *     highlightIds?: string[]}
- *   | {kind: "picture", type: string, payload: Object|null, frame: Object, frameIndex: number,
- *      frameCount: number, name: string, showCaption: boolean}
+ *   | {kind: "picture", type: string, payload: Object|null, frame: Object,
+ *      frameIndex: number|null, frameCount: number, name: string, showCaption: boolean}
  *   | {kind: "loading", text: string}
  *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
  *      action?: {id: string, label: string, onClick: Function}}} PictureContent
  *   `compact` draws a short box (no picture is coming, so no room is held for one).
  *   `highlightIds` are the pieces the hovered or focused gadget row names (#229 stage 4).
- *   "picture" is a format=frames picture (#199), drawn by the renderer for its `type`.
+ *   "picture" is a format=frames picture (#199), drawn by the renderer for its `type`;
+ *   `frameIndex` is null for the default picture before Run (the plain frame).
  */
 function PictureBox({ idPrefix, content }) {
   let inner;
@@ -150,6 +151,9 @@ function PictureBox({ idPrefix, content }) {
         p: 2,
         boxSizing: "border-box",
         [COMPACT_MEDIA]: { minHeight: content.compact ? 160 : 320 },
+        // A phone gives the picture every pixel it can, so a diagram scaled to fit the width
+        // (components/pictures/graphPieces.js, DiagramScroll) stays as large as it can.
+        "@media (max-width:600px)": { p: 1 },
       }}
     >
       {inner}

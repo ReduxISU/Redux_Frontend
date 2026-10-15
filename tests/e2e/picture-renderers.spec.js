@@ -12,6 +12,8 @@
 // remove a visualization's `pictureType`, which decides whether the frames request is made.
 //
 // #201: the Graph renderer, below the foundation's tests, on one small captured run per shape.
+// Before Run the picture is the plain instance (no step's states or annotations), and a
+// diagram scales down to fit a phone, scrolling only when its labels would get too small.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
@@ -23,6 +25,7 @@ import {
   DFA_AUTOMATON_LIST,
   DFA_TABLE_FRAMES,
   DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
+  LARGE_GRAPH_FRAMES,
   MAX_CUT_GRAPH_FRAMES,
   STEINER_GRAPH_FRAMES,
 } from "./picture-payloads";
@@ -98,10 +101,11 @@ test("a picture type with a renderer is drawn from format=frames, and one withou
   await expect(picture).toHaveAttribute("data-picture-kind", "picture");
   await expect(picture).toHaveAttribute("data-picture-type", "Table");
   await expect(page.locator(`${TABLE_PREFIX}-table`)).toHaveAttribute("data-table-shape", "trace");
-  await expect(page.locator(`${TABLE_PREFIX}-r0`)).toHaveAttribute(
-    "data-state",
-    "ElementHighlight",
-  );
+  // Before Run it is the plain picture: the first step's cell text, but none of its states.
+  await expect(picture.locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(page.locator(`${TABLE_PREFIX}-r0`)).toHaveAttribute("data-state", "Background");
+  await expect(page.locator(`${TABLE_PREFIX}-r0c3`)).toHaveText("1");
+  await expect(page.locator(`${TABLE_PREFIX}-r0c3`)).not.toHaveAttribute("data-changed", /./);
   expect(asked).toEqual([`${TABLE_VIZ} frames`]);
 
   // The Automaton type has none yet: the frames answer is set aside, the list is asked for,
@@ -191,6 +195,9 @@ test("Committed draws apart from Solution, dashed, and has its own Legend entry"
   await setPictureTypes(page, { [TABLE_VIZ]: "Table" });
   await answerPictures(page, { tableFrames: handMade });
   await gotoProblemDetail(page, PROBLEM, { expect });
+  // States are a run's, so they show once it runs (before Run the picture is plain).
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(CAPTION)).toBeVisible();
 
   const committed = page.locator(`${TABLE_PREFIX}-r0`);
   await expect(committed).toHaveAttribute("data-state", "Committed");
@@ -474,18 +481,14 @@ for (const scheme of ["light", "dark"]) {
       const box = await svg.boundingBox();
       expect(box.width).toBeGreaterThan(300);
       expect(box.height).toBeGreaterThan(150);
-      // The page never scrolls sideways; on a phone the diagram scrolls in its own box.
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      );
-      expect(overflow).toBeLessThanOrEqual(0);
-      const scrolls = await page
-        .locator(`${GRAPH}-scroll`)
-        .evaluate((el) => el.scrollWidth > el.clientWidth);
-      expect(scrolls).toBe(width === 390);
-      await expect(page.locator(`${GRAPH}-swipe`)).toBeVisible({ visible: width === 390 });
-      // Node 1 is Background in the first frame: a dark label on the light canvas, a light one
-      // on the dark.
+      // The page never scrolls sideways, and a graph this small fits even a phone: it is drawn
+      // smaller instead of scrolling in its own box.
+      expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
+      await expect(page.locator(`${GRAPH}-scroll`)).toHaveAttribute("data-fit", "fit");
+      expect(await boxScrolls(page, `${GRAPH}-scroll`)).toBe(false);
+      await expect(page.locator(`${GRAPH}-swipe`)).toHaveCount(0);
+      // Every node is Background in the plain picture: a dark label on the light canvas, a
+      // light one on the dark.
       const ink = await graphNode(page, "1")
         .locator("text")
         .first()
@@ -495,3 +498,128 @@ for (const scheme of ["light", "dark"]) {
     });
   }
 }
+
+/** How far the page scrolls sideways (0 or less: it doesn't). */
+function pageOverflow(page) {
+  return page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+}
+
+/** True when the box `selector` names scrolls sideways. */
+function boxScrolls(page, selector) {
+  return page.locator(selector).evaluate((el) => el.scrollWidth > el.clientWidth);
+}
+
+/** How much the diagram `selector` names is scaled on screen (CSS px per viewBox unit). */
+function diagramScale(page, selector) {
+  return page
+    .locator(selector)
+    .evaluate((svg) => svg.getBoundingClientRect().width / svg.viewBox.baseVal.width);
+}
+
+/** Each node's (or literal's) drawn centre, by id, in viewBox units. */
+function nodeCentres(page, scope) {
+  return page.locator(`${scope} [data-node-id]`).evaluateAll((nodes) =>
+    Object.fromEntries(
+      nodes.map((node) => {
+        const body = node.querySelector("circle, rect");
+        const box = body.getBBox();
+        return [
+          node.getAttribute("data-node-id"),
+          `${box.x + box.width / 2},${box.y + box.height / 2}`,
+        ];
+      }),
+    ),
+  );
+}
+
+test("Graph: before Run the picture is the plain instance, with no step's states or annotations", async ({
+  page,
+}) => {
+  // The cut's first step already has sides and Committed edges; none of it shows before Run.
+  const capture = MAX_CUT_GRAPH_FRAMES;
+  await openPicture(page, "Max Cut", capture);
+  const graph = page.locator(`${GRAPH}-graph`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(graph.locator("[data-node-id]")).toHaveCount(capture.payload.nodes.length);
+  await expect(graph.locator("[data-edge-id]")).toHaveCount(capture.payload.edges.length);
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(graph.locator("[data-group]")).toHaveCount(0);
+  await expect(graph.locator("[data-phantom]")).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  // The weights are the instance's, so they show.
+  await expect(graph.locator("[data-weight]")).toHaveCount(capture.payload.edges.length);
+  // The key has nothing only a run draws: no sides, no Committed.
+  await expect(legendBody(page)).not.toContainText("S side");
+  await expect(legendBody(page)).not.toContainText("Committed");
+
+  // After Run, step 1 is drawn over the very same layout.
+  const before = await nodeCentres(page, `${GRAPH}-graph`);
+  await runToFrame(page, capture, 0);
+  await expect(page.locator(PICTURE).locator("[data-frame-index]")).toHaveAttribute(
+    "data-frame-index",
+    "0",
+  );
+  await expect(graphNode(page, "1")).toHaveAttribute("data-group", "0");
+  await expect(graphEdge(page, "1-2")).toHaveAttribute("data-state", "Committed");
+  expect(await nodeCentres(page, `${GRAPH}-graph`)).toEqual(before);
+});
+
+test("Graph: a tour's plain picture has no order badges, and step 1 keeps every node in place", async ({
+  page,
+}) => {
+  const capture = DIRECTED_HAMILTONIAN_GRAPH_FRAMES;
+  await openPicture(page, "Directed Hamiltonian Cycle", capture);
+  const graph = page.locator(`${GRAPH}-graph`);
+  await expect(graph.locator("[data-badge]")).toHaveCount(0);
+  await expect(graph.locator("[data-order]")).toHaveCount(0);
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  // Arrows are the graph's own, so they show.
+  await expect(graph.locator("[data-edge-id] polygon")).toHaveCount(capture.payload.edges.length);
+  const before = await nodeCentres(page, `${GRAPH}-graph`);
+  await runToFrame(page, capture, 0);
+  await expect(graph.locator('[data-badge="order"]')).toHaveCount(
+    new Set(capture.frames[0].order).size,
+  );
+  expect(await nodeCentres(page, `${GRAPH}-graph`)).toEqual(before);
+});
+
+test("Graph: a graph too big to fit a phone readably scrolls sideways with the swipe hint", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openPicture(page, "Clique", LARGE_GRAPH_FRAMES);
+  await expect(page.locator(`${GRAPH}-scroll`)).toHaveAttribute("data-fit", "scroll");
+  expect(await boxScrolls(page, `${GRAPH}-scroll`)).toBe(true);
+  await expect(page.locator(`${GRAPH}-swipe`)).toBeVisible();
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
+  // It stops shrinking where a 13-unit node label is 8 px on screen (graphPieces.js MIN_LABEL_PX).
+  expect(13 * (await diagramScale(page, `${GRAPH}-svg`))).toBeGreaterThanOrEqual(7.95);
+  // Keyboard focus still reaches a node out of view, and still traces it.
+  const far = graphNode(page, "9");
+  await far.focus();
+  await expect(far).toHaveAttribute("data-traced", "trace");
+
+  // On a wide screen the same graph fits.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator(`${GRAPH}-scroll`)).toHaveAttribute("data-fit", "fit");
+  await expect(page.locator(`${GRAPH}-swipe`)).toHaveCount(0);
+});
+
+test("Graph: tapping a node on a phone still traces it when the diagram is scaled to fit", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  await expect(page.locator(`${GRAPH}-scroll`)).toHaveAttribute("data-fit", "fit");
+  expect(await diagramScale(page, `${GRAPH}-svg`)).toBeLessThan(1);
+  // The node's hit area shrinks with it but stays a usable target (24 px, WCAG 2.2's minimum).
+  const target = await graphNode(page, "4").locator("[data-body]").boundingBox();
+  expect(target.width).toBeGreaterThanOrEqual(24);
+  // (A phone opens the Details panel as a sheet over the picture; close it first.)
+  await page.locator("#workbench-panel-close").click();
+  await graphNode(page, "4").click();
+  await expect(graphNode(page, "4")).toHaveAttribute("aria-pressed", "true");
+  await expect(graphEdge(page, "3-4")).toHaveAttribute("data-traced", "trace");
+});

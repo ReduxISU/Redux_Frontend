@@ -7,6 +7,7 @@
 // with no code here. Fading is by color (grayscale and a dashed line), never by opacity.
 
 import Box from "@mui/material/Box";
+import { useEffect, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import { NODE_RADIUS, outlineDistance } from "./graphLayout";
 import { pictureStateStyle } from "./pictureStates";
@@ -359,38 +360,84 @@ export function PictureToggle({ id, label, options, value, onChange }) {
   );
 }
 
-/** The phone hint under a diagram that is wider than the screen and scrolls sideways. */
+/** The hint under a diagram that is wider than its box and scrolls sideways. */
 export function SwipeHint({ id }) {
   return (
-    <Box
-      id={id}
-      sx={{
-        display: "none",
-        fontSize: "0.8125rem",
-        color: "text.secondary",
-        "@media (max-width: 700px)": { display: "block" },
-      }}
-    >
+    <Box id={id} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
       Swipe the diagram sideways to see all of it.
     </Box>
   );
 }
 
-/** The narrowest a diagram gets before it scrolls sideways (the design's phone rule). */
-export const DIAGRAM_MIN_WIDTH = 560;
+/**
+ * The smallest a diagram's node labels may be drawn on screen, in CSS px. A diagram scales down
+ * to fit the width it has (a phone, a narrow column beside an open panel) until its node labels
+ * would drop below this; past that it stops shrinking and scrolls sideways in its own box, with
+ * the swipe hint under it.
+ *
+ * 8 px, not the 10 px first aimed for: a 390 px phone leaves the picture about 315 px, and the
+ * layouts are about 480 to 680 units wide, so at 10 px even a four-node graph or a three-clause
+ * formula would still scroll. The labels are one to three bold-enough monospace characters inside
+ * an outlined node, which stay legible at 8 px; a Graph's 13-unit labels reach it at 62% of the
+ * viewBox's size, a clause graph's 12.5-unit ones at 64%.
+ */
+export const MIN_LABEL_PX = 8;
 
 /**
- * `sx` for the box a diagram scrolls in, so it scrolls from its left edge. Only on a phone does
- * the diagram keep DIAGRAM_MIN_WIDTH and scroll; a narrow picture column on a wider screen
- * (the workbench with a panel open) just draws it smaller.
+ * The narrowest (CSS px) a diagram may be drawn: its viewBox width scaled so that labels of
+ * `labelSize` viewBox units are MIN_LABEL_PX on screen.
  */
-export const diagramScrollSx = {
-  width: "100%",
-  maxWidth: "100%",
-  overflowX: "auto",
-  overflowY: "hidden",
-  "@media (max-width: 700px)": { "& > svg": { minWidth: DIAGRAM_MIN_WIDTH } },
-};
+export function fitMinWidth(viewBoxWidth, labelSize) {
+  return Math.ceil((viewBoxWidth * MIN_LABEL_PX) / labelSize);
+}
+
+/**
+ * The widest (CSS px) a diagram is drawn: 15% over its viewBox, so a small drawing isn't blown
+ * up on a wide screen, but at least 560 px, so a small drawing still fills a narrow column.
+ */
+export function diagramMaxWidth(viewBoxWidth) {
+  return Math.max(560, Math.round(viewBoxWidth * 1.15));
+}
+
+/**
+ * The box a diagram is drawn in. The diagram (a DiagramSvg given fitMinWidth() as its
+ * `minWidth`) fills the box's width and scales with it, so it fits a phone; only when that would
+ * take its labels under MIN_LABEL_PX does it keep its minimum width and scroll sideways here,
+ * from its left edge, and then the swipe hint shows under it. Scaling is the SVG's viewBox, so
+ * hit targets, focus rings and the hover / tap trace scale with the drawing. `data-fit` says
+ * which it is doing ("fit" or "scroll").
+ * @param {{id: string, hintId: string, children: import("react").ReactNode}} props
+ */
+export function DiagramScroll({ id, hintId, children }) {
+  const boxRef = useRef(null);
+  const [scrolls, setScrolls] = useState(false);
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return undefined;
+    // Measured, not worked out from widths, so it is whatever the browser actually laid out.
+    const measure = () => setScrolls(box.scrollWidth > box.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    // The diagram itself too: a new layout (Force / Circle) can change its minimum width.
+    if (box.firstElementChild) observer.observe(box.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <>
+      <Box
+        ref={boxRef}
+        id={id}
+        data-fit={scrolls ? "scroll" : "fit"}
+        sx={{ width: "100%", maxWidth: "100%", overflowX: "auto", overflowY: "hidden" }}
+      >
+        {children}
+      </Box>
+      {scrolls && <SwipeHint id={hintId} />}
+    </>
+  );
+}
 
 /** An ordinal for screen readers: 1st, 2nd, 3rd, 4th, 11th, 21st. */
 export function ordinal(n) {

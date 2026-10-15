@@ -1752,3 +1752,44 @@ export const DIRECTED_HAMILTONIAN_GRAPH_FRAMES = {
     },
   ],
 };
+
+/**
+ * Not captured: a Graph made here, big enough that it can't fit a phone at a readable size
+ * (16 nodes on a circle, each joined to the next two), so its diagram has to scroll sideways at
+ * 390 px. One frame, highlighting node 1. The shape and field names are the captures' own.
+ */
+export const LARGE_GRAPH_FRAMES = (() => {
+  const count = 16;
+  const ids = Array.from({ length: count }, (_, i) => String(i + 1));
+  const edges = [];
+  for (let i = 0; i < count; i += 1) {
+    for (const step of [1, 2]) {
+      const a = ids[i];
+      const b = ids[(i + step) % count];
+      edges.push({ id: `${a}-${b}`, a, b });
+    }
+  }
+  return {
+    type: "Graph",
+    payload: {
+      kind: "graph",
+      subtype: "undirected",
+      layout: "circle",
+      nodes: ids.map((id) => ({ id, label: id })),
+      edges,
+      shape: "subset",
+      rule: "clique",
+      k: 3,
+    },
+    frames: [
+      {
+        event: "Try",
+        caption: "Try 1.",
+        focus: ["1"],
+        nodes: { 1: { state: "ElementHighlight" } },
+        edges: {},
+        phantoms: [],
+      },
+    ],
+  };
+})();
