@@ -25,8 +25,6 @@ import { pictureFocusSx, pictureMotionSx } from "./pictureSx";
  * @param {number} [props.minWidth] Narrowest the diagram may get before its box scrolls.
  * @param {number} [props.maxWidth] Widest the diagram may get (it is centred in a wider box),
  *   so a small drawing isn't blown up on a wide screen.
- * @param {string} [props.maxHeight] Tallest the diagram may get (a CSS length); a wide box then
- *   centres the drawing in it.
  * @param {Object} [props.svgRef] A ref to the <svg> (DiagramZoom.js reads its screen position).
  * @param {Object} [props.extraSx] More `sx` for the <svg> (DiagramZoom.js's touch-action).
  * @param {import("react").ReactNode} props.children The diagram's elements.
@@ -39,7 +37,6 @@ export default function DiagramSvg({
   interactive,
   minWidth,
   maxWidth,
-  maxHeight,
   svgRef,
   extraSx,
   children,
@@ -61,7 +58,6 @@ export default function DiagramSvg({
         height: "auto",
         minWidth: minWidth ?? undefined,
         maxWidth: maxWidth ?? undefined,
-        maxHeight: maxHeight ?? undefined,
         mx: maxWidth ? "auto" : undefined,
         ...pictureMotionSx,
         "& [data-focusable]": { ...pictureFocusSx, cursor: "pointer" },
