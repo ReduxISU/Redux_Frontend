@@ -79,6 +79,18 @@ function stateNote(state) {
 }
 
 /**
+ * The Table's plain frame, for its default picture before Run (registry.js plainFrame()). Unlike
+ * the graphs, a table keeps its cell text in the frames, not the payload, so an empty frame
+ * would draw no rows at all. This keeps the first step's cell text and drops its row and cell
+ * states, its underlines and its arrows.
+ * @returns {{values: Array<Array<string|null>>}}
+ */
+export function tablePlainFrame(_payload, frames) {
+  const values = frames?.[0]?.values;
+  return { values: Array.isArray(values) ? values : [] };
+}
+
+/**
  * @param {Object} props See components/pictures/registry.js for the props every renderer gets.
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {string} props.name The visualization's name, for the caption.

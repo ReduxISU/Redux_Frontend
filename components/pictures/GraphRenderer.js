@@ -28,12 +28,13 @@ import DiagramSvg from "./DiagramSvg";
 import { layoutGraph, NODE_RADIUS, nodeWidth } from "./graphLayout";
 import {
   Badge,
-  DIAGRAM_MIN_WIDTH,
-  diagramScrollSx,
+  DiagramScroll,
+  diagramMaxWidth,
   edgeGeometry,
   edgeLook,
   FAINT_EDGE,
   FAINT_FILTER,
+  fitMinWidth,
   groupColors,
   NodeBody,
   NodeLabel,
@@ -41,11 +42,13 @@ import {
   ordinal,
   PictureToggle,
   Ring,
-  SwipeHint,
   TRACE_COLOR,
   WeightTag,
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+
+/** A node label's size, in viewBox units (NodeLabel's default). */
+const LABEL_SIZE = 13;
 
 const LAYOUTS = [
   { value: "force", label: "Force" },
@@ -173,13 +176,14 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
           onChange={(value) => setLayoutChoice(value)}
         />
       </Box>
-      <Box sx={diagramScrollSx} id={`${idPrefix}-scroll`}>
+      <DiagramScroll id={`${idPrefix}-scroll`} hintId={`${idPrefix}-swipe`}>
         <DiagramSvg
           id={`${idPrefix}-svg`}
           label={label}
           viewBox={`${layout.minX} ${layout.minY} ${layout.width} ${layout.height}`}
           interactive
-          maxWidth={Math.max(DIAGRAM_MIN_WIDTH, Math.round(layout.width * 1.15))}
+          minWidth={fitMinWidth(layout.width, LABEL_SIZE)}
+          maxWidth={diagramMaxWidth(layout.width)}
         >
           <g data-layer="edges">
             {graph.edges.map((edge, index) => {
@@ -382,8 +386,7 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
             })}
           </g>
         </DiagramSvg>
-      </Box>
-      <SwipeHint id={`${idPrefix}-swipe`} />
+      </DiagramScroll>
     </Box>
   );
 }
