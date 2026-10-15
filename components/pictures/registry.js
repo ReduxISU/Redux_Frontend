@@ -36,17 +36,20 @@
 // Legend all key off this table.
 
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
+import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
 export const PICTURE_RENDERERS = {
   Graph: GraphRenderer,
+  GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
 };
 
 /** Picture type -> the Legend entries for its annotations (see step 3 above). */
 const PICTURE_ANNOTATIONS = {
   Graph: graphAnnotations,
+  GroupedGraph: groupedGraphAnnotations,
 };
 
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
