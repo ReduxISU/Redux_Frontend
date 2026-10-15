@@ -20,19 +20,22 @@ import { useMemo, useState } from "react";
 import { LITERAL_RADIUS, layoutClauseGraph } from "./clauseGraphLayout";
 import DiagramSvg from "./DiagramSvg";
 import {
-  DIAGRAM_MIN_WIDTH,
-  diagramScrollSx,
+  DiagramScroll,
+  diagramMaxWidth,
   edgeLook,
   FAINT_EDGE,
   FAINT_FILTER,
+  fitMinWidth,
   MONO,
   NodeLabel,
   nodeLook,
   PictureToggle,
-  SwipeHint,
   TRACE_COLOR,
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+
+/** A literal's (and a variable chip's) label size, in viewBox units. */
+const LABEL_SIZE = 12.5;
 
 const EDGE_CHOICES = [
   { value: "complements", label: "Complement pairs" },
@@ -131,13 +134,14 @@ export default function GroupedGraphRenderer({ idPrefix, name, payload, frame })
           onChange={setEdgeChoice}
         />
       </Box>
-      <Box sx={diagramScrollSx} id={`${idPrefix}-scroll`}>
+      <DiagramScroll id={`${idPrefix}-scroll`} hintId={`${idPrefix}-swipe`}>
         <DiagramSvg
           id={`${idPrefix}-svg`}
           label={label}
           viewBox={`${layout.minX} ${layout.minY} ${layout.width} ${layout.height}`}
           interactive
-          maxWidth={Math.max(DIAGRAM_MIN_WIDTH, Math.round(layout.width * 1.15))}
+          minWidth={fitMinWidth(layout.width, LABEL_SIZE)}
+          maxWidth={diagramMaxWidth(layout.width)}
         >
           <g data-layer="clauses">
             {layout.groups.map((group, index) => {
@@ -280,7 +284,7 @@ export default function GroupedGraphRenderer({ idPrefix, name, payload, frame })
                     text={literal.label}
                     color={look.ink}
                     bold={look.bold}
-                    size={12.5}
+                    size={LABEL_SIZE}
                   />
                 </g>
               );
@@ -341,15 +345,14 @@ export default function GroupedGraphRenderer({ idPrefix, name, payload, frame })
                     text={`${variable.label} ${valueText}`}
                     color={ink}
                     bold={assigned && value}
-                    size={12.5}
+                    size={LABEL_SIZE}
                   />
                 </g>
               );
             })}
           </g>
         </DiagramSvg>
-      </Box>
-      <SwipeHint id={`${idPrefix}-swipe`} />
+      </DiagramScroll>
     </Box>
   );
 }

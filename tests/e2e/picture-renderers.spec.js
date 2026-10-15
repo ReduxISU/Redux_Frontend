@@ -14,7 +14,8 @@
 // #201: the Graph renderer, below the foundation's tests, on one small captured run per shape.
 // Before Run the picture is the plain instance (no step's states or annotations), and a
 // diagram scales down to fit a phone, scrolling only when its labels would get too small.
-// #202: the Grouped Graph renderer (SAT and 3SAT's clause graph), after it.
+// #202: the Grouped Graph renderer (SAT and 3SAT's clause graph), after it, with the same
+// plain picture before Run and the same fit to a phone's width.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
@@ -667,6 +668,27 @@ test("Grouped Graph: one cluster per clause, its literals, complement edges and 
   await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="clause"]`)).toHaveCount(0);
 });
 
+test("Grouped Graph: before Run the clause graph is the plain formula, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  // The first step already tries x1 (a ring, a T chip); none of it shows before Run.
+  const capture = SAT3_CLAUSE_GRAPH_FRAMES;
+  await openPicture(page, "3SAT", capture);
+  const graph = page.locator(`${CLAUSES}-graph`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(graph.locator("[data-node-id]")).toHaveCount(capture.payload.nodes.length);
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(graph.locator("[data-tried]")).toHaveCount(0);
+  await expect(graph.locator('[data-variable-id]:not([data-value="unassigned"])')).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(legendBody(page)).not.toContainText("Ring (the variable being tried)");
+
+  const before = await nodeCentres(page, `${CLAUSES}-graph`);
+  await runToFrame(page, capture, 0);
+  await expect(variableChip(page, "v:x1")).toHaveAttribute("data-tried", "true");
+  expect(await nodeCentres(page, `${CLAUSES}-graph`)).toEqual(before);
+});
+
 test("Grouped Graph: the steps show False literals, Covered clauses, Committed true literals and the answer", async ({
   page,
 }) => {
@@ -761,15 +783,14 @@ for (const scheme of ["light", "dark"]) {
       const svg = page.locator(`${CLAUSES}-svg`);
       await expect(svg).toBeVisible();
       const box = await svg.boundingBox();
-      expect(box.width).toBeGreaterThan(300);
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      );
-      expect(overflow).toBeLessThanOrEqual(0);
-      const scrolls = await page
-        .locator(`${CLAUSES}-scroll`)
-        .evaluate((el) => el.scrollWidth > el.clientWidth);
-      expect(scrolls).toBe(width === 390);
+      expect(box.width).toBeGreaterThan(280);
+      // A three-clause formula fits even a phone: scaled down, never scrolling sideways, and
+      // its labels no smaller than 8 px (graphPieces.js MIN_LABEL_PX).
+      expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
+      await expect(page.locator(`${CLAUSES}-scroll`)).toHaveAttribute("data-fit", "fit");
+      expect(await boxScrolls(page, `${CLAUSES}-scroll`)).toBe(false);
+      await expect(page.locator(`${CLAUSES}-swipe`)).toHaveCount(0);
+      expect(12.5 * (await diagramScale(page, `${CLAUSES}-svg`))).toBeGreaterThanOrEqual(7.95);
       // An unassigned variable's chip text follows the theme.
       const ink = await variableChip(page, "v:x3")
         .locator("text")
