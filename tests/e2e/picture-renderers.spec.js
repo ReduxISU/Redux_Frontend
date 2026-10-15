@@ -1135,3 +1135,30 @@ test("Grouped Graph: the clause graph zooms like a graph, and a tap still traces
   await page.locator(`${CLAUSES}-zoom-reset`).click();
   await expect(zoom).toHaveAttribute("data-zoom", "1.00");
 });
+
+for (const [width, height] of [
+  [1280, 800],
+  [1920, 1080],
+]) {
+  test(`Grouped Graph: at ${width}x${height} the clause graph fills the pane and, zoomed, isn't clipped to a column`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+    const svg = `${CLAUSES}-svg`;
+    await expect(page.locator(svg)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const sizes = await areaSizes(page, svg);
+        return Math.abs(sizes.width - sizes.content);
+      })
+      .toBeLessThanOrEqual(2);
+    await scrollPictureToTop(page);
+    const sizes = await areaSizes(page, svg);
+    expect(sizes.bottom).toBeLessThanOrEqual(sizes.viewport);
+    await page.locator(`${CLAUSES}-zoom-in`).click();
+    await page.locator(`${CLAUSES}-zoom-in`).click();
+    const zoomed = await areaSizes(page, svg);
+    expect(zoomed.viewAspect).toBeCloseTo(zoomed.width / zoomed.height, 2);
+  });
+}

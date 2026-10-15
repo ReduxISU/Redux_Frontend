@@ -21,7 +21,6 @@ import { useMemo, useState } from "react";
 import { LITERAL_RADIUS, layoutClauseGraph } from "./clauseGraphLayout";
 import DiagramZoom from "./DiagramZoom";
 import {
-  diagramMaxWidth,
   edgeLook,
   FAINT_EDGE,
   FAINT_FILTER,
@@ -127,8 +126,7 @@ export default function GroupedGraphRenderer({ idPrefix, name, payload, frame })
       <DiagramZoom
         idPrefix={idPrefix}
         label={label}
-        box={layout}
-        maxWidth={diagramMaxWidth(layout.width)}
+        drawing={layout}
         resetOn={[payload]}
         toolbar={
           <PictureToggle
