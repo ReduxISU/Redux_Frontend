@@ -80,12 +80,17 @@ function stateNote(state) {
 
 /**
  * The Table's plain frame, for its default picture before Run (registry.js plainFrame()). Unlike
- * the graphs, a table keeps its cell text in the frames, not the payload, so an empty frame
- * would draw no rows at all. This keeps the first step's cell text and drops its row and cell
- * states, its underlines and its arrows.
+ * the graphs, a table keeps its cell text in the frames, so an empty frame would draw no rows at
+ * all. The backend sends the instance's base picture as `payload.blank` (its cells with nothing
+ * worked out, `values[i][j]` as in a frame, no states): that is drawn when present, so no
+ * solver's work shows before Run (an ILP's first try and its totals, say). A backend older than
+ * `blank` gets the first step's cell text instead, without its row and cell states, underlines
+ * or arrows.
  * @returns {{values: Array<Array<string|null>>}}
  */
-export function tablePlainFrame(_payload, frames) {
+export function tablePlainFrame(payload, frames) {
+  const blank = payload?.blank?.values;
+  if (Array.isArray(blank)) return { values: blank };
   const values = frames?.[0]?.values;
   return { values: Array.isArray(values) ? values : [] };
 }
@@ -96,7 +101,7 @@ export function tablePlainFrame(_payload, frames) {
  * @param {string} props.name The visualization's name, for the caption.
  * @param {{shape?: string, columns: Array<{id: string, label: string, key?: string}>,
  *   rows: Array<{id: string, label?: string}>, title?: string, rowAxis?: string,
- *   columnAxis?: string}} props.payload
+ *   columnAxis?: string, blank?: {values: Array<Array<string|null>>}}} props.payload
  * @param {{values?: Array<Array<string|null>>, rows?: Object, cells?: Object,
  *   changed?: string[], arrows?: Array<{from: string, to: string, best: boolean}>}} props.frame
  */
