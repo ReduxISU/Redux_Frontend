@@ -206,6 +206,8 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  * @param {Object[]} props.legendFrames Every frame on screen, for the Legend.
  * @param {Set<string>|null} [props.legendStates] The picture states a format=frames picture
  *   uses (#199), for the Legend.
+ * @param {Array<{key: string, text: string, swatch: Object}>|null} [props.legendAnnotations]
+ *   What a format=frames picture draws besides states (#201), for the Legend.
  */
 export default function VisualizationPane({
   idPrefix,
@@ -219,6 +221,7 @@ export default function VisualizationPane({
   note,
   legendFrames,
   legendStates,
+  legendAnnotations,
 }) {
   const basis = target && stack ? "100%" : "380px";
   const noteColor =
@@ -365,7 +368,12 @@ export default function VisualizationPane({
       )}
 
       {(legendFrames.some(Boolean) || legendStates) && (
-        <Legend idPrefix={`${idPrefix}-legend`} frames={legendFrames} states={legendStates} />
+        <Legend
+          idPrefix={`${idPrefix}-legend`}
+          frames={legendFrames}
+          states={legendStates}
+          annotations={legendAnnotations}
+        />
       )}
     </Box>
   );

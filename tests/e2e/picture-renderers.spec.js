@@ -10,10 +10,22 @@
 // answered here from payloads captured off the live API (tests/e2e/picture-payloads.js), so
 // CI needs no backend that serves format=frames. Catalog answers are only edited to set or
 // remove a visualization's `pictureType`, which decides whether the frames request is made.
+//
+// #201: the Graph renderer, below the foundation's tests, on one small captured run per shape.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
-import { DFA_AUTOMATON_FRAMES, DFA_AUTOMATON_LIST, DFA_TABLE_FRAMES } from "./picture-payloads";
+import {
+  CLIQUE_COVER_GRAPH_FRAMES,
+  CLIQUE_FAILED_GRAPH_FRAMES,
+  CLIQUE_GRAPH_FRAMES,
+  DFA_AUTOMATON_FRAMES,
+  DFA_AUTOMATON_LIST,
+  DFA_TABLE_FRAMES,
+  DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
+  MAX_CUT_GRAPH_FRAMES,
+  STEINER_GRAPH_FRAMES,
+} from "./picture-payloads";
 
 const PROBLEM = "DFA Acceptance";
 const TABLE_VIZ = "DFATableVisualization";
@@ -203,3 +215,283 @@ test("Committed draws apart from Solution, dashed, and has its own Legend entry"
   await expect(legend).toContainText("Committed (kept so far)");
   await expect(legend).toContainText("Solution (answer)");
 });
+
+// --- #201: the Graph renderer ---------------------------------------------------------------
+//
+// Each Graph problem's page is opened with every picture request answered by one captured run
+// (tests/e2e/picture-payloads.js), so the default picture and the run are both that capture.
+// The catalog (and so the problem's own visualization and solvers) comes from the real backend
+// as everywhere else; the capture decides what is drawn.
+
+const GRAPH = "#workbench-source-frames-graph";
+
+/** Answers every visualize request with `capture`, and every solve request with a stub. */
+async function answerWith(page, capture) {
+  await page.route(VISUALIZE_REQUEST, (route) => route.fulfill({ json: capture }));
+  await page.route(SOLVE_REQUEST, (route) => route.fulfill({ json: "stub" }));
+}
+
+/** Opens `problem` with its pictures answered by `capture`, and waits for the picture. */
+async function openPicture(page, problem, capture) {
+  await answerWith(page, capture);
+  await gotoProblemDetail(page, problem, { expect });
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", capture.type, {
+    timeout: 20_000,
+  });
+}
+
+/** Presses Run and steps forward to frame `index` (0-based). */
+async function runToFrame(page, capture, index) {
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-steps-position")).toHaveText(
+    `Step 1 of ${capture.frames.length}`,
+  );
+  for (let step = 0; step < index; step += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+}
+
+const graphNode = (page, id) => page.locator(`${GRAPH}-graph [data-node-id="${id}"]`);
+const graphEdge = (page, id) => page.locator(`${GRAPH}-graph [data-edge-id="${id}"]`);
+const legendBody = (page) => page.locator("#workbench-legend-body");
+
+test("Graph: the subset shape draws Committed apart from the answer, and every node is labelled", async ({
+  page,
+}) => {
+  const capture = CLIQUE_GRAPH_FRAMES;
+  await openPicture(page, "Clique", capture);
+  await expect(page.locator(`${GRAPH}-graph`)).toHaveAttribute("data-graph-shape", "subset");
+  await expect(page.locator(`${GRAPH}-graph`)).toHaveAttribute("data-graph-layout", "force");
+  const nodes = page.locator(`${GRAPH}-graph [data-node-id]`);
+  await expect(nodes).toHaveCount(capture.payload.nodes.length);
+  await expect(page.locator(`${GRAPH}-graph [data-edge-id]`)).toHaveCount(
+    capture.payload.edges.length,
+  );
+  for (const node of await nodes.all()) {
+    await expect(node).toHaveAttribute("aria-label", /^Node \S+, .*(joined to|no edges)/);
+    await expect(node).toHaveAttribute("tabindex", "0");
+  }
+
+  // Frame 3: 1 and the edge 1-2 are kept so far, 2 is the node being added.
+  await runToFrame(page, capture, 2);
+  await expect(graphNode(page, "1")).toHaveAttribute("data-state", "Committed");
+  await expect(graphNode(page, "2")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(graphEdge(page, "1-2")).toHaveAttribute("data-state", "Committed");
+  await expect(graphNode(page, "1")).toHaveAttribute("aria-label", /Committed \(kept so far\)/);
+  const committedBody = graphNode(page, "1").locator("[data-body]");
+  await expect(committedBody).toHaveAttribute("stroke-dasharray", "6 3");
+  await expect(graphEdge(page, "1-2").locator("path")).toHaveAttribute("stroke-dasharray", "6 3");
+  const kept = await committedBody.evaluate((el) => getComputedStyle(el).fill);
+
+  // The last frame: the confirmed answer, drawn solid and in another green.
+  await page.locator("#workbench-steps-next").click();
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(CAPTION)).toHaveAttribute("data-event", "Done");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  for (const id of ["1", "2", "3"]) {
+    await expect(graphNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(graphNode(page, "4")).toHaveAttribute("data-state", "Background");
+  const answerBody = graphNode(page, "1").locator("[data-body]");
+  await expect(answerBody).not.toHaveAttribute("stroke-dasharray", /./);
+  expect(await answerBody.evaluate((el) => getComputedStyle(el).fill)).not.toBe(kept);
+
+  await expect(legendBody(page)).toContainText("Committed (kept so far)");
+  await expect(legendBody(page)).toContainText("Solution (answer)");
+  await expect(legendBody(page)).toContainText("Rejected (failed or ruled out)");
+});
+
+test("Graph: a failed run shows missing edges as dashed Rejected phantoms and ends on no", async ({
+  page,
+}) => {
+  const capture = CLIQUE_FAILED_GRAPH_FRAMES;
+  await openPicture(page, "Clique", capture);
+  await runToFrame(page, capture, 0);
+  const phantom = page.locator(`${GRAPH}-graph [data-phantom="1|3"]`);
+  await expect(phantom).toHaveAttribute("data-state", "Rejected");
+  await expect(phantom.locator("path")).toHaveAttribute("stroke-dasharray", "6 5");
+  await expect(graphNode(page, "2")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(legendBody(page)).toContainText("Missing edge");
+
+  for (let step = 1; step < capture.frames.length; step += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(page.locator(`${GRAPH}-graph [data-phantom]`)).toHaveCount(0);
+  // A run that found nothing never turns anything green.
+  await expect(page.locator(`${GRAPH}-graph [data-state="Solution"]`)).toHaveCount(0);
+});
+
+test("Graph: Steiner terminals get a double outline and a Legend entry", async ({ page }) => {
+  await openPicture(page, "Steiner Tree", STEINER_GRAPH_FRAMES);
+  await expect(page.locator(`${GRAPH}-graph`)).toHaveAttribute("data-graph-shape", "edges");
+  for (const id of ["1", "3"]) {
+    await expect(graphNode(page, id)).toHaveAttribute("data-terminal", "true");
+    await expect(graphNode(page, id)).toHaveAttribute("aria-label", /terminal/);
+  }
+  await expect(graphNode(page, "2")).not.toHaveAttribute("data-terminal", /./);
+  await expect(legendBody(page)).toContainText("Terminal");
+});
+
+test("Graph: the cut shape colors the two sides, shows the weights and keeps the crossing edges", async ({
+  page,
+}) => {
+  const capture = MAX_CUT_GRAPH_FRAMES;
+  await openPicture(page, "Max Cut", capture);
+  await expect(page.locator(`${GRAPH}-graph`)).toHaveAttribute("data-graph-shape", "cut");
+  await expect(page.locator(`${GRAPH}-graph [data-weight]`)).toHaveCount(
+    capture.payload.edges.length,
+  );
+
+  const last = capture.frames.length - 1;
+  await runToFrame(page, capture, last);
+  const fills = {};
+  for (const [id, side] of Object.entries(capture.frames[last].groups)) {
+    await expect(graphNode(page, id)).toHaveAttribute("data-group", String(side));
+    await expect(graphNode(page, id)).toHaveAttribute(
+      "aria-label",
+      side === 0 ? /S side/ : /T side/,
+    );
+    fills[side] = await graphNode(page, id)
+      .locator("[data-body]")
+      .evaluate((el) => getComputedStyle(el).fill);
+  }
+  expect(fills[0]).not.toBe(fills[1]);
+  for (const [id, entry] of Object.entries(capture.frames[last].edges)) {
+    await expect(graphEdge(page, id)).toHaveAttribute("data-state", entry.state);
+  }
+  await expect(legendBody(page)).toContainText("S side");
+  await expect(legendBody(page)).toContainText("T side");
+});
+
+test("Graph: the groups shape keeps each node's group color under its state, with missing edges", async ({
+  page,
+}) => {
+  const capture = CLIQUE_COVER_GRAPH_FRAMES;
+  await openPicture(page, "Clique Cover", capture);
+  await runToFrame(page, capture, 1);
+  // Node 1 is in group 1 on its own, nodes 2 to 4 in group 0, where 2 and 3 aren't joined.
+  await expect(graphNode(page, "1")).toHaveAttribute("data-group", "1");
+  await expect(graphNode(page, "3")).toHaveAttribute("data-group", "0");
+  await expect(graphNode(page, "3")).toHaveAttribute("data-state", "Rejected");
+  const body = (id) =>
+    graphNode(page, id)
+      .locator("[data-body]")
+      .evaluate((el) => ({ fill: getComputedStyle(el).fill, line: getComputedStyle(el).stroke }));
+  const clashing = await body("3");
+  const calm = await body("4");
+  // The same group, so the same fill; the clash shows in the outline.
+  expect(clashing.fill).toBe(calm.fill);
+  expect(clashing.line).not.toBe(calm.line);
+  await expect(page.locator(`${GRAPH}-graph [data-phantom="2|3"]`)).toHaveCount(1);
+  await expect(legendBody(page)).toContainText("Clique 1");
+  await expect(legendBody(page)).toContainText("Missing edge");
+});
+
+test("Graph: a directed tour draws arrows, order badges and both edges of an opposite pair", async ({
+  page,
+}) => {
+  const capture = DIRECTED_HAMILTONIAN_GRAPH_FRAMES;
+  await openPicture(page, "Directed Hamiltonian Cycle", capture);
+  await expect(page.locator(`${GRAPH}-graph`)).toHaveAttribute("data-graph-layout", "circle");
+  await expect(page.locator(`${GRAPH}-graph [data-edge-id] polygon`)).toHaveCount(
+    capture.payload.edges.length,
+  );
+  // 1>2 and 2>1 are bowed apart, so neither hides the other.
+  expect(await graphEdge(page, "1>2").locator("path").getAttribute("d")).toContain("Q");
+  expect(await graphEdge(page, "2>1").locator("path").getAttribute("d")).toContain("Q");
+
+  const last = capture.frames.length - 1;
+  await runToFrame(page, capture, last);
+  const order = capture.frames[last].order;
+  for (const [index, id] of order.slice(0, -1).entries()) {
+    await expect(graphNode(page, id)).toHaveAttribute("data-order", String(index + 1));
+  }
+  await expect(page.locator(`${GRAPH}-graph [data-badge="order"]`)).toHaveCount(order.length - 1);
+  await expect(legendBody(page)).toContainText("Order (position in the tour)");
+  await expect(legendBody(page)).toContainText("Arrow");
+});
+
+test("Graph: hovering, focusing or tapping a node traces its edges and fades the rest by color", async ({
+  page,
+}) => {
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  await graphNode(page, "4").hover();
+  await expect(graphEdge(page, "3-4")).toHaveAttribute("data-traced", "trace");
+  await expect(graphEdge(page, "1-2")).toHaveAttribute("data-traced", "faint");
+  await expect(graphNode(page, "1")).toHaveAttribute("data-traced", "faint");
+  await expect(graphNode(page, "3")).toHaveAttribute("data-traced", "trace");
+  // Faded by color, never by opacity.
+  const faded = await graphNode(page, "1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+
+  await page.mouse.move(0, 0);
+  await expect(graphEdge(page, "1-2")).not.toHaveAttribute("data-traced", /./);
+
+  // Keyboard: focus traces too, and Enter pins the trace.
+  await graphNode(page, "1").focus();
+  await expect(graphEdge(page, "1-2")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(graphNode(page, "1")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Graph: the layout is deterministic and the Force / Circle switch overrides it", async ({
+  page,
+}) => {
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const where = () =>
+    graphNode(page, "1")
+      .locator("[data-body]")
+      .evaluate((el) => [el.getAttribute("cx"), el.getAttribute("cy")].join(","));
+  const first = await where();
+  await page.reload();
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Graph", {
+    timeout: 20_000,
+  });
+  expect(await where()).toBe(first);
+
+  await page.locator(`${GRAPH}-layout-circle`).click();
+  await expect(page.locator(`${GRAPH}-graph`)).toHaveAttribute("data-graph-layout", "circle");
+  await expect(page.locator(`${GRAPH}-layout-circle`)).toHaveAttribute("aria-pressed", "true");
+  expect(await where()).not.toBe(first);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Graph: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+      const svg = page.locator(`${GRAPH}-svg`);
+      await expect(svg).toBeVisible();
+      const box = await svg.boundingBox();
+      expect(box.width).toBeGreaterThan(300);
+      expect(box.height).toBeGreaterThan(150);
+      // The page never scrolls sideways; on a phone the diagram scrolls in its own box.
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+      const scrolls = await page
+        .locator(`${GRAPH}-scroll`)
+        .evaluate((el) => el.scrollWidth > el.clientWidth);
+      expect(scrolls).toBe(width === 390);
+      await expect(page.locator(`${GRAPH}-swipe`)).toBeVisible({ visible: width === 390 });
+      // Node 1 is Background in the first frame: a dark label on the light canvas, a light one
+      // on the dark.
+      const ink = await graphNode(page, "1")
+        .locator("text")
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}

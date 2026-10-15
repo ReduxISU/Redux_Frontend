@@ -175,6 +175,19 @@ function pairsFor(t) {
     add(`state ${name}: ink on its fill`, state.ink, state.fill, TEXT);
   }
   add("state cell text (primary) on canvas", t.text.primary, s.input, TEXT);
+  // #201: the Graph and Grouped Graph pictures. Plain edges and the hover trace stand on the
+  // canvas; an order badge is the canvas color on the primary text color; group colors (cut
+  // sides, color classes, clique-cover groups) carry their label on the fill, and their outline
+  // stands on the canvas and, as a Legend swatch, on the pane.
+  add("graph edge on canvas (input)", v.edge, s.input, UI);
+  add("graph hover trace on canvas (input)", t.brand.line, s.input, UI);
+  add("graph order badge text on badge", s.input, t.text.primary, TEXT);
+  add("graph order badge on canvas", t.text.primary, s.input, UI);
+  for (const [name, group] of Object.entries(v.group)) {
+    add(`group ${name}: label on its fill`, group.ink, group.fill, TEXT);
+    add(`group ${name}: line on canvas (input)`, group.line, s.input, UI);
+    add(`group ${name}: line on surface`, group.line, s.main, UI);
+  }
   add("table header text on raised", t.text.primary, s.raised, TEXT);
   return pairs;
 }

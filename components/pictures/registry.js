@@ -19,17 +19,37 @@
 //      HTML when the picture is text, as the Table is), take every color from
 //      pictureStates.js's pictureStateStyle(), and give every focusable piece an aria-label.
 //   2. Add it to PICTURE_RENDERERS below under the exact `type` Redux sends.
-//   3. Capture a payload from the live API into tests/e2e/picture-payloads.js and cover it in
+//   3. If the picture draws annotations that are not states (group colors, order badges,
+//      missing edges), export a function (payload, frames) => [{key, text, swatch}] from the
+//      renderer's file and add it to PICTURE_ANNOTATIONS below, so the Legend lists them
+//      (swatch kinds: components/workbench/Legend.js).
+//   4. Capture a payload from the live API into tests/e2e/picture-payloads.js and cover it in
 //      tests/e2e/picture-renderers.spec.js.
 // Nothing else changes: the request, the fallback, the step controls, the caption line and the
 // Legend all key off this table.
 
+import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import TableRenderer from "./TableRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
 export const PICTURE_RENDERERS = {
+  Graph: GraphRenderer,
   Table: TableRenderer,
 };
+
+/** Picture type -> the Legend entries for its annotations (see step 3 above). */
+const PICTURE_ANNOTATIONS = {
+  Graph: graphAnnotations,
+};
+
+/**
+ * The Legend entries for what a picture draws besides its states, over a run's frames.
+ * @returns {Array<{key: string, text: string, swatch: Object}>}
+ */
+export function pictureAnnotations(type, payload, frames) {
+  const annotate = Object.hasOwn(PICTURE_ANNOTATIONS, type) ? PICTURE_ANNOTATIONS[type] : null;
+  return annotate ? annotate(payload, frames) : [];
+}
 
 /** True when this site draws `type` from a format=frames response. */
 export function hasPictureRenderer(type) {

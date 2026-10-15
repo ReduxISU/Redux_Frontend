@@ -23,9 +23,19 @@ import { pictureFocusSx, pictureMotionSx } from "./pictureSx";
  * @param {string} props.viewBox The SVG viewBox ("0 0 width height").
  * @param {boolean} [props.interactive] True when pieces inside can be focused.
  * @param {number} [props.minWidth] Narrowest the diagram may get before its box scrolls.
+ * @param {number} [props.maxWidth] Widest the diagram may get (it is centred in a wider box),
+ *   so a small drawing isn't blown up on a wide screen.
  * @param {import("react").ReactNode} props.children The diagram's elements.
  */
-export default function DiagramSvg({ id, label, viewBox, interactive, minWidth, children }) {
+export default function DiagramSvg({
+  id,
+  label,
+  viewBox,
+  interactive,
+  minWidth,
+  maxWidth,
+  children,
+}) {
   return (
     <Box
       component="svg"
@@ -39,6 +49,8 @@ export default function DiagramSvg({ id, label, viewBox, interactive, minWidth, 
         width: "100%",
         height: "auto",
         minWidth: minWidth ?? undefined,
+        maxWidth: maxWidth ?? undefined,
+        mx: maxWidth ? "auto" : undefined,
         ...pictureMotionSx,
         "& [data-focusable]": { ...pictureFocusSx, cursor: "pointer" },
       }}
