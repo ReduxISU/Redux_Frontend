@@ -4,8 +4,8 @@
 // (local/viz-integration) on 2026-10-14, so tests/e2e/picture-renderers.spec.js can answer the
 // picture requests itself and CI needs no backend that serves format=frames.
 // DFA Acceptance: the problem's default instance, 3 frames with the DFASolver. The Graph
-// pictures (#201) and the Bipartite Graph pictures (#203) follow at the end, each with its
-// instance and solver.
+// pictures (#201), the Bipartite Graph pictures (#203) and the Layered Graph pictures (#205)
+// follow at the end, each with its instance and solver.
 
 /** format=frames for DFATableVisualization: picture type Table (has a renderer). */
 export const DFA_TABLE_FRAMES = {
@@ -3506,6 +3506,2310 @@ export const SAT3_FACTOR_GRAPH_FRAMES = {
         "v:x1": true,
         "v:x2": true,
         "v:x3": false,
+      },
+      ok: true,
+    },
+  ],
+};
+
+// #205: Layered Graph pictures (Topological Sort, Feedback Arc Set, Feedback Node Set, Strongly
+// Connected Components, Single Source and Single Pair Shortest Path), captured the same way on
+// 2026-10-15 from the published local build of local/viz-integration.
+
+/** format=frames, Topological Sort, the problem default ({1,2,3,4,5,6},{(1,2),(1,3),(2,4),(3,4),(4,5),(3,6)}), KahnsAlgorithm: order shape; ready nodes Covered, placed nodes Committed with order badges, then the answer. */
+export const TOPOLOGICAL_SORT_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "order",
+    rule: "topologicalSort",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 1,
+        row: 1,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "6",
+        label: "6",
+        layer: 2,
+        row: 1,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "1>3",
+        a: "1",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "2>4",
+        a: "2",
+        b: "4",
+        back: false,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+      },
+      {
+        id: "3>6",
+        a: "3",
+        b: "6",
+        back: false,
+      },
+    ],
+    layers: [["1"], ["2", "3"], ["4", "6"], ["5"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Ready to place (no incoming edges): 1.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      order: [],
+    },
+    {
+      event: "Accept",
+      caption: "Place 1 at position 1. That frees 2 and 3. Ready: 2 and 3.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Covered",
+        },
+        "1>3": {
+          state: "Covered",
+        },
+      },
+      order: ["1"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 2 at position 2. Ready: 3.",
+      focus: ["2"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Covered",
+        },
+        "2>4": {
+          state: "Covered",
+        },
+      },
+      order: ["1", "2"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 3 at position 3. That frees 4 and 6. Ready: 4 and 6.",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Committed",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+        6: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "Covered",
+        },
+        "3>4": {
+          state: "Covered",
+        },
+        "3>6": {
+          state: "Covered",
+        },
+      },
+      order: ["1", "2", "3"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 4 at position 4. That frees 5. Ready: 6 and 5.",
+      focus: ["4"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Committed",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+        6: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "Committed",
+        },
+        "3>4": {
+          state: "Committed",
+        },
+        "3>6": {
+          state: "Covered",
+        },
+        "4>5": {
+          state: "Covered",
+        },
+      },
+      order: ["1", "2", "3", "4"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 6 at position 5. Ready: 5.",
+      focus: ["6"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Committed",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "Committed",
+        },
+        5: {
+          state: "Covered",
+        },
+        6: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "Committed",
+        },
+        "3>4": {
+          state: "Committed",
+        },
+        "3>6": {
+          state: "Committed",
+        },
+        "4>5": {
+          state: "Covered",
+        },
+      },
+      order: ["1", "2", "3", "4", "6"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 5 at position 6.",
+      focus: ["5"],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Solution",
+        },
+        5: {
+          state: "ElementHighlight",
+        },
+        6: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>4": {
+          state: "Solution",
+        },
+        "3>6": {
+          state: "Solution",
+        },
+        "4>5": {
+          state: "Solution",
+        },
+      },
+      order: ["1", "2", "3", "4", "6", "5"],
+    },
+    {
+      event: "Done",
+      caption: "Every node is placed and every edge points forward: 1, 2, 3, 4, 6, 5.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Solution",
+        },
+        5: {
+          state: "Solution",
+        },
+        6: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>4": {
+          state: "Solution",
+        },
+        "3>6": {
+          state: "Solution",
+        },
+        "4>5": {
+          state: "Solution",
+        },
+      },
+      order: ["1", "2", "3", "4", "6", "5"],
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Topological Sort, ({1,2,3,4,5},{(1,2),(2,3),(3,4),(4,2),(3,5)}) (a cycle 2, 3, 4), KahnsAlgorithm: the back edge 4>2 under the rows, the stuck nodes and the cycle Rejected, a Done that is not ok. */
+export const TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "order",
+    rule: "topologicalSort",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 3,
+        row: 1,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+      {
+        id: "4>2",
+        a: "4",
+        b: "2",
+        back: true,
+      },
+      {
+        id: "3>5",
+        a: "3",
+        b: "5",
+        back: false,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"], ["4", "5"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Ready to place (no incoming edges): 1.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      order: [],
+    },
+    {
+      event: "Accept",
+      caption: "Place 1 at position 1.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Covered",
+        },
+      },
+      order: ["1"],
+    },
+    {
+      event: "Reject",
+      caption: "2, 3, 4 and 5 never lose their last incoming edge, because of a cycle.",
+      focus: ["2", "3", "4", "5"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Rejected",
+        },
+        3: {
+          state: "Rejected",
+        },
+        4: {
+          state: "Rejected",
+        },
+        5: {
+          state: "Rejected",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Covered",
+        },
+      },
+      order: ["1"],
+    },
+    {
+      event: "Done",
+      caption: "The graph has a cycle, so no topological order exists.",
+      focus: [],
+      nodes: {
+        2: {
+          state: "Rejected",
+        },
+        3: {
+          state: "Rejected",
+        },
+        4: {
+          state: "Rejected",
+        },
+        5: {
+          state: "Rejected",
+        },
+      },
+      edges: {
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>4": {
+          state: "Rejected",
+        },
+        "4>2": {
+          state: "Rejected",
+        },
+      },
+      order: [],
+      ok: false,
+    },
+  ],
+};
+
+/** format=frames, Feedback Arc Set, the problem default (({1,2,3,4,5},{(1,2),(2,3),(3,1),(4,5),(5,2),(3,4)}),1), ArcSetBruteForce: removedSet shape; surviving cycles Rejected, the removed edge dashed. */
+export const ARC_SET_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "removedSet",
+    rule: "feedbackArcSet",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 4,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "3>1",
+        a: "3",
+        b: "1",
+        back: true,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+      },
+      {
+        id: "5>2",
+        a: "5",
+        b: "2",
+        back: true,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"], ["4"], ["5"]],
+    k: 1,
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try removing nothing: the cycle 1 → 2 → 3 → 1 is there.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1>2": {
+          state: "Rejected",
+        },
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>1": {
+          state: "Rejected",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption: "Try removing {(1,2)}: the cycle 2 → 3 → 4 → 5 → 2 is still there.",
+      focus: ["1>2"],
+      nodes: {},
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>4": {
+          state: "Rejected",
+        },
+        "4>5": {
+          state: "Rejected",
+        },
+        "5>2": {
+          state: "Rejected",
+        },
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Try removing {(2,3)}. No cycle is left.",
+      focus: ["2>3"],
+      nodes: {},
+      edges: {
+        "2>3": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Done",
+      caption: "Removing {(2,3)} leaves no cycle, within K = 1. Found after 3 tries.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "2>3": {
+          state: "Solution",
+        },
+      },
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Feedback Node Set, the problem default (({1,2,3,4,5},{(1,2),(2,3),(3,1),(4,5),(5,2),(3,4)}),1), NodeSetBruteForce: removedSet shape; a removed node's edges Untraveled. */
+export const NODE_SET_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "removedSet",
+    rule: "feedbackNodeSet",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 4,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "3>1",
+        a: "3",
+        b: "1",
+        back: true,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+      },
+      {
+        id: "5>2",
+        a: "5",
+        b: "2",
+        back: true,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"], ["4"], ["5"]],
+    k: 1,
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try removing nothing: the cycle 1 → 2 → 3 → 1 is there.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1>2": {
+          state: "Rejected",
+        },
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>1": {
+          state: "Rejected",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption: "Try removing {1}: the cycle 2 → 3 → 4 → 5 → 2 is still there.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Untraveled",
+        },
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>1": {
+          state: "Untraveled",
+        },
+        "3>4": {
+          state: "Rejected",
+        },
+        "4>5": {
+          state: "Rejected",
+        },
+        "5>2": {
+          state: "Rejected",
+        },
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Try removing {2}. No cycle is left.",
+      focus: ["2"],
+      nodes: {
+        2: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Untraveled",
+        },
+        "2>3": {
+          state: "Untraveled",
+        },
+        "5>2": {
+          state: "Untraveled",
+        },
+      },
+    },
+    {
+      event: "Done",
+      caption: "Removing {2} leaves no cycle, within K = 1. Found after 3 tries.",
+      focus: [],
+      nodes: {
+        2: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Untraveled",
+        },
+        "2>3": {
+          state: "Untraveled",
+        },
+        "5>2": {
+          state: "Untraveled",
+        },
+      },
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Strongly Connected Components, the problem default ({1,2,3,4,5},{(1,2),(2,3),(3,1),(3,4),(4,5),(5,4)}), KosarajuSolver: groups shape; pass 1 Covered with finish numbers, pass 2 component colors. */
+export const SCC_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "groups",
+    rule: "stronglyConnectedComponents",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 4,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "3>1",
+        a: "3",
+        b: "1",
+        back: true,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+      },
+      {
+        id: "5>4",
+        a: "5",
+        b: "4",
+        back: true,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"], ["4"], ["5"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Pass 1: visit 1.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: visit 2.",
+      focus: ["2"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: visit 3.",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: visit 4.",
+      focus: ["4"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: visit 5.",
+      focus: ["5"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 5 is finished (number 1).",
+      focus: ["5"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5"],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 4 is finished (number 2).",
+      focus: ["4"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5", "4"],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 3 is finished (number 3).",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5", "4", "3"],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 2 is finished (number 4).",
+      focus: ["2"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5", "4", "3", "2"],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 1 is finished (number 5).",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: 1 has the highest finish number left, so it starts component 1.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {
+        1: 0,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: follow the edge 3 → 1 backward, so 3 joins component 1.",
+      focus: ["3", "3>1"],
+      nodes: {
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "3>1": {
+          state: "ElementHighlight",
+        },
+      },
+      groups: {
+        1: 0,
+        3: 0,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: follow the edge 2 → 3 backward, so 2 joins component 1.",
+      focus: ["2", "2>3"],
+      nodes: {
+        2: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "2>3": {
+          state: "ElementHighlight",
+        },
+        "3>1": {
+          state: "Committed",
+        },
+      },
+      groups: {
+        1: 0,
+        2: 0,
+        3: 0,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: 4 has the highest finish number left, so it starts component 2.",
+      focus: ["4"],
+      nodes: {
+        4: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "2>3": {
+          state: "Committed",
+        },
+        "3>1": {
+          state: "Committed",
+        },
+      },
+      groups: {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 1,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: follow the edge 5 → 4 backward, so 5 joins component 2.",
+      focus: ["5", "5>4"],
+      nodes: {
+        5: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+        "3>1": {
+          state: "Solution",
+        },
+        "4>5": {
+          state: "Solution",
+        },
+        "5>4": {
+          state: "ElementHighlight",
+        },
+      },
+      groups: {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 1,
+        5: 1,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Done",
+      caption: "2 strongly connected components: {1,2,3}, {4,5}.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+        "3>1": {
+          state: "Solution",
+        },
+        "4>5": {
+          state: "Solution",
+        },
+        "5>4": {
+          state: "Solution",
+        },
+      },
+      groups: {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 1,
+        5: 1,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Single Source Shortest Path, ({1,2,3,4,5,6},{((1,2),4),((1,3),2),((3,2),1),((2,4),5),((3,4),8),((6,5),1)},1), SSSPSolver: distances shape; d = n under each node, ∞ until reached, 5 and 6 Untraveled at the end. */
+export const SSSP_UNREACHABLE_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "distances",
+    rule: "singleSourceShortestPath",
+    directed: true,
+    weighted: true,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 1,
+        row: 1,
+      },
+      {
+        id: "6",
+        label: "6",
+        layer: 0,
+        row: 1,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+        weight: 4,
+      },
+      {
+        id: "1>3",
+        a: "1",
+        b: "3",
+        back: false,
+        weight: 2,
+      },
+      {
+        id: "3>2",
+        a: "3",
+        b: "2",
+        back: false,
+        weight: 1,
+      },
+      {
+        id: "2>4",
+        a: "2",
+        b: "4",
+        back: false,
+        weight: 5,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+        weight: 8,
+      },
+      {
+        id: "6>5",
+        a: "6",
+        b: "5",
+        back: false,
+        weight: 1,
+      },
+    ],
+    layers: [["1", "6"], ["3", "5"], ["2"], ["4"]],
+    source: "1",
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start at 1 with distance 0. Every other node starts at ∞.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      dist: {
+        1: 0,
+        2: null,
+        3: null,
+        4: null,
+        5: null,
+        6: null,
+      },
+      pred: {},
+    },
+    {
+      event: "Accept",
+      caption: "Settle 1 at distance 0. Shorter routes found: 2: ∞ → 4, 3: ∞ → 2.",
+      focus: ["1", "1>2", "1>3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "1>3": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: null,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 3 at distance 2. Shorter routes found: 2: 4 → 3, 4: ∞ → 10.",
+      focus: ["3", "3>2", "3>4"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Committed",
+        },
+        "3>2": {
+          state: "ElementHighlight",
+        },
+        "3>4": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 3,
+        3: 2,
+        4: 10,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "3",
+        3: "1",
+        4: "3",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 2 at distance 3. Shorter routes found: 4: 10 → 8.",
+      focus: ["2", "2>4"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "ElementHighlight",
+        },
+        "3>2": {
+          state: "Committed",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 3,
+        3: 2,
+        4: 8,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "3",
+        3: "1",
+        4: "2",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 4 at distance 8. No shorter routes from here.",
+      focus: ["4"],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>2": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 3,
+        3: 2,
+        4: 8,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "3",
+        3: "1",
+        4: "2",
+      },
+    },
+    {
+      event: "Done",
+      caption:
+        "Every node that can be reached is settled; the shortest paths from 1 form a tree. 5 and 6 can't be reached.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Solution",
+        },
+        5: {
+          state: "Untraveled",
+        },
+        6: {
+          state: "Untraveled",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>2": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 3,
+        3: 2,
+        4: 8,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "3",
+        3: "1",
+        4: "2",
+      },
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Single Pair Shortest Path, the problem default ({1,2,3,4,5},{((1,2),4),((1,3),2),((2,3),1),((3,5),7),((2,4),3),((4,5),9)},1,5), SPSPSolver: source and target tags, weights, only the path 1, 3, 5 as the answer. */
+export const SPSP_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "distances",
+    rule: "singlePairShortestPath",
+    directed: true,
+    weighted: true,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 2,
+        row: 1,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 3,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+        weight: 4,
+      },
+      {
+        id: "1>3",
+        a: "1",
+        b: "3",
+        back: false,
+        weight: 2,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+        weight: 1,
+      },
+      {
+        id: "3>5",
+        a: "3",
+        b: "5",
+        back: false,
+        weight: 7,
+      },
+      {
+        id: "2>4",
+        a: "2",
+        b: "4",
+        back: false,
+        weight: 3,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+        weight: 9,
+      },
+    ],
+    layers: [["1"], ["2"], ["3", "4"], ["5"]],
+    source: "1",
+    target: "5",
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start at 1 with distance 0. Every other node starts at ∞.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      dist: {
+        1: 0,
+        2: null,
+        3: null,
+        4: null,
+        5: null,
+      },
+      pred: {},
+    },
+    {
+      event: "Accept",
+      caption: "Settle 1 at distance 0. Shorter routes found: 2: ∞ → 4, 3: ∞ → 2.",
+      focus: ["1", "1>2", "1>3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "1>3": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: null,
+        5: null,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 3 at distance 2. Shorter routes found: 5: ∞ → 9.",
+      focus: ["3", "3>5"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Covered",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "3>5": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: null,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        5: "3",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 2 at distance 4. Shorter routes found: 4: ∞ → 7.",
+      focus: ["2", "2>4"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "ElementHighlight",
+        },
+        "3>5": {
+          state: "Covered",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: 7,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        4: "2",
+        5: "3",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 4 at distance 7. No shorter routes from here.",
+      focus: ["4", "4>5"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Committed",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "Committed",
+        },
+        "3>5": {
+          state: "Covered",
+        },
+        "4>5": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: 7,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        4: "2",
+        5: "3",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 5 at distance 9. It is the target, so the search stops.",
+      focus: ["5"],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Solution",
+        },
+        5: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>5": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: 7,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        4: "2",
+        5: "3",
+      },
+    },
+    {
+      event: "Done",
+      caption: "The shortest path is 1 → 3 → 5, with total 9.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Solution",
+        },
+        "3>5": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: 7,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        4: "2",
+        5: "3",
+      },
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Single Source Shortest Path, ({1,2,3},{((1,2),5),((1,2),2),((2,3),1),((1,3),9)},1), SSSPSolver: parallel edges 1 to 2 merged into one edge labelled 5,2 (the lighter one counts), and an edge that skips a layer bowed. */
+export const SSSP_PARALLEL_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "distances",
+    rule: "singleSourceShortestPath",
+    directed: true,
+    weighted: true,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+        weight: 2,
+        label: "5,2",
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+        weight: 1,
+      },
+      {
+        id: "1>3",
+        a: "1",
+        b: "3",
+        back: false,
+        weight: 9,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"]],
+    source: "1",
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start at 1 with distance 0. Every other node starts at ∞.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      dist: {
+        1: 0,
+        2: null,
+        3: null,
+      },
+      pred: {},
+    },
+    {
+      event: "Accept",
+      caption: "Settle 1 at distance 0. Shorter routes found: 2: ∞ → 5, 2: 5 → 2, 3: ∞ → 9.",
+      focus: ["1", "1>2", "1>3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "1>3": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 2,
+        3: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 2 at distance 2. Shorter routes found: 3: 9 → 3.",
+      focus: ["2", "2>3"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "2>3": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 2,
+        3: 3,
+      },
+      pred: {
+        2: "1",
+        3: "2",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 3 at distance 3. No shorter routes from here.",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 2,
+        3: 3,
+      },
+      pred: {
+        2: "1",
+        3: "2",
+      },
+    },
+    {
+      event: "Done",
+      caption: "Every node that can be reached is settled; the shortest paths from 1 form a tree.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 2,
+        3: 3,
+      },
+      pred: {
+        2: "1",
+        3: "2",
       },
       ok: true,
     },
