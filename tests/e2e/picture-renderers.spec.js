@@ -16,10 +16,13 @@
 // always opens fitted to its width, and zooms and pans (DiagramZoom.js).
 // #203: the Bipartite Graph renderer (Set Cover, Exact Cover, Hitting Set and SAT's factor
 // graph) at the end, with the same plain picture before Run and the same fit and zoom.
+// #205: the Layered Graph renderer (Topological Sort, the feedback sets, SCC and shortest
+// paths) after it, the same way.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
 import {
+  ARC_SET_LAYERED_FRAMES,
   CLIQUE_COVER_GRAPH_FRAMES,
   CLIQUE_FAILED_GRAPH_FRAMES,
   CLIQUE_GRAPH_FRAMES,
@@ -32,10 +35,17 @@ import {
   ILP_TABLE_FRAMES_WITH_BLANK,
   LARGE_GRAPH_FRAMES,
   MAX_CUT_GRAPH_FRAMES,
+  NODE_SET_LAYERED_FRAMES,
   SAT3_FACTOR_GRAPH_FRAMES,
+  SCC_LAYERED_FRAMES,
   SET_COVER_BIPARTITE_FRAMES,
   SET_COVER_FAILED_BIPARTITE_FRAMES,
+  SPSP_LAYERED_FRAMES,
+  SSSP_PARALLEL_LAYERED_FRAMES,
+  SSSP_UNREACHABLE_LAYERED_FRAMES,
   STEINER_GRAPH_FRAMES,
+  TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES,
+  TOPOLOGICAL_SORT_LAYERED_FRAMES,
 } from "./picture-payloads";
 
 const PROBLEM = "DFA Acceptance";
@@ -1278,6 +1288,378 @@ for (const [width, height] of [
     expect(sizes.viewAspect).toBeCloseTo(sizes.width / sizes.height, 2);
     await page.locator(`${BIPARTITE}-zoom-in`).click();
     await page.locator(`${BIPARTITE}-zoom-in`).click();
+    const zoomed = await areaSizes(page, svg);
+    expect(zoomed.viewAspect).toBeCloseTo(zoomed.width / zoomed.height, 2);
+  });
+}
+
+// --- #205: the Layered Graph renderer (directed graphs in ranks) ------------------------------
+
+const LAYERED = "#workbench-source-frames-layeredgraph";
+
+/**
+ * Each layered capture with the problem page it is opened on and the visualizations allInfo is
+ * made to name LayeredGraph (so the test doesn't depend on the backend the catalog comes from).
+ */
+const LAYERED_CASES = {
+  topo: {
+    problem: "Topological Sort",
+    viz: ["TopologicalSortDefaultVisualization"],
+    capture: TOPOLOGICAL_SORT_LAYERED_FRAMES,
+  },
+  cycle: {
+    problem: "Topological Sort",
+    viz: ["TopologicalSortDefaultVisualization"],
+    capture: TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES,
+  },
+  arcSet: {
+    problem: "Feedback Arc Set",
+    viz: ["ArcSetDefaultVisualization"],
+    capture: ARC_SET_LAYERED_FRAMES,
+  },
+  nodeSet: {
+    problem: "Feedback Node Set",
+    viz: ["NodeSetDefaultVisualization"],
+    capture: NODE_SET_LAYERED_FRAMES,
+  },
+  scc: {
+    problem: "Strongly Connected Components",
+    viz: ["SCCVisualization"],
+    capture: SCC_LAYERED_FRAMES,
+  },
+  sssp: {
+    problem: "Single Source Shortest Path Problem",
+    viz: ["SSSPVisualization", "SSSPTableVisualization"],
+    capture: SSSP_UNREACHABLE_LAYERED_FRAMES,
+  },
+  ssspParallel: {
+    problem: "Single Source Shortest Path Problem",
+    viz: ["SSSPVisualization", "SSSPTableVisualization"],
+    capture: SSSP_PARALLEL_LAYERED_FRAMES,
+  },
+  spsp: {
+    problem: "Single Pair Shortest Path Problem",
+    viz: ["SPSPVisualization", "SPSPTableVisualization"],
+    capture: SPSP_LAYERED_FRAMES,
+  },
+};
+
+async function openLayered(page, { problem, viz, capture }) {
+  await setPictureTypes(page, Object.fromEntries(viz.map((name) => [name, "LayeredGraph"])));
+  await openPicture(page, problem, capture);
+  await expect(page.locator(`${LAYERED}-graph`)).toBeVisible();
+}
+
+const layeredNode = (page, id) => page.locator(`${LAYERED}-graph [data-node-id="${id}"]`);
+const layeredEdge = (page, id) => page.locator(`${LAYERED}-graph [data-edge-id="${id}"]`);
+
+/** Frame `index`'s states, checked piece by piece against the picture (absent = Background). */
+async function expectLayeredStates(page, capture, index) {
+  const frame = capture.frames[index];
+  for (const node of capture.payload.nodes) {
+    await expect(layeredNode(page, node.id)).toHaveAttribute(
+      "data-state",
+      frame.nodes[node.id]?.state ?? "Background",
+    );
+  }
+  for (const edge of capture.payload.edges) {
+    await expect(layeredEdge(page, edge.id)).toHaveAttribute(
+      "data-state",
+      frame.edges[edge.id]?.state ?? "Background",
+    );
+  }
+}
+
+/** Each node's drawn centre, by id, in viewBox units, grouped by its column (x). */
+function layeredColumns(page) {
+  return page.locator(`${LAYERED}-graph [data-node-id]`).evaluateAll((nodes) => {
+    const columns = new Map();
+    for (const node of nodes) {
+      const box = node.querySelector("[data-body]").getBBox();
+      const x = Math.round(box.x + box.width / 2);
+      if (!columns.has(x)) columns.set(x, []);
+      columns.get(x).push(node.getAttribute("data-node-id"));
+    }
+    return [...columns.entries()].sort((a, b) => a[0] - b[0]).map(([, ids]) => ids.sort());
+  });
+}
+
+for (const [key, testCase] of Object.entries(LAYERED_CASES)) {
+  test(`Layered Graph: ${testCase.problem} (${key}) draws every node in its layer, every edge and every step`, async ({
+    page,
+  }) => {
+    const { capture } = testCase;
+    const { payload } = capture;
+    await openLayered(page, testCase);
+    const graph = page.locator(`${LAYERED}-graph`);
+    await expect(graph).toHaveAttribute("data-graph-shape", payload.shape);
+    await expect(graph.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
+    await expect(graph.locator("[data-edge-id]")).toHaveCount(payload.edges.length);
+    await expect(graph.locator("[data-back]")).toHaveCount(
+      payload.edges.filter((edge) => edge.back).length,
+    );
+    // One column per layer, left to right, holding that layer's nodes.
+    expect(await layeredColumns(page)).toEqual(payload.layers.map((ids) => [...ids].sort()));
+    // Directed: an arrowhead on every edge.
+    await expect(graph.locator("[data-edge-id] polygon")).toHaveCount(
+      payload.directed ? payload.edges.length : 0,
+    );
+    // Every node says what it is, and can be reached by keyboard.
+    for (const piece of await graph.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("aria-label", /^Node \S+, /);
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // The step controls walk every frame's states.
+    await runToFrame(page, capture, 0);
+    await expectLayeredStates(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectLayeredStates(page, capture, index);
+    }
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      capture.frames.at(-1).ok ? "Verdict: yes" : "Verdict: no",
+    );
+  });
+}
+
+test("Layered Graph: before Run the picture is the plain graph, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  // Kahn's first step already marks 1 ready; SCC's and SSSP's add finish numbers, colors and
+  // distances. None of it shows before Run.
+  const capture = TOPOLOGICAL_SORT_LAYERED_FRAMES;
+  await openLayered(page, LAYERED_CASES.topo);
+  const graph = page.locator(`${LAYERED}-graph`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(graph.locator("[data-badge]")).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(legendBody(page)).not.toContainText("Order (position in the order)");
+  await expect(legendBody(page)).toContainText("Arrow (the edge's direction)");
+
+  const before = await nodeCentres(page, `${LAYERED}-graph`);
+  await runToFrame(page, capture, 0);
+  await expect(layeredNode(page, "1")).toHaveAttribute("data-state", "Covered");
+  expect(await nodeCentres(page, `${LAYERED}-graph`)).toEqual(before);
+});
+
+test("Layered Graph: the plain shortest-path picture names the source and target but shows no distances", async ({
+  page,
+}) => {
+  const capture = SPSP_LAYERED_FRAMES;
+  await openLayered(page, LAYERED_CASES.spsp);
+  const graph = page.locator(`${LAYERED}-graph`);
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(graph.locator("[data-distance]")).toHaveCount(0);
+  await expect(layeredNode(page, "1").locator('[data-tag="source"]')).toHaveText("source");
+  await expect(layeredNode(page, "5").locator('[data-tag="target"]')).toHaveText("target");
+  // The weights are the instance's, so they show.
+  await expect(graph.locator("[data-weight]")).toHaveCount(capture.payload.edges.length);
+  const before = await nodeCentres(page, `${LAYERED}-graph`);
+  await runToFrame(page, capture, 0);
+  await expect(layeredNode(page, "1").locator("[data-distance]")).toHaveText("d = 0");
+  await expect(layeredNode(page, "5").locator("[data-distance]")).toHaveText("∞");
+  expect(await nodeCentres(page, `${LAYERED}-graph`)).toEqual(before);
+});
+
+test("Layered Graph: Topological Sort shows ready, Committed and placed nodes with order badges", async ({
+  page,
+}) => {
+  const capture = TOPOLOGICAL_SORT_LAYERED_FRAMES;
+  await openLayered(page, LAYERED_CASES.topo);
+  await runToFrame(page, capture, 3);
+  await expect(layeredNode(page, "1")).toHaveAttribute("data-state", "Committed");
+  await expect(layeredNode(page, "1")).toHaveAttribute("data-order", "1");
+  await expect(layeredNode(page, "3")).toHaveAttribute("data-order", "3");
+  await expect(layeredNode(page, "3").locator('[data-badge="order"]')).toHaveText("3");
+  await expect(layeredNode(page, "4")).toHaveAttribute("data-state", "Covered");
+  await expect(layeredNode(page, "2")).toHaveAttribute("aria-label", /placed 2nd/);
+  await expect(layeredEdge(page, "1>2")).toHaveAttribute("data-state", "Committed");
+  await expect(legendBody(page)).toContainText("Order (position in the order)");
+  await expect(legendBody(page)).toContainText("Committed (kept so far)");
+});
+
+test("Layered Graph: a cycle's back edge runs under the rows, and the stuck nodes end Rejected", async ({
+  page,
+}) => {
+  const capture = TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES;
+  await openLayered(page, LAYERED_CASES.cycle);
+  // 4>2 points backward: it leaves 4's bottom and dips below every node.
+  const below = await page.locator(`${LAYERED}-svg`).evaluate((svg) => {
+    const edge = svg.querySelector('[data-edge-id="4>2"] path').getBBox();
+    const bodies = [...svg.querySelectorAll("[data-node-id] [data-body]")].map((b) => b.getBBox());
+    return edge.y + edge.height > Math.max(...bodies.map((b) => b.y + b.height));
+  });
+  expect(below).toBe(true);
+  await expect(legendBody(page)).toContainText("Back edge (points backward, closing a cycle");
+  await runToFrame(page, capture, capture.frames.length - 1);
+  for (const id of ["2", "3", "4", "5"]) {
+    await expect(layeredNode(page, id)).toHaveAttribute("data-state", "Rejected");
+  }
+  await expect(layeredEdge(page, "4>2")).toHaveAttribute("data-state", "Rejected");
+  await expect(page.locator(`${LAYERED}-graph [data-state="Solution"]`)).toHaveCount(0);
+});
+
+test("Layered Graph: Feedback Arc Set draws the removed edge dashed, Feedback Node Set its node's edges Untraveled", async ({
+  page,
+}) => {
+  const arcs = ARC_SET_LAYERED_FRAMES;
+  await openLayered(page, LAYERED_CASES.arcSet);
+  await runToFrame(page, arcs, arcs.frames.length - 1);
+  await expect(layeredEdge(page, "2>3")).toHaveAttribute("data-state", "Solution");
+  await expect(layeredEdge(page, "2>3")).toHaveAttribute("data-removed", "true");
+  await expect(layeredEdge(page, "2>3").locator("path")).toHaveAttribute("stroke-dasharray", "6 5");
+  await expect(layeredEdge(page, "1>2")).not.toHaveAttribute("data-removed", /./);
+  await expect(legendBody(page)).toContainText("Dashed edge (removed by the candidate)");
+
+  const nodes = NODE_SET_LAYERED_FRAMES;
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await openLayered(page, LAYERED_CASES.nodeSet);
+  await runToFrame(page, nodes, nodes.frames.length - 1);
+  await expect(layeredNode(page, "2")).toHaveAttribute("data-state", "Solution");
+  for (const id of ["1>2", "2>3", "5>2"]) {
+    await expect(layeredEdge(page, id)).toHaveAttribute("data-state", "Untraveled");
+  }
+  await expect(layeredEdge(page, "2>3")).not.toHaveAttribute("data-removed", /./);
+});
+
+test("Layered Graph: SCC numbers the first pass's finish order and colors the components", async ({
+  page,
+}) => {
+  const capture = SCC_LAYERED_FRAMES;
+  await openLayered(page, LAYERED_CASES.scc);
+  await runToFrame(page, capture, 9);
+  await expect(layeredNode(page, "5")).toHaveAttribute("data-finish", "1");
+  await expect(layeredNode(page, "5").locator('[data-tag="finish"]')).toHaveText("#1");
+  await expect(layeredNode(page, "1")).toHaveAttribute("aria-label", /finished 5th/);
+  await page.locator("#workbench-steps-next").click();
+  await page.locator("#workbench-steps-next").click();
+  await expect(layeredNode(page, "1")).toHaveAttribute("data-group", "0");
+  await expect(layeredNode(page, "3")).toHaveAttribute("data-group", "0");
+  for (let index = 12; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  await expect(layeredNode(page, "4")).toHaveAttribute("data-group", "1");
+  await expect(layeredNode(page, "4")).toHaveAttribute("aria-label", /component 2/);
+  await expect(layeredEdge(page, "5>4")).toHaveAttribute("data-state", "Solution");
+  const legend = legendBody(page);
+  await expect(legend).toContainText("Component 1");
+  await expect(legend).toContainText("Component 2");
+  await expect(legend).toContainText("#n (finish order in the first pass)");
+});
+
+test("Layered Graph: shortest paths show distances, ∞ for the unreached, and merged parallel weights", async ({
+  page,
+}) => {
+  const capture = SSSP_UNREACHABLE_LAYERED_FRAMES;
+  await openLayered(page, LAYERED_CASES.sssp);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await expect(layeredNode(page, "4")).toHaveAttribute("data-dist", "8");
+  await expect(layeredNode(page, "4").locator("[data-distance]")).toHaveText("d = 8");
+  await expect(layeredNode(page, "5")).toHaveAttribute("data-dist", "∞");
+  await expect(layeredNode(page, "5")).toHaveAttribute("data-state", "Untraveled");
+  await expect(layeredNode(page, "5")).toHaveAttribute("aria-label", /not reached yet/);
+  await expect(legendBody(page)).toContainText("d = n (best distance known so far");
+  await expect(legendBody(page)).toContainText("Untraveled (never reached)");
+
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await openLayered(page, LAYERED_CASES.ssspParallel);
+  // 1>2 was listed twice (5 and 2): one edge, both weights on its tag.
+  await expect(page.locator(`${LAYERED}-graph [data-weight="5,2"]`)).toHaveCount(1);
+  // 1>3 skips a layer, so it is bowed around 2.
+  await expect(layeredEdge(page, "1>3").locator("path")).toHaveAttribute("d", /Q/);
+  await expect(layeredEdge(page, "1>2").locator("path")).toHaveAttribute("d", /L/);
+});
+
+test("Layered Graph: hovering, focusing or tapping a node traces its edges and fades the rest by color", async ({
+  page,
+}) => {
+  await openLayered(page, LAYERED_CASES.topo);
+  await layeredNode(page, "3").hover();
+  for (const id of ["1>3", "3>4", "3>6"]) {
+    await expect(layeredEdge(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(layeredEdge(page, "4>5")).toHaveAttribute("data-traced", "faint");
+  await expect(layeredNode(page, "6")).toHaveAttribute("data-traced", "trace");
+  await expect(layeredNode(page, "5")).toHaveAttribute("data-traced", "faint");
+  const faded = await layeredNode(page, "5").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+
+  await page.mouse.move(0, 0);
+  await layeredNode(page, "4").focus();
+  await expect(layeredEdge(page, "4>5")).toHaveAttribute("data-traced", "trace");
+  await expect(layeredNode(page, "6")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(layeredNode(page, "4")).toHaveAttribute("aria-pressed", "true");
+  await expect(layeredNode(page, "4")).toHaveAttribute("aria-label", /edges to 5, from 2, 3$/);
+});
+
+test("Layered Graph: on a phone a tap traces a node, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openLayered(page, LAYERED_CASES.sssp);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${LAYERED}-svg`);
+  await page.locator(`${LAYERED}-zoom-in`).click();
+  await expect(page.locator(`${LAYERED}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await layeredNode(page, "3").focus();
+  await layeredNode(page, "3").blur();
+  await layeredNode(page, "3").click();
+  await expect(layeredNode(page, "3")).toHaveAttribute("aria-pressed", "true");
+  await expect(layeredEdge(page, "3>2")).toHaveAttribute("data-traced", "trace");
+  await expectFits(page, `${LAYERED}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1280]) {
+    test(`Layered Graph: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openLayered(page, LAYERED_CASES.spsp);
+      const svg = page.locator(`${LAYERED}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${LAYERED}-svg`);
+      await expect(page.locator(`${LAYERED}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The source tag follows the theme: no dark-on-dark, no light-on-white.
+      const ink = await layeredNode(page, "1")
+        .locator('[data-tag="source"]')
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+for (const [width, height] of [
+  [1280, 800],
+  [1920, 1080],
+]) {
+  test(`Layered Graph: at ${width}x${height} the picture fills the pane and fits the screen`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await openLayered(page, LAYERED_CASES.topo);
+    const svg = `${LAYERED}-svg`;
+    await expect(page.locator(svg)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const sizes = await areaSizes(page, svg);
+        return Math.abs(sizes.width - sizes.content);
+      })
+      .toBeLessThanOrEqual(2);
+    await scrollPictureToTop(page);
+    const sizes = await areaSizes(page, svg);
+    expect(sizes.bottom).toBeLessThanOrEqual(sizes.viewport);
+    expect(sizes.viewAspect).toBeCloseTo(sizes.width / sizes.height, 2);
+    await page.locator(`${LAYERED}-zoom-in`).click();
+    await page.locator(`${LAYERED}-zoom-in`).click();
     const zoomed = await areaSizes(page, svg);
     expect(zoomed.viewAspect).toBeCloseTo(zoomed.width / zoomed.height, 2);
   });
