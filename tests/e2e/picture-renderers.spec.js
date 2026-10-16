@@ -1854,26 +1854,73 @@ test("Automaton: a DFA's missing moves lead to a separate red Garbage state the 
   await expect(garbage).toContainText("Garbage");
   await expect(garbage).toHaveAttribute("aria-label", /missing moves: 1 on b; 2 on a; 3 on b/);
   await expect(automatonState(page, "q:3")).toHaveAttribute("aria-label", /no move on b/);
-  // Drawn in red even before Run, dashed until the machine falls in; no arrow leads into it.
+  // Drawn in red even before Run (a thin dashed red outline and red text on the neutral
+  // fill), with no arrow into it and no fall.
   const body = garbage.locator("[data-body]");
+  const fallArrow = page.locator(`${AUTOMATON}-graph [data-fall-arrow]`);
+  const look = () =>
+    body.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { fill: style.fill, stroke: style.stroke, width: el.getAttribute("stroke-width") };
+    });
+  await expect(garbage).toHaveAttribute("data-look", "idle");
   await expect(body).toHaveAttribute("stroke-dasharray", "5 3");
-  const red = await body.evaluate((el) => getComputedStyle(el).stroke);
+  const idle = await look();
   for (const transition of capture.payload.transitions) {
     expect(transition.b).not.toBe("garbage");
   }
+  await expect(fallArrow).toHaveCount(0);
   await expect(legendBody(page)).toContainText("Garbage (where every missing move leads");
 
-  // Frame 4: 3 has no move on b, so the run falls into Garbage.
-  await runToFrame(page, capture, 3);
+  // Frame 3: still in 3, Garbage idle, and 3 is ringed as the current state.
+  await runToFrame(page, capture, 2);
+  await expect(garbage).toHaveAttribute("data-look", "idle");
+  await expect(fallArrow).toHaveCount(0);
+  await expect(automatonState(page, "q:3").locator("[data-current]")).toHaveCount(1);
+  await expect(garbage.locator("[data-current]")).toHaveCount(0);
+
+  // Frame 4: 3 has no move on b, so the run falls into Garbage. Garbage takes the Rejected
+  // style and the current-state ring; a dashed red arrow labelled b runs from 3 into it, 3 is
+  // marked as where it fell from, and the tape marks the b it got stuck on.
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[3].caption);
   await expect(garbage).toHaveAttribute("data-state", "Rejected");
   await expect(garbage).toHaveAttribute("data-active", "true");
+  await expect(garbage).toHaveAttribute("data-look", "entered");
+  await expect(garbage.locator("[data-current]")).toHaveCount(1);
   await expect(body).not.toHaveAttribute("stroke-dasharray", /./);
-  expect(await body.evaluate((el) => getComputedStyle(el).stroke)).toBe(red);
-  await expect(tape(page).locator('[data-tape-cell="2"]')).toHaveAttribute("data-head", "true");
+  const entered = await look();
+  expect(entered.fill).not.toBe(idle.fill);
+  expect(entered.stroke).toBe(idle.stroke);
+  expect(Number(entered.width)).toBeGreaterThan(Number(idle.width));
+  await expect(fallArrow).toHaveCount(1);
+  await expect(fallArrow).toHaveAttribute("data-from", "q:3");
+  await expect(fallArrow.locator('[data-arrow-label="b"]')).toHaveCount(1);
+  await expect(fallArrow.locator("path")).toHaveAttribute("stroke-dasharray", "6 4");
+  await expect(automatonState(page, "q:3")).toHaveAttribute("data-fell-from", "true");
+  await expect(automatonState(page, "q:3")).toHaveAttribute("aria-label", /fell into Garbage on b/);
+  await expect(automatonState(page, "q:3").locator("[data-current]")).toHaveCount(0);
+  await expect(garbage).toHaveAttribute("aria-label", /the machine is here, fell in from 3 on b/);
+  await expect(tape(page).locator('[data-tape-cell="2"]')).toHaveAttribute("data-stuck", "true");
+  await expect(legendBody(page)).toContainText("Dashed red arrow (the missing move that fell");
+  // The fall draws nothing new into the layout: every state stays where it was.
+  const positions = await nodeCentres(page, `${AUTOMATON}-graph`);
 
+  // Done: still in Garbage, so the fall stays on screen.
   await page.locator("#workbench-steps-next").click();
   await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
   await expect(tape(page).locator("[data-tape-end]")).toHaveText("reject");
+  await expect(fallArrow).toHaveCount(1);
+  await expect(tape(page).locator('[data-tape-cell="2"]')).toHaveAttribute("data-stuck", "true");
+  expect(await nodeCentres(page, `${AUTOMATON}-graph`)).toEqual(positions);
+
+  // Back to the start: Garbage is idle again and the fall is gone.
+  await page.locator("#workbench-steps-previous").click();
+  await page.locator("#workbench-steps-previous").click();
+  await expect(garbage).toHaveAttribute("data-look", "idle");
+  await expect(fallArrow).toHaveCount(0);
+  await page.locator("#workbench-steps-next").click();
+  await page.locator("#workbench-steps-next").click();
   // Hovering a state with a missing move traces Garbage too; one without fades it.
   await automatonState(page, "q:2").hover();
   await expect(garbage).toHaveAttribute("data-traced", "trace");
@@ -1926,14 +1973,21 @@ test("Automaton: One path follows a single run picked from the dropdown, and All
   await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
   await expect(page.locator(`${AUTOMATON}-graph [data-active]`)).toHaveCount(1);
 
-  // A path that dies: its last state is Rejected, and the states it never reached Untraveled.
+  // A path that dies: its last state is Rejected and ringed as where the run is, the states it
+  // never reached Untraveled, and the tape marks the symbol it had no move for.
   const dies = paths.find((path) => path.outcome === "dies");
   await picker.selectOption(dies.id);
   await expect(position).toHaveText(`Step 1 of ${dies.frames.length}`);
   for (let index = 1; index < dies.frames.length; index += 1) {
     await page.locator("#workbench-steps-next").click();
   }
-  await expectAutomatonStates(page, capture.payload, dies.frames.at(-1));
+  const dead = dies.frames.at(-1);
+  await expectAutomatonStates(page, capture.payload, dead);
+  await expect(automatonState(page, dead.active[0]).locator("[data-current]")).toHaveCount(1);
+  await expect(tape(page).locator(`[data-tape-cell="${dead.position}"]`)).toHaveAttribute(
+    "data-stuck",
+    "true",
+  );
   await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
   await expect(page.locator(`${AUTOMATON}-graph [data-state="Solution"]`)).toHaveCount(0);
   await expect(legendBody(page)).toContainText("Untraveled (never reached)");
@@ -1942,6 +1996,28 @@ test("Automaton: One path follows a single run picked from the dropdown, and All
   await expect(picker).toHaveCount(0);
   await expect(position).toHaveText(`Step 1 of ${capture.frames.length}`);
   await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[0].caption);
+});
+
+test("Automaton: a rejected run with no state left says so, and marks the active states while it runs", async ({
+  page,
+}) => {
+  const capture = NFA_BACKTRACK_REJECTED_AUTOMATON_FRAMES;
+  await openAutomaton(page, AUTOMATON_CASES.backtrack);
+  await runToFrame(page, capture, 0);
+  await expect(page.locator(`${AUTOMATON}-graph [data-current]`)).toHaveCount(
+    capture.frames[0].active.length,
+  );
+  await expect(page.locator(`${AUTOMATON}-dead`)).toHaveCount(0);
+  for (let index = 1; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  // The Done step has no active state: nothing is ringed, so a line says why.
+  expect(capture.frames.at(-1).active).toEqual([]);
+  await expect(page.locator(`${AUTOMATON}-graph [data-current]`)).toHaveCount(0);
+  await expect(page.locator(`${AUTOMATON}-dead`)).toHaveText(
+    "No state is left: every branch of the run died or ended outside an accept state.",
+  );
+  await expect(tape(page).locator("[data-tape-end]")).toHaveText("reject");
 });
 
 test("Automaton: a DFA has one run, so it offers no path picker", async ({ page }) => {

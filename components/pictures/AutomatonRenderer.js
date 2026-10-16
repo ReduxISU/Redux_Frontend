@@ -28,6 +28,7 @@ import { useMemo, useState } from "react";
 import { paletteVars } from "../theme";
 import { GARBAGE_HEIGHT, layoutAutomaton, STATE_RADIUS } from "./automatonLayout";
 import DiagramZoom from "./DiagramZoom";
+import { outlineDistance } from "./graphLayout";
 import {
   edgeLook,
   FAINT_EDGE,
@@ -47,6 +48,65 @@ const EPSILON_DASH = "5 4";
 
 /** The Garbage state's dash while nothing has fallen into it. */
 const GARBAGE_DASH = "5 3";
+
+/** The dash of the arrow drawn from the state a DFA fell from into Garbage. */
+const FALL_DASH = "6 4";
+
+/** How far outside a state (or Garbage) the "current state" ring sits. */
+const CURRENT_GAP = 6;
+
+/**
+ * Where a DFA falls into Garbage on its input, from the payload alone: run the input from the
+ * start state until a state has no move on the next symbol. Returns that state, the symbol and
+ * its index, or null when the machine never falls (an NFA, a complete DFA, or an input it reads
+ * through). Not part of the layout: the arrow it draws only appears while Garbage is active.
+ */
+export function garbageFall(payload) {
+  if (!payload?.garbage || typeof payload.start !== "string") return null;
+  const input = (Array.isArray(payload.input) ? payload.input : []).map(String);
+  const transitions = Array.isArray(payload.transitions) ? payload.transitions : [];
+  const missing = new Set(
+    (Array.isArray(payload.garbage.missing) ? payload.garbage.missing : []).map(
+      (move) => `${move?.state}\u0000${move?.symbol}`,
+    ),
+  );
+  let state = payload.start;
+  for (let index = 0; index < input.length; index += 1) {
+    const symbol = input[index];
+    const move = transitions.find(
+      (transition) =>
+        transition?.a === state &&
+        Array.isArray(transition.symbols) &&
+        transition.symbols.map(String).includes(symbol),
+    );
+    if (move) {
+      state = move.b;
+    } else {
+      return missing.has(`${state}\u0000${symbol}`) ? { from: state, symbol, index } : null;
+    }
+  }
+  return null;
+}
+
+/** The "current state" ring: an outline CURRENT_GAP outside a body `width` wide, `radius` high. */
+function CurrentRing({ x, y, width, radius, color, dash, testId }) {
+  const r = radius + CURRENT_GAP;
+  return (
+    <rect
+      x={x - width / 2 - CURRENT_GAP}
+      y={y - r}
+      width={width + 2 * CURRENT_GAP}
+      height={2 * r}
+      rx={r}
+      fill="none"
+      stroke={color}
+      strokeWidth={2.2}
+      strokeDasharray={dash}
+      pointerEvents="none"
+      {...{ [`data-${testId}`]: "" }}
+    />
+  );
+}
 
 const VIEWS = [
   { value: "all", label: "All branches" },
@@ -114,7 +174,7 @@ function StateBody({ state, look }) {
  * The input tape: one cell per symbol, read ones muted, the one just read filled, the head on
  * the next one, and an end cell that gives the verdict on the Done step.
  */
-function Tape({ id, input, frame, frameIndex, justRead }) {
+function Tape({ id, input, frame, frameIndex, justRead, stuck }) {
   const running = frameIndex !== null && frame;
   const done = running && frame.event === "Done";
   const position = running && Number.isInteger(frame.position) ? frame.position : null;
@@ -122,6 +182,7 @@ function Tape({ id, input, frame, frameIndex, justRead }) {
   const plain = pictureStateStyle("Background");
   const highlight = pictureStateStyle("ElementHighlight");
   const verdictStyle = pictureStateStyle(accepted ? "Solution" : "Rejected");
+  const red = pictureStateStyle("Rejected");
 
   let summary;
   if (!input.length) summary = "The input is empty.";
@@ -129,6 +190,11 @@ function Tape({ id, input, frame, frameIndex, justRead }) {
   if (position !== null) {
     if (done) {
       summary += ` ${accepted ? "Accepted" : "Rejected"} after reading ${plural(position, "symbol")}.`;
+      if (stuck !== null && stuck < input.length) {
+        summary += ` It got stuck on the ${ordinal(stuck + 1)} symbol, ${input[stuck]}.`;
+      }
+    } else if (stuck !== null && stuck < input.length) {
+      summary += ` ${plural(position, "symbol")} read; stuck on the ${ordinal(stuck + 1)}, ${input[stuck]}: no move reads it.`;
     } else if (position < input.length) {
       summary += ` ${plural(position, "symbol")} read; the head is on the ${ordinal(position + 1)}, ${input[position]}.`;
     } else {
@@ -160,6 +226,7 @@ function Tape({ id, input, frame, frameIndex, justRead }) {
         const read = position !== null && index < position;
         const just = !done && justRead && position !== null && index === position - 1;
         const head = !done && position !== null && index === position;
+        const isStuck = stuck !== null && index === stuck;
         let sx = {
           ...cellSx,
           borderColor: plain.line,
@@ -175,6 +242,17 @@ function Tape({ id, input, frame, frameIndex, justRead }) {
             boxShadow: `0 0 0 2px ${highlight.line}`,
           };
         }
+        if (isStuck) {
+          // The symbol no move reads: red, ringed like the head, so the fall shows on the tape.
+          sx = {
+            ...sx,
+            backgroundColor: red.fill,
+            color: red.ink,
+            borderColor: red.line,
+            borderStyle: "dashed",
+            boxShadow: `0 0 0 2px ${red.line}`,
+          };
+        }
         return (
           <Box
             // biome-ignore lint/suspicious/noArrayIndexKey: a tape cell is its position.
@@ -184,6 +262,7 @@ function Tape({ id, input, frame, frameIndex, justRead }) {
             data-read={read ? "true" : undefined}
             data-just={just ? "true" : undefined}
             data-head={head ? "true" : undefined}
+            data-stuck={isStuck ? "true" : undefined}
             sx={sx}
           >
             {symbol}
@@ -326,6 +405,43 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
   const label = `${name}: ${kind === "nfa" ? "an NFA" : "a DFA"} with ${plural(layout.states.length, "state")} and ${plural(layout.arrows.length, "arrow")}${layout.garbage ? ", and a Garbage state for its missing moves" : ""}, left to right from the start state.`;
 
   const garbageState = layout.garbage ? stateOf(frame?.nodes, layout.garbage.id) : "Background";
+  const inGarbage = running && layout.garbage !== null && active.has(layout.garbage.id);
+  // Where the machine fell into Garbage from: shown for as long as it is in Garbage (the Reject
+  // step that falls and the Done step after it), so the reason stays on screen.
+  const fallMove = useMemo(() => garbageFall(payload), [payload]);
+  const fall = inGarbage && fallMove && labels.has(fallMove.from) ? fallMove : null;
+  const fallArrow = useMemo(() => {
+    if (!fallMove || !layout.garbage) return null;
+    const from = layout.states.find((state) => state.id === fallMove.from);
+    if (!from) return null;
+    const to = layout.garbage;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const ux = dx / length;
+    const uy = dy / length;
+    const startGap = outlineDistance(dx, dy, from.width, STATE_RADIUS) + CURRENT_GAP + 2;
+    const endGap = outlineDistance(-dx, -dy, to.width, GARBAGE_HEIGHT / 2) + 2;
+    const start = { x: from.x + ux * startGap, y: from.y + uy * startGap };
+    const tip = { x: to.x - ux * endGap, y: to.y - uy * endGap };
+    const size = 11;
+    const back = { x: tip.x - ux * size, y: tip.y - uy * size };
+    const side = { x: -uy * size * 0.5, y: ux * size * 0.5 };
+    const end = { x: tip.x - ux * size * 0.6, y: tip.y - uy * size * 0.6 };
+    const r = (value) => Math.round(value * 10) / 10;
+    return {
+      path: `M${r(start.x)},${r(start.y)} L${r(end.x)},${r(end.y)}`,
+      arrow: `${r(tip.x)},${r(tip.y)} ${r(back.x + side.x)},${r(back.y + side.y)} ${r(back.x - side.x)},${r(back.y - side.y)}`,
+      label: { x: (start.x + tip.x) / 2, y: (start.y + tip.y) / 2 },
+    };
+  }, [fallMove, layout]);
+  // The symbol the run got stuck on: the one it fell into Garbage on, or, on a failed Done step,
+  // the one no active state had a move for.
+  let stuck = null;
+  if (running && Number.isInteger(frame?.position) && frame.position < input.length) {
+    if (inGarbage || (frame.event === "Done" && frame.ok === false)) stuck = frame.position;
+  }
+  const allDead = running && frame?.event === "Done" && frame.ok === false && active.size === 0;
 
   return (
     <Box
@@ -401,6 +517,25 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
             <polygon points={layout.start.arrow} fill={paletteVars.text.primary} />
           </g>
         )}
+        {fall && fallArrow && (
+          <g data-fall-arrow="" data-from={fall.from} pointerEvents="none">
+            <path
+              d={fallArrow.path}
+              fill="none"
+              stroke={pictureStateStyle("Rejected").line}
+              strokeWidth={2.4}
+              strokeDasharray={FALL_DASH}
+              strokeLinecap="round"
+            />
+            <polygon points={fallArrow.arrow} fill={pictureStateStyle("Rejected").line} />
+            <ArrowLabel
+              x={fallArrow.label.x}
+              y={fallArrow.label.y}
+              text={fall.symbol}
+              state="Rejected"
+            />
+          </g>
+        )}
         <g data-layer="nodes">
           {layout.states.map((node) => {
             const state = stateOf(frame?.nodes, node.id);
@@ -414,6 +549,8 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
             if (node.accepting) parts.push("accepting");
             if (state !== "Background") parts.push(pictureStateStyle(state).legend);
             if (running && active.has(node.id)) parts.push("active");
+            const fellFrom = fall !== null && fall.from === node.id;
+            if (fellFrom) parts.push(`fell into ${layout.garbage.label} on ${fall.symbol}`);
             const moves = out.map((arrow) => `on ${arrow.text} to ${labels.get(arrow.b)}`);
             if (missing.length) {
               moves.push(`no move on ${missing.join(", ")} (to ${layout.garbage.label})`);
@@ -435,6 +572,7 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
                 data-start={node.start ? "true" : undefined}
                 data-accepting={node.accepting ? "true" : undefined}
                 data-active={running && active.has(node.id) ? "true" : undefined}
+                data-fell-from={fellFrom ? "true" : undefined}
                 data-traced={near ? (faint ? "faint" : "trace") : undefined}
                 data-focusable=""
                 tabIndex={0}
@@ -458,6 +596,27 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
                   }
                 }}
               >
+                {running && active.has(node.id) && (
+                  <CurrentRing
+                    x={node.x}
+                    y={node.y}
+                    width={node.width}
+                    radius={STATE_RADIUS}
+                    color={look.line}
+                    testId="current"
+                  />
+                )}
+                {fellFrom && (
+                  <CurrentRing
+                    x={node.x}
+                    y={node.y}
+                    width={node.width}
+                    radius={STATE_RADIUS}
+                    color={pictureStateStyle("Rejected").line}
+                    dash={FALL_DASH}
+                    testId="fell-ring"
+                  />
+                )}
                 <StateBody
                   state={node}
                   look={
@@ -482,7 +641,15 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
               const garbage = layout.garbage;
               const red = pictureStateStyle("Rejected");
               const stated = garbageState !== "Background";
-              const outline = stated ? pictureStateStyle(garbageState).line : red.line;
+              const isActive = running && active.has(garbage.id);
+              const lit = stated || isActive;
+              // Idle: the red Garbage node on the canvas's neutral fill, a thin dashed red outline
+              // and red text. Entered: its state's full style (Rejected: red fill, solid thick red
+              // outline), with the same "current state" ring an active state gets.
+              const style = pictureStateStyle(stated ? garbageState : "Rejected");
+              const fill = lit ? style.fill : paletteVars.surface.input;
+              const ink = lit ? style.ink : red.text;
+              const outline = lit ? style.line : red.line;
               const faint = traced !== null && !tracesGarbage;
               const moves = garbage.missing.map(
                 (move) => `${labels.get(move.state) ?? move.state} on ${move.symbol}`,
@@ -491,19 +658,31 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
                 `${garbage.label} state: a missing move leads here and the input is rejected`,
               ];
               if (stated) parts.push(pictureStateStyle(garbageState).legend);
-              if (running && active.has(garbage.id)) parts.push("active");
+              if (isActive) parts.push("active: the machine is here");
+              if (fall) parts.push(`fell in from ${labels.get(fall.from)} on ${fall.symbol}`);
               if (moves.length) parts.push(`missing moves: ${moves.join("; ")}`);
               return (
                 <g
                   data-node-id={garbage.id}
                   data-garbage=""
                   data-state={garbageState}
-                  data-active={running && active.has(garbage.id) ? "true" : undefined}
+                  data-active={isActive ? "true" : undefined}
+                  data-look={lit ? "entered" : "idle"}
                   data-traced={traced ? (faint ? "faint" : "trace") : undefined}
                   role="img"
                   aria-label={parts.join(", ")}
                   style={faint ? { filter: FAINT_FILTER } : undefined}
                 >
+                  {isActive && (
+                    <CurrentRing
+                      x={garbage.x}
+                      y={garbage.y}
+                      width={garbage.width}
+                      radius={GARBAGE_HEIGHT / 2}
+                      color={outline}
+                      testId="current"
+                    />
+                  )}
                   <rect
                     x={garbage.x - garbage.width / 2}
                     y={garbage.y - GARBAGE_HEIGHT / 2}
@@ -511,17 +690,17 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
                     height={GARBAGE_HEIGHT}
                     rx={GARBAGE_HEIGHT / 2}
                     data-body=""
-                    fill={red.fill}
+                    fill={fill}
                     stroke={tracesGarbage ? TRACE_COLOR : outline}
-                    strokeWidth={stated || tracesGarbage ? 3.5 : 2}
-                    strokeDasharray={stated || tracesGarbage ? undefined : GARBAGE_DASH}
+                    strokeWidth={lit || tracesGarbage ? 3.5 : 1.8}
+                    strokeDasharray={lit || tracesGarbage ? undefined : GARBAGE_DASH}
                   />
                   <text
                     x={garbage.x}
                     y={garbage.y}
                     textAnchor="middle"
                     dominantBaseline="central"
-                    fill={red.ink}
+                    fill={ink}
                     fontFamily={MONO}
                     fontSize={13}
                     fontWeight={700}
@@ -552,7 +731,16 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
         frame={frame}
         frameIndex={frameIndex}
         justRead={justRead}
+        stuck={stuck}
       />
+      {allDead && (
+        <Box
+          id={`${idPrefix}-dead`}
+          sx={{ fontSize: "0.875rem", fontWeight: 700, color: pictureStateStyle("Rejected").text }}
+        >
+          No state is left: every branch of the run died or ended outside an accept state.
+        </Box>
+      )}
       {runs && runs.value !== null && payload?.pathsTruncated === true && (
         <Box
           id={`${idPrefix}-paths-truncated`}
@@ -586,11 +774,13 @@ export function automatonRuns(payload) {
 /**
  * The Legend's entries for what an Automaton draws besides states: the entry arrow, the double
  * ring, the arrows' symbols, dashed ε-moves and the Garbage state (each only when the machine
- * has it).
+ * has it), and, from a run's frames, the fall into Garbage and the current-state ring.
  * @returns {Array<{key: string, text: string, swatch: Object}>}
  */
-export function automatonAnnotations(payload) {
+export function automatonAnnotations(payload, frames) {
   const entries = [];
+  const list = Array.isArray(frames) ? frames.filter(Boolean) : [];
+  const ran = list.some((frame) => Array.isArray(frame.active));
   if (typeof payload?.start === "string") {
     entries.push({
       key: "start",
@@ -625,7 +815,25 @@ export function automatonAnnotations(payload) {
     entries.push({
       key: "garbage",
       text: `${payload.garbage.label ?? "Garbage"} (where every missing move leads; the input is rejected)`,
-      swatch: { kind: "fill", fill: red.fill, line: red.line },
+      swatch: { kind: "fill", fill: paletteVars.surface.input, line: red.line },
+    });
+    const garbageId = payload.garbage.id;
+    if (
+      garbageFall(payload) &&
+      list.some((frame) => Array.isArray(frame.active) && frame.active.includes(garbageId))
+    ) {
+      entries.push({
+        key: "fall",
+        text: `Dashed red arrow (the missing move that fell into ${payload.garbage.label ?? "Garbage"})`,
+        swatch: { kind: "line", color: red.line, dash: FALL_DASH },
+      });
+    }
+  }
+  if (ran && list.some((frame) => Array.isArray(frame.active) && frame.active.length > 0)) {
+    entries.push({
+      key: "current",
+      text: "Outer ring (a state the machine is in now)",
+      swatch: { kind: "ring", color: pictureStateStyle("ElementHighlight").line },
     });
   }
   return entries;
