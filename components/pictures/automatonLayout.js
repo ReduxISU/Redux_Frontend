@@ -13,6 +13,11 @@
 // drawn too, when it skips layers, or when it joins two far-apart states of one layer. A loop is
 // an arc over its state. The start state gets an entry arrow from the left. A DFA with a missing
 // move gets its Garbage state at the bottom right, apart from the rest, with no arrows into it.
+//
+// #250: the arrows, the entry arrow and Garbage are drawn by shapeAutomaton from the states'
+// current positions, so the reader can move any state (Garbage too) and the arrows follow. Each
+// arrow keeps the bow or loop side the layout chose for it, plus the reader's own bend (or the
+// direction the reader turned a loop to).
 
 import { outlineDistance } from "./graphLayout";
 
@@ -463,18 +468,7 @@ export function layoutAutomaton(payload) {
   const layers = new Map(placed.map((state) => [state.id, state.layer]));
 
   // The entry arrow into the start state, from the left.
-  const first = placed.find((state) => state.start) ?? null;
-  let start = null;
-  if (first) {
-    const tip = { x: first.x - first.width / 2 - 1, y: first.y };
-    const from = { x: tip.x - 41, y: tip.y };
-    const arrow = arrowAt(tip, 1, 0);
-    start = {
-      path: `M${round(from.x)},${round(from.y)} L${round(arrow.lineEnd.x)},${round(arrow.lineEnd.y)}`,
-      arrow: arrow.points,
-      box: { x1: from.x, y1: tip.y - 6, x2: tip.x, y2: tip.y + 6 },
-    };
-  }
+  const start = entryArrow(placed.find((state) => state.start) ?? null);
 
   // The Garbage state, apart at the bottom right with no arrows into it.
   let garbage = null;
@@ -507,8 +501,70 @@ export function layoutAutomaton(payload) {
     width,
     height,
   });
-  const arrows = transitions.map((transition, index) => {
-    const shape = shaped[index];
+  // What the layout chose for each arrow: its bow, or the side its loop points to.
+  const graph = {
+    transitions,
+    widths,
+    choices: shaped.map((shape) =>
+      shape.loop ? { loop: true, angle: shape.angle } : { loop: false, offset: shape.offset },
+    ),
+  };
+  const arrows = automatonArrows(graph, positions);
+
+  return {
+    ...cropBox(placed, arrows, start, garbage, width, height),
+    layerCount,
+    states: placed,
+    arrows,
+    start,
+    garbage,
+    graph,
+    positions,
+  };
+}
+
+/** The entry arrow into the start state `first`, from its left (null with no start state). */
+export function entryArrow(first) {
+  if (!first) return null;
+  const tip = { x: first.x - first.width / 2 - 1, y: first.y };
+  const from = { x: tip.x - 41, y: tip.y };
+  const arrow = arrowAt(tip, 1, 0);
+  return {
+    path: `M${round(from.x)},${round(from.y)} L${round(arrow.lineEnd.x)},${round(arrow.lineEnd.y)}`,
+    arrow: arrow.points,
+    box: { x1: from.x, y1: tip.y - 6, x2: tip.x, y2: tip.y + 6 },
+  };
+}
+
+/**
+ * Every arrow's shape from the states' current `positions` (#250): the bow the layout chose plus
+ * `bends[id]` (drawing units, to the left of travel like the layout's), or a loop pointing
+ * `loops[id]` degrees, or the side the layout chose.
+ * @param {{transitions: Object[], widths: Map<string, number>, choices: Object[]}} graph The
+ *   layout's `graph`.
+ * @param {Map<string, {x: number, y: number}>} positions
+ * @param {Object} [bends] Arrow id -> drawing units.
+ * @param {Object} [loops] Arrow id -> degrees.
+ */
+export function automatonArrows(
+  { transitions, widths, choices },
+  positions,
+  bends = {},
+  loops = {},
+) {
+  return transitions.map((transition, index) => {
+    const choice = choices[index];
+    const a = positions.get(transition.a);
+    const b = positions.get(transition.b);
+    const shape = choice.loop
+      ? loopShape(a, widths.get(transition.a), loops[transition.id] ?? choice.angle)
+      : lineShape(
+          a,
+          b,
+          widths.get(transition.a),
+          widths.get(transition.b),
+          choice.offset + (bends[transition.id] ?? 0),
+        );
     const arrow = arrowAt(shape.end, shape.into.x, shape.into.y);
     const symbols = Array.isArray(transition.symbols) ? transition.symbols.map(String) : [];
     return {
@@ -525,14 +581,4 @@ export function layoutAutomaton(payload) {
       points: shape.points,
     };
   });
-
-  return {
-    ...cropBox(placed, arrows, start, garbage, width, height),
-    layerCount,
-    states: placed,
-    arrows,
-    start,
-    garbage,
-    positions,
-  };
 }

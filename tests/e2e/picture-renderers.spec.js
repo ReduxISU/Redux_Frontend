@@ -21,11 +21,13 @@
 // paths) after it, the same way.
 // #204: the Automaton renderer (DFA, NFA) after that: the Garbage state, the NFA's all-branches
 // steps and the One path picker, the tape, the same plain picture before Run and fit.
-// #206: the Flow Network renderer (Minimum S-T Cut) last: flow / capacity on every edge, the
-// augmenting paths and back arcs, and the cut's S and T sides.
+// #206: the Flow Network renderer (Minimum S-T Cut) after that: flow / capacity on every edge,
+// the augmenting paths and back arcs, and the cut's S and T sides.
+// #202: the Grouped Graph renderer (SAT and 3SAT's clause graph) last, with the same
+// plain picture before Run and the same fit and zoom.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail } from "./helpers";
+import { gotoProblemDetail, openPanel } from "./helpers";
 import {
   ARC_SET_LAYERED_FRAMES,
   CLIQUE_COVER_GRAPH_FRAMES,
@@ -51,7 +53,9 @@ import {
   NFA_DEFAULT_AUTOMATON_FRAMES,
   NFA_SUBSET_AUTOMATON_FRAMES,
   NODE_SET_LAYERED_FRAMES,
+  SAT3_CLAUSE_GRAPH_FRAMES,
   SAT3_FACTOR_GRAPH_FRAMES,
+  SAT3_FAILED_CLAUSE_GRAPH_FRAMES,
   SCC_LAYERED_FRAMES,
   SET_COVER_BIPARTITE_FRAMES,
   SET_COVER_FAILED_BIPARTITE_FRAMES,
@@ -189,8 +193,10 @@ test("before Run a table draws the payload's blank, not the first step's work", 
   await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
   await expect(picture.locator("[data-changed]")).toHaveCount(0);
 
-  // Run draws the first frame: the first try, with its totals.
+  // Run opens on the last frame; its first frame is the first try, with its totals.
   await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
+  await toFirstStep(page);
   await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[0].caption);
   // (A highlighted cell also says its state, for screen readers.)
   await expect(cell("r0c0")).toHaveText(/^0(\s|$)/);
@@ -227,8 +233,13 @@ test("the step controls walk a format=frames run, with each step's caption and s
 
   const [first, second, last] = DFA_TABLE_FRAMES.frames;
   const caption = page.locator(`${CAPTION}-text`);
+  // A run opens on its last step: the finished result, with its verdict.
+  await expect(page.locator("#workbench-steps-position")).toHaveText("Step 3 of 3");
+  await expect(caption).toHaveText(last.caption);
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  // The slider goes back through the steps.
+  await toFirstStep(page);
   await expect(caption).toHaveText(first.caption);
-  await expect(page.locator("#workbench-steps-position")).toHaveText("Step 1 of 3");
   await expect(page.locator(`${TABLE_PREFIX}-r1`)).toHaveCount(0);
 
   await page.locator("#workbench-steps-next").click();
@@ -253,6 +264,48 @@ test("the step controls walk a format=frames run, with each step's caption and s
 
   await page.locator("#workbench-steps-previous").click();
   await expect(caption).toHaveText(second.caption);
+});
+
+test("a run opens on its last step, Play there replays from step 1, and the slider goes back", async ({
+  page,
+}) => {
+  await setPictureTypes(page, { [TABLE_VIZ]: "Table" });
+  await answerPictures(page);
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Table");
+  // Before Run the picture is the plain one, with no steps.
+  await expect(page.locator("#workbench-steps-position")).toHaveCount(0);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+
+  await page.locator("#workbench-run").click();
+  const position = page.locator("#workbench-steps-position");
+  const caption = page.locator(`${CAPTION}-text`);
+  const frames = DFA_TABLE_FRAMES.frames;
+  await expect(position).toHaveText(`Step ${frames.length} of ${frames.length}`);
+  await expect(caption).toHaveText(frames.at(-1).caption);
+  await expect(page.locator("#workbench-steps-next")).toBeDisabled();
+
+  // The slider walks back a step at a time.
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(position).toHaveText(`Step ${frames.length - 1} of ${frames.length}`);
+  await expect(caption).toHaveText(frames.at(-2).caption);
+  await page.keyboard.press("End");
+  await expect(position).toHaveText(`Step ${frames.length} of ${frames.length}`);
+
+  // Play on the last step replays the run from step 1, and goes on from there.
+  await page.locator("#workbench-steps-play-pause").click();
+  await expect(position).toHaveText(`Step 1 of ${frames.length}`);
+  await expect(caption).toHaveText(frames[0].caption);
+  await expect(position).toHaveText(`Step 2 of ${frames.length}`);
+  await expect(position).toHaveText(`Step ${frames.length} of ${frames.length}`);
+  await expect(page.locator("#workbench-steps-play-pause")).toHaveAttribute("aria-label", "Play");
+
+  // Play from any other step goes on from there.
+  await page.locator("#workbench-steps-previous").click();
+  await expect(position).toHaveText(`Step ${frames.length - 1} of ${frames.length}`);
+  await page.locator("#workbench-steps-play-pause").click();
+  await expect(position).toHaveText(`Step ${frames.length} of ${frames.length}`);
 });
 
 test("Committed draws apart from Solution, dashed, and has its own Legend entry", async ({
@@ -332,16 +385,26 @@ async function openPicture(page, problem, capture) {
   });
 }
 
-/** Presses Run and steps forward to frame `index` (0-based). */
+/**
+ * Presses Run and goes to frame `index` (0-based). A run opens on its last frame, the finished
+ * result; this goes back to the first (the slider's Home key) and steps forward from there.
+ */
 async function runToFrame(page, capture, index) {
   await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-steps-position")).toHaveText(
-    `Step 1 of ${capture.frames.length}`,
-  );
+  const count = capture.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+  await toFirstStep(page);
   for (let step = 0; step < index; step += 1) {
     await page.locator("#workbench-steps-next").click();
   }
   await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+}
+
+/** Goes back to step 1 with the step slider's Home key. */
+async function toFirstStep(page) {
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("Home");
+  await expect(page.locator("#workbench-steps-position")).toHaveText(/^Step 1 of /);
 }
 
 const graphNode = (page, id) => page.locator(`${GRAPH}-graph [data-node-id="${id}"]`);
@@ -1770,7 +1833,10 @@ for (const [key, testCase] of Object.entries(AUTOMATON_CASES)) {
     await openAutomaton(page, testCase);
     const graph = page.locator(`${AUTOMATON}-graph`);
     await expect(graph).toHaveAttribute("data-automaton-kind", payload.kind);
-    await expect(graph.locator("[data-focusable]")).toHaveCount(payload.states.length);
+    // Every state is focusable, Garbage too (#250: the arrow keys move it).
+    await expect(graph.locator("[data-focusable]")).toHaveCount(
+      payload.states.length + (payload.garbage ? 1 : 0),
+    );
     await expect(graph.locator("[data-edge-id]")).toHaveCount(payload.transitions.length);
     await expect(graph.locator("[data-garbage]")).toHaveCount(payload.garbage ? 1 : 0);
     // Accept states get a double ring, the start state an entry arrow.
@@ -1787,7 +1853,7 @@ for (const [key, testCase] of Object.entries(AUTOMATON_CASES)) {
     await expect(tape(page).locator("[data-tape-cell]")).toHaveCount(payload.input.length);
     await expect(tape(page).locator("[data-tape-end]")).toHaveCount(1);
     // Every state says what it is, and can be reached by keyboard.
-    for (const piece of await graph.locator("[data-focusable]").all()) {
+    for (const piece of await graph.locator("[data-focusable]:not([data-garbage])").all()) {
       await expect(piece).toHaveAttribute("aria-label", /^State \S+, .*(on .* to |no moves out)/);
       await expect(piece).toHaveAttribute("tabindex", "0");
     }
@@ -2057,9 +2123,12 @@ test("Automaton: One path follows a single run picked from the dropdown, and All
   await expect(picker.locator("option")).toHaveText(paths.map((path) => path.label));
   await expect(picker).toHaveValue(paths[0].id);
   await expect(page.locator(`${AUTOMATON}-graph`)).toHaveAttribute("data-run-view", paths[0].id);
-  // The steps start over on the path's own frames.
+  // The steps switch to the path's own frames, opening on its last (the path's result).
   const position = page.locator("#workbench-steps-position");
-  await expect(position).toHaveText(`Step 1 of ${paths[0].frames.length}`);
+  const ends = `Step ${paths[0].frames.length} of ${paths[0].frames.length}`;
+  await expect(position).toHaveText(ends);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(paths[0].frames.at(-1).caption);
+  await toFirstStep(page);
   for (const [index, frame] of paths[0].frames.entries()) {
     if (index > 0) await page.locator("#workbench-steps-next").click();
     await expect(page.locator(`${CAPTION}-text`)).toHaveText(frame.caption);
@@ -2072,10 +2141,7 @@ test("Automaton: One path follows a single run picked from the dropdown, and All
   // never reached Untraveled, and the tape marks the symbol it had no move for.
   const dies = paths.find((path) => path.outcome === "dies");
   await picker.selectOption(dies.id);
-  await expect(position).toHaveText(`Step 1 of ${dies.frames.length}`);
-  for (let index = 1; index < dies.frames.length; index += 1) {
-    await page.locator("#workbench-steps-next").click();
-  }
+  await expect(position).toHaveText(`Step ${dies.frames.length} of ${dies.frames.length}`);
   const dead = dies.frames.at(-1);
   await expectAutomatonStates(page, capture.payload, dead);
   await expect(automatonState(page, dead.active[0]).locator("[data-current]")).toHaveCount(1);
@@ -2089,8 +2155,8 @@ test("Automaton: One path follows a single run picked from the dropdown, and All
 
   await page.locator(`${AUTOMATON}-view-all`).click();
   await expect(picker).toHaveCount(0);
-  await expect(position).toHaveText(`Step 1 of ${capture.frames.length}`);
-  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[0].caption);
+  await expect(position).toHaveText(`Step ${capture.frames.length} of ${capture.frames.length}`);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
 });
 
 test("Automaton: a rejected run with no state left says so, and marks the active states while it runs", async ({
@@ -2675,3 +2741,753 @@ for (const [key, capture] of Object.entries(FLOW_CASES)) {
     expect(await labelCollisions(page, `${FLOW}-svg`)).toEqual([]);
   });
 }
+
+// --- #202: the Grouped Graph renderer (the clause graph) -----------------------------------
+
+const CLAUSES = "#workbench-source-frames-groupedgraph";
+
+const literal = (page, id) => page.locator(`${CLAUSES}-graph [data-node-id="${id}"]`);
+const clause = (page, id) => page.locator(`${CLAUSES}-graph [data-clause-id="${id}"]`);
+const variableChip = (page, id) => page.locator(`${CLAUSES}-graph [data-variable-id="${id}"]`);
+
+test("Grouped Graph: one cluster per clause, its literals, complement edges and a chip per variable", async ({
+  page,
+}) => {
+  const capture = SAT3_CLAUSE_GRAPH_FRAMES;
+  await openPicture(page, "3SAT", capture);
+  const { payload } = capture;
+  await expect(page.locator(`${CLAUSES}-graph [data-clause-id]`)).toHaveCount(
+    payload.groups.length,
+  );
+  await expect(page.locator(`${CLAUSES}-graph [data-node-id]`)).toHaveCount(payload.nodes.length);
+  await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="complement"]`)).toHaveCount(
+    payload.edges.length,
+  );
+  await expect(page.locator(`${CLAUSES}-graph [data-variable-id]`)).toHaveCount(
+    payload.variables.length,
+  );
+  // Every focusable piece says what it is.
+  for (const piece of await page.locator(`${CLAUSES}-graph [data-focusable]`).all()) {
+    await expect(piece).toHaveAttribute("aria-label", /^(Literal \S+ in C\d+|Variable \S+: )/);
+    await expect(piece).toHaveAttribute("tabindex", "0");
+  }
+
+  // The Edges switch adds the edges inside each clause (the 3SAT to Independent Set graph).
+  await page.locator(`${CLAUSES}-edges-all`).click();
+  await expect(page.locator(`${CLAUSES}-edges-all`)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="clause"]`)).toHaveCount(
+    payload.clauseEdges.length,
+  );
+  await page.locator(`${CLAUSES}-edges-complements`).click();
+  await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="clause"]`)).toHaveCount(0);
+});
+
+test("Grouped Graph: before Run the clause graph is the plain formula, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  // The first step already tries x1 (a ring, a T chip); none of it shows before Run.
+  const capture = SAT3_CLAUSE_GRAPH_FRAMES;
+  await openPicture(page, "3SAT", capture);
+  const graph = page.locator(`${CLAUSES}-graph`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(graph.locator("[data-node-id]")).toHaveCount(capture.payload.nodes.length);
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(graph.locator("[data-tried]")).toHaveCount(0);
+  await expect(graph.locator('[data-variable-id]:not([data-value="unassigned"])')).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(legendBody(page)).not.toContainText("Ring (the variable being tried)");
+
+  const before = await nodeCentres(page, `${CLAUSES}-graph`);
+  await runToFrame(page, capture, 0);
+  await expect(variableChip(page, "v:x1")).toHaveAttribute("data-tried", "true");
+  expect(await nodeCentres(page, `${CLAUSES}-graph`)).toEqual(before);
+});
+
+test("Grouped Graph: the steps show False literals, Covered clauses, Committed true literals and the answer", async ({
+  page,
+}) => {
+  const capture = SAT3_CLAUSE_GRAPH_FRAMES;
+  await openPicture(page, "3SAT", capture);
+
+  // Frame 5: x1 = True is kept so far, x2 is being tried.
+  await runToFrame(page, capture, 4);
+  await expect(literal(page, "c0-0")).toHaveAttribute("data-state", "Committed");
+  await expect(literal(page, "c0-0")).toHaveAttribute("aria-label", /Committed \(kept so far\)/);
+  await expect(literal(page, "c1-0")).toHaveAttribute("data-state", "False");
+  await expect(literal(page, "c2-0")).toHaveAttribute("data-tried", "true");
+  await expect(clause(page, "c0")).toHaveAttribute("data-state", "Covered");
+  await expect(variableChip(page, "v:x1")).toHaveAttribute("data-value", "true");
+  await expect(variableChip(page, "v:x2")).toHaveAttribute("data-tried", "true");
+  await expect(variableChip(page, "v:x3")).toHaveAttribute("data-value", "unassigned");
+  await expect(variableChip(page, "v:x3")).toHaveAttribute("aria-label", /not assigned yet/);
+
+  // The last frame: one true literal per clause, confirmed.
+  await page.locator("#workbench-steps-next").click();
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  const done = capture.frames.at(-1);
+  for (const [id, entry] of Object.entries(done.nodes)) {
+    await expect(literal(page, id)).toHaveAttribute("data-state", entry.state);
+  }
+  for (const group of capture.payload.groups) {
+    await expect(clause(page, group.id)).toHaveAttribute("data-state", "Covered");
+  }
+  await expect(variableChip(page, "v:x3")).toHaveAttribute("data-value", "false");
+
+  const legend = legendBody(page);
+  await expect(legend).toContainText("False (assigned false)");
+  await expect(legend).toContainText("Committed (kept so far)");
+  await expect(legend).toContainText("Complement edge");
+  await expect(legend).toContainText("Ring (the variable being tried)");
+});
+
+test("Grouped Graph: an unsatisfiable formula shows the failing clause Rejected and ends on no", async ({
+  page,
+}) => {
+  const capture = SAT3_FAILED_CLAUSE_GRAPH_FRAMES;
+  await openPicture(page, "3SAT", capture);
+  await runToFrame(page, capture, 1);
+  await expect(clause(page, "c1")).toHaveAttribute("data-state", "Rejected");
+  await expect(literal(page, "c1-0")).toHaveAttribute("data-state", "Rejected");
+  await expect(clause(page, "c0")).toHaveAttribute("data-state", "Covered");
+  for (let step = 2; step < capture.frames.length; step += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(page.locator(`${CLAUSES}-graph [data-state="Solution"]`)).toHaveCount(0);
+});
+
+test("Grouped Graph: hovering a literal or focusing a variable traces that variable everywhere", async ({
+  page,
+}) => {
+  await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+  await literal(page, "c0-0").hover();
+  // x1 appears in all three clauses; its literals are traced and the others fade by color.
+  for (const id of ["c0-0", "c1-0", "c1-2", "c2-2"]) {
+    await expect(literal(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(literal(page, "c0-1")).toHaveAttribute("data-traced", "faint");
+  const faded = await literal(page, "c0-1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(page.locator(`${CLAUSES}-graph [data-edge-id="c0-0~c1-0"]`)).toHaveAttribute(
+    "data-traced",
+    "trace",
+  );
+
+  await page.mouse.move(0, 0);
+  await variableChip(page, "v:x2").focus();
+  await expect(literal(page, "c0-1")).toHaveAttribute("data-traced", "trace");
+  await expect(literal(page, "c0-0")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(variableChip(page, "v:x2")).toHaveAttribute("aria-pressed", "true");
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Grouped Graph: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+      const svg = page.locator(`${CLAUSES}-svg`);
+      await expect(svg).toBeVisible();
+      const box = await svg.boundingBox();
+      expect(box.width).toBeGreaterThan(250);
+      // The whole formula fits the width it has, at every width: nothing scrolls sideways.
+      await expectFits(page, `${CLAUSES}-svg`);
+      await expect(page.locator(`${CLAUSES}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // An unassigned variable's chip text follows the theme.
+      const ink = await variableChip(page, "v:x3")
+        .locator("text")
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+test("Grouped Graph: the clause graph zooms like a graph, and a tap still traces when zoomed", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  const zoom = page.locator(`${CLAUSES}-zoom`);
+  await page.locator(`${CLAUSES}-zoom-in`).click();
+  await expect(zoom).toHaveAttribute("data-zoom", "1.50");
+  // The Edges switch changes what is drawn, not where, so the zoom stays.
+  await page.locator(`${CLAUSES}-edges-all`).click();
+  await expect(zoom).toHaveAttribute("data-zoom", "1.50");
+  await page.locator(`${CLAUSES}-edges-complements`).click();
+
+  // Focusing a literal brings it into view; tapping it traces its variable.
+  await literal(page, "c0-0").focus();
+  await literal(page, "c0-0").blur();
+  await literal(page, "c0-0").click();
+  await expect(literal(page, "c0-0")).toHaveAttribute("aria-pressed", "true");
+  await expect(literal(page, "c1-0")).toHaveAttribute("data-traced", "trace");
+  await expectFits(page, `${CLAUSES}-svg`);
+
+  await page.locator(`${CLAUSES}-zoom-reset`).click();
+  await expect(zoom).toHaveAttribute("data-zoom", "1.00");
+});
+
+for (const [width, height] of [
+  [1280, 800],
+  [1920, 1080],
+]) {
+  test(`Grouped Graph: at ${width}x${height} the clause graph fills the pane and, zoomed, isn't clipped to a column`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+    const svg = `${CLAUSES}-svg`;
+    await expect(page.locator(svg)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const sizes = await areaSizes(page, svg);
+        return Math.abs(sizes.width - sizes.content);
+      })
+      .toBeLessThanOrEqual(2);
+    await scrollPictureToTop(page);
+    const sizes = await areaSizes(page, svg);
+    expect(sizes.bottom).toBeLessThanOrEqual(sizes.viewport);
+    await page.locator(`${CLAUSES}-zoom-in`).click();
+    await page.locator(`${CLAUSES}-zoom-in`).click();
+    const zoomed = await areaSizes(page, svg);
+    expect(zoomed.viewAspect).toBeCloseTo(zoomed.width / zoomed.height, 2);
+  });
+}
+
+// --- #250: moving nodes and bending edges by hand -------------------------------------------
+//
+// Every node-link picture (Graph, Grouped Graph, Bipartite Graph, Layered Graph, Automaton,
+// Flow Network) lets the reader drag its nodes and bend its edges (diagramEdits.js, with the
+// gestures in DiagramZoom.js), within each type's own limits. The changes stay while the steps
+// play and after Run, and go back to the layout on Reset layout or a new instance.
+
+/** A piece's body: its own circle or rect (data-body), or its first one (a clause's circle). */
+const bodyOf = (piece) => piece.locator("[data-body], circle, rect").first();
+
+/** A piece's body centre, in drawing units. */
+function drawnCentre(piece) {
+  return bodyOf(piece).evaluate((el) => {
+    const box = el.getBBox();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+}
+
+/** A piece's body centre on screen, in CSS px (scrolled into view first). */
+async function screenCentre(piece) {
+  await piece.scrollIntoViewIfNeeded();
+  const box = await bodyOf(piece).boundingBox();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/** Drags with the mouse from `from` (screen px) by (dx, dy), in small steps. */
+async function mouseDragFrom(page, from, dx, dy) {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + dx / 2, from.y + dy / 2, { steps: 5 });
+  await page.mouse.move(from.x + dx, from.y + dy, { steps: 5 });
+  await page.mouse.up();
+}
+
+/** Drags `piece` by its body's middle. */
+async function mouseDrag(page, piece, dx, dy) {
+  await mouseDragFrom(page, await screenCentre(piece), dx, dy);
+}
+
+/** A path's `d` and its first and last points, in drawing units. */
+function pathEnds(path) {
+  return path.evaluate((el) => {
+    const d = el.getAttribute("d");
+    const numbers = d.match(/-?\d+(\.\d+)?/g).map(Number);
+    return {
+      d,
+      start: { x: numbers[0], y: numbers[1] },
+      end: { x: numbers[numbers.length - 2], y: numbers[numbers.length - 1] },
+    };
+  });
+}
+
+const distance = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+
+/** Every piece's body centre in `scope`, by id, in drawing units. */
+function centresOf(page, scope) {
+  return page.locator(`${scope} [data-node-id]`).evaluateAll((nodes) =>
+    Object.fromEntries(
+      nodes.map((node) => {
+        const box = node.querySelector("[data-body], circle, rect").getBBox();
+        return [
+          node.getAttribute("data-node-id"),
+          { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+        ];
+      }),
+    ),
+  );
+}
+
+/** The screen point `share` of the way along a path (CSS px). */
+async function pointAlong(path, share) {
+  await path.scrollIntoViewIfNeeded();
+  return path.evaluate((el, part) => {
+    const point = el.getPointAtLength(el.getTotalLength() * part);
+    const ctm = el.getScreenCTM();
+    return {
+      x: ctm.a * point.x + ctm.c * point.y + ctm.e,
+      y: ctm.b * point.x + ctm.d * point.y + ctm.f,
+    };
+  }, share);
+}
+
+/** A tap that wobbles under the drag threshold (2 px): still a tap. */
+async function wobblyClick(page, piece) {
+  const at = await screenCentre(piece);
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 2, at.y + 1);
+  await page.mouse.up();
+}
+
+/** The Automaton's state radius, in drawing units (automatonLayout.js STATE_RADIUS). */
+const STATE_RADIUS_UNITS = 26;
+
+test("Drag: a Graph node moves with its edges, a tap still traces, and Reset layout puts it back", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const reset = page.locator(`${GRAPH}-layout-reset`);
+  await expect(reset).toBeDisabled();
+  await expect(reset).toHaveAttribute("aria-label", /Reset layout/);
+  const before = await centresOf(page, `${GRAPH}-graph`);
+  const edgePath = graphEdge(page, "1-2").locator("path");
+  const edgeBefore = await pathEnds(edgePath);
+
+  await mouseDrag(page, graphNode(page, "1"), 90, 60);
+  const moved = await drawnCentre(graphNode(page, "1"));
+  expect(moved.x - before["1"].x).toBeGreaterThan(20);
+  expect(moved.y - before["1"].y).toBeGreaterThan(10);
+  // The edge leaves the node where it is now, at its outline.
+  const edgeAfter = await pathEnds(edgePath);
+  expect(edgeAfter.d).not.toBe(edgeBefore.d);
+  expect(distance(edgeAfter.start, moved)).toBeLessThan(25);
+  // The other nodes stay; a drag is not a tap, so nothing is pinned.
+  const after = await centresOf(page, `${GRAPH}-graph`);
+  for (const id of ["2", "3", "4"]) expect(after[id]).toEqual(before[id]);
+  await expect(graphNode(page, "1")).toHaveAttribute("aria-pressed", "false");
+  await expect(reset).toBeEnabled();
+
+  // A press that wobbles a pixel or two is still a tap: it pins and traces.
+  await wobblyClick(page, graphNode(page, "2"));
+  await expect(graphNode(page, "2")).toHaveAttribute("aria-pressed", "true");
+  await expect(graphEdge(page, "2-3")).toHaveAttribute("data-traced", "trace");
+  expect((await centresOf(page, `${GRAPH}-graph`))["2"]).toEqual(before["2"]);
+
+  await reset.click();
+  expect(await centresOf(page, `${GRAPH}-graph`)).toEqual(before);
+  expect((await pathEnds(edgePath)).d).toBe(edgeBefore.d);
+  await expect(reset).toBeDisabled();
+});
+
+test("Drag: bending a Graph edge moves its weight; the edits survive Run and the steps", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const capture = MAX_CUT_GRAPH_FRAMES;
+  await openPicture(page, "Max Cut", capture);
+  const scope = `${GRAPH}-graph`;
+  const edgePath = graphEdge(page, "1-2").locator("path");
+  const weight = page.locator(`${scope} [data-layer="weights"] [data-drag-edge="1-2"]`);
+  const straight = await pathEnds(edgePath);
+  expect(straight.d).toContain("L");
+  const weightBefore = await screenCentre(weight);
+
+  // Drag the weight sideways: the edge bows through it, and the weight rides along.
+  await mouseDragFrom(page, weightBefore, 0, 50);
+  const bent = await pathEnds(edgePath);
+  expect(bent.d).toContain("Q");
+  const weightAfter = await screenCentre(weight);
+  expect(distance(weightAfter, weightBefore)).toBeGreaterThan(20);
+  // Dragging the edge's line itself (a third of the way along, clear of the weight) bends it too.
+  const line = page.locator(`${scope} [data-layer="edge-handles"] [data-drag-edge="1-2"]`);
+  await mouseDragFrom(page, await pointAlong(line, 0.3), 0, -100);
+  expect((await pathEnds(edgePath)).d).not.toBe(bent.d);
+  await mouseDrag(page, graphNode(page, "3"), -60, 40);
+  const edited = await centresOf(page, scope);
+  const editedPath = (await pathEnds(edgePath)).d;
+
+  // Run, and every step, keep the hand-made layout.
+  await runToFrame(page, capture, 0);
+  expect(await centresOf(page, scope)).toEqual(edited);
+  expect((await pathEnds(edgePath)).d).toBe(editedPath);
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[1].caption);
+  expect(await centresOf(page, scope)).toEqual(edited);
+  expect((await pathEnds(edgePath)).d).toBe(editedPath);
+});
+
+test("Drag: the Force / Circle switch and a new instance put the automatic layout back", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const scope = `${GRAPH}-graph`;
+  const force = await centresOf(page, scope);
+  await mouseDrag(page, graphNode(page, "4"), -80, -40);
+  expect(await centresOf(page, scope)).not.toEqual(force);
+  await page.locator(`${GRAPH}-layout-circle`).click();
+  await page.locator(`${GRAPH}-layout-force`).click();
+  expect(await centresOf(page, scope)).toEqual(force);
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
+
+  // A new instance (here the same graph, written with a trailing space) starts afresh.
+  await mouseDrag(page, graphNode(page, "4"), -80, -40);
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeEnabled();
+  await openPanel(page, "instance", { expect });
+  const input = page.locator("#workbench-instance-full-instance");
+  await input.fill(`${await input.inputValue()} `);
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
+  await expect.poll(() => centresOf(page, scope)).toEqual(force);
+});
+
+test("Drag: the arrow keys move a focused node, Shift further, and say so", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const node = graphNode(page, "1");
+  const start = await drawnCentre(node);
+  await node.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await drawnCentre(node)).x - start.x).toBeCloseTo(10, 1);
+  await expect(page.locator(`${GRAPH}-moved`)).toHaveText("Moved Node 1 right.");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect.poll(async () => (await drawnCentre(node)).x - start.x).toBeCloseTo(-40, 1);
+  expect((await drawnCentre(node)).y).toBeCloseTo(start.y, 1);
+  // Enter still pins the node.
+  await page.keyboard.press("Enter");
+  await expect(node).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeEnabled();
+});
+
+test("Drag: zoomed in, a node follows the pointer through the zoomed view, and empty space still pans", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.25");
+  const node = graphNode(page, "3");
+  const from = await screenCentre(node);
+  const drawnBefore = await drawnCentre(node);
+  const viewBox = await viewBoxOf(page);
+  // Towards the middle of the picture, so nothing stops it.
+  const svgBox = await page.locator(`${GRAPH}-svg`).boundingBox();
+  const dx = from.x < svgBox.x + svgBox.width / 2 ? 45 : -45;
+  const dy = from.y < svgBox.y + svgBox.height / 2 ? 30 : -30;
+  await mouseDragFrom(page, from, dx, dy);
+  // The node is still under the pointer: drawing units are screen px over the zoomed scale.
+  const to = await screenCentre(node);
+  expect(Math.abs(to.x - from.x - dx)).toBeLessThan(2);
+  expect(Math.abs(to.y - from.y - dy)).toBeLessThan(2);
+  const scale = await page.locator(`${GRAPH}-svg`).evaluate((svg) => svg.getScreenCTM().a);
+  const drawnAfter = await drawnCentre(node);
+  expect(Math.abs(drawnAfter.x - drawnBefore.x - dx / scale)).toBeLessThan(1);
+  // Dragging the node did not pan.
+  expect(await viewBoxOf(page)).toBe(viewBox);
+
+  // A drag on empty space pans, and moves no node.
+  const empty = await page.locator(`${GRAPH}-svg`).evaluate((svg) => {
+    const rect = svg.getBoundingClientRect();
+    for (let y = rect.top + 10; y < rect.bottom - 10; y += 12) {
+      for (let x = rect.left + 10; x < rect.right - 10; x += 12) {
+        if (document.elementFromPoint(x, y) === svg) return { x, y };
+      }
+    }
+    return null;
+  });
+  expect(empty).not.toBeNull();
+  const centres = await centresOf(page, `${GRAPH}-graph`);
+  await mouseDragFrom(page, empty, 40, 0);
+  expect(await viewBoxOf(page)).not.toBe(viewBox);
+  expect(await centresOf(page, `${GRAPH}-graph`)).toEqual(centres);
+});
+
+test("Drag: on a touch screen a swipe at fit scrolls the page, and a long press then a drag moves the node", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${GRAPH}-svg`);
+  const node = graphNode(page, "2");
+  const before = await centresOf(page, `${GRAPH}-graph`);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 2 });
+  const touch = (type, touchPoints) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints });
+
+  // A quick swipe over the node: the page scrolls, and the node stays where it was. (The finger
+  // moves down, so the page scrolls up, when there is room above; up otherwise.)
+  const at = await screenCentre(node);
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  const down = scrollBefore > 150 ? 1 : -1;
+  await touch("touchStart", [{ x: at.x, y: at.y, id: 0 }]);
+  for (let step = 1; step <= 6; step += 1) {
+    await touch("touchMove", [{ x: at.x, y: at.y + down * step * 20, id: 0 }]);
+  }
+  await touch("touchEnd", []);
+  await expect
+    .poll(async () => down * (scrollBefore - (await page.evaluate(() => window.scrollY))))
+    .toBeGreaterThan(20);
+  expect(await centresOf(page, `${GRAPH}-graph`)).toEqual(before);
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
+
+  // A long press arms the node (a dashed outline); the drag after it moves the node, not the page.
+  const held = await screenCentre(node);
+  const scrollHeld = await page.evaluate(() => window.scrollY);
+  await touch("touchStart", [{ x: held.x, y: held.y, id: 0 }]);
+  await expect(page.locator(`${GRAPH}-graph [data-drag-armed]`)).toHaveAttribute(
+    "data-node-id",
+    "2",
+  );
+  for (let step = 1; step <= 6; step += 1) {
+    await touch("touchMove", [{ x: held.x + step * 8, y: held.y + step * 6, id: 0 }]);
+  }
+  await touch("touchEnd", []);
+  await expect(page.locator(`${GRAPH}-graph [data-drag-armed]`)).toHaveCount(0);
+  const moved = await drawnCentre(node);
+  expect(distance(moved, before["2"])).toBeGreaterThan(15);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollHeld);
+  await expect(node).toHaveAttribute("aria-pressed", "false");
+});
+
+test("Drag: an Automaton state moves with its arrows, Garbage moves too, and the fall arrow follows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const capture = DFA_GARBAGE_AUTOMATON_FRAMES;
+  await openAutomaton(page, AUTOMATON_CASES.garbage);
+  const scope = `${AUTOMATON}-graph`;
+  const before = await centresOf(page, scope);
+  const entry = page.locator(`${scope} [data-start-arrow] path`);
+  const entryBefore = await pathEnds(entry);
+  const arrowPath = automatonArrow(page, "q:1>q:2").locator("path");
+
+  // The start state moves freely; its entry arrow and its arrows go with it.
+  await mouseDrag(page, automatonState(page, "q:1"), 40, 70);
+  const moved = await drawnCentre(automatonState(page, "q:1"));
+  expect(moved.x - before["q:1"].x).toBeGreaterThan(10);
+  expect(moved.y - before["q:1"].y).toBeGreaterThan(20);
+  const entryAfter = await pathEnds(entry);
+  expect(entryAfter.d).not.toBe(entryBefore.d);
+  expect(Math.abs(entryAfter.end.y - moved.y)).toBeLessThan(1);
+  expect(distance((await pathEnds(arrowPath)).start, moved)).toBeLessThan(STATE_RADIUS_UNITS + 4);
+
+  // Garbage moves like any state.
+  await mouseDrag(page, automatonState(page, "garbage"), -120, 0);
+  const garbage = await drawnCentre(automatonState(page, "garbage"));
+  expect(before.garbage.x - garbage.x).toBeGreaterThan(30);
+
+  // Garbage takes focus like a state, and the arrow keys move it the same steps.
+  const garbageNode = automatonState(page, "garbage");
+  await expect(garbageNode).toHaveAttribute("tabindex", "0");
+  await expect(garbageNode).toHaveAttribute("aria-label", /^Garbage state, /);
+  await garbageNode.focus();
+  await page.keyboard.press("ArrowUp");
+  // The focus ring shows on it, as on a state.
+  expect(await garbageNode.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+  await expect.poll(async () => (await drawnCentre(garbageNode)).y).toBeCloseTo(garbage.y - 10, 1);
+  await expect(page.locator(`${AUTOMATON}-moved`)).toHaveText("Moved Garbage state up.");
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect.poll(async () => (await drawnCentre(garbageNode)).x).toBeCloseTo(garbage.x + 50, 1);
+  // Its idle look is kept.
+  await expect(garbageNode).toHaveAttribute("data-look", "idle");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => drawnCentre(garbageNode)).toEqual(garbage);
+
+  // A tap still traces (and a second tap lets go).
+  await wobblyClick(page, automatonState(page, "q:2"));
+  await expect(automatonState(page, "q:2")).toHaveAttribute("aria-pressed", "true");
+  await automatonState(page, "q:2").click();
+
+  // Another visualization (drawn from the same capture here) starts from the layout again.
+  const listbox = page.locator("#workbench-source-type-listbox");
+  await page.locator("#workbench-source-type-button").click();
+  await listbox.locator('[role="option"][aria-selected="false"]').first().click();
+  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeDisabled();
+  await expect.poll(() => centresOf(page, scope)).toEqual(before);
+  await page.locator("#workbench-source-type-button").click();
+  await listbox.locator('[role="option"][aria-selected="false"]').first().click();
+  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeDisabled();
+  await mouseDrag(page, automatonState(page, "garbage"), -120, 0);
+  const garbageMoved = await drawnCentre(automatonState(page, "garbage"));
+  expect(distance(garbageMoved, garbage)).toBeLessThan(1);
+
+  // The run falls into Garbage from q:3: the fall arrow runs from where both are now.
+  await runToFrame(page, capture, 3);
+  const fall = page.locator(`${scope} [data-fall-arrow] path`);
+  await expect(fall).toBeVisible();
+  const fallEnds = await pathEnds(fall);
+  const from = await drawnCentre(automatonState(page, "q:3"));
+  expect(distance(fallEnds.start, from)).toBeLessThan(STATE_RADIUS_UNITS + 12);
+  expect(distance(fallEnds.end, garbage)).toBeLessThan(80);
+  expect(await drawnCentre(automatonState(page, "garbage"))).toEqual(garbage);
+});
+
+test("Drag: bending an Automaton arrow moves its label, and dragging a loop turns it around its state", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openAutomaton(page, AUTOMATON_CASES.garbage);
+  const scope = `${AUTOMATON}-graph`;
+  const label = page.locator(`${scope} [data-layer="labels"] [data-drag-edge="q:1>q:2"]`);
+  const path = automatonArrow(page, "q:1>q:2").locator("path");
+  const before = await pathEnds(path);
+  const labelBefore = await screenCentre(label);
+  await mouseDragFrom(page, labelBefore, 0, -60);
+  expect((await pathEnds(path)).d).not.toBe(before.d);
+  const labelAfter = await screenCentre(label);
+  expect(labelBefore.y - labelAfter.y).toBeGreaterThan(25);
+
+  // The loop on q:3: drag its label round to the state's other side.
+  const state = await drawnCentre(automatonState(page, "q:3"));
+  const loopLabel = page.locator(`${scope} [data-layer="labels"] [data-drag-edge="q:3>q:3"]`);
+  const loopPath = automatonArrow(page, "q:3>q:3").locator("path");
+  const loopBefore = await pathEnds(loopPath);
+  const labelDrawn = () =>
+    loopLabel.locator("rect").evaluate((el) => {
+      const box = el.getBBox();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    });
+  const sideBefore = await labelDrawn();
+  const stateOnScreen = await screenCentre(automatonState(page, "q:3"));
+  const grab = await screenCentre(loopLabel);
+  await mouseDragFrom(page, grab, 2 * (stateOnScreen.x - grab.x), 2 * (stateOnScreen.y - grab.y));
+  expect((await pathEnds(loopPath)).d).not.toBe(loopBefore.d);
+  // The label is now on the far side: its direction from the state points the other way.
+  const sideAfter = await labelDrawn();
+  const dot =
+    (sideBefore.x - state.x) * (sideAfter.x - state.x) +
+    (sideBefore.y - state.y) * (sideAfter.y - state.y);
+  expect(dot).toBeLessThan(0);
+  // Turning a loop doesn't move its state.
+  expect(await drawnCentre(automatonState(page, "q:3"))).toEqual(state);
+});
+
+test("Drag: a Bipartite node only moves up and down its own column", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openBipartite(page, BIPARTITE_CASES[0]);
+  const scope = `${BIPARTITE}-graph`;
+  const before = await centresOf(page, scope);
+  const edge = bipartiteEdge(page, "e:2~S1");
+  await mouseDrag(page, bipartiteNode(page, "e:2"), 120, 70);
+  const element = await drawnCentre(bipartiteNode(page, "e:2"));
+  expect(element.x).toBeCloseTo(before["e:2"].x, 1);
+  expect(element.y - before["e:2"].y).toBeGreaterThan(20);
+  expect(Math.abs((await pathEnds(edge)).start.y - element.y)).toBeLessThan(1);
+
+  await mouseDrag(page, bipartiteNode(page, "S1"), -200, 60);
+  const set = await drawnCentre(bipartiteNode(page, "S1"));
+  expect(set.x).toBeCloseTo(before.S1.x, 1);
+  expect(set.y - before.S1.y).toBeGreaterThan(20);
+  expect(Math.abs((await pathEnds(edge)).end.y - set.y)).toBeLessThan(1);
+  // The elements and the sets are still on their own sides.
+  const after = await centresOf(page, scope);
+  for (const id of ["e:1", "e:2", "e:3", "e:4", "e:5"]) {
+    expect(after[id].x).toBeLessThan(after.S1.x);
+  }
+
+  await wobblyClick(page, bipartiteNode(page, "S2"));
+  await expect(bipartiteNode(page, "S2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Drag: a Layered node only moves within its layer, and its edges follow", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openLayered(page, LAYERED_CASES.topo);
+  const scope = `${LAYERED}-graph`;
+  const before = await centresOf(page, scope);
+  const into = layeredEdge(page, "1>3").locator("path");
+  const intoBefore = await pathEnds(into);
+  await mouseDrag(page, layeredNode(page, "3"), 150, 60);
+  const moved = await drawnCentre(layeredNode(page, "3"));
+  expect(moved.x).toBeCloseTo(before["3"].x, 1);
+  expect(moved.y - before["3"].y).toBeGreaterThan(20);
+  expect((await pathEnds(into)).d).not.toBe(intoBefore.d);
+  // The arrow keys keep to the layer too.
+  await layeredNode(page, "3").focus();
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.keyboard.press("ArrowUp");
+  await expect
+    .poll(async () => (await drawnCentre(layeredNode(page, "3"))).y)
+    .toBeCloseTo(moved.y - 10, 1);
+  expect((await drawnCentre(layeredNode(page, "3"))).x).toBeCloseTo(before["3"].x, 1);
+
+  await wobblyClick(page, layeredNode(page, "2"));
+  await expect(layeredNode(page, "2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Drag: a Flow Network's source stays leftmost and its sink rightmost", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openFlow(page, FLOW_CASES.default);
+  const scope = `${FLOW}-graph`;
+  const before = await centresOf(page, scope);
+  // The source dragged far right stops at the leftmost other node.
+  await mouseDrag(page, flowNode(page, "1"), 600, 0);
+  let now = await centresOf(page, scope);
+  for (const id of ["2", "3", "4"]) expect(now["1"].x).toBeLessThanOrEqual(now[id].x + 0.5);
+  expect(now["1"].x).toBeGreaterThan(before["1"].x);
+  // The sink dragged far left stops at the rightmost other node.
+  await mouseDrag(page, flowNode(page, "4"), -700, 0);
+  now = await centresOf(page, scope);
+  for (const id of ["1", "2", "3"]) expect(now["4"].x).toBeGreaterThanOrEqual(now[id].x - 0.5);
+  // A middle node moves freely in between, and its edges follow.
+  const edge = flowEdge(page, "2>4").locator("path");
+  await mouseDrag(page, flowNode(page, "2"), 30, 80);
+  const middle = await drawnCentre(flowNode(page, "2"));
+  expect(middle.y - now["2"].y).toBeGreaterThan(20);
+  expect(distance((await pathEnds(edge)).start, middle)).toBeLessThan(30);
+
+  await wobblyClick(page, flowNode(page, "3"));
+  await expect(flowNode(page, "3")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Drag: a clause moves with its literals, and a literal stays inside its clause", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+  const scope = `${CLAUSES}-graph`;
+  const before = await centresOf(page, scope);
+  const hull = clause(page, "c0").locator("circle");
+  const hullBefore = await drawnCentre(clause(page, "c0"));
+  // Grab the clause by its circle, away from its literals (near its rim).
+  const box = await hull.boundingBox();
+  await mouseDragFrom(page, { x: box.x + box.width / 2, y: box.y + 6 }, 70, 50);
+  const hullAfter = await drawnCentre(clause(page, "c0"));
+  const shift = { x: hullAfter.x - hullBefore.x, y: hullAfter.y - hullBefore.y };
+  expect(Math.hypot(shift.x, shift.y)).toBeGreaterThan(20);
+  const after = await centresOf(page, scope);
+  for (const id of ["c0-0", "c0-1", "c0-2"]) {
+    expect(after[id].x - before[id].x).toBeCloseTo(shift.x, 1);
+    expect(after[id].y - before[id].y).toBeCloseTo(shift.y, 1);
+  }
+  for (const id of ["c1-0", "c2-0"]) expect(after[id]).toEqual(before[id]);
+
+  // A literal dragged far away stops at its clause's circle.
+  await mouseDrag(page, literal(page, "c0-1"), 400, 300);
+  const radius = await hull.evaluate((el) => Number(el.getAttribute("r")));
+  const literalAt = await drawnCentre(literal(page, "c0-1"));
+  const centre = await drawnCentre(clause(page, "c0"));
+  expect(distance(literalAt, centre)).toBeLessThanOrEqual(radius - 17 + 0.5);
+  expect(distance(literalAt, after["c0-1"])).toBeGreaterThan(5);
+
+  await wobblyClick(page, literal(page, "c1-0"));
+  await expect(literal(page, "c1-0")).toHaveAttribute("aria-pressed", "true");
+});
