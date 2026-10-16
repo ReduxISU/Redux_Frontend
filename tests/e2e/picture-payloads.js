@@ -5971,6 +5971,173 @@ export const DFA_GARBAGE_AUTOMATON_FRAMES = {
   ],
 };
 
+// DFA Acceptance, DFASolver, the DFA default instance on abc:
+// (({1,2,3},{a,b},{(1,a,2),(1,b,3),(2,a,2),(2,b,2),(3,a,2),(3,b,3)},1,{2}),abc). The machine is
+// complete, but c is not in the alphabet: 2 has no move on it, so the payload has a Garbage state
+// whose only missing move is (2, c), and the run falls into it on the c. Captured on 2026-10-15
+// from the published local build of local/viz-integration.
+export const DFA_ABC_GARBAGE_AUTOMATON_FRAMES = {
+  type: "Automaton",
+  payload: {
+    kind: "dfa",
+    layout: "layered",
+    states: [
+      {
+        id: "q:1",
+        label: "1",
+        layer: 0,
+      },
+      {
+        id: "q:2",
+        label: "2",
+        layer: 1,
+      },
+      {
+        id: "q:3",
+        label: "3",
+        layer: 1,
+      },
+    ],
+    start: "q:1",
+    accepting: ["q:2"],
+    alphabet: ["a", "b"],
+    transitions: [
+      {
+        id: "q:1>q:2",
+        a: "q:1",
+        b: "q:2",
+        label: "a",
+        symbols: ["a"],
+        epsilon: false,
+      },
+      {
+        id: "q:1>q:3",
+        a: "q:1",
+        b: "q:3",
+        label: "b",
+        symbols: ["b"],
+        epsilon: false,
+      },
+      {
+        id: "q:2>q:2",
+        a: "q:2",
+        b: "q:2",
+        label: "a,b",
+        symbols: ["a", "b"],
+        epsilon: false,
+      },
+      {
+        id: "q:3>q:2",
+        a: "q:3",
+        b: "q:2",
+        label: "a",
+        symbols: ["a"],
+        epsilon: false,
+      },
+      {
+        id: "q:3>q:3",
+        a: "q:3",
+        b: "q:3",
+        label: "b",
+        symbols: ["b"],
+        epsilon: false,
+      },
+    ],
+    input: ["a", "b", "c"],
+    garbage: {
+      id: "garbage",
+      label: "Garbage",
+      missing: [
+        {
+          state: "q:2",
+          symbol: "c",
+        },
+      ],
+    },
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start in 1.",
+      focus: ["q:1"],
+      position: 0,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Try",
+      caption: "Read 'a': move from 1 to 2.",
+      focus: ["q:1>q:2"],
+      position: 1,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'b': move from 2 to 2.",
+      focus: ["q:2>q:2"],
+      position: 2,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:2>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption:
+        "'c' is not in the alphabet, so 2 has no move on it, and the DFA falls into the Garbage state and stays there.",
+      focus: ["garbage"],
+      position: 2,
+      active: ["garbage"],
+      nodes: {
+        garbage: {
+          state: "Rejected",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Done",
+      caption:
+        "Rejected: 'c' is not in the alphabet, so 2 has no move on it and the run ends in the Garbage state.",
+      focus: [],
+      position: 2,
+      active: ["garbage"],
+      nodes: {
+        garbage: {
+          state: "Rejected",
+        },
+        "q:3": {
+          state: "Untraveled",
+        },
+      },
+      edges: {},
+      ok: false,
+    },
+  ],
+};
+
 // NFA Acceptance, NFASubsetSolver (every active state at once), instance
 // (({0,1,2,3},{a,b},{(0,ε,1),(0,a,0),(0,b,0),(1,a,2),(2,b,3)},0,{3}),aab): an ε-move from 0 to 1;
 // accepted, with four paths for the picker.

@@ -29,6 +29,7 @@ import {
   CLIQUE_COVER_GRAPH_FRAMES,
   CLIQUE_FAILED_GRAPH_FRAMES,
   CLIQUE_GRAPH_FRAMES,
+  DFA_ABC_GARBAGE_AUTOMATON_FRAMES,
   DFA_AUTOMATON_FRAMES,
   DFA_AUTOMATON_LIST,
   DFA_GARBAGE_AUTOMATON_FRAMES,
@@ -1699,6 +1700,11 @@ const AUTOMATON_CASES = {
     viz: ["DFAVisualization", "DFATableVisualization"],
     capture: DFA_GARBAGE_AUTOMATON_FRAMES,
   },
+  abc: {
+    problem: "DFA Acceptance",
+    viz: ["DFAVisualization", "DFATableVisualization"],
+    capture: DFA_ABC_GARBAGE_AUTOMATON_FRAMES,
+  },
   subset: {
     problem: "NFA Acceptance",
     viz: ["NFAVisualization", "NFATableVisualization"],
@@ -1919,6 +1925,95 @@ test("Automaton: a DFA's missing moves lead to a separate red Garbage state the 
   await expect(garbage).toHaveAttribute("data-traced", "trace");
   await expect(automatonArrow(page, "q:2>q:3")).toHaveAttribute("data-traced", "trace");
   await expect(automatonArrow(page, "q:1>q:2")).toHaveAttribute("data-traced", "faint");
+});
+
+test("Automaton: a symbol outside the alphabet is a missing move that falls into Garbage", async ({
+  page,
+}) => {
+  // The DFA default on abc: the machine is complete, but c is not in the alphabet, so 2 has no
+  // move on it. The payload's Garbage lists only that move; the alphabet stays a, b.
+  const capture = DFA_ABC_GARBAGE_AUTOMATON_FRAMES;
+  expect(capture.payload.alphabet).toEqual(["a", "b"]);
+  expect(capture.payload.garbage.missing).toEqual([{ state: "q:2", symbol: "c" }]);
+  await openAutomaton(page, AUTOMATON_CASES.abc);
+  const garbage = page.locator(`${AUTOMATON}-graph [data-garbage]`);
+  const fallArrow = page.locator(`${AUTOMATON}-graph [data-fall-arrow]`);
+  await expect(garbage).toHaveAttribute("aria-label", /missing moves: 2 on c/);
+  await expect(garbage).toHaveAttribute("data-look", "idle");
+
+  // Frame 3: b read, still in 2; nothing has fallen yet.
+  await runToFrame(page, capture, 2);
+  await expect(fallArrow).toHaveCount(0);
+  await expect(automatonState(page, "q:2").locator("[data-current]")).toHaveCount(1);
+
+  // Frame 4: c, so the run falls from 2 into Garbage along a dashed red arrow labelled c, and
+  // the tape marks the c it got stuck on as outside the alphabet. 2 is not left Rejected.
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[3].caption);
+  await expect(garbage).toHaveAttribute("data-state", "Rejected");
+  await expect(garbage).toHaveAttribute("data-active", "true");
+  await expect(garbage).toHaveAttribute("data-look", "entered");
+  await expect(fallArrow).toHaveCount(1);
+  await expect(fallArrow).toHaveAttribute("data-from", "q:2");
+  await expect(fallArrow.locator('[data-arrow-label="c"]')).toHaveCount(1);
+  await expect(fallArrow.locator("path")).toHaveAttribute("stroke-dasharray", "6 4");
+  // Garbage sits below 2 with 3 in between, so the arrow bends around 3, and its c is not hidden
+  // behind any state.
+  await expect(fallArrow).toHaveAttribute("data-bent", "true");
+  const labelBox = await fallArrow.locator('[data-arrow-label="c"]').boundingBox();
+  for (const id of ["q:1", "q:2", "q:3"]) {
+    const box = await automatonState(page, id).boundingBox();
+    const overlaps =
+      labelBox.x < box.x + box.width &&
+      box.x < labelBox.x + labelBox.width &&
+      labelBox.y < box.y + box.height &&
+      box.y < labelBox.y + labelBox.height;
+    expect(overlaps, `the fall's label overlaps ${id}`).toBe(false);
+  }
+  await expect(automatonState(page, "q:2")).toHaveAttribute("data-fell-from", "true");
+  await expect(automatonState(page, "q:2")).toHaveAttribute(
+    "aria-label",
+    /fell into Garbage on c, which is not in the alphabet/,
+  );
+  await expect(automatonState(page, "q:2")).not.toHaveAttribute("data-state", "Rejected");
+  const cell = tape(page).locator('[data-tape-cell="2"]');
+  await expect(cell).toHaveText("c");
+  await expect(cell).toHaveAttribute("data-stuck", "true");
+  await expect(cell).toHaveAttribute("data-outside-alphabet", "true");
+  await expect(tape(page)).toHaveAttribute(
+    "aria-label",
+    /c: it is not in the alphabet, so no move/,
+  );
+
+  // Done: rejected in Garbage, the fall still on screen.
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(tape(page).locator("[data-tape-end]")).toHaveText("reject");
+  await expect(garbage).toHaveAttribute("data-state", "Rejected");
+  await expect(fallArrow).toHaveCount(1);
+  await expect(cell).toHaveAttribute("data-stuck", "true");
+});
+
+test("Automaton: a symbol outside the alphabet falls into Garbage even where missing does not list it", async ({
+  page,
+}) => {
+  // A payload whose Garbage does not list the move the run misses: the symbol is outside the
+  // alphabet, so no state has a move on it, and the fall is still drawn from 2 on c.
+  const base = DFA_ABC_GARBAGE_AUTOMATON_FRAMES;
+  const capture = {
+    ...base,
+    payload: { ...base.payload, garbage: { ...base.payload.garbage, missing: [] } },
+  };
+  await openAutomaton(page, { ...AUTOMATON_CASES.abc, capture });
+  await runToFrame(page, capture, 3);
+  const fallArrow = page.locator(`${AUTOMATON}-graph [data-fall-arrow]`);
+  await expect(fallArrow).toHaveCount(1);
+  await expect(fallArrow).toHaveAttribute("data-from", "q:2");
+  await expect(fallArrow.locator('[data-arrow-label="c"]')).toHaveCount(1);
+  await expect(tape(page).locator('[data-tape-cell="2"]')).toHaveAttribute(
+    "data-outside-alphabet",
+    "true",
+  );
 });
 
 test("Automaton: an NFA's steps show every active state at once by default", async ({ page }) => {
