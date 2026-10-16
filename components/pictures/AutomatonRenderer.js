@@ -57,9 +57,11 @@ const CURRENT_GAP = 6;
 
 /**
  * Where a DFA falls into Garbage on its input, from the payload alone: run the input from the
- * start state until a state has no move on the next symbol. Returns that state, the symbol and
- * its index, or null when the machine never falls (an NFA, a complete DFA, or an input it reads
- * through). Not part of the layout: the arrow it draws only appears while Garbage is active.
+ * start state until a state has no move on the next symbol. Returns that state, the symbol, its
+ * index and whether the symbol is outside the alphabet (no state has a move on it, so it falls
+ * there like on any missing move), or null when the machine never falls (an NFA, a complete DFA,
+ * or an input it reads through). Not part of the layout: the arrow it draws only appears while
+ * Garbage is active.
  */
 export function garbageFall(payload) {
   if (!payload?.garbage || typeof payload.start !== "string") return null;
@@ -70,6 +72,7 @@ export function garbageFall(payload) {
       (move) => `${move?.state}\u0000${move?.symbol}`,
     ),
   );
+  const alphabet = Array.isArray(payload.alphabet) ? new Set(payload.alphabet.map(String)) : null;
   let state = payload.start;
   for (let index = 0; index < input.length; index += 1) {
     const symbol = input[index];
@@ -82,7 +85,11 @@ export function garbageFall(payload) {
     if (move) {
       state = move.b;
     } else {
-      return missing.has(`${state}\u0000${symbol}`) ? { from: state, symbol, index } : null;
+      // A symbol outside the alphabet is a missing move even where `missing` does not list it.
+      const outside = alphabet !== null && !alphabet.has(symbol);
+      return missing.has(`${state}\u0000${symbol}`) || outside
+        ? { from: state, symbol, index, outside }
+        : null;
     }
   }
   return null;
@@ -174,7 +181,7 @@ function StateBody({ state, look }) {
  * The input tape: one cell per symbol, read ones muted, the one just read filled, the head on
  * the next one, and an end cell that gives the verdict on the Done step.
  */
-function Tape({ id, input, frame, frameIndex, justRead, stuck }) {
+function Tape({ id, input, frame, frameIndex, justRead, stuck, outside }) {
   const running = frameIndex !== null && frame;
   const done = running && frame.event === "Done";
   const position = running && Number.isInteger(frame.position) ? frame.position : null;
@@ -191,10 +198,10 @@ function Tape({ id, input, frame, frameIndex, justRead, stuck }) {
     if (done) {
       summary += ` ${accepted ? "Accepted" : "Rejected"} after reading ${plural(position, "symbol")}.`;
       if (stuck !== null && stuck < input.length) {
-        summary += ` It got stuck on the ${ordinal(stuck + 1)} symbol, ${input[stuck]}.`;
+        summary += ` It got stuck on the ${ordinal(stuck + 1)} symbol, ${input[stuck]}${outside ? ", which is not in the alphabet" : ""}.`;
       }
     } else if (stuck !== null && stuck < input.length) {
-      summary += ` ${plural(position, "symbol")} read; stuck on the ${ordinal(stuck + 1)}, ${input[stuck]}: no move reads it.`;
+      summary += ` ${plural(position, "symbol")} read; stuck on the ${ordinal(stuck + 1)}, ${input[stuck]}: ${outside ? "it is not in the alphabet, so " : ""}no move reads it.`;
     } else if (position < input.length) {
       summary += ` ${plural(position, "symbol")} read; the head is on the ${ordinal(position + 1)}, ${input[position]}.`;
     } else {
@@ -263,6 +270,7 @@ function Tape({ id, input, frame, frameIndex, justRead, stuck }) {
             data-just={just ? "true" : undefined}
             data-head={head ? "true" : undefined}
             data-stuck={isStuck ? "true" : undefined}
+            data-outside-alphabet={isStuck && outside ? "true" : undefined}
             sx={sx}
           >
             {symbol}
@@ -415,24 +423,79 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
     const from = layout.states.find((state) => state.id === fallMove.from);
     if (!from) return null;
     const to = layout.garbage;
+    // A straight line when nothing is in the way; otherwise the line bends (a quadratic curve
+    // through a control point pushed sideways off the midpoint) until it clears every other
+    // state and arrow label, so neither hides the arrow or its symbol. Bends that would leave
+    // the drawing are not used; with no clear bend, the line stays straight.
+    const blockers = [
+      ...layout.states
+        .filter((state) => state.id !== from.id)
+        .map((state) => ({
+          x: state.x,
+          y: state.y,
+          r: Math.max(state.width / 2, STATE_RADIUS) + 16,
+        })),
+      ...layout.arrows.map((arrow) => ({
+        x: arrow.label.x,
+        y: arrow.label.y,
+        r: (arrow.text.length * 8 + 12) / 2 + 14,
+      })),
+    ];
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const length = Math.hypot(dx, dy) || 1;
-    const ux = dx / length;
-    const uy = dy / length;
-    const startGap = outlineDistance(dx, dy, from.width, STATE_RADIUS) + CURRENT_GAP + 2;
-    const endGap = outlineDistance(-dx, -dy, to.width, GARBAGE_HEIGHT / 2) + 2;
-    const start = { x: from.x + ux * startGap, y: from.y + uy * startGap };
-    const tip = { x: to.x - ux * endGap, y: to.y - uy * endGap };
+    const nx = -dy / length;
+    const ny = dx / length;
+    const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+    const at = (control, t) => ({
+      x: (1 - t) ** 2 * from.x + 2 * (1 - t) * t * control.x + t ** 2 * to.x,
+      y: (1 - t) ** 2 * from.y + 2 * (1 - t) * t * control.y + t ** 2 * to.y,
+    });
+    const inside = (point) =>
+      point.x >= layout.minX + 8 &&
+      point.x <= layout.minX + layout.width - 8 &&
+      point.y >= layout.minY + 8 &&
+      point.y <= layout.minY + layout.height - 8;
+    const clears = (control) => {
+      for (let t = 0.1; t <= 0.9; t += 0.05) {
+        const point = at(control, t);
+        if (!inside(point)) return false;
+        if (blockers.some((b) => Math.hypot(point.x - b.x, point.y - b.y) < b.r)) return false;
+      }
+      return true;
+    };
+    let control = mid;
+    for (const bend of [0, 50, -50, 100, -100, 150, -150, 200, -200, 260, -260]) {
+      const candidate = { x: mid.x + nx * bend, y: mid.y + ny * bend };
+      if (clears(candidate)) {
+        control = candidate;
+        break;
+      }
+    }
+    // Leave `from` towards the control point and reach Garbage from it.
+    const unit = (x, y) => {
+      const l = Math.hypot(x, y) || 1;
+      return { x: x / l, y: y / l };
+    };
+    const out = unit(control.x - from.x, control.y - from.y);
+    const into = unit(to.x - control.x, to.y - control.y);
+    const startGap = outlineDistance(out.x, out.y, from.width, STATE_RADIUS) + CURRENT_GAP + 2;
+    const endGap = outlineDistance(-into.x, -into.y, to.width, GARBAGE_HEIGHT / 2) + 2;
+    const start = { x: from.x + out.x * startGap, y: from.y + out.y * startGap };
+    const tip = { x: to.x - into.x * endGap, y: to.y - into.y * endGap };
     const size = 11;
-    const back = { x: tip.x - ux * size, y: tip.y - uy * size };
-    const side = { x: -uy * size * 0.5, y: ux * size * 0.5 };
-    const end = { x: tip.x - ux * size * 0.6, y: tip.y - uy * size * 0.6 };
+    const back = { x: tip.x - into.x * size, y: tip.y - into.y * size };
+    const side = { x: -into.y * size * 0.5, y: into.x * size * 0.5 };
+    const end = { x: tip.x - into.x * size * 0.6, y: tip.y - into.y * size * 0.6 };
     const r = (value) => Math.round(value * 10) / 10;
+    const straight = control === mid;
     return {
-      path: `M${r(start.x)},${r(start.y)} L${r(end.x)},${r(end.y)}`,
+      path: straight
+        ? `M${r(start.x)},${r(start.y)} L${r(end.x)},${r(end.y)}`
+        : `M${r(start.x)},${r(start.y)} Q${r(control.x)},${r(control.y)} ${r(end.x)},${r(end.y)}`,
       arrow: `${r(tip.x)},${r(tip.y)} ${r(back.x + side.x)},${r(back.y + side.y)} ${r(back.x - side.x)},${r(back.y - side.y)}`,
-      label: { x: (start.x + tip.x) / 2, y: (start.y + tip.y) / 2 },
+      label: straight ? { x: (start.x + tip.x) / 2, y: (start.y + tip.y) / 2 } : at(control, 0.5),
+      bent: !straight,
     };
   }, [fallMove, layout]);
   // The symbol the run got stuck on: the one it fell into Garbage on, or, on a failed Done step,
@@ -441,6 +504,9 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
   if (running && Number.isInteger(frame?.position) && frame.position < input.length) {
     if (inGarbage || (frame.event === "Done" && frame.ok === false)) stuck = frame.position;
   }
+  // Whether that symbol is outside the alphabet (no state has a move on it).
+  const alphabet = Array.isArray(payload?.alphabet) ? payload.alphabet.map(String) : null;
+  const stuckOutside = stuck !== null && alphabet !== null && !alphabet.includes(input[stuck]);
   const allDead = running && frame?.event === "Done" && frame.ok === false && active.size === 0;
 
   return (
@@ -518,7 +584,12 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
           </g>
         )}
         {fall && fallArrow && (
-          <g data-fall-arrow="" data-from={fall.from} pointerEvents="none">
+          <g
+            data-fall-arrow=""
+            data-from={fall.from}
+            data-bent={fallArrow.bent ? "true" : undefined}
+            pointerEvents="none"
+          >
             <path
               d={fallArrow.path}
               fill="none"
@@ -551,7 +622,11 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
             if (state !== "Background") parts.push(pictureStateStyle(state).legend);
             if (running && active.has(node.id)) parts.push("active");
             const fellFrom = fall !== null && fall.from === node.id;
-            if (fellFrom) parts.push(`fell into ${layout.garbage.label} on ${fall.symbol}`);
+            if (fellFrom) {
+              parts.push(
+                `fell into ${layout.garbage.label} on ${fall.symbol}${fall.outside ? ", which is not in the alphabet" : ""}`,
+              );
+            }
             const moves = out.map((arrow) => `on ${arrow.text} to ${labels.get(arrow.b)}`);
             if (missing.length) {
               moves.push(`no move on ${missing.join(", ")} (to ${layout.garbage.label})`);
@@ -733,6 +808,7 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
         frameIndex={frameIndex}
         justRead={justRead}
         stuck={stuck}
+        outside={stuckOutside}
       />
       {allDead && (
         <Box
