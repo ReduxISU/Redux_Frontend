@@ -303,9 +303,13 @@ export default function DiagramZoom({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  // The area's height before the screen's cap: the drawing's shape at the area's width.
+  // The area's height before the screen's cap: the drawing's shape at the area's width. A
+  // picture that opens zoomed in to be readable (`minScale`, below) gets the height it needs at
+  // that zoom instead, so its zoomed window isn't a thin strip.
+  const widthScale = area ? Math.min(area.width / drawing.width, MAX_FIT_SCALE) : null;
+  const readable = Boolean(minScale && follow && area) && widthScale < minScale;
   const naturalHeight = area
-    ? Math.round(drawing.height * Math.min(area.width / drawing.width, MAX_FIT_SCALE))
+    ? Math.round(drawing.height * (readable ? minScale * READABLE_ZOOM : widthScale))
     : null;
   const box = fitBox(drawing, area);
   const [stored, setStored] = useState(FIT);

@@ -34,7 +34,7 @@ const MIN_HEIGHT = 160;
  * middle (`lb 7450` over `≥ 6830`), so it is no wider than its node; a line still longer than
  * NOTE_MAX is cut, with an ellipsis (the whole note is in the node's label).
  */
-const NOTE_LINE = 10;
+const NOTE_LINE = 12;
 const NOTE_MAX = 14;
 
 /** The note's first line under a node, the gap between its lines, and its font size. */
