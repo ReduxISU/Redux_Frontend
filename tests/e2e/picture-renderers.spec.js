@@ -27,7 +27,7 @@
 // plain picture before Run and the same fit and zoom.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail } from "./helpers";
+import { gotoProblemDetail, openPanel } from "./helpers";
 import {
   ARC_SET_LAYERED_FRAMES,
   CLIQUE_COVER_GRAPH_FRAMES,
@@ -2901,3 +2901,513 @@ for (const [width, height] of [
     expect(zoomed.viewAspect).toBeCloseTo(zoomed.width / zoomed.height, 2);
   });
 }
+
+// --- #250: moving nodes and bending edges by hand -------------------------------------------
+//
+// Every node-link picture (Graph, Grouped Graph, Bipartite Graph, Layered Graph, Automaton,
+// Flow Network) lets the reader drag its nodes and bend its edges (diagramEdits.js, with the
+// gestures in DiagramZoom.js), within each type's own limits. The changes stay while the steps
+// play and after Run, and go back to the layout on Reset layout or a new instance.
+
+/** A piece's body: its own circle or rect (data-body), or its first one (a clause's circle). */
+const bodyOf = (piece) => piece.locator("[data-body], circle, rect").first();
+
+/** A piece's body centre, in drawing units. */
+function drawnCentre(piece) {
+  return bodyOf(piece).evaluate((el) => {
+    const box = el.getBBox();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+}
+
+/** A piece's body centre on screen, in CSS px (scrolled into view first). */
+async function screenCentre(piece) {
+  await piece.scrollIntoViewIfNeeded();
+  const box = await bodyOf(piece).boundingBox();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/** Drags with the mouse from `from` (screen px) by (dx, dy), in small steps. */
+async function mouseDragFrom(page, from, dx, dy) {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + dx / 2, from.y + dy / 2, { steps: 5 });
+  await page.mouse.move(from.x + dx, from.y + dy, { steps: 5 });
+  await page.mouse.up();
+}
+
+/** Drags `piece` by its body's middle. */
+async function mouseDrag(page, piece, dx, dy) {
+  await mouseDragFrom(page, await screenCentre(piece), dx, dy);
+}
+
+/** A path's `d` and its first and last points, in drawing units. */
+function pathEnds(path) {
+  return path.evaluate((el) => {
+    const d = el.getAttribute("d");
+    const numbers = d.match(/-?\d+(\.\d+)?/g).map(Number);
+    return {
+      d,
+      start: { x: numbers[0], y: numbers[1] },
+      end: { x: numbers[numbers.length - 2], y: numbers[numbers.length - 1] },
+    };
+  });
+}
+
+const distance = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+
+/** Every piece's body centre in `scope`, by id, in drawing units. */
+function centresOf(page, scope) {
+  return page.locator(`${scope} [data-node-id]`).evaluateAll((nodes) =>
+    Object.fromEntries(
+      nodes.map((node) => {
+        const box = node.querySelector("[data-body], circle, rect").getBBox();
+        return [
+          node.getAttribute("data-node-id"),
+          { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+        ];
+      }),
+    ),
+  );
+}
+
+/** The screen point `share` of the way along a path (CSS px). */
+async function pointAlong(path, share) {
+  await path.scrollIntoViewIfNeeded();
+  return path.evaluate((el, part) => {
+    const point = el.getPointAtLength(el.getTotalLength() * part);
+    const ctm = el.getScreenCTM();
+    return {
+      x: ctm.a * point.x + ctm.c * point.y + ctm.e,
+      y: ctm.b * point.x + ctm.d * point.y + ctm.f,
+    };
+  }, share);
+}
+
+/** A tap that wobbles under the drag threshold (2 px): still a tap. */
+async function wobblyClick(page, piece) {
+  const at = await screenCentre(piece);
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 2, at.y + 1);
+  await page.mouse.up();
+}
+
+/** The Automaton's state radius, in drawing units (automatonLayout.js STATE_RADIUS). */
+const STATE_RADIUS_UNITS = 26;
+
+test("Drag: a Graph node moves with its edges, a tap still traces, and Reset layout puts it back", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const reset = page.locator(`${GRAPH}-layout-reset`);
+  await expect(reset).toBeDisabled();
+  await expect(reset).toHaveAttribute("aria-label", /Reset layout/);
+  const before = await centresOf(page, `${GRAPH}-graph`);
+  const edgePath = graphEdge(page, "1-2").locator("path");
+  const edgeBefore = await pathEnds(edgePath);
+
+  await mouseDrag(page, graphNode(page, "1"), 90, 60);
+  const moved = await drawnCentre(graphNode(page, "1"));
+  expect(moved.x - before["1"].x).toBeGreaterThan(20);
+  expect(moved.y - before["1"].y).toBeGreaterThan(10);
+  // The edge leaves the node where it is now, at its outline.
+  const edgeAfter = await pathEnds(edgePath);
+  expect(edgeAfter.d).not.toBe(edgeBefore.d);
+  expect(distance(edgeAfter.start, moved)).toBeLessThan(25);
+  // The other nodes stay; a drag is not a tap, so nothing is pinned.
+  const after = await centresOf(page, `${GRAPH}-graph`);
+  for (const id of ["2", "3", "4"]) expect(after[id]).toEqual(before[id]);
+  await expect(graphNode(page, "1")).toHaveAttribute("aria-pressed", "false");
+  await expect(reset).toBeEnabled();
+
+  // A press that wobbles a pixel or two is still a tap: it pins and traces.
+  await wobblyClick(page, graphNode(page, "2"));
+  await expect(graphNode(page, "2")).toHaveAttribute("aria-pressed", "true");
+  await expect(graphEdge(page, "2-3")).toHaveAttribute("data-traced", "trace");
+  expect((await centresOf(page, `${GRAPH}-graph`))["2"]).toEqual(before["2"]);
+
+  await reset.click();
+  expect(await centresOf(page, `${GRAPH}-graph`)).toEqual(before);
+  expect((await pathEnds(edgePath)).d).toBe(edgeBefore.d);
+  await expect(reset).toBeDisabled();
+});
+
+test("Drag: bending a Graph edge moves its weight; the edits survive Run and the steps", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const capture = MAX_CUT_GRAPH_FRAMES;
+  await openPicture(page, "Max Cut", capture);
+  const scope = `${GRAPH}-graph`;
+  const edgePath = graphEdge(page, "1-2").locator("path");
+  const weight = page.locator(`${scope} [data-layer="weights"] [data-drag-edge="1-2"]`);
+  const straight = await pathEnds(edgePath);
+  expect(straight.d).toContain("L");
+  const weightBefore = await screenCentre(weight);
+
+  // Drag the weight sideways: the edge bows through it, and the weight rides along.
+  await mouseDragFrom(page, weightBefore, 0, 50);
+  const bent = await pathEnds(edgePath);
+  expect(bent.d).toContain("Q");
+  const weightAfter = await screenCentre(weight);
+  expect(distance(weightAfter, weightBefore)).toBeGreaterThan(20);
+  // Dragging the edge's line itself (a third of the way along, clear of the weight) bends it too.
+  const line = page.locator(`${scope} [data-layer="edge-handles"] [data-drag-edge="1-2"]`);
+  await mouseDragFrom(page, await pointAlong(line, 0.3), 0, -100);
+  expect((await pathEnds(edgePath)).d).not.toBe(bent.d);
+  await mouseDrag(page, graphNode(page, "3"), -60, 40);
+  const edited = await centresOf(page, scope);
+  const editedPath = (await pathEnds(edgePath)).d;
+
+  // Run, and every step, keep the hand-made layout.
+  await runToFrame(page, capture, 0);
+  expect(await centresOf(page, scope)).toEqual(edited);
+  expect((await pathEnds(edgePath)).d).toBe(editedPath);
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[1].caption);
+  expect(await centresOf(page, scope)).toEqual(edited);
+  expect((await pathEnds(edgePath)).d).toBe(editedPath);
+});
+
+test("Drag: the Force / Circle switch and a new instance put the automatic layout back", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const scope = `${GRAPH}-graph`;
+  const force = await centresOf(page, scope);
+  await mouseDrag(page, graphNode(page, "4"), -80, -40);
+  expect(await centresOf(page, scope)).not.toEqual(force);
+  await page.locator(`${GRAPH}-layout-circle`).click();
+  await page.locator(`${GRAPH}-layout-force`).click();
+  expect(await centresOf(page, scope)).toEqual(force);
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
+
+  // A new instance (here the same graph, written with a trailing space) starts afresh.
+  await mouseDrag(page, graphNode(page, "4"), -80, -40);
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeEnabled();
+  await openPanel(page, "instance", { expect });
+  const input = page.locator("#workbench-instance-full-instance");
+  await input.fill(`${await input.inputValue()} `);
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
+  await expect.poll(() => centresOf(page, scope)).toEqual(force);
+});
+
+test("Drag: the arrow keys move a focused node, Shift further, and say so", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  const node = graphNode(page, "1");
+  const start = await drawnCentre(node);
+  await node.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await drawnCentre(node)).x - start.x).toBeCloseTo(10, 1);
+  await expect(page.locator(`${GRAPH}-moved`)).toHaveText("Moved Node 1 right.");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect.poll(async () => (await drawnCentre(node)).x - start.x).toBeCloseTo(-40, 1);
+  expect((await drawnCentre(node)).y).toBeCloseTo(start.y, 1);
+  // Enter still pins the node.
+  await page.keyboard.press("Enter");
+  await expect(node).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeEnabled();
+});
+
+test("Drag: zoomed in, a node follows the pointer through the zoomed view, and empty space still pans", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.25");
+  const node = graphNode(page, "3");
+  const from = await screenCentre(node);
+  const drawnBefore = await drawnCentre(node);
+  const viewBox = await viewBoxOf(page);
+  // Towards the middle of the picture, so nothing stops it.
+  const svgBox = await page.locator(`${GRAPH}-svg`).boundingBox();
+  const dx = from.x < svgBox.x + svgBox.width / 2 ? 45 : -45;
+  const dy = from.y < svgBox.y + svgBox.height / 2 ? 30 : -30;
+  await mouseDragFrom(page, from, dx, dy);
+  // The node is still under the pointer: drawing units are screen px over the zoomed scale.
+  const to = await screenCentre(node);
+  expect(Math.abs(to.x - from.x - dx)).toBeLessThan(2);
+  expect(Math.abs(to.y - from.y - dy)).toBeLessThan(2);
+  const scale = await page.locator(`${GRAPH}-svg`).evaluate((svg) => svg.getScreenCTM().a);
+  const drawnAfter = await drawnCentre(node);
+  expect(Math.abs(drawnAfter.x - drawnBefore.x - dx / scale)).toBeLessThan(1);
+  // Dragging the node did not pan.
+  expect(await viewBoxOf(page)).toBe(viewBox);
+
+  // A drag on empty space pans, and moves no node.
+  const empty = await page.locator(`${GRAPH}-svg`).evaluate((svg) => {
+    const rect = svg.getBoundingClientRect();
+    for (let y = rect.top + 10; y < rect.bottom - 10; y += 12) {
+      for (let x = rect.left + 10; x < rect.right - 10; x += 12) {
+        if (document.elementFromPoint(x, y) === svg) return { x, y };
+      }
+    }
+    return null;
+  });
+  expect(empty).not.toBeNull();
+  const centres = await centresOf(page, `${GRAPH}-graph`);
+  await mouseDragFrom(page, empty, 40, 0);
+  expect(await viewBoxOf(page)).not.toBe(viewBox);
+  expect(await centresOf(page, `${GRAPH}-graph`)).toEqual(centres);
+});
+
+test("Drag: on a touch screen a swipe at fit scrolls the page, and a long press then a drag moves the node", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${GRAPH}-svg`);
+  const node = graphNode(page, "2");
+  const before = await centresOf(page, `${GRAPH}-graph`);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 2 });
+  const touch = (type, touchPoints) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints });
+
+  // A quick swipe over the node: the page scrolls, and the node stays where it was. (The finger
+  // moves down, so the page scrolls up, when there is room above; up otherwise.)
+  const at = await screenCentre(node);
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  const down = scrollBefore > 150 ? 1 : -1;
+  await touch("touchStart", [{ x: at.x, y: at.y, id: 0 }]);
+  for (let step = 1; step <= 6; step += 1) {
+    await touch("touchMove", [{ x: at.x, y: at.y + down * step * 20, id: 0 }]);
+  }
+  await touch("touchEnd", []);
+  await expect
+    .poll(async () => down * (scrollBefore - (await page.evaluate(() => window.scrollY))))
+    .toBeGreaterThan(20);
+  expect(await centresOf(page, `${GRAPH}-graph`)).toEqual(before);
+  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
+
+  // A long press arms the node (a dashed outline); the drag after it moves the node, not the page.
+  const held = await screenCentre(node);
+  const scrollHeld = await page.evaluate(() => window.scrollY);
+  await touch("touchStart", [{ x: held.x, y: held.y, id: 0 }]);
+  await expect(page.locator(`${GRAPH}-graph [data-drag-armed]`)).toHaveAttribute(
+    "data-node-id",
+    "2",
+  );
+  for (let step = 1; step <= 6; step += 1) {
+    await touch("touchMove", [{ x: held.x + step * 8, y: held.y + step * 6, id: 0 }]);
+  }
+  await touch("touchEnd", []);
+  await expect(page.locator(`${GRAPH}-graph [data-drag-armed]`)).toHaveCount(0);
+  const moved = await drawnCentre(node);
+  expect(distance(moved, before["2"])).toBeGreaterThan(15);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollHeld);
+  await expect(node).toHaveAttribute("aria-pressed", "false");
+});
+
+test("Drag: an Automaton state moves with its arrows, Garbage moves too, and the fall arrow follows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const capture = DFA_GARBAGE_AUTOMATON_FRAMES;
+  await openAutomaton(page, AUTOMATON_CASES.garbage);
+  const scope = `${AUTOMATON}-graph`;
+  const before = await centresOf(page, scope);
+  const entry = page.locator(`${scope} [data-start-arrow] path`);
+  const entryBefore = await pathEnds(entry);
+  const arrowPath = automatonArrow(page, "q:1>q:2").locator("path");
+
+  // The start state moves freely; its entry arrow and its arrows go with it.
+  await mouseDrag(page, automatonState(page, "q:1"), 40, 70);
+  const moved = await drawnCentre(automatonState(page, "q:1"));
+  expect(moved.x - before["q:1"].x).toBeGreaterThan(10);
+  expect(moved.y - before["q:1"].y).toBeGreaterThan(20);
+  const entryAfter = await pathEnds(entry);
+  expect(entryAfter.d).not.toBe(entryBefore.d);
+  expect(Math.abs(entryAfter.end.y - moved.y)).toBeLessThan(1);
+  expect(distance((await pathEnds(arrowPath)).start, moved)).toBeLessThan(STATE_RADIUS_UNITS + 4);
+
+  // Garbage moves like any state.
+  await mouseDrag(page, automatonState(page, "garbage"), -120, 0);
+  const garbage = await drawnCentre(automatonState(page, "garbage"));
+  expect(before.garbage.x - garbage.x).toBeGreaterThan(30);
+
+  // A tap still traces (and a second tap lets go).
+  await wobblyClick(page, automatonState(page, "q:2"));
+  await expect(automatonState(page, "q:2")).toHaveAttribute("aria-pressed", "true");
+  await automatonState(page, "q:2").click();
+
+  // Another visualization (drawn from the same capture here) starts from the layout again.
+  const listbox = page.locator("#workbench-source-type-listbox");
+  await page.locator("#workbench-source-type-button").click();
+  await listbox.locator('[role="option"][aria-selected="false"]').first().click();
+  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeDisabled();
+  await expect.poll(() => centresOf(page, scope)).toEqual(before);
+  await page.locator("#workbench-source-type-button").click();
+  await listbox.locator('[role="option"][aria-selected="false"]').first().click();
+  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeDisabled();
+  await mouseDrag(page, automatonState(page, "garbage"), -120, 0);
+  const garbageMoved = await drawnCentre(automatonState(page, "garbage"));
+  expect(distance(garbageMoved, garbage)).toBeLessThan(1);
+
+  // The run falls into Garbage from q:3: the fall arrow runs from where both are now.
+  await runToFrame(page, capture, 3);
+  const fall = page.locator(`${scope} [data-fall-arrow] path`);
+  await expect(fall).toBeVisible();
+  const fallEnds = await pathEnds(fall);
+  const from = await drawnCentre(automatonState(page, "q:3"));
+  expect(distance(fallEnds.start, from)).toBeLessThan(STATE_RADIUS_UNITS + 12);
+  expect(distance(fallEnds.end, garbage)).toBeLessThan(80);
+  expect(await drawnCentre(automatonState(page, "garbage"))).toEqual(garbage);
+});
+
+test("Drag: bending an Automaton arrow moves its label, and dragging a loop turns it around its state", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openAutomaton(page, AUTOMATON_CASES.garbage);
+  const scope = `${AUTOMATON}-graph`;
+  const label = page.locator(`${scope} [data-layer="labels"] [data-drag-edge="q:1>q:2"]`);
+  const path = automatonArrow(page, "q:1>q:2").locator("path");
+  const before = await pathEnds(path);
+  const labelBefore = await screenCentre(label);
+  await mouseDragFrom(page, labelBefore, 0, -60);
+  expect((await pathEnds(path)).d).not.toBe(before.d);
+  const labelAfter = await screenCentre(label);
+  expect(labelBefore.y - labelAfter.y).toBeGreaterThan(25);
+
+  // The loop on q:3: drag its label round to the state's other side.
+  const state = await drawnCentre(automatonState(page, "q:3"));
+  const loopLabel = page.locator(`${scope} [data-layer="labels"] [data-drag-edge="q:3>q:3"]`);
+  const loopPath = automatonArrow(page, "q:3>q:3").locator("path");
+  const loopBefore = await pathEnds(loopPath);
+  const labelDrawn = () =>
+    loopLabel.locator("rect").evaluate((el) => {
+      const box = el.getBBox();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    });
+  const sideBefore = await labelDrawn();
+  const stateOnScreen = await screenCentre(automatonState(page, "q:3"));
+  const grab = await screenCentre(loopLabel);
+  await mouseDragFrom(page, grab, 2 * (stateOnScreen.x - grab.x), 2 * (stateOnScreen.y - grab.y));
+  expect((await pathEnds(loopPath)).d).not.toBe(loopBefore.d);
+  // The label is now on the far side: its direction from the state points the other way.
+  const sideAfter = await labelDrawn();
+  const dot =
+    (sideBefore.x - state.x) * (sideAfter.x - state.x) +
+    (sideBefore.y - state.y) * (sideAfter.y - state.y);
+  expect(dot).toBeLessThan(0);
+  // Turning a loop doesn't move its state.
+  expect(await drawnCentre(automatonState(page, "q:3"))).toEqual(state);
+});
+
+test("Drag: a Bipartite node only moves up and down its own column", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openBipartite(page, BIPARTITE_CASES[0]);
+  const scope = `${BIPARTITE}-graph`;
+  const before = await centresOf(page, scope);
+  const edge = bipartiteEdge(page, "e:2~S1");
+  await mouseDrag(page, bipartiteNode(page, "e:2"), 120, 70);
+  const element = await drawnCentre(bipartiteNode(page, "e:2"));
+  expect(element.x).toBeCloseTo(before["e:2"].x, 1);
+  expect(element.y - before["e:2"].y).toBeGreaterThan(20);
+  expect(Math.abs((await pathEnds(edge)).start.y - element.y)).toBeLessThan(1);
+
+  await mouseDrag(page, bipartiteNode(page, "S1"), -200, 60);
+  const set = await drawnCentre(bipartiteNode(page, "S1"));
+  expect(set.x).toBeCloseTo(before.S1.x, 1);
+  expect(set.y - before.S1.y).toBeGreaterThan(20);
+  expect(Math.abs((await pathEnds(edge)).end.y - set.y)).toBeLessThan(1);
+  // The elements and the sets are still on their own sides.
+  const after = await centresOf(page, scope);
+  for (const id of ["e:1", "e:2", "e:3", "e:4", "e:5"]) {
+    expect(after[id].x).toBeLessThan(after.S1.x);
+  }
+
+  await wobblyClick(page, bipartiteNode(page, "S2"));
+  await expect(bipartiteNode(page, "S2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Drag: a Layered node only moves within its layer, and its edges follow", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openLayered(page, LAYERED_CASES.topo);
+  const scope = `${LAYERED}-graph`;
+  const before = await centresOf(page, scope);
+  const into = layeredEdge(page, "1>3").locator("path");
+  const intoBefore = await pathEnds(into);
+  await mouseDrag(page, layeredNode(page, "3"), 150, 60);
+  const moved = await drawnCentre(layeredNode(page, "3"));
+  expect(moved.x).toBeCloseTo(before["3"].x, 1);
+  expect(moved.y - before["3"].y).toBeGreaterThan(20);
+  expect((await pathEnds(into)).d).not.toBe(intoBefore.d);
+  // The arrow keys keep to the layer too.
+  await layeredNode(page, "3").focus();
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.keyboard.press("ArrowUp");
+  await expect
+    .poll(async () => (await drawnCentre(layeredNode(page, "3"))).y)
+    .toBeCloseTo(moved.y - 10, 1);
+  expect((await drawnCentre(layeredNode(page, "3"))).x).toBeCloseTo(before["3"].x, 1);
+
+  await wobblyClick(page, layeredNode(page, "2"));
+  await expect(layeredNode(page, "2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Drag: a Flow Network's source stays leftmost and its sink rightmost", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openFlow(page, FLOW_CASES.default);
+  const scope = `${FLOW}-graph`;
+  const before = await centresOf(page, scope);
+  // The source dragged far right stops at the leftmost other node.
+  await mouseDrag(page, flowNode(page, "1"), 600, 0);
+  let now = await centresOf(page, scope);
+  for (const id of ["2", "3", "4"]) expect(now["1"].x).toBeLessThanOrEqual(now[id].x + 0.5);
+  expect(now["1"].x).toBeGreaterThan(before["1"].x);
+  // The sink dragged far left stops at the rightmost other node.
+  await mouseDrag(page, flowNode(page, "4"), -700, 0);
+  now = await centresOf(page, scope);
+  for (const id of ["1", "2", "3"]) expect(now["4"].x).toBeGreaterThanOrEqual(now[id].x - 0.5);
+  // A middle node moves freely in between, and its edges follow.
+  const edge = flowEdge(page, "2>4").locator("path");
+  await mouseDrag(page, flowNode(page, "2"), 30, 80);
+  const middle = await drawnCentre(flowNode(page, "2"));
+  expect(middle.y - now["2"].y).toBeGreaterThan(20);
+  expect(distance((await pathEnds(edge)).start, middle)).toBeLessThan(30);
+
+  await wobblyClick(page, flowNode(page, "3"));
+  await expect(flowNode(page, "3")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Drag: a clause moves with its literals, and a literal stays inside its clause", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+  const scope = `${CLAUSES}-graph`;
+  const before = await centresOf(page, scope);
+  const hull = clause(page, "c0").locator("circle");
+  const hullBefore = await drawnCentre(clause(page, "c0"));
+  // Grab the clause by its circle, away from its literals (near its rim).
+  const box = await hull.boundingBox();
+  await mouseDragFrom(page, { x: box.x + box.width / 2, y: box.y + 6 }, 70, 50);
+  const hullAfter = await drawnCentre(clause(page, "c0"));
+  const shift = { x: hullAfter.x - hullBefore.x, y: hullAfter.y - hullBefore.y };
+  expect(Math.hypot(shift.x, shift.y)).toBeGreaterThan(20);
+  const after = await centresOf(page, scope);
+  for (const id of ["c0-0", "c0-1", "c0-2"]) {
+    expect(after[id].x - before[id].x).toBeCloseTo(shift.x, 1);
+    expect(after[id].y - before[id].y).toBeCloseTo(shift.y, 1);
+  }
+  for (const id of ["c1-0", "c2-0"]) expect(after[id]).toEqual(before[id]);
+
+  // A literal dragged far away stops at its clause's circle.
+  await mouseDrag(page, literal(page, "c0-1"), 400, 300);
+  const radius = await hull.evaluate((el) => Number(el.getAttribute("r")));
+  const literalAt = await drawnCentre(literal(page, "c0-1"));
+  const centre = await drawnCentre(clause(page, "c0"));
+  expect(distance(literalAt, centre)).toBeLessThanOrEqual(radius - 17 + 0.5);
+  expect(distance(literalAt, after["c0-1"])).toBeGreaterThan(5);
+
+  await wobblyClick(page, literal(page, "c1-0"));
+  await expect(literal(page, "c1-0")).toHaveAttribute("aria-pressed", "true");
+});
