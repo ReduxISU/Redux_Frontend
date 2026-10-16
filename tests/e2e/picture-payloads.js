@@ -7,7 +7,8 @@
 // pictures (#201), the Bipartite Graph pictures (#203), the Layered Graph pictures (#205), the
 // Automaton pictures (#204), the Flow Network pictures (#206) and the Grouped Graph pictures
 // (#202) follow at the end, each with its instance and solver. The Packing pictures (#207) and
-// the Search Tree pictures (#217) come last, captured the same way on 2026-10-16.
+// the Search Tree pictures (#217) come last, captured the same way on 2026-10-16 (Subset Sum's
+// FastApproximation, and the TSP and 3SAT trees, again after Redux #897-#900).
 
 /** format=frames for DFATableVisualization: picture type Table (has a renderer). */
 export const DFA_TABLE_FRAMES = {
@@ -10500,7 +10501,7 @@ export const SUBSET_SUM_PACKING_FRAMES = {
   ],
 };
 
-/** format=frames, Subset Sum, the problem default ({1,7,12,15},28), FastApproximation: one step per item, the best sum kept so far. */
+/** format=frames, Subset Sum, the problem default ({1,7,12,15},28), FastApproximation (recaptured after Redux #897-#900): one step per item, the best sum so far Committed and the number just added in focus. */
 export const SUBSET_SUM_APPROX_PACKING_FRAMES = {
   type: "Packing",
   payload: {
@@ -10521,7 +10522,7 @@ export const SUBSET_SUM_APPROX_PACKING_FRAMES = {
       caption: "Add 1 to every sum kept so far that stays within 28. 2 sums kept. Best so far: 1.",
       focus: ["I1"],
       items: { I1: { state: "ElementHighlight" } },
-      containers: { C1: { state: "Rejected" } },
+      containers: {},
       assign: [0, -1, -1, -1],
       totals: [{ size: 1 }],
       step: 0,
@@ -10530,8 +10531,8 @@ export const SUBSET_SUM_APPROX_PACKING_FRAMES = {
       event: "Try",
       caption: "Add 7 to every sum kept so far that stays within 28. 4 sums kept. Best so far: 8.",
       focus: ["I2"],
-      items: { I1: { state: "ElementHighlight" }, I2: { state: "ElementHighlight" } },
-      containers: { C1: { state: "Rejected" } },
+      items: { I1: { state: "Committed" }, I2: { state: "ElementHighlight" } },
+      containers: {},
       assign: [0, 0, -1, -1],
       totals: [{ size: 8 }],
       step: 1,
@@ -10542,11 +10543,11 @@ export const SUBSET_SUM_APPROX_PACKING_FRAMES = {
         "Add 12 to every sum kept so far that stays within 28. 8 sums kept. Best so far: 20.",
       focus: ["I3"],
       items: {
-        I1: { state: "ElementHighlight" },
-        I2: { state: "ElementHighlight" },
+        I1: { state: "Committed" },
+        I2: { state: "Committed" },
         I3: { state: "ElementHighlight" },
       },
-      containers: { C1: { state: "Rejected" } },
+      containers: {},
       assign: [0, 0, 0, -1],
       totals: [{ size: 20 }],
       step: 2,
@@ -10557,8 +10558,8 @@ export const SUBSET_SUM_APPROX_PACKING_FRAMES = {
         "Add 15 to every sum kept so far that stays within 28. 14 sums kept. Best so far: 28.",
       focus: ["I4"],
       items: {
-        I1: { state: "ElementHighlight" },
-        I3: { state: "ElementHighlight" },
+        I1: { state: "Committed" },
+        I3: { state: "Committed" },
         I4: { state: "ElementHighlight" },
       },
       containers: { C1: { state: "Covered" } },
@@ -10670,6 +10671,69 @@ export const SUBSET_SUM_CLIPPED_PACKING_FRAMES = {
       totals: [{ size: 3 }],
       step: 6,
       ok: true,
+    },
+  ],
+};
+
+/** format=frames, Subset Sum, ({1000,1001,5},1006), FastApproximation (Redux #897-#900): trimming keeps the best sum at 1000, so the numbers in focus after the first stay out of it, and the run ends on no. */
+export const SUBSET_SUM_APPROX_MISS_PACKING_FRAMES = {
+  type: "Packing",
+  payload: {
+    kind: "packing",
+    rule: "subsetSum",
+    items: [
+      { id: "I1", label: "1000", size: 1000 },
+      { id: "I2", label: "1001", size: 1001 },
+      { id: "I3", label: "5", size: 5 },
+    ],
+    containers: [{ id: "C1", label: "Chosen", target: 1006 }],
+    total: 2006,
+  },
+  frames: [
+    {
+      event: "Try",
+      caption:
+        "Add 1000 to every sum kept so far that stays within 1006. 2 sums kept. Best so far: 1000.",
+      focus: ["I1"],
+      items: { I1: { state: "ElementHighlight" } },
+      containers: {},
+      assign: [0, -1, -1],
+      totals: [{ size: 1000 }],
+      step: 0,
+    },
+    {
+      event: "Try",
+      caption:
+        "Add 1001 to every sum kept so far that stays within 1006. 2 sums kept, 1 trimmed as too close to another. Best so far: 1000.",
+      focus: ["I2"],
+      items: { I1: { state: "Committed" }, I2: { state: "ElementHighlight" } },
+      containers: {},
+      assign: [0, -1, -1],
+      totals: [{ size: 1000 }],
+      step: 1,
+    },
+    {
+      event: "Try",
+      caption:
+        "Add 5 to every sum kept so far that stays within 1006. 3 sums kept, 1 trimmed as too close to another. Best so far: 1000.",
+      focus: ["I3"],
+      items: { I1: { state: "Committed" }, I3: { state: "ElementHighlight" } },
+      containers: {},
+      assign: [0, -1, -1],
+      totals: [{ size: 1000 }],
+      step: 2,
+    },
+    {
+      event: "Done",
+      caption:
+        "The best sum kept is 1000, not 1006, so the approximation answers no, even if an exact subset exists.",
+      focus: [],
+      items: {},
+      containers: {},
+      assign: [-1, -1, -1],
+      totals: [{ size: 0 }],
+      step: 3,
+      ok: false,
     },
   ],
 };
