@@ -71,6 +71,8 @@ function FrameCaption({ id, frame }) {
  * @param {string} props.name The visualization's name.
  * @param {string} props.type The response's picture type.
  * @param {Object|null} props.payload The response's static part.
+ * @param {string} [props.layoutKey] Names the instance and visualization drawn: a node-link
+ *   picture keeps the reader's moved nodes and bent edges while it stays the same (#250).
  * @param {Object|null} props.frame The frame to draw.
  * @param {number|null} props.frameIndex Which frame it is, or null for the plain frame of the
  *   default picture before Run (registry.js plainFrame(): every piece in Background).
@@ -87,6 +89,7 @@ export default function PictureCanvas({
   name,
   type,
   payload,
+  layoutKey,
   frame,
   frameIndex,
   frameCount,
@@ -116,6 +119,7 @@ export default function PictureCanvas({
         idPrefix={`${idPrefix}-${type.toLowerCase()}`}
         name={name}
         payload={payload}
+        layoutKey={layoutKey ?? null}
         frame={frame}
         frameIndex={frameIndex}
         frameCount={frameCount}

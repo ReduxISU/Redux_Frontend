@@ -627,6 +627,8 @@ export default function Workbench({ problem }) {
         kind: "picture",
         type: pictureResult.type,
         payload: pictureResult.payload,
+        // #250: the picture's hand-made layout is kept for this instance and visualization.
+        layoutKey: `${instance}\u0000${selectedViz.className}`,
         frame,
         frameIndex: currentStep,
         frameCount: runFrames.length,
@@ -653,6 +655,7 @@ export default function Workbench({ problem }) {
       kind: "picture",
       type: defaultPicture.picture.type,
       payload: defaultPicture.picture.payload,
+      layoutKey: `${instance}\u0000${selectedViz.className}`,
       // The plain frame (hooks/useDefaultPicture.js): the instance, not a step of a run.
       frame: defaultPicture.picture.frame,
       frameIndex: null,
