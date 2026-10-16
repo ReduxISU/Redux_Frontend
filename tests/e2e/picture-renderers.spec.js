@@ -72,6 +72,7 @@ import {
   SSSP_PARALLEL_LAYERED_FRAMES,
   SSSP_UNREACHABLE_LAYERED_FRAMES,
   STEINER_GRAPH_FRAMES,
+  SUBSET_SUM_APPROX_MISS_PACKING_FRAMES,
   SUBSET_SUM_APPROX_PACKING_FRAMES,
   SUBSET_SUM_CLIPPED_PACKING_FRAMES,
   SUBSET_SUM_PACKING_FRAMES,
@@ -2990,6 +2991,7 @@ const PACKING_CASES = {
   partitionOdd: PARTITION_ODD_PACKING_FRAMES,
   subsetSum: SUBSET_SUM_PACKING_FRAMES,
   subsetSumApprox: SUBSET_SUM_APPROX_PACKING_FRAMES,
+  subsetSumApproxMiss: SUBSET_SUM_APPROX_MISS_PACKING_FRAMES,
   subsetSumClipped: SUBSET_SUM_CLIPPED_PACKING_FRAMES,
   knapsack: KNAPSACK_PACKING_FRAMES,
   knapsackOver: KNAPSACK_OVER_PACKING_FRAMES,
@@ -3247,6 +3249,48 @@ test("Packing: Bin Packing's bins share one scale, and a full bin is as long as 
     );
   }
   await expect(legendBody(page)).toContainText("Bin 3 (items in this bin)");
+});
+
+test("Packing: the approximation keeps its best sum so far Committed, with the number it adds in focus", async ({
+  page,
+}) => {
+  const capture = SUBSET_SUM_APPROX_PACKING_FRAMES;
+  await openPacking(page, capture);
+  // Adding 12: the best sum so far, 1 + 7, is Committed, and 12 is the number looked at.
+  await runToFrame(page, capture, 2);
+  await expect(packingItem(page, "I1")).toHaveAttribute("data-state", "Committed");
+  await expect(packingItem(page, "I2")).toHaveAttribute("data-state", "Committed");
+  await expect(packingItem(page, "I3")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(packingItem(page, "I4")).toHaveAttribute("data-state", "Background");
+  // The row is not judged before the run ends: no Rejected, no tick or cross.
+  const row = packingRows(page, "C1");
+  await expect(row).toHaveAttribute("data-state", "Background");
+  await expect(row.locator("[data-readout]")).toHaveText("20");
+  await expect(page.locator(`${PACKING}-packing [data-state="Rejected"]`)).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("Committed (kept so far)");
+});
+
+test("Packing: a number the approximation looks at but keeps out reads as not in the container", async ({
+  page,
+}) => {
+  const capture = SUBSET_SUM_APPROX_MISS_PACKING_FRAMES;
+  await openPacking(page, capture);
+  // Adding 1001: trimming keeps the best sum at 1000, so 1001 is in focus but not in Chosen.
+  await runToFrame(page, capture, 1);
+  await expect(packingItem(page, "I2")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(packingItem(page, "I2")).toHaveAttribute("data-container", "-1");
+  await expect(packingItem(page, "I2")).toHaveAttribute(
+    "aria-label",
+    "Item 1001, size 1001, not in Chosen, Highlighted (looked at now)",
+  );
+  await expect(packingRows(page, "C1").locator("[data-piece-for]")).toHaveCount(1);
+  await expect(packingRows(page, "C1").locator("[data-readout]")).toHaveText("1000");
+  // The run ends on no, with nothing placed.
+  await page.locator("#workbench-steps-next").click();
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
+  await expect(page.locator(`${PACKING}-packing [data-piece-for]`)).toHaveCount(0);
+  await expect(packingItem(page, "I2")).toHaveAttribute("aria-label", /left out/);
 });
 
 test("Packing: First Fit Decreasing marks the item no bin has room for, and ends on no", async ({

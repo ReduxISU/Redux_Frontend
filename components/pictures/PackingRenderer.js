@@ -215,7 +215,14 @@ export default function PackingRenderer({ idPrefix, name, payload, frame }) {
                 ? `weight ${item.size}, value ${item.value}`
                 : `size ${formatAmount(item.size)}`,
             );
-            if (assign) parts.push(where >= 0 ? `in ${containerLabel(where)}` : "left out");
+            // An item looked at but kept out (a Subset Sum approximation's number that its best
+            // sum doesn't use) is not "left out": the run is still deciding.
+            if (assign && where >= 0) parts.push(`in ${containerLabel(where)}`);
+            else if (assign && state === "ElementHighlight") {
+              parts.push(
+                layout.containers.length === 1 ? `not in ${containerLabel(0)}` : "in no container",
+              );
+            } else if (assign) parts.push("left out");
             if (state !== "Background") parts.push(pictureStateStyle(state).legend);
             return (
               // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
