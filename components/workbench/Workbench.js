@@ -26,6 +26,12 @@
 //     asked for through lib/pictureRequest.js, so a picture type with a format=frames renderer
 //     (components/pictures/registry.js) is drawn by it, with the step controls walking its
 //     frames and each step's caption under it, and every other type keeps its old renderer.
+//   - One run, every picture (#252): Run asks ProblemProvider/visualizeRun for the solver's run
+//     and every picture of it (lib/pictureRequest.js), so switching the Visualization Type after
+//     Run asks for nothing and stays on the same moment of the run (lib/runSteps.js). A picture
+//     the run can't draw shows the instance with a note saying why. On a backend without
+//     visualizeRun, and for a visualization only the old flat list draws, Run asks for the one
+//     chosen picture as before, and switching shows the instance until the next Run.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -45,7 +51,7 @@ import {
 import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
 import { highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
-import { requestPicture } from "../../lib/pictureRequest";
+import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
   REDUX_API_BASE_URL,
   requestMappedSolution,
@@ -53,6 +59,7 @@ import {
   requestReduction,
   requestSolvedInstance,
 } from "../../lib/redux";
+import { frameAtPosition, framePosition, RUN_END } from "../../lib/runSteps";
 import ComputeStatus from "../detail/ComputeStatus";
 import { statesInFrames } from "../pictures/pictureStates";
 import { pictureAnnotations, pictureRuns } from "../pictures/registry";
@@ -105,6 +112,23 @@ function openingStep(frames) {
 function reducedTargetFrame(result) {
   const frames = Array.isArray(result?.frames) ? result.frames : [];
   return frames.length > 1 ? frames[frames.length - 1] : null;
+}
+
+/**
+ * The note under a picture the run can't draw (#252), saying why and giving the answer.
+ * @param {{reason: string}} gap The run's `unavailable` entry for the visualization.
+ */
+function runGapNote(gap, visualizationName, solverName, answer, runLabel) {
+  const answerText = answer ? `The answer: ${answer}.` : "The run stopped before an answer.";
+  if (gap.reason === "shape_mismatch") {
+    return `${visualizationName} can't draw the steps of ${solverName}, so it shows the instance. ${answerText}`;
+  }
+  if (gap.reason === "solver_mismatch") {
+    return `${solverName} doesn't solve what ${visualizationName} draws, so it shows the instance. ${answerText}`;
+  }
+  // no_frames, no_renderer (no renderer here for its picture type), or left out of the answer:
+  // only a run asked for this visualization alone can draw it.
+  return `${visualizationName} isn't drawn from this run, so it shows the instance. ${answerText} Press ${runLabel} to draw a run in it.`;
 }
 
 function findIndexByName(items, name) {
@@ -179,10 +203,25 @@ export default function Workbench({ problem }) {
   const pictureResult = pictureRun.status === COMPUTE_DONE ? pictureRun.result : null;
   const reduceResult = reduceRun.status === COMPUTE_DONE ? reduceRun.result : null;
 
-  const runPictureCurrent =
-    Boolean(pictureResult) &&
-    pictureResult.instance === instance &&
-    pictureResult.vizClassName === selectedViz?.className;
+  // The run's picture for the chosen visualization: from one run's pictures (#252), or the one
+  // picture a run asked for alone. `runGap` is the reason one run has no picture for it.
+  const pictureRunCurrent = Boolean(pictureResult) && pictureResult.instance === instance;
+  let runPicture = null;
+  let runGap = null;
+  if (pictureRunCurrent && selectedViz) {
+    if (pictureResult.run) {
+      runPicture = pictureResult.run.pictures[selectedViz.className] ?? null;
+      if (!runPicture) {
+        runGap = pictureResult.run.unavailable[selectedViz.className] ?? {
+          reason: "missing",
+          detail: "",
+        };
+      }
+    } else if (pictureResult.vizClassName === selectedViz.className) {
+      runPicture = pictureResult;
+    }
+  }
+  const runPictureCurrent = Boolean(runPicture);
   const solveCurrent = Boolean(solveResult) && solveResult.instance === instance;
   const reduceCurrent =
     Boolean(reduceResult) &&
@@ -230,12 +269,22 @@ export default function Workbench({ problem }) {
   // is the run's own frames.
   const [runView, setRunView] = useState(null);
 
+  // Where in the run the pictures are (lib/runSteps.js), kept across switching the
+  // Visualization Type (#252). Only read on a switch; the step controls move currentStep.
+  const [runPosition, setRunPosition] = useState(RUN_END);
+
   // A new run's picture opens on its last step (the finished result), on its own frames.
   const [stepsFor, setStepsFor] = useState(pictureRun.result);
   if (stepsFor !== pictureRun.result) {
-    setStepsFor(pictureRun.result);
-    setCurrentStep(openingStep(pictureRun.result?.frames));
+    const landed = pictureRun.result;
+    setStepsFor(landed);
+    setCurrentStep(
+      openingStep(
+        landed?.run ? landed.run.pictures[selectedViz?.className]?.frames : landed?.frames,
+      ),
+    );
     setRunView(null);
+    setRunPosition(RUN_END);
   }
 
   // The Result dot only means "a run finished while you were not looking".
@@ -253,16 +302,33 @@ export default function Workbench({ problem }) {
   // #204: the other runs a format=frames picture offers (an NFA's paths, registry.js
   // pictureRuns), and the frames the steps walk: the chosen one's, or the run's own.
   const otherRuns =
-    showingRunPicture && pictureResult.format === "frames"
-      ? pictureRuns(pictureResult.type, pictureResult.payload)
+    showingRunPicture && runPicture.format === "frames"
+      ? pictureRuns(runPicture.type, runPicture.payload)
       : [];
   const chosenRun = otherRuns.find((run) => run.id === runView) ?? null;
-  const runFrames = showingRunPicture ? (chosenRun ? chosenRun.frames : pictureResult.frames) : [];
+  const runFrames = showingRunPicture ? (chosenRun ? chosenRun.frames : runPicture.frames) : [];
   // Following another run (or all branches again) opens it on its last step too.
   function chooseRun(id) {
     setRunView(id);
     const run = otherRuns.find((candidate) => candidate.id === id);
-    setCurrentStep(openingStep(run ? run.frames : pictureResult?.frames));
+    setCurrentStep(openingStep(run ? run.frames : runPicture?.frames));
+  }
+
+  // #252: switching the Visualization Type after one run keeps the run and the moment in it.
+  // The new picture opens on the frame drawn from the same solver step, or the nearest one
+  // before it (lib/runSteps.js). A picture with no steps on screen (one the run can't draw, or
+  // another of the picture's runs) leaves the kept moment as it was.
+  function chooseVisualization(index) {
+    setVizIndex(index);
+    if (!pictureRunCurrent || !pictureResult.run) return;
+    let position = runPosition;
+    if (showingRunPicture && !chosenRun) {
+      position = framePosition(runFrames, currentStep) ?? runPosition;
+    }
+    const next = pictureResult.run.pictures[visualizations[index]?.className];
+    setRunPosition(position);
+    setCurrentStep(next ? frameAtPosition(next.frames, position) : 0);
+    setRunView(null);
   }
   const edits = useFrameEdits({
     backendType: selectedViz?.backendType,
@@ -377,8 +443,19 @@ export default function Workbench({ problem }) {
         succeeded = true;
         return { output, solverName: solver.name, instance: runInstance, runId };
       });
+      const oneRun = drawsFromRun(visualization);
       const picture = visualization
         ? pictureRun.start(async (signal) => {
+            const ran = { solverName: solver.name, instance: runInstance, runId };
+            // #252: one run and every picture of it, when the backend has visualizeRun.
+            if (oneRun) {
+              const run = await requestRunPictures({
+                instance: runInstance,
+                solver: solver.className,
+                signal,
+              });
+              if (run) return { run, ...ran };
+            }
             // #199: {format, frames} plus, for a format=frames picture, its type and payload.
             const picture = await requestPicture({
               visualization,
@@ -386,13 +463,7 @@ export default function Workbench({ problem }) {
               solver: solver.className,
               signal,
             });
-            return {
-              ...picture,
-              vizClassName: visualization.className,
-              solverName: solver.name,
-              instance: runInstance,
-              runId,
-            };
+            return { ...picture, vizClassName: visualization.className, ...ran };
           })
         : Promise.resolve();
       finished = Promise.all([answer, picture]);
@@ -639,11 +710,11 @@ export default function Workbench({ problem }) {
     const frame = runFrames[currentStep] ?? null;
     if (!frame) {
       sourceContent = { kind: "message", text: "This run came back without a picture." };
-    } else if (pictureResult.format === "frames") {
+    } else if (runPicture.format === "frames") {
       sourceContent = {
         kind: "picture",
-        type: pictureResult.type,
-        payload: pictureResult.payload,
+        type: runPicture.type,
+        payload: runPicture.payload,
         // #250: the picture's hand-made layout is kept for this instance and visualization.
         layoutKey: `${instance}\u0000${selectedViz.className}`,
         frame,
@@ -721,7 +792,7 @@ export default function Workbench({ problem }) {
           card: visualizationCard(visualization, "source"),
         })),
         value: String(vizIndex),
-        onChange: (value) => setVizIndex(Number(value)),
+        onChange: (value) => chooseVisualization(Number(value)),
       }
     : null;
 
@@ -839,6 +910,17 @@ export default function Workbench({ problem }) {
     // Before any Run the certificate would be drawn on the picture right away.
     note = {
       text: `${CERTIFICATE_DRAWING_REASON} The picture still shows the instance.`,
+      tone: "muted",
+    };
+  } else if (mode === "solve" && runGap) {
+    note = {
+      text: runGapNote(
+        runGap,
+        selectedViz.name,
+        pictureResult.run.solverName ?? pictureResult.solverName,
+        asCertificate(pictureResult.run.answer),
+        runLabel,
+      ),
       tone: "muted",
     };
   } else if (showingRunPicture && runFrames.length <= 1) {
@@ -983,6 +1065,10 @@ export default function Workbench({ problem }) {
     result: resultNew && panel !== "result" ? { label: "New result", color: accentLine } : null,
   };
 
+  // The picture the Result panel counts steps from: the chosen visualization's, of this run.
+  const countedPicture = pictureResult?.run
+    ? (pictureResult.run.pictures[selectedViz?.className] ?? null)
+    : pictureResult;
   const solveSummary = solveResult
     ? {
         solverName: solveResult.solverName,
@@ -992,10 +1078,10 @@ export default function Workbench({ problem }) {
         // An old flat list is [base, ...steps, solved]; a format=frames run is one frame per
         // step, its last one the solved picture (#199).
         stepCount:
-          pictureResult && pictureResult.runId === solveResult.runId
-            ? pictureResult.format === "frames"
-              ? pictureResult.frames.length
-              : Math.max(pictureResult.frames.length - 2, 0)
+          countedPicture && pictureResult.runId === solveResult.runId
+            ? countedPicture.format === "frames"
+              ? countedPicture.frames.length
+              : Math.max(countedPicture.frames.length - 2, 0)
             : null,
       }
     : null;
