@@ -26,7 +26,7 @@
 // didn't.
 
 import Box from "@mui/material/Box";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
 import { FAINT_FILTER, groupColors, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
@@ -42,6 +42,7 @@ import {
   textWidth,
 } from "./packingLayout";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { useBoxWidth } from "./useBoxWidth";
 
 /** The dashed line a row's total is held to, and its dash. */
 const LINE_DASH = "5 4";
@@ -74,22 +75,6 @@ function Heading({ id, lines, y }) {
       ))}
     </text>
   );
-}
-
-/** The width of the box `ref` is on, in CSS px, kept current; null until it is measured. */
-function useBoxWidth(ref) {
-  const [width, setWidth] = useState(null);
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return undefined;
-    const measure = () => setWidth(element.clientWidth || null);
-    measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [ref]);
-  return width;
 }
 
 /** A frame's container index per item, or null when the frame places nothing (before Run). */
