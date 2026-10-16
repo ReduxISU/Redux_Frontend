@@ -236,6 +236,69 @@ export function WeightTag({ x, y, text, state, faint }) {
 }
 
 /**
+ * A short text on a pill at (x, y): an Automaton arrow's symbols, a Flow Network edge's
+ * flow / capacity. A stated piece's pill takes its state's fill and label color, a traced one the
+ * trace color, and a faint one fades by color. `forId` names the piece it labels (`data-for`).
+ */
+export function StatePill({
+  forId,
+  x,
+  y,
+  text,
+  state,
+  faint,
+  traced,
+  testId,
+  charWidth = 8,
+  size = 12.5,
+}) {
+  const value = String(text);
+  const width = value.length * charWidth + 12;
+  const style = pictureStateStyle(state);
+  const plain = state === "Background";
+  let fill = plain ? paletteVars.surface.input : style.fill;
+  let line = style.line;
+  let ink = plain ? style.text : style.ink;
+  if (traced) {
+    fill = paletteVars.surface.input;
+    line = TRACE_COLOR;
+    ink = paletteVars.text.primary;
+  }
+  return (
+    <g
+      {...{ [`data-${testId}`]: value }}
+      data-for={forId}
+      pointerEvents="none"
+      style={faint ? { filter: FAINT_FILTER } : undefined}
+    >
+      <rect
+        x={x - width / 2}
+        y={y - 10}
+        width={width}
+        height={20}
+        rx={10}
+        fill={fill}
+        stroke={line}
+        strokeWidth={plain && !traced ? 1 : 1.6}
+        strokeDasharray={plain || traced ? undefined : style.dash}
+      />
+      <text
+        x={x}
+        y={y}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill={ink}
+        fontFamily={MONO}
+        fontSize={size}
+        fontWeight={plain ? 400 : 700}
+      >
+        {value}
+      </text>
+    </g>
+  );
+}
+
+/**
  * The geometry of an edge from a to b: a straight line between the two outlines, or, when
  * `bend` is set (one of a directed pair a>b, b>a), a curve bowed to one side so the pair don't
  * overlap. Returns the SVG path, the point to put a weight tag on, and, for a directed edge,

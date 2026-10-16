@@ -21,6 +21,8 @@
 // paths) after it, the same way.
 // #204: the Automaton renderer (DFA, NFA) after that: the Garbage state, the NFA's all-branches
 // steps and the One path picker, the tape, the same plain picture before Run and fit.
+// #206: the Flow Network renderer (Minimum S-T Cut) last: flow / capacity on every edge, the
+// augmenting paths and back arcs, and the cut's S and T sides.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
@@ -40,6 +42,11 @@ import {
   ILP_TABLE_FRAMES_WITH_BLANK,
   LARGE_GRAPH_FRAMES,
   MAX_CUT_GRAPH_FRAMES,
+  MIN_CUT_BACKWARD_FLOW_FRAMES,
+  MIN_CUT_BOWED_FLOW_FRAMES,
+  MIN_CUT_FLOW_FRAMES,
+  MIN_CUT_NO_PATH_FLOW_FRAMES,
+  MIN_CUT_PARALLEL_FLOW_FRAMES,
   NFA_BACKTRACK_REJECTED_AUTOMATON_FRAMES,
   NFA_DEFAULT_AUTOMATON_FRAMES,
   NFA_SUBSET_AUTOMATON_FRAMES,
@@ -2218,6 +2225,349 @@ for (const [width, height] of [
   });
 }
 
+// --- #206: the Flow Network renderer (Minimum S-T Cut) -----------------------------------------
+
+const FLOW = "#workbench-source-frames-flownetwork";
+
+/** Each flow capture, opened on the Minimum S-T Cut page with its pictures answered by it. */
+const FLOW_CASES = {
+  default: MIN_CUT_FLOW_FRAMES,
+  backward: MIN_CUT_BACKWARD_FLOW_FRAMES,
+  bowed: MIN_CUT_BOWED_FLOW_FRAMES,
+  parallel: MIN_CUT_PARALLEL_FLOW_FRAMES,
+  noPath: MIN_CUT_NO_PATH_FLOW_FRAMES,
+};
+
+async function openFlow(page, capture) {
+  await setPictureTypes(page, { MinSTCutVisualization: "FlowNetwork" });
+  await openPicture(page, "Minimum S-T Cut", capture);
+  await expect(page.locator(`${FLOW}-graph`)).toBeVisible();
+}
+
+const flowNode = (page, id) => page.locator(`${FLOW}-graph [data-node-id="${id}"]`);
+const flowEdge = (page, id) => page.locator(`${FLOW}-graph [data-edge-id="${id}"]`);
+const flowSummary = (page) => page.locator(`${FLOW}-summary`);
+
+/** Each node's drawn centre x, by id, grouped into columns left to right. */
+function flowColumns(page) {
+  return page.locator(`${FLOW}-graph [data-node-id]`).evaluateAll((nodes) => {
+    const columns = new Map();
+    for (const node of nodes) {
+      const box = node.querySelector("[data-body]").getBBox();
+      const x = Math.round(box.x + box.width / 2);
+      if (!columns.has(x)) columns.set(x, []);
+      columns.get(x).push(node.getAttribute("data-node-id"));
+    }
+    return [...columns.entries()].sort((a, b) => a[0] - b[0]).map(([, ids]) => ids.sort());
+  });
+}
+
+/** Frame `index`'s states, flows and sides, checked piece by piece against the picture. */
+async function expectFlowFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  for (const node of capture.payload.nodes) {
+    await expect(flowNode(page, node.id)).toHaveAttribute(
+      "data-state",
+      frame.nodes[node.id]?.state ?? "Background",
+    );
+    if (frame.groups) {
+      await expect(flowNode(page, node.id)).toHaveAttribute(
+        "data-group",
+        String(frame.groups[node.id]),
+      );
+    } else {
+      await expect(flowNode(page, node.id)).not.toHaveAttribute("data-group", /./);
+    }
+  }
+  for (const edge of capture.payload.edges) {
+    const drawn = flowEdge(page, edge.id);
+    await expect(drawn).toHaveAttribute("data-state", frame.edges[edge.id]?.state ?? "Background");
+    await expect(drawn).toHaveAttribute("data-flow", String(frame.flow[edge.id]));
+    const text = `${frame.flow[edge.id]}/${edge.capacity}${edge.label ? ` (${edge.label})` : ""}`;
+    await expect(
+      page.locator(`${FLOW}-graph [data-flow-label][data-for="${edge.id}"]`),
+    ).toHaveAttribute("data-flow-label", text);
+  }
+  await expect(flowSummary(page)).toHaveAttribute("data-value", String(frame.value));
+  await expect(flowSummary(page)).toContainText(`Flow value: ${frame.value}.`);
+}
+
+for (const [key, capture] of Object.entries(FLOW_CASES)) {
+  test(`Flow Network: the ${key} capture draws every node in its column, every edge and every step`, async ({
+    page,
+  }) => {
+    const { payload } = capture;
+    await openFlow(page, capture);
+    const graph = page.locator(`${FLOW}-graph`);
+    await expect(graph.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
+    await expect(graph.locator("[data-edge-id]")).toHaveCount(payload.edges.length);
+    await expect(graph.locator("[data-edge-id] polygon")).toHaveCount(payload.edges.length);
+    // One column per layer, the source alone on the left and the sink alone on the right.
+    const columns = await flowColumns(page);
+    expect(columns).toEqual(payload.layers.map((ids) => [...ids].sort()));
+    expect(columns[0]).toEqual([payload.source]);
+    expect(columns.at(-1)).toEqual([payload.sink]);
+    await expect(flowNode(page, payload.source).locator('[data-tag="source"]')).toHaveText(
+      "source",
+    );
+    await expect(flowNode(page, payload.sink).locator('[data-tag="sink"]')).toHaveText("sink");
+    // Before Run each edge shows its capacity (or the capacities it merges).
+    for (const edge of payload.edges) {
+      await expect(
+        graph.locator(`[data-flow-label="${edge.label ?? String(edge.capacity)}"]`).first(),
+      ).toBeVisible();
+    }
+    for (const piece of await graph.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("aria-label", /^Node \S+, .*(edges to|no edges out)/);
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // The step controls walk every frame's states, flows and, at the end, the cut's sides.
+    await runToFrame(page, capture, 0);
+    await expectFlowFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectFlowFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    await expect(graph.locator("[data-cut]")).toHaveCount(last.cut?.length ?? 0);
+  });
+}
+
+test("Flow Network: before Run the picture is the plain network, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  const capture = MIN_CUT_FLOW_FRAMES;
+  await openFlow(page, capture);
+  const graph = page.locator(`${FLOW}-graph`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(graph.locator("[data-group]")).toHaveCount(0);
+  await expect(graph.locator("[data-flow]")).toHaveCount(0);
+  await expect(graph.locator("[data-back-arc]")).toHaveCount(0);
+  await expect(flowSummary(page)).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(page.locator(`${FLOW}-residual`)).toHaveCount(0);
+  // The capacities are the instance's, so they show; no flow yet.
+  await expect(graph.locator('[data-flow-label="10"]')).toHaveCount(1);
+  await expect(graph.locator('[data-flow-label*="/"]')).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("c (an edge's capacity)");
+  await expect(legendBody(page)).not.toContainText("S side");
+
+  const before = await nodeCentres(page, `${FLOW}-graph`);
+  await runToFrame(page, capture, 0);
+  await expect(graph.locator('[data-flow-label="0/10"]')).toHaveCount(1);
+  expect(await nodeCentres(page, `${FLOW}-graph`)).toEqual(before);
+  // The answer's side colors don't move anything either.
+  for (let index = 1; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  await expect(flowNode(page, "1")).toHaveAttribute("data-group", "0");
+  expect(await nodeCentres(page, `${FLOW}-graph`)).toEqual(before);
+});
+
+test("Flow Network: each step highlights its augmenting path, full edges are Covered and get thicker", async ({
+  page,
+}) => {
+  const capture = MIN_CUT_FLOW_FRAMES;
+  await openFlow(page, capture);
+  await runToFrame(page, capture, 2);
+  for (const id of ["1>3", "3>4"]) {
+    await expect(flowEdge(page, id)).toHaveAttribute("data-state", "ElementHighlight");
+  }
+  await expect(flowEdge(page, "2>4")).toHaveAttribute("data-state", "Covered");
+  await expect(flowNode(page, "3")).toHaveAttribute("data-state", "ElementHighlight");
+  const width = (id) =>
+    flowEdge(page, id)
+      .locator("path")
+      .evaluate((el) => Number(el.getAttribute("stroke-width")));
+  // 1>2 carries 3 of 10, 2>4 is full: the full one is drawn thicker.
+  expect(await width("2>4")).toBeGreaterThan(await width("1>2"));
+  await expect(legendBody(page)).toContainText("f/c (the flow an edge carries / its capacity");
+  await expect(legendBody(page)).toContainText("Covered (rule met)");
+});
+
+test("Flow Network: the answer colors the S and T sides, draws the cut and adds it up", async ({
+  page,
+}) => {
+  const capture = MIN_CUT_FLOW_FRAMES;
+  await openFlow(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  for (const id of ["1>3", "2>4"]) {
+    await expect(flowEdge(page, id)).toHaveAttribute("data-state", "Solution");
+    await expect(flowEdge(page, id)).toHaveAttribute("data-cut", "true");
+  }
+  await expect(flowNode(page, "1")).toHaveAttribute("aria-label", /S side/);
+  await expect(flowNode(page, "4")).toHaveAttribute("aria-label", /T side/);
+  const fill = (id) =>
+    flowNode(page, id)
+      .locator("[data-body]")
+      .evaluate((el) => getComputedStyle(el).fill);
+  expect(await fill("1")).toBe(await fill("2"));
+  expect(await fill("1")).not.toBe(await fill("3"));
+  await expect(flowSummary(page)).toHaveText(
+    "Flow value: 5. S = {1, 2}, T = {3, 4}. Cut: 1→3, 2→4, capacity 5, equal to the maximum flow.",
+  );
+  await expect(legendBody(page)).toContainText("S side");
+  await expect(legendBody(page)).toContainText("T side");
+  await expect(legendBody(page)).toContainText("Solution (answer)");
+});
+
+test("Flow Network: a path that takes flow back draws a dashed back arc, and the residual switch shows them all", async ({
+  page,
+}) => {
+  const capture = MIN_CUT_BACKWARD_FLOW_FRAMES;
+  await openFlow(page, capture);
+  await runToFrame(page, capture, 2);
+  const back = page.locator(`${FLOW}-graph [data-back-arc]`);
+  await expect(back).toHaveCount(1);
+  await expect(back).toHaveAttribute("data-back-arc", "a>b");
+  await expect(back).toHaveAttribute("data-used", "true");
+  await expect(back.locator("path")).toHaveAttribute("stroke-dasharray", "5 4");
+  await expect(back.locator('[data-back-label="↶1"]')).toHaveCount(1);
+  await expect(legendBody(page)).toContainText("Dashed back arc (the path takes back flow");
+
+  // The residual view: a back arc on every edge that carries flow.
+  await page.locator(`${FLOW}-residual-on`).click();
+  const carrying = Object.values(capture.frames[2].flow).filter((units) => units > 0).length;
+  await expect(back).toHaveCount(carrying + 1);
+  await page.locator(`${FLOW}-residual-off`).click();
+  await expect(back).toHaveCount(1);
+  await page.locator("#workbench-steps-next").click();
+  await expect(back).toHaveCount(0);
+});
+
+test("Flow Network: parallel edges show every listed capacity, and an edge from T back to S ends Untraveled", async ({
+  page,
+}) => {
+  const capture = MIN_CUT_PARALLEL_FLOW_FRAMES;
+  await openFlow(page, capture);
+  await expect(page.locator(`${FLOW}-graph [data-flow-label="2,5"]`)).toHaveCount(1);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await expect(page.locator(`${FLOW}-graph [data-flow-label="4/7 (2,5)"]`)).toHaveCount(1);
+  await expect(flowEdge(page, "3>1")).toHaveAttribute("data-state", "Untraveled");
+  await expect(legendBody(page)).toContainText("Untraveled (never reached)");
+});
+
+test("Flow Network: an edge that would cross a node is bowed around it, on the side that clears it", async ({
+  page,
+}) => {
+  await openFlow(page, MIN_CUT_BOWED_FLOW_FRAMES);
+  const clear = await page.locator(`${FLOW}-svg`).evaluate((svg) => {
+    const path = svg.querySelector('[data-edge-id="b>t"] path');
+    const c = svg.querySelector('[data-node-id="c"] [data-body]').getBBox();
+    const centre = { x: c.x + c.width / 2, y: c.y + c.height / 2 };
+    let nearest = Number.POSITIVE_INFINITY;
+    const length = path.getTotalLength();
+    for (let step = 0; step <= 50; step += 1) {
+      const point = path.getPointAtLength((length * step) / 50);
+      nearest = Math.min(nearest, Math.hypot(point.x - centre.x, point.y - centre.y));
+    }
+    return { d: path.getAttribute("d"), nearest, radius: c.width / 2 };
+  });
+  expect(clear.d).toContain("Q");
+  expect(clear.nearest).toBeGreaterThan(clear.radius + 8);
+});
+
+test("Flow Network: hovering, focusing or tapping a node traces its edges and fades the rest by color", async ({
+  page,
+}) => {
+  await openFlow(page, MIN_CUT_FLOW_FRAMES);
+  await flowNode(page, "2").hover();
+  for (const id of ["1>2", "2>4"]) {
+    await expect(flowEdge(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(flowEdge(page, "1>3")).toHaveAttribute("data-traced", "faint");
+  await expect(flowNode(page, "4")).toHaveAttribute("data-traced", "trace");
+  await expect(flowNode(page, "3")).toHaveAttribute("data-traced", "faint");
+  const faded = await flowNode(page, "3").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+
+  await page.mouse.move(0, 0);
+  await flowNode(page, "3").focus();
+  await expect(flowEdge(page, "3>4")).toHaveAttribute("data-traced", "trace");
+  await expect(flowEdge(page, "1>2")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(flowNode(page, "3")).toHaveAttribute("aria-pressed", "true");
+  await expect(flowNode(page, "3")).toHaveAttribute(
+    "aria-label",
+    "Node 3, edges to 4 (capacity 5), from 1 (capacity 2)",
+  );
+  await expect(flowNode(page, "1")).toHaveAttribute(
+    "aria-label",
+    "Node 1, source, edges to 2 (capacity 10), 3 (capacity 2)",
+  );
+});
+
+test("Flow Network: on a phone a tap traces a node, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openFlow(page, MIN_CUT_BACKWARD_FLOW_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${FLOW}-svg`);
+  await page.locator(`${FLOW}-zoom-in`).click();
+  await expect(page.locator(`${FLOW}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await flowNode(page, "b").focus();
+  await flowNode(page, "b").blur();
+  await flowNode(page, "b").click();
+  await expect(flowNode(page, "b")).toHaveAttribute("aria-pressed", "true");
+  await expect(flowEdge(page, "b>t")).toHaveAttribute("data-traced", "trace");
+  await expectFits(page, `${FLOW}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1280]) {
+    test(`Flow Network: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openFlow(page, MIN_CUT_FLOW_FRAMES);
+      const svg = page.locator(`${FLOW}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${FLOW}-svg`);
+      await expect(page.locator(`${FLOW}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The source tag follows the theme: no dark-on-dark, no light-on-white.
+      const ink = await flowNode(page, "1")
+        .locator('[data-tag="source"]')
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+for (const [width, height] of [
+  [1280, 800],
+  [1920, 1080],
+]) {
+  test(`Flow Network: at ${width}x${height} the picture fills the pane and fits the screen`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await openFlow(page, MIN_CUT_BACKWARD_FLOW_FRAMES);
+    const svg = `${FLOW}-svg`;
+    await expect(page.locator(svg)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const sizes = await areaSizes(page, svg);
+        return Math.abs(sizes.width - sizes.content);
+      })
+      .toBeLessThanOrEqual(2);
+    await scrollPictureToTop(page);
+    const sizes = await areaSizes(page, svg);
+    expect(sizes.bottom).toBeLessThanOrEqual(sizes.viewport);
+    expect(sizes.viewAspect).toBeCloseTo(sizes.width / sizes.height, 2);
+  });
+}
+
 /**
  * Every place where a diagram's edge labels collide, read off the drawn SVG: two labels' boxes
  * meeting, a label on a state's (node's) body, or another edge's line running through a label.
@@ -2308,5 +2658,20 @@ for (const [key, testCase] of Object.entries(AUTOMATON_CASES)) {
       testCase.capture.payload.transitions.length,
     );
     expect(await labelCollisions(page, `${AUTOMATON}-svg`)).toEqual([]);
+  });
+}
+
+for (const [key, capture] of Object.entries(FLOW_CASES)) {
+  test(`Flow Network: the ${key} capture's edge labels clear each other, every node and every other edge`, async ({
+    page,
+  }) => {
+    await openFlow(page, capture);
+    await expect(page.locator(`${FLOW}-graph [data-layer="labels"] > g`)).toHaveCount(
+      capture.payload.edges.length,
+    );
+    expect(await labelCollisions(page, `${FLOW}-svg`)).toEqual([]);
+    // During the run too: the labels grow to "flow/capacity".
+    await runToFrame(page, capture, capture.frames.length - 1);
+    expect(await labelCollisions(page, `${FLOW}-svg`)).toEqual([]);
   });
 }

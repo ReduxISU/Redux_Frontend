@@ -38,6 +38,7 @@ import {
   nodeLook,
   ordinal,
   PictureToggle,
+  StatePill,
   TRACE_COLOR,
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
@@ -173,51 +174,6 @@ function StateBody({ state, look }) {
         <circle cx={state.x} cy={state.y} r={R - 5} data-accept-ring="" {...inner} />
       )}
     </>
-  );
-}
-
-/** An arrow's symbols on a pill. A stated arrow's pill takes its state's fill and label color. */
-function ArrowLabel({ x, y, text, state, faint, traced }) {
-  const width = text.length * 8 + 12;
-  const style = pictureStateStyle(state);
-  const plain = state === "Background";
-  let fill = plain ? paletteVars.surface.input : style.fill;
-  let line = style.line;
-  let ink = plain ? style.text : style.ink;
-  if (traced) {
-    fill = paletteVars.surface.input;
-    line = TRACE_COLOR;
-    ink = paletteVars.text.primary;
-  }
-  return (
-    <g
-      data-arrow-label={text}
-      pointerEvents="none"
-      style={faint ? { filter: FAINT_FILTER } : undefined}
-    >
-      <rect
-        x={x - width / 2}
-        y={y - 10}
-        width={width}
-        height={20}
-        rx={10}
-        fill={fill}
-        stroke={line}
-        strokeWidth={plain && !traced ? 1 : 1.6}
-      />
-      <text
-        x={x}
-        y={y}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill={ink}
-        fontFamily={MONO}
-        fontSize={12.5}
-        fontWeight={plain ? 400 : 700}
-      >
-        {text}
-      </text>
-    </g>
   );
 }
 
@@ -603,8 +559,10 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
         </g>
         <g data-layer="labels">
           {layout.arrows.map((arrow) => (
-            <ArrowLabel
+            <StatePill
               key={arrow.id}
+              forId={arrow.id}
+              testId="arrow-label"
               x={arrow.label.x}
               y={arrow.label.y}
               text={arrow.text}
@@ -641,7 +599,8 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
               strokeLinecap="round"
             />
             <polygon points={fallArrow.arrow} fill={pictureStateStyle("Rejected").line} />
-            <ArrowLabel
+            <StatePill
+              testId="arrow-label"
               x={fallArrow.label.x}
               y={fallArrow.label.y}
               text={fall.symbol}
