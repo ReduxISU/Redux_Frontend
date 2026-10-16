@@ -18,8 +18,11 @@
 // Before Run there is no tree to draw: the picture says the tree grows once the solver runs.
 // Layout is searchTreeLayout.js's pure function of the run's frames, one drawing box for the
 // whole run, so a node is the same size at every step and the zoom holds still while stepping;
-// zoomed in, a step's node out of view pans into it (DiagramZoom.js's `follow`). Hovering,
-// focusing or tapping a node traces its path from the root, everything else faded by color.
+// zoomed in, a step's node out of view brings the view to the path from the root down to it
+// (DiagramZoom.js's `follow`). A tree too wide to read at fit (on a phone, or a wide one on a
+// desktop) opens zoomed in to its text's design size (MIN_SCALE), framing that path; Fit shows
+// it whole. Hovering, focusing or tapping a node traces its path from the root, everything else
+// faded by color.
 //
 // #250: nothing here can be dragged. The tree is drawn again from every step's own nodes, so a
 // node moved by hand would not stay put as the tree grows around it.
@@ -41,10 +44,14 @@ import {
 } from "./searchTreeLayout";
 
 /**
- * The smallest scale (CSS px per drawing unit) the tree's labels read at: about 7 px text. A
- * tree that would fit only smaller (a wide one on a phone) opens zoomed in on the step instead.
+ * The smallest scale (CSS px per drawing unit) the tree's text reads at: its design size, so a
+ * label is 11.5 to 12.5 px and a note 10.5 px. A tree that would fit only smaller (a wide one on
+ * a phone) opens zoomed in to this scale on the step's path instead; Fit shows it whole.
  */
-const MIN_SCALE = 0.55;
+const MIN_SCALE = 1;
+
+/** The margin around the node and the path the view frames, in drawing units. */
+const FRAME_MARGIN = 12;
 
 /** The dash of a branch cut without exploring (and of the node that stands for several). */
 const CUT_DASH = "4 4";
@@ -106,6 +113,20 @@ function edgeLookInto(node) {
     default:
       return node.kind === "more" || node.kind === "hidden" ? { ...plain, dash: "2 3" } : plain;
   }
+}
+
+/** The box around `nodes` (each with its note), with FRAME_MARGIN on every side. */
+function frameOf(nodes) {
+  const left = Math.min(...nodes.map((node) => node.x - node.room / 2));
+  const right = Math.max(...nodes.map((node) => node.x + node.room / 2));
+  const top = Math.min(...nodes.map((node) => node.y - NODE_HEIGHT / 2));
+  const bottom = Math.max(...nodes.map((node) => node.y + NODE_HEIGHT / 2 + node.noteDepth));
+  return {
+    x: left - FRAME_MARGIN,
+    y: top - FRAME_MARGIN,
+    width: right - left + 2 * FRAME_MARGIN,
+    height: bottom - top + 2 * FRAME_MARGIN,
+  };
 }
 
 /** A node's label for screen readers: its path from the root, what it is, and its state. */
@@ -198,15 +219,9 @@ export default function SearchTreeRenderer({
     (focusId !== undefined ? byId.get(focusId) : undefined) ??
     tree.nodes.findLast((node) => node.state === "Solution" || node.state === "Committed") ??
     tree.nodes[0];
-  const follow = followed
-    ? {
-        key: `${frameIndex}:${followed.id}`,
-        x: followed.x - followed.width / 2 - 12,
-        y: followed.y - NODE_HEIGHT / 2 - 12,
-        width: followed.width + 24,
-        height: NODE_HEIGHT + 24,
-      }
-    : null;
+  const follow = followed ? { key: `${frameIndex}:${followed.id}`, ...frameOf([followed]) } : null;
+  // Zoomed in, the view frames the path from the root down to that node (as much as fits).
+  if (follow) follow.path = frameOf(pathOf(followed));
   const total = Number.isInteger(frame?.total) ? frame.total : null;
   const cut = Number.isInteger(frame?.cut) ? frame.cut : null;
   const label = `${name}: ${plural(tree.nodes.length, "node")} drawn${total !== null ? `, ${total} made so far` : ""}${cut !== null ? `, ${cut} cut` : ""}.`;

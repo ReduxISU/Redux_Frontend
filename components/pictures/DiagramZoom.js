@@ -42,10 +42,13 @@
 // Fit puts every piece back where the layout put it.
 //
 // #217: a renderer may also pass `follow`, the box of the piece a step is about (a search tree's
-// node). Zoomed in, a new step whose piece is out of the window pans the window to it, so a
-// reader stepping through a big picture on a phone zooms once and keeps the step in view. With
-// `minScale` too, a picture whose text would be too small to read at fit (a wide search tree on
-// a phone) opens zoomed in to a readable size around that piece instead; Fit shows it whole.
+// node), and the box of what leads to it (`path`: the tree's path from the root down to that
+// node). Zoomed in, a new step whose piece is out of the window pans the window to frame its
+// path, so a reader stepping through a big picture on a phone zooms once and keeps the step in
+// view. With `minScale` too, a picture whose text would be too small to read at fit (a wide
+// search tree on a phone) opens zoomed in to that readable scale, framing the step's path,
+// instead; Fit shows it whole, and zooming in goes on past MAX_ZOOM times fit when the readable
+// scale needs it.
 
 import Box from "@mui/material/Box";
 import { useEffect, useRef, useState } from "react";
@@ -91,8 +94,11 @@ function fitBox(drawing, area) {
   };
 }
 
-/** How far past a renderer's `minScale` a picture too small to read at fit opens (#217). */
-const READABLE_ZOOM = 1.4;
+/**
+ * How far past a renderer's `minScale` a picture too small to read at fit can zoom in (#217),
+ * when that is further than MAX_ZOOM times fit.
+ */
+const READABLE_MAX_ZOOM = 2;
 
 /** How much one press of + or - zooms. */
 const BUTTON_STEP = 1.5;
@@ -170,9 +176,12 @@ function clamp(value, low, high) {
   return Math.min(high, Math.max(low, value));
 }
 
-/** The view kept inside the zoom range and the window kept inside the drawing. */
+/**
+ * The view kept inside the zoom range (fit to the box's `maxZoom`, MAX_ZOOM unless a renderer's
+ * `minScale` needs more) and the window kept inside the drawing.
+ */
 function clampView(view, box) {
-  const k = clamp(view.k, 1, MAX_ZOOM);
+  const k = clamp(view.k, 1, box.maxZoom ?? MAX_ZOOM);
   return {
     k,
     x: clamp(view.x, 0, box.width - box.width / k),
@@ -185,7 +194,7 @@ function clampView(view, box) {
  * is. `ctm` is the <svg>'s screen matrix at `view` (screen = a * unit + e).
  */
 function zoomedAt(view, box, ctm, k, sx, sy) {
-  const next = clamp(k, 1, MAX_ZOOM);
+  const next = clamp(k, 1, box.maxZoom ?? MAX_ZOOM);
   const ratio = view.k / next;
   const ux = (sx - ctm.e) / ctm.a;
   const uy = (sy - ctm.f) / ctm.d;
@@ -226,6 +235,51 @@ function viewShowing(view, box, piece) {
   );
 }
 
+/**
+ * #217: the view at zoom `k` that frames a step: `follow`'s `path` (the tree's path from the root
+ * down to the step's node) centred where the window can hold it, else as much of it as fits
+ * beside `follow` itself (the node), which is always in the window. Where the window is smaller
+ * than the drawing it stays on the drawing, so no empty band of the fitted box's padding shows;
+ * where it is larger, the drawing is centred in it.
+ */
+function viewFraming(k, box, drawing, follow) {
+  const path = follow.path ?? follow;
+  const along = (start, size, pathStart, pathSize, pieceStart, pieceSize, window) => {
+    // A window that holds the whole drawing this way shows it all, centred.
+    if (window >= size) return start + size / 2 - window / 2;
+    const low = Math.max(pieceStart + pieceSize - window, start);
+    const high = Math.min(pieceStart, start + size - window);
+    const centred = pathStart + pathSize / 2 - window / 2;
+    return low <= high ? clamp(centred, low, high) : high;
+  };
+  const w = box.width / k;
+  const h = box.height / k;
+  return clampView(
+    {
+      k,
+      x:
+        along(drawing.minX, drawing.width, path.x, path.width, follow.x, follow.width, w) -
+        box.minX,
+      y:
+        along(drawing.minY, drawing.height, path.y, path.height, follow.y, follow.height, h) -
+        box.minY,
+    },
+    box,
+  );
+}
+
+/** Whether `piece` (a box in drawing units) is wholly inside the window of `view`. */
+function inWindow(view, box, piece) {
+  const left = box.minX + view.x;
+  const top = box.minY + view.y;
+  return (
+    piece.x >= left &&
+    piece.y >= top &&
+    piece.x + piece.width <= left + box.width / view.k &&
+    piece.y + piece.height <= top + box.height / view.k
+  );
+}
+
 function sameKeys(a, b) {
   return a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
 }
@@ -263,11 +317,12 @@ const zoomButtonSx = {
  *   makeEditor), with the Reset layout button; none for a picture that can't be rearranged.
  * @param {{key: string, x: number, y: number, width: number, height: number}|null}
  *   [props.follow] A box to keep in view while zoomed in (#217: the node a search tree's step
- *   is about). When its key changes and the box is outside the zoomed window, the window pans
- *   to centre it; at fit everything is in view already.
+ *   is about), with `path`, the box of what leads to it (the path from the root). When its key
+ *   changes and the box is outside the zoomed window, the window pans to frame the path (see
+ *   viewFraming); at fit everything is in view already.
  * @param {number|null} [props.minScale] The smallest scale (CSS px per drawing unit) the
- *   picture's text can be read at (#217). When fit would draw it smaller, it opens zoomed in
- *   around `follow` instead, once per layout.
+ *   picture's text can be read at (#217). When fit would draw it smaller, it opens zoomed in to
+ *   that scale, framing `follow`'s path, instead, once per layout.
  * @param {import("react").ReactNode} props.children The diagram's elements.
  */
 export default function DiagramZoom({
@@ -305,13 +360,23 @@ export default function DiagramZoom({
   }, []);
   // The area's height before the screen's cap: the drawing's shape at the area's width. A
   // picture that opens zoomed in to be readable (`minScale`, below) gets the height it needs at
-  // that zoom instead, so its zoomed window isn't a thin strip.
+  // that scale instead, so its zoomed window isn't a thin strip.
   const widthScale = area ? Math.min(area.width / drawing.width, MAX_FIT_SCALE) : null;
   const readable = Boolean(minScale && follow && area) && widthScale < minScale;
   const naturalHeight = area
-    ? Math.round(drawing.height * (readable ? minScale * READABLE_ZOOM : widthScale))
+    ? Math.round(drawing.height * (readable ? minScale : widthScale))
     : null;
-  const box = fitBox(drawing, area);
+  const fitted = fitBox(drawing, area);
+  // The fitted box, with how far it zooms in: MAX_ZOOM times fit, or further when the
+  // renderer's readable scale is further off (clampView and zoomedAt read it).
+  const fitScale = area?.width > 0 ? area.width / fitted.width : null;
+  const box = {
+    ...fitted,
+    maxZoom:
+      minScale && fitScale
+        ? Math.max(MAX_ZOOM, (minScale * READABLE_MAX_ZOOM) / fitScale)
+        : MAX_ZOOM,
+  };
   const [stored, setStored] = useState(FIT);
   const [storedFor, setStoredFor] = useState(resetOn);
   // React's "adjust state when a prop changes" pattern: a new instance or layout starts at fit.
@@ -326,29 +391,22 @@ export default function DiagramZoom({
   const [followedKey, setFollowedKey] = useState(followKey);
   if (followKey !== followedKey) {
     setFollowedKey(followKey);
-    const next = follow && !resetting && view.k > 1.001 ? viewShowing(view, box, follow) : null;
-    if (next) setStored(next);
+    if (follow && !resetting && view.k > 1.001 && !inWindow(view, box, follow)) {
+      setStored(viewFraming(view.k, box, drawing, follow));
+    }
   }
   // #217: a picture too big to read at fit on this screen (its scale under `minScale`) opens
-  // zoomed in to a readable size around the piece it follows, once per layout; Fit still shows
-  // it whole.
+  // zoomed in to that scale, framing the path to the piece it follows, once per layout; Fit
+  // still shows it whole. Opening zoomed changes the area's height (`naturalHeight`, above), so
+  // the frame is taken again when the area's size changes, until the reader moves the view.
   const [readableFor, setReadableFor] = useState(null);
-  if (minScale && follow && area?.width > 0 && !sameKeys(readableFor ?? [], resetOn)) {
-    setReadableFor(resetOn);
-    const fitScale = area.width / box.width;
-    if (fitScale < minScale) {
-      const k = Math.min(MAX_ZOOM, (minScale * READABLE_ZOOM) / fitScale);
-      setStored(
-        clampView(
-          {
-            k,
-            x: follow.x + follow.width / 2 - box.width / k / 2 - box.minX,
-            y: follow.y + follow.height / 2 - box.height / k / 2 - box.minY,
-          },
-          box,
-        ),
-      );
-    }
+  const freshLayout = !readableFor || !sameKeys(readableFor.keys, resetOn);
+  const resized = !freshLayout && readableFor.area !== area && Object.is(stored, readableFor.view);
+  if (minScale && follow && fitScale && (freshLayout || resized)) {
+    const next =
+      fitScale < minScale ? viewFraming(minScale / fitScale, box, drawing, follow) : { ...FIT };
+    setReadableFor({ keys: resetOn, area, view: next });
+    setStored(next);
   }
   const zoomed = view.k > 1.001;
 
@@ -509,7 +567,7 @@ export default function DiagramZoom({
       const k = clamp(
         (pinch.view.k * Math.hypot(p.x - q.x, p.y - q.y)) / pinch.distance,
         1,
-        MAX_ZOOM,
+        box.maxZoom,
       );
       const scale = k / pinch.view.k;
       const mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
@@ -688,7 +746,7 @@ export default function DiagramZoom({
             type="button"
             id={`${idPrefix}-zoom-in`}
             aria-label="Zoom in"
-            disabled={view.k >= MAX_ZOOM - 0.001}
+            disabled={view.k >= box.maxZoom - 0.001}
             onClick={() => zoomBy(BUTTON_STEP)}
             sx={zoomButtonSx}
           >

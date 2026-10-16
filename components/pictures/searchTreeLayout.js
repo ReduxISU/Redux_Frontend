@@ -30,12 +30,15 @@ const MIN_WIDTH = 480;
 const MIN_HEIGHT = 160;
 
 /**
- * A note longer than NOTE_LINE characters is broken onto two lines at the space nearest its
- * middle (`lb 7450` over `≥ 6830`), so it is no wider than its node; a line still longer than
- * NOTE_MAX is cut, with an ellipsis (the whole note is in the node's label).
+ * A note is one line up to NOTE_LINE characters (`2 clauses left`). A bound longer than
+ * BOUND_LINE that compares two numbers is broken before its comparison (`lb 7450` over
+ * `≥ 6830`), so it is no wider than its node; any other note longer than NOTE_LINE is broken at
+ * the space nearest its middle. A line still longer than NOTE_LINE is cut, with an ellipsis (the
+ * whole note is in the node's label).
  */
-const NOTE_LINE = 12;
-const NOTE_MAX = 14;
+const NOTE_LINE = 16;
+const BOUND_LINE = 12;
+const COMPARISON = /^(.*\S) ([≥≤<>=≠] .*)$/;
 
 /** The note's first line under a node, the gap between its lines, and its font size. */
 export const NOTE_OFFSET = NODE_HEIGHT / 2 + 11;
@@ -52,13 +55,15 @@ function round(value) {
 }
 
 function cut(line) {
-  return line.length > NOTE_MAX ? `${line.slice(0, NOTE_MAX - 1)}…` : line;
+  return line.length > NOTE_LINE ? `${line.slice(0, NOTE_LINE - 1)}…` : line;
 }
 
 /** A node's note as drawn: its bound, on one or two lines (see NOTE_LINE). */
 export function noteLines(bound) {
   if (typeof bound !== "string" || !bound.trim()) return [];
   const text = bound.trim();
+  const comparison = text.length > BOUND_LINE ? COMPARISON.exec(text) : null;
+  if (comparison) return [cut(comparison[1]), cut(comparison[2])];
   if (text.length <= NOTE_LINE) return [text];
   let split = -1;
   for (let at = 0; at < text.length; at += 1) {

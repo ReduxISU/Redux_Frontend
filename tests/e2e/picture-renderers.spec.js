@@ -3699,6 +3699,11 @@ test("Search Tree: the whole run shares one box, so the view and a node's size h
   const capture = N_QUEENS_SEARCH_TREE_FRAMES;
   await openTree(page, capture);
   await runToFrame(page, capture, 0);
+  // Too wide to read at fit here, the tree opens zoomed in to a readable size; at Fit the
+  // window holds still while it grows.
+  await expect(page.locator(`${TREE}-zoom`)).not.toHaveAttribute("data-zoom", "1.00");
+  await page.locator(`${TREE}-zoom-reset`).click();
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
   const viewBox = await page.locator(`${TREE}-svg`).getAttribute("viewBox");
   const first = await treeBoxes(page);
   // A step later the tree has changed shape (Redux folded a branch), but the box is the same.
@@ -4029,6 +4034,175 @@ for (const [key, capture] of Object.entries(TREE_CASES)) {
       await page.locator("#workbench-steps-next").click();
       await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
       expect(await treeCollisions(page)).toEqual([]);
+    }
+  });
+}
+
+/**
+ * The smallest label and the smallest note of the tree as drawn on screen, in CSS px (font size
+ * times the diagram's scale), with the text each belongs to.
+ */
+function treeSmallestText(page) {
+  return page.locator(`${TREE}-svg`).evaluate((svg) => {
+    const scale = svg.getScreenCTM().a;
+    const smallest = (selector) =>
+      [...svg.querySelectorAll(selector)]
+        .map((text) => ({
+          text: text.textContent,
+          px: Number.parseFloat(getComputedStyle(text).fontSize) * scale,
+        }))
+        .reduce((least, text) => (text.px < least.px ? text : least), { text: "", px: Infinity });
+    return { label: smallest("[data-label]"), note: smallest("[data-note]") };
+  });
+}
+
+/** The smallest a tree's label and note may be drawn on a phone, in CSS px. */
+const TREE_LABEL_PX = 11;
+const TREE_NOTE_PX = 10;
+
+/** Whether node `id`'s box is wholly inside the picture area on screen. */
+function treeNodeInView(page, id) {
+  return page.locator(`${TREE}-svg`).evaluate((svg, nodeId) => {
+    const node = svg.querySelector(`[data-node-id="${nodeId}"] [data-body]`);
+    const a = node.getBoundingClientRect();
+    const b = svg.getBoundingClientRect();
+    return (
+      a.left >= b.left - 1 &&
+      a.right <= b.right + 1 &&
+      a.top >= b.top - 1 &&
+      a.bottom <= b.bottom + 1
+    );
+  }, id);
+}
+
+/** The node a frame's view follows: its step's, or else the end of the answer's path. */
+function followedNode(frame) {
+  const [focus] = frame.focus;
+  if (focus !== undefined) return focus;
+  const answer = frame.nodes.findLast(
+    (node) => node.state === "Solution" || node.state === "Committed",
+  );
+  return (answer ?? frame.nodes[0]).id;
+}
+
+for (const key of ["sat3", "tsp", "queens"]) {
+  test(`Search Tree: on a 390 px phone the ${key} tree opens readable, framing the path from the root to its step`, async ({
+    page,
+  }) => {
+    const capture = TREE_CASES[key];
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openTree(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    await runToFrame(page, capture, capture.frames.length - 1);
+    // Too wide to read at fit on a phone, so it opens zoomed in; Fit still shows it whole.
+    await expect
+      .poll(async () => Number(await page.locator(`${TREE}-zoom`).getAttribute("data-zoom")))
+      .toBeGreaterThan(1);
+    await expectFits(page, `${TREE}-svg`);
+    const finished = await treeSmallestText(page);
+    expect(finished.label.px, `"${finished.label.text}"`).toBeGreaterThanOrEqual(TREE_LABEL_PX);
+    expect(finished.note.px, `"${finished.note.text}"`).toBeGreaterThanOrEqual(TREE_NOTE_PX);
+    // The view frames the path from the root down to the step's node: the node, the root's
+    // row (no empty band over the tree), and the root too, or else as much of the path as fits
+    // (the node at the window's far side from the root).
+    const last = capture.frames.at(-1);
+    const followed = followedNode(last);
+    expect(await treeNodeInView(page, followed)).toBe(true);
+    const framing = await page.locator(`${TREE}-svg`).evaluate(
+      (svg, [rootId, nodeId]) => {
+        const rect = (id) =>
+          svg.querySelector(`[data-node-id="${id}"] [data-body]`).getBoundingClientRect();
+        const area = svg.getBoundingClientRect();
+        const root = rect(rootId);
+        const node = rect(nodeId);
+        return {
+          rowInView: root.top >= area.top - 1 && root.bottom <= area.bottom + 1,
+          rootInView: root.left >= area.left - 1 && root.right <= area.right + 1,
+          // How far the node sits from the window's side away from the root.
+          farGap:
+            root.left + root.width / 2 > node.left + node.width / 2
+              ? node.left - area.left
+              : area.right - node.right,
+        };
+      },
+      [last.nodes[0].id, followed],
+    );
+    expect(framing.rowInView).toBe(true);
+    if (!framing.rootInView) expect(framing.farGap).toBeLessThan(40);
+    const top = await page
+      .locator(`${TREE}-svg`)
+      .evaluate((svg) => Number(svg.getAttribute("viewBox").split(" ")[1]));
+    expect(top).toBeGreaterThanOrEqual(0);
+    // Stepping back keeps each step's node in view, at the same readable size.
+    for (let index = capture.frames.length - 2; index >= capture.frames.length - 4; index -= 1) {
+      await page.locator("#workbench-steps-previous").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expect.poll(() => treeNodeInView(page, followedNode(capture.frames[index]))).toBe(true);
+    }
+    const stepped = await treeSmallestText(page);
+    expect(stepped.label.px).toBeGreaterThanOrEqual(TREE_LABEL_PX);
+    expect(stepped.note.px).toBeGreaterThanOrEqual(TREE_NOTE_PX);
+    await page.locator(`${TREE}-zoom-reset`).click();
+    await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  });
+}
+
+test("Search Tree: on a desktop a wide tree opens readable on its answer's path, and a small one at fit", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const capture = TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await page.locator("#workbench-run").click();
+  await expect
+    .poll(async () => Number(await page.locator(`${TREE}-zoom`).getAttribute("data-zoom")))
+    .toBeGreaterThan(1);
+  const smallest = await treeSmallestText(page);
+  expect(smallest.label.px).toBeGreaterThanOrEqual(TREE_LABEL_PX);
+  expect(smallest.note.px).toBeGreaterThanOrEqual(TREE_NOTE_PX);
+  // The answer's whole path fits: the root and the answer's leaf are both in view.
+  const last = capture.frames.at(-1);
+  expect(await treeNodeInView(page, last.nodes[0].id)).toBe(true);
+  expect(await treeNodeInView(page, followedNode(last))).toBe(true);
+  await page.locator(`${TREE}-zoom-reset`).click();
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+
+  // A tree that reads at fit opens at fit.
+  await openTree(page, SAT3_SEARCH_TREE_FRAMES);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-steps-position")).toHaveText(
+    `Step ${SAT3_SEARCH_TREE_FRAMES.frames.length} of ${SAT3_SEARCH_TREE_FRAMES.frames.length}`,
+  );
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  expect((await treeSmallestText(page)).note.px).toBeGreaterThanOrEqual(TREE_NOTE_PX);
+});
+
+test("Search Tree: a short note like 2 clauses left stays on one line", async ({ page }) => {
+  const capture = SAT3_UNSAT_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const notes = page.locator(`${TREE}-tree [data-note="2 clauses left"]`);
+  expect(await notes.count()).toBeGreaterThan(0);
+  for (const note of await notes.all()) {
+    await expect(note.locator("tspan")).toHaveText(["2 clauses left"]);
+  }
+  for (const note of await page.locator(`${TREE}-tree [data-note="1 clause left"]`).all()) {
+    await expect(note.locator("tspan")).toHaveText(["1 clause left"]);
+  }
+});
+
+for (const width of [390, 320]) {
+  test(`Search Tree: at ${width} px every capture's finished tree has no labels or notes meeting`, async ({
+    page,
+  }) => {
+    test.slow();
+    await page.setViewportSize({ width, height: 844 });
+    for (const capture of Object.values(TREE_CASES)) {
+      await openTree(page, capture);
+      await page.locator("#workbench-panel-close").click();
+      await runToFrame(page, capture, capture.frames.length - 1);
+      expect(await treeCollisions(page)).toEqual([]);
+      await expectFits(page, `${TREE}-svg`);
     }
   });
 }
