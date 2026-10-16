@@ -651,7 +651,7 @@ export const DFA_AUTOMATON_LIST = [
 // #201: Graph pictures, one small instance per shape, captured the same way on 2026-10-14
 // (POST /ProblemProvider/visualize?visualization=<name>&format=frames&solver=<name>).
 
-/** format=frames, Clique, instance (({1,2,3,4},{{1,2},{1,3},{2,3},{3,4}}),3), CarraghanPardalos (branch and bound): subset shape; Committed nodes and edges, then the confirmed answer. */
+/** format=frames, Clique, instance (({1,2,3,4},{{1,2},{1,3},{2,3},{3,4}}),3), CarraghanPardalos (branch and bound): subset shape; Committed nodes and edges, then the confirmed answer (recaptured after Redux #889: "1 vertex", "No vertex"). */
 export const CLIQUE_GRAPH_FRAMES = {
   type: "Graph",
   payload: {
@@ -714,6 +714,7 @@ export const CLIQUE_GRAPH_FRAMES = {
       },
       edges: {},
       phantoms: [],
+      step: 0,
     },
     {
       event: "Accept",
@@ -726,10 +727,11 @@ export const CLIQUE_GRAPH_FRAMES = {
       },
       edges: {},
       phantoms: [],
+      step: 1,
     },
     {
       event: "Accept",
-      caption: "Add 2 to the clique. 1 vertices are joined to every member so far.",
+      caption: "Add 2 to the clique. 1 vertex is joined to every member so far.",
       focus: ["2"],
       nodes: {
         1: {
@@ -745,10 +747,11 @@ export const CLIQUE_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 2,
     },
     {
       event: "Accept",
-      caption: "Add 3 to the clique. 0 vertices are joined to every member so far.",
+      caption: "Add 3 to the clique. No vertex is joined to every member so far.",
       focus: ["3"],
       nodes: {
         1: {
@@ -773,6 +776,7 @@ export const CLIQUE_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 3,
     },
     {
       event: "Done",
@@ -801,6 +805,7 @@ export const CLIQUE_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 4,
       ok: true,
     },
   ],
@@ -1324,7 +1329,7 @@ export const MAX_CUT_GRAPH_FRAMES = {
   ],
 };
 
-/** format=frames, Clique Cover, instance (({1,2,3,4},{{1,2},{3,4}}),2), CliqueCoverBruteForce: groups shape; missing edges inside a group as Rejected phantoms. */
+/** format=frames, Clique Cover, instance (({1,2,3,4},{{1,2},{3,4}}),2), CliqueCoverBruteForce: groups shape; missing edges inside a group as Rejected phantoms, and a try that leaves node 1 in no clique with node 1 Rejected (recaptured after Redux #890). */
 export const CLIQUE_COVER_GRAPH_FRAMES = {
   type: "Graph",
   payload: {
@@ -1408,6 +1413,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
           state: "Rejected",
         },
       ],
+      step: 0,
       groups: {
         1: 0,
         2: 0,
@@ -1444,6 +1450,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
           state: "Rejected",
         },
       ],
+      step: 1,
       groups: {
         1: 1,
         2: 0,
@@ -1453,13 +1460,10 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
     },
     {
       event: "Reject",
-      caption: "Try {2,3,4},{}: 2 and 3 are in one group but aren't joined.",
-      focus: ["2", "3"],
+      caption: "Try {2,3,4},{}: node 1 is in no clique.",
+      focus: ["1"],
       nodes: {
-        2: {
-          state: "Rejected",
-        },
-        3: {
+        1: {
           state: "Rejected",
         },
       },
@@ -1480,6 +1484,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
           state: "Rejected",
         },
       ],
+      step: 2,
       groups: {
         2: 0,
         3: 0,
@@ -1515,6 +1520,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
           state: "Rejected",
         },
       ],
+      step: 3,
       groups: {
         1: 0,
         2: 1,
@@ -1536,6 +1542,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 4,
       groups: {
         1: 1,
         2: 1,
@@ -1557,6 +1564,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 5,
       ok: true,
       groups: {
         1: 1,
@@ -5973,7 +5981,7 @@ export const SSSP_UNREACHABLE_LAYERED_FRAMES = {
   ],
 };
 
-/** format=frames, Single Pair Shortest Path, the problem default ({1,2,3,4,5},{((1,2),4),((1,3),2),((2,3),1),((3,5),7),((2,4),3),((4,5),9)},1,5), SPSPSolver: source and target tags, weights, only the path 1, 3, 5 as the answer. */
+/** format=frames, Single Pair Shortest Path, the problem default ({1,2,3,4,5},{((1,2),4),((1,3),2),((2,3),1),((3,5),7),((2,4),3),((4,5),9)},1,5), SPSPSolver: source and target tags, weights, only the path 1, 3, 5 as the answer; when 5 is settled only the path so far is Solution and the rest of the tree Committed (recaptured after Redux #892). */
 export const SPSP_LAYERED_FRAMES = {
   type: "LayeredGraph",
   payload: {
@@ -6074,6 +6082,7 @@ export const SPSP_LAYERED_FRAMES = {
         },
       },
       edges: {},
+      step: 0,
       dist: {
         1: 0,
         2: null,
@@ -6106,6 +6115,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "ElementHighlight",
         },
       },
+      step: 1,
       dist: {
         1: 0,
         2: 4,
@@ -6147,6 +6157,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "ElementHighlight",
         },
       },
+      step: 2,
       dist: {
         1: 0,
         2: 4,
@@ -6195,6 +6206,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "Covered",
         },
       },
+      step: 3,
       dist: {
         1: 0,
         2: 4,
@@ -6247,6 +6259,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "ElementHighlight",
         },
       },
+      step: 4,
       dist: {
         1: 0,
         2: 4,
@@ -6270,13 +6283,13 @@ export const SPSP_LAYERED_FRAMES = {
           state: "Solution",
         },
         2: {
-          state: "Solution",
+          state: "Committed",
         },
         3: {
           state: "Solution",
         },
         4: {
-          state: "Solution",
+          state: "Committed",
         },
         5: {
           state: "ElementHighlight",
@@ -6284,18 +6297,19 @@ export const SPSP_LAYERED_FRAMES = {
       },
       edges: {
         "1>2": {
-          state: "Solution",
+          state: "Committed",
         },
         "1>3": {
           state: "Solution",
         },
         "2>4": {
-          state: "Solution",
+          state: "Committed",
         },
         "3>5": {
           state: "Solution",
         },
       },
+      step: 5,
       dist: {
         1: 0,
         2: 4,
@@ -6339,6 +6353,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "Solution",
         },
       },
+      step: 6,
       dist: {
         1: 0,
         2: 4,

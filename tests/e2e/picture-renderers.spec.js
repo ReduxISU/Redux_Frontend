@@ -582,6 +582,13 @@ test("Graph: the groups shape keeps each node's group color under its state, wit
   await expect(page.locator(`${GRAPH}-graph [data-phantom="2|3"]`)).toHaveCount(1);
   await expect(legendBody(page)).toContainText("Clique 1");
   await expect(legendBody(page)).toContainText("Missing edge");
+  // A try that leaves node 1 in no group (Redux #890) names it and marks it Rejected.
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "Try {2,3,4},{}: node 1 is in no clique.",
+  );
+  await expect(graphNode(page, "1")).toHaveAttribute("data-state", "Rejected");
+  await expect(graphNode(page, "3")).toHaveAttribute("data-state", "Background");
 });
 
 test("Graph: a directed tour draws arrows, order badges and both edges of an opposite pair", async ({
@@ -1586,6 +1593,18 @@ test("Layered Graph: the plain shortest-path picture names the source and target
   await expect(layeredNode(page, "1").locator("[data-distance]")).toHaveText("d = 0");
   await expect(layeredNode(page, "5").locator("[data-distance]")).toHaveText("∞");
   expect(await nodeCentres(page, `${LAYERED}-graph`)).toEqual(before);
+  // Settling the target (Redux #892): only the path so far is Solution, the rest of the tree
+  // Committed, and the target highlighted.
+  await runToFrame(page, capture, 5);
+  for (const id of ["1", "3"]) {
+    await expect(layeredNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  for (const id of ["2", "4"]) {
+    await expect(layeredNode(page, id)).toHaveAttribute("data-state", "Committed");
+  }
+  await expect(layeredNode(page, "5")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(layeredEdge(page, "3>5")).toHaveAttribute("data-state", "Solution");
+  await expect(layeredEdge(page, "2>4")).toHaveAttribute("data-state", "Committed");
 });
 
 test("Layered Graph: Topological Sort shows ready, Committed and placed nodes with order badges", async ({
