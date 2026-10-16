@@ -2567,3 +2567,111 @@ for (const [width, height] of [
     expect(sizes.viewAspect).toBeCloseTo(sizes.width / sizes.height, 2);
   });
 }
+
+/**
+ * Every place where a diagram's edge labels collide, read off the drawn SVG: two labels' boxes
+ * meeting, a label on a state's (node's) body, or another edge's line running through a label.
+ * Labels and edges pair up by order (`[data-layer="labels"] > g` and `[data-layer="edges"] > g`
+ * are drawn in the same order), so an edge's own line through its label doesn't count.
+ * @returns {Promise<string[]>} One line per collision; empty when the picture is clear.
+ */
+function labelCollisions(page, scope) {
+  return page.locator(scope).evaluate((root) => {
+    const labels = [...root.querySelectorAll('[data-layer="labels"] > g')].map((g) => {
+      const box = g.querySelector("rect").getBBox();
+      return {
+        name: g.textContent,
+        x1: box.x,
+        y1: box.y,
+        x2: box.x + box.width,
+        y2: box.y + box.height,
+      };
+    });
+    const edges = [...root.querySelectorAll('[data-layer="edges"] > g')];
+    const lines = [
+      ...edges.map((g, index) => ({
+        path: g.querySelector("path"),
+        owner: index,
+        name: g.dataset.edgeId,
+      })),
+      ...[...root.querySelectorAll("[data-start-arrow] path")].map((path) => ({
+        path,
+        owner: -1,
+        name: "entry arrow",
+      })),
+    ];
+    const bodies = [...root.querySelectorAll("[data-node-id] [data-body]")].map((body) => ({
+      body,
+      name: body.closest("[data-node-id]").dataset.nodeId,
+    }));
+    const meets = (a, b) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+    const found = [];
+    labels.forEach((label, i) => {
+      labels.forEach((other, j) => {
+        if (j > i && meets(label, other))
+          found.push(`label ${i} "${label.name}" meets label ${j} "${other.name}"`);
+      });
+      for (const { body, name } of bodies) {
+        if (body.tagName === "circle") {
+          const cx = body.cx.baseVal.value;
+          const cy = body.cy.baseVal.value;
+          const r = body.r.baseVal.value;
+          const nx = Math.min(Math.max(cx, label.x1), label.x2);
+          const ny = Math.min(Math.max(cy, label.y1), label.y2);
+          if (Math.hypot(nx - cx, ny - cy) < r)
+            found.push(`label ${i} "${label.name}" on state ${name}`);
+        } else {
+          const b = body.getBBox();
+          if (meets(label, { x1: b.x, y1: b.y, x2: b.x + b.width, y2: b.y + b.height })) {
+            found.push(`label ${i} "${label.name}" on ${name}`);
+          }
+        }
+      }
+      const inner = { x1: label.x1 + 1, y1: label.y1 + 1, x2: label.x2 - 1, y2: label.y2 - 1 };
+      for (const { path, owner, name } of lines) {
+        if (owner === i) continue;
+        const length = path.getTotalLength();
+        for (let at = 0; at <= length; at += 2) {
+          const point = path.getPointAtLength(at);
+          if (
+            point.x > inner.x1 &&
+            point.x < inner.x2 &&
+            point.y > inner.y1 &&
+            point.y < inner.y2
+          ) {
+            found.push(`line ${name} runs through label ${i} "${label.name}"`);
+            break;
+          }
+        }
+      }
+    });
+    return found;
+  });
+}
+
+for (const [key, testCase] of Object.entries(AUTOMATON_CASES)) {
+  test(`Automaton: the ${key} capture's arrow labels clear each other, every state and every other arrow`, async ({
+    page,
+  }) => {
+    await openAutomaton(page, testCase);
+    await expect(page.locator(`${AUTOMATON}-graph [data-layer="labels"] > g`)).toHaveCount(
+      testCase.capture.payload.transitions.length,
+    );
+    expect(await labelCollisions(page, `${AUTOMATON}-svg`)).toEqual([]);
+  });
+}
+
+for (const [key, capture] of Object.entries(FLOW_CASES)) {
+  test(`Flow Network: the ${key} capture's edge labels clear each other, every node and every other edge`, async ({
+    page,
+  }) => {
+    await openFlow(page, capture);
+    await expect(page.locator(`${FLOW}-graph [data-layer="labels"] > g`)).toHaveCount(
+      capture.payload.edges.length,
+    );
+    expect(await labelCollisions(page, `${FLOW}-svg`)).toEqual([]);
+    // During the run too: the labels grow to "flow/capacity".
+    await runToFrame(page, capture, capture.frames.length - 1);
+    expect(await labelCollisions(page, `${FLOW}-svg`)).toEqual([]);
+  });
+}
