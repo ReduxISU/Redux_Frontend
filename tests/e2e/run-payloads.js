@@ -7,14 +7,14 @@
 
 /**
  * DFA Acceptance: the problem's default instance with the DFASolver. Both pictures (the
- * Automaton and the Table) drawn from the one run, three frames each, steps 0 to 2. `ok` is
- * false for an accepted run: a known backend solver/verifier mismatch, not used here.
+ * Automaton and the Table) drawn from the one run, three frames each, steps 0 to 2. The answer
+ * is the bare certificate the DFA verifier checks (ReduxISU/Redux#896).
  */
 export const DFA_ONE_RUN = {
   solver: "DFASolver",
   solverName: "DFA Simulation",
-  answer: "The sequence of states to accept is: 1, 2",
-  ok: false,
+  answer: "1,2",
+  ok: true,
   timedOut: false,
   pictures: [
     {
