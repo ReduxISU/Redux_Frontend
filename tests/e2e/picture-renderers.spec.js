@@ -87,6 +87,8 @@ import {
   SUBSET_SUM_PACKING_FRAMES,
   TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES,
   TOPOLOGICAL_SORT_LAYERED_FRAMES,
+  TSP_4CITY_SEARCH_TREE_FRAMES,
+  TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES,
   TSP_SEARCH_TREE_FRAMES,
 } from "./picture-payloads";
 
@@ -3568,6 +3570,8 @@ const TREE_CASES = {
   sat3: SAT3_SEARCH_TREE_FRAMES,
   sat3Unsat: SAT3_UNSAT_SEARCH_TREE_FRAMES,
   tsp: TSP_SEARCH_TREE_FRAMES,
+  tspGreedyBeaten: TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES,
+  tsp4City: TSP_4CITY_SEARCH_TREE_FRAMES,
   coloring: GRAPH_COLORING_SEARCH_TREE_FRAMES,
   coloringFailed: GRAPH_COLORING_FAILED_SEARCH_TREE_FRAMES,
   queens: N_QUEENS_SEARCH_TREE_FRAMES,
@@ -3744,6 +3748,12 @@ test("Search Tree: the answer's path turns green, and best-first nodes show when
   for (const id of ["n1", "n3"]) {
     await expect(treeEdge(page, id)).not.toHaveAttribute("stroke-dasharray", /./);
   }
+  // The answer's leaf says why it is one, and each queued node how many clauses it leaves.
+  await expect(treeNode(page, "n3").locator("[data-note]")).toHaveAttribute("data-note", "x3 free");
+  await expect(treeNode(page, "n2").locator("[data-note]")).toHaveAttribute(
+    "data-note",
+    "1 clause left",
+  );
   // Best-first: the order each node left the queue, and the one still queued waits dashed.
   await expect(treeNode(page, "n0").locator('[data-badge="order"]')).toHaveText("1");
   await expect(treeNode(page, "n1").locator('[data-badge="order"]')).toHaveText("2");
@@ -3772,10 +3782,10 @@ test("Search Tree: a bound or clash is noted under its node, on two lines when i
   const capture = TSP_SEARCH_TREE_FRAMES;
   await openTree(page, capture);
   await runToFrame(page, capture, capture.frames.length - 1);
-  const note = treeNode(page, "n2").locator("[data-note]");
+  const note = treeNode(page, "n3").locator("[data-note]");
   await expect(note).toHaveAttribute("data-note", "lb 7450 ≥ 6830");
   await expect(note.locator("tspan")).toHaveText(["lb 7450", "≥ 6830"]);
-  await expect(treeNode(page, "n2")).toHaveAttribute(
+  await expect(treeNode(page, "n3")).toHaveAttribute(
     "aria-label",
     "Denver, path New York → Denver, cut without exploring, Rejected (failed or ruled out), lb 7450 ≥ 6830",
   );
@@ -3785,9 +3795,57 @@ test("Search Tree: a bound or clash is noted under its node, on two lines when i
   await expect(legendBody(page)).toContainText(
     "Dashed red branch (cut without exploring, by a bound or a clash)",
   );
-  // The greedy tour that is the answer was found before the search: no node is its path.
-  await expect(page.locator(`${TREE}-tree [data-state="Solution"]`)).toHaveCount(0);
   await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Search Tree: TSP's greedy tour is a leaf under the root, and the answer's path when nothing beats it", async ({
+  page,
+}) => {
+  const capture = TSP_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  // The first step: the root is explored first, and the greedy tour is the step's node.
+  await runToFrame(page, capture, 0);
+  await expect(treeNode(page, "n0").locator('[data-badge="order"]')).toHaveText("1");
+  await expect(treeNode(page, "n1")).toHaveAttribute("data-focus", "true");
+  await expect(treeNode(page, "n1").locator("[data-label]")).toHaveText("greedy tour");
+  await expect(treeNode(page, "n1").locator("[data-note]")).toHaveAttribute(
+    "data-note",
+    "tour 6830",
+  );
+  // The search never beats it: the answer's path is the root and the greedy tour.
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("End");
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
+  await expect(page.locator(`${TREE}-tree [data-state="Solution"]`)).toHaveCount(2);
+  for (const id of ["n0", "n1"]) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(treeEdge(page, "n1")).not.toHaveAttribute("stroke-dasharray", /./);
+  // The label fits its node.
+  const fits = await treeNode(page, "n1").evaluate((node) => {
+    const body = node.querySelector("[data-body]").getBoundingClientRect();
+    const label = node.querySelector("[data-label]").getBoundingClientRect();
+    return label.left >= body.left - 0.5 && label.right <= body.right + 0.5;
+  });
+  expect(fits).toBe(true);
+});
+
+test("Search Tree: when the search beats TSP's greedy tour, the answer's path runs down the tree", async ({
+  page,
+}) => {
+  const capture = TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  for (const id of ["n0", "n3", "n9", "n12", "n14"]) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(treeNode(page, "n14").locator("[data-note]")).toHaveAttribute(
+    "data-note",
+    "tour 27",
+  );
+  // The greedy tour it beat stays a leaf, no longer the answer.
+  await expect(treeNode(page, "n1")).toHaveAttribute("data-state", "Covered");
+  await expect(treeNode(page, "n1").locator("[data-note]")).toHaveAttribute("data-note", "tour 31");
 });
 
 test("Search Tree: hovering, focusing or tapping a node traces its path from the root", async ({
@@ -3796,16 +3854,16 @@ test("Search Tree: hovering, focusing or tapping a node traces its path from the
   const capture = TSP_SEARCH_TREE_FRAMES;
   await openTree(page, capture);
   await runToFrame(page, capture, capture.frames.length - 1);
-  await treeNode(page, "n11").hover();
-  for (const id of ["n0", "n4", "n8", "n11"]) {
+  await treeNode(page, "n12").hover();
+  for (const id of ["n0", "n5", "n9", "n12"]) {
     await expect(treeNode(page, id)).toHaveAttribute("data-traced", "trace");
   }
-  for (const id of ["n4", "n8", "n11"]) {
+  for (const id of ["n5", "n9", "n12"]) {
     await expect(treeEdge(page, id)).toHaveAttribute("data-traced", "trace");
   }
-  await expect(treeNode(page, "n1")).toHaveAttribute("data-traced", "faint");
-  await expect(treeEdge(page, "n1")).toHaveAttribute("data-traced", "faint");
-  const faded = await treeNode(page, "n1").evaluate((el) => ({
+  await expect(treeNode(page, "n2")).toHaveAttribute("data-traced", "faint");
+  await expect(treeEdge(page, "n2")).toHaveAttribute("data-traced", "faint");
+  const faded = await treeNode(page, "n2").evaluate((el) => ({
     opacity: getComputedStyle(el).opacity,
     filter: getComputedStyle(el).filter,
   }));
@@ -3813,12 +3871,12 @@ test("Search Tree: hovering, focusing or tapping a node traces its path from the
   expect(faded.filter).toContain("grayscale");
 
   await page.mouse.move(0, 0);
-  await treeNode(page, "n6").focus();
-  await expect(treeNode(page, "n1")).toHaveAttribute("data-traced", "trace");
-  await expect(treeNode(page, "n4")).toHaveAttribute("data-traced", "faint");
+  await treeNode(page, "n7").focus();
+  await expect(treeNode(page, "n2")).toHaveAttribute("data-traced", "trace");
+  await expect(treeNode(page, "n5")).toHaveAttribute("data-traced", "faint");
   await page.keyboard.press("Enter");
-  await expect(treeNode(page, "n6")).toHaveAttribute("aria-pressed", "true");
-  await expect(treeNode(page, "n1")).toHaveAttribute(
+  await expect(treeNode(page, "n7")).toHaveAttribute("aria-pressed", "true");
+  await expect(treeNode(page, "n2")).toHaveAttribute(
     "aria-label",
     "Chicago, path New York → Chicago, explored, Covered (rule met), lb 5470, left the queue 2, 3 children",
   );
