@@ -419,6 +419,8 @@ test("Search Tree: after a 3SAT backtracking run, the clause graph's step opens 
     "data-focus",
     "true",
   );
+  // Switched to, the tree opens at fit, like every picture.
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
   // Stepping on grows the tree, and going back to the clause graph keeps the step.
   await page.locator("#workbench-steps-next").click();
   await expect(page.locator(`${TREE}-tree [data-node-id="n1"]`)).toHaveAttribute(
@@ -428,6 +430,10 @@ test("Search Tree: after a 3SAT backtracking run, the clause graph's step opens 
   await chooseVisualization(page, "3SAT Visualization");
   await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "GroupedGraph");
   await expect(page.locator(POSITION)).toHaveText(`Step 6 of ${clauses.length}`);
+  await expect(page.locator("#workbench-source-frames-groupedgraph-zoom")).toHaveAttribute(
+    "data-zoom",
+    "1.00",
+  );
   expect(asked.filter((request) => request === "run")).toHaveLength(1);
   await expect(page.locator(NOTE)).toHaveCount(0);
 });

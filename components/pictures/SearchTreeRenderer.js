@@ -19,10 +19,10 @@
 // Layout is searchTreeLayout.js's pure function of the run's frames, one drawing box for the
 // whole run, so a node is the same size at every step and the zoom holds still while stepping;
 // zoomed in, a step's node out of view brings the view to the path from the root down to it
-// (DiagramZoom.js's `follow`). A tree too wide to read at fit (on a phone, or a wide one on a
-// desktop) opens zoomed in to its text's design size (MIN_SCALE), framing that path; Fit shows
-// it whole. Hovering, focusing or tapping a node traces its path from the root, everything else
-// faded by color.
+// (DiagramZoom.js's `follow`). The tree opens at fit, like every picture; one too wide to read
+// there (on a phone, or a wide one on a desktop) zooms in past its text's design size
+// (READABLE_SCALE). Hovering, focusing or tapping a node traces its path from the root,
+// everything else faded by color.
 //
 // #250: nothing here can be dragged. The tree is drawn again from every step's own nodes, so a
 // node moved by hand would not stay put as the tree grows around it.
@@ -44,11 +44,11 @@ import {
 } from "./searchTreeLayout";
 
 /**
- * The smallest scale (CSS px per drawing unit) the tree's text reads at: its design size, so a
- * label is 11.5 to 12.5 px and a note 10.5 px. A tree that would fit only smaller (a wide one on
- * a phone) opens zoomed in to this scale on the step's path instead; Fit shows it whole.
+ * The scale (CSS px per drawing unit) the tree's text reads at: its design size, so a label is
+ * 11.5 to 12.5 px and a note 10.5 px. A tree that fits only smaller (a wide one on a phone) can
+ * still be zoomed in to this scale and past it.
  */
-const MIN_SCALE = 1;
+const READABLE_SCALE = 1;
 
 /** The margin around the node and the path the view frames, in drawing units. */
 const FRAME_MARGIN = 12;
@@ -239,7 +239,7 @@ export default function SearchTreeRenderer({
         drawing={run}
         resetOn={[payload, frames]}
         follow={follow}
-        minScale={MIN_SCALE}
+        readableScale={READABLE_SCALE}
         toolbar={
           total !== null ? (
             <Box
