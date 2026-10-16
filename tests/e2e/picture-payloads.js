@@ -5,8 +5,8 @@
 // picture requests itself and CI needs no backend that serves format=frames.
 // DFA Acceptance: the problem's default instance, 3 frames with the DFASolver. The Graph
 // pictures (#201), the Bipartite Graph pictures (#203), the Layered Graph pictures (#205), the
-// Automaton pictures (#204) and the Flow Network pictures (#206) follow at the end, each with its
-// instance and solver.
+// Automaton pictures (#204), the Flow Network pictures (#206) and the Grouped Graph pictures
+// (#202) follow at the end, each with its instance and solver.
 
 /** format=frames for DFATableVisualization: picture type Table (has a renderer). */
 export const DFA_TABLE_FRAMES = {
@@ -1751,6 +1751,754 @@ export const DIRECTED_HAMILTONIAN_GRAPH_FRAMES = {
       phantoms: [],
       ok: true,
       order: ["1", "2", "3", "4", "1"],
+    },
+  ],
+};
+
+// #202: Grouped Graph (clause graph) pictures, captured the same way on 2026-10-14.
+
+/** format=frames, 3SAT, the problem default (x1 | !x2 | x3) & (!x1 | x3 | x1) & (x2 | !x3 | !x1), Sat3BacktrackingSolver: clause graph with False literals, Covered clauses, Committed true literals and the confirmed answer. */
+export const SAT3_CLAUSE_GRAPH_FRAMES = {
+  type: "GroupedGraph",
+  payload: {
+    kind: "groupedGraph",
+    layout: "ring",
+    shape: "assignment",
+    rule: "satisfiability",
+    groups: [
+      {
+        id: "c0",
+        label: "C1",
+        members: ["c0-0", "c0-1", "c0-2"],
+      },
+      {
+        id: "c1",
+        label: "C2",
+        members: ["c1-0", "c1-1", "c1-2"],
+      },
+      {
+        id: "c2",
+        label: "C3",
+        members: ["c2-0", "c2-1", "c2-2"],
+      },
+    ],
+    nodes: [
+      {
+        id: "c0-0",
+        label: "x1",
+        variable: "v:x1",
+        positive: true,
+        group: "c0",
+      },
+      {
+        id: "c0-1",
+        label: "¬x2",
+        variable: "v:x2",
+        positive: false,
+        group: "c0",
+      },
+      {
+        id: "c0-2",
+        label: "x3",
+        variable: "v:x3",
+        positive: true,
+        group: "c0",
+      },
+      {
+        id: "c1-0",
+        label: "¬x1",
+        variable: "v:x1",
+        positive: false,
+        group: "c1",
+      },
+      {
+        id: "c1-1",
+        label: "x3",
+        variable: "v:x3",
+        positive: true,
+        group: "c1",
+      },
+      {
+        id: "c1-2",
+        label: "x1",
+        variable: "v:x1",
+        positive: true,
+        group: "c1",
+      },
+      {
+        id: "c2-0",
+        label: "x2",
+        variable: "v:x2",
+        positive: true,
+        group: "c2",
+      },
+      {
+        id: "c2-1",
+        label: "¬x3",
+        variable: "v:x3",
+        positive: false,
+        group: "c2",
+      },
+      {
+        id: "c2-2",
+        label: "¬x1",
+        variable: "v:x1",
+        positive: false,
+        group: "c2",
+      },
+    ],
+    variables: [
+      {
+        id: "v:x1",
+        label: "x1",
+      },
+      {
+        id: "v:x2",
+        label: "x2",
+      },
+      {
+        id: "v:x3",
+        label: "x3",
+      },
+    ],
+    edges: [
+      {
+        id: "c0-0~c1-0",
+        a: "c0-0",
+        b: "c1-0",
+      },
+      {
+        id: "c0-0~c2-2",
+        a: "c0-0",
+        b: "c2-2",
+      },
+      {
+        id: "c0-1~c2-0",
+        a: "c0-1",
+        b: "c2-0",
+      },
+      {
+        id: "c0-2~c2-1",
+        a: "c0-2",
+        b: "c2-1",
+      },
+      {
+        id: "c1-1~c2-1",
+        a: "c1-1",
+        b: "c2-1",
+      },
+      {
+        id: "c1-2~c2-2",
+        a: "c1-2",
+        b: "c2-2",
+      },
+    ],
+    clauseEdges: [
+      {
+        id: "c0-0~c0-1",
+        a: "c0-0",
+        b: "c0-1",
+      },
+      {
+        id: "c0-0~c0-2",
+        a: "c0-0",
+        b: "c0-2",
+      },
+      {
+        id: "c0-1~c0-2",
+        a: "c0-1",
+        b: "c0-2",
+      },
+      {
+        id: "c1-0~c1-1",
+        a: "c1-0",
+        b: "c1-1",
+      },
+      {
+        id: "c1-0~c1-2",
+        a: "c1-0",
+        b: "c1-2",
+      },
+      {
+        id: "c1-1~c1-2",
+        a: "c1-1",
+        b: "c1-2",
+      },
+      {
+        id: "c2-0~c2-1",
+        a: "c2-0",
+        b: "c2-1",
+      },
+      {
+        id: "c2-0~c2-2",
+        a: "c2-0",
+        b: "c2-2",
+      },
+      {
+        id: "c2-1~c2-2",
+        a: "c2-1",
+        b: "c2-2",
+      },
+    ],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Try x1 = True.",
+      focus: ["v:x1"],
+      nodes: {
+        "c0-0": {
+          state: "ElementHighlight",
+        },
+        "c1-0": {
+          state: "False",
+        },
+        "c1-2": {
+          state: "ElementHighlight",
+        },
+        "c2-2": {
+          state: "False",
+        },
+      },
+      groups: {
+        c0: {
+          state: "Covered",
+        },
+        c1: {
+          state: "Covered",
+        },
+      },
+      assignment: {
+        "v:x1": true,
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Keep x1 = True: no clause has every literal false yet, so this branch is queued.",
+      focus: ["v:x1"],
+      nodes: {
+        "c0-0": {
+          state: "ElementHighlight",
+        },
+        "c1-0": {
+          state: "False",
+        },
+        "c1-2": {
+          state: "ElementHighlight",
+        },
+        "c2-2": {
+          state: "False",
+        },
+      },
+      groups: {
+        c0: {
+          state: "Covered",
+        },
+        c1: {
+          state: "Covered",
+        },
+      },
+      assignment: {
+        "v:x1": true,
+      },
+    },
+    {
+      event: "Try",
+      caption: "Try x1 = False.",
+      focus: ["v:x1"],
+      nodes: {
+        "c0-0": {
+          state: "False",
+        },
+        "c1-0": {
+          state: "ElementHighlight",
+        },
+        "c1-2": {
+          state: "False",
+        },
+        "c2-2": {
+          state: "ElementHighlight",
+        },
+      },
+      groups: {
+        c1: {
+          state: "Covered",
+        },
+        c2: {
+          state: "Covered",
+        },
+      },
+      assignment: {
+        "v:x1": false,
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Keep x1 = False: no clause has every literal false yet, so this branch is queued.",
+      focus: ["v:x1"],
+      nodes: {
+        "c0-0": {
+          state: "False",
+        },
+        "c1-0": {
+          state: "ElementHighlight",
+        },
+        "c1-2": {
+          state: "False",
+        },
+        "c2-2": {
+          state: "ElementHighlight",
+        },
+      },
+      groups: {
+        c1: {
+          state: "Covered",
+        },
+        c2: {
+          state: "Covered",
+        },
+      },
+      assignment: {
+        "v:x1": false,
+      },
+    },
+    {
+      event: "Try",
+      caption: "Try x2 = True after x1 = True.",
+      focus: ["v:x2"],
+      nodes: {
+        "c0-0": {
+          state: "Committed",
+        },
+        "c0-1": {
+          state: "False",
+        },
+        "c1-0": {
+          state: "False",
+        },
+        "c1-2": {
+          state: "Committed",
+        },
+        "c2-0": {
+          state: "ElementHighlight",
+        },
+        "c2-2": {
+          state: "False",
+        },
+      },
+      groups: {
+        c0: {
+          state: "Covered",
+        },
+        c1: {
+          state: "Covered",
+        },
+        c2: {
+          state: "Covered",
+        },
+      },
+      assignment: {
+        "v:x1": true,
+        "v:x2": true,
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Keep x2 = True: every clause now has a true literal.",
+      focus: ["v:x2"],
+      nodes: {
+        "c0-0": {
+          state: "Solution",
+        },
+        "c0-1": {
+          state: "False",
+        },
+        "c1-0": {
+          state: "False",
+        },
+        "c1-2": {
+          state: "Solution",
+        },
+        "c2-0": {
+          state: "ElementHighlight",
+        },
+        "c2-2": {
+          state: "False",
+        },
+      },
+      groups: {
+        c0: {
+          state: "Covered",
+        },
+        c1: {
+          state: "Covered",
+        },
+        c2: {
+          state: "Covered",
+        },
+      },
+      assignment: {
+        "v:x1": true,
+        "v:x2": true,
+      },
+    },
+    {
+      event: "Done",
+      caption: "Every clause has a true literal under x1 = True, x2 = True, x3 = False.",
+      focus: [],
+      nodes: {
+        "c0-0": {
+          state: "Solution",
+        },
+        "c0-1": {
+          state: "False",
+        },
+        "c0-2": {
+          state: "False",
+        },
+        "c1-0": {
+          state: "False",
+        },
+        "c1-1": {
+          state: "False",
+        },
+        "c1-2": {
+          state: "Solution",
+        },
+        "c2-0": {
+          state: "Solution",
+        },
+        "c2-1": {
+          state: "Solution",
+        },
+        "c2-2": {
+          state: "False",
+        },
+      },
+      groups: {
+        c0: {
+          state: "Covered",
+        },
+        c1: {
+          state: "Covered",
+        },
+        c2: {
+          state: "Covered",
+        },
+      },
+      assignment: {
+        "v:x1": true,
+        "v:x2": true,
+        "v:x3": false,
+      },
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, 3SAT, instance (x1 | x1 | x1) & (!x1 | !x1 | !x1), Sat3BacktrackingSolver: an unsatisfiable formula; each branch leaves a clause Rejected, and the Done has ok: false. */
+export const SAT3_FAILED_CLAUSE_GRAPH_FRAMES = {
+  type: "GroupedGraph",
+  payload: {
+    kind: "groupedGraph",
+    layout: "ring",
+    shape: "assignment",
+    rule: "satisfiability",
+    groups: [
+      {
+        id: "c0",
+        label: "C1",
+        members: ["c0-0", "c0-1", "c0-2"],
+      },
+      {
+        id: "c1",
+        label: "C2",
+        members: ["c1-0", "c1-1", "c1-2"],
+      },
+    ],
+    nodes: [
+      {
+        id: "c0-0",
+        label: "x1",
+        variable: "v:x1",
+        positive: true,
+        group: "c0",
+      },
+      {
+        id: "c0-1",
+        label: "x1",
+        variable: "v:x1",
+        positive: true,
+        group: "c0",
+      },
+      {
+        id: "c0-2",
+        label: "x1",
+        variable: "v:x1",
+        positive: true,
+        group: "c0",
+      },
+      {
+        id: "c1-0",
+        label: "¬x1",
+        variable: "v:x1",
+        positive: false,
+        group: "c1",
+      },
+      {
+        id: "c1-1",
+        label: "¬x1",
+        variable: "v:x1",
+        positive: false,
+        group: "c1",
+      },
+      {
+        id: "c1-2",
+        label: "¬x1",
+        variable: "v:x1",
+        positive: false,
+        group: "c1",
+      },
+    ],
+    variables: [
+      {
+        id: "v:x1",
+        label: "x1",
+      },
+    ],
+    edges: [
+      {
+        id: "c0-0~c1-0",
+        a: "c0-0",
+        b: "c1-0",
+      },
+      {
+        id: "c0-0~c1-1",
+        a: "c0-0",
+        b: "c1-1",
+      },
+      {
+        id: "c0-0~c1-2",
+        a: "c0-0",
+        b: "c1-2",
+      },
+      {
+        id: "c0-1~c1-0",
+        a: "c0-1",
+        b: "c1-0",
+      },
+      {
+        id: "c0-1~c1-1",
+        a: "c0-1",
+        b: "c1-1",
+      },
+      {
+        id: "c0-1~c1-2",
+        a: "c0-1",
+        b: "c1-2",
+      },
+      {
+        id: "c0-2~c1-0",
+        a: "c0-2",
+        b: "c1-0",
+      },
+      {
+        id: "c0-2~c1-1",
+        a: "c0-2",
+        b: "c1-1",
+      },
+      {
+        id: "c0-2~c1-2",
+        a: "c0-2",
+        b: "c1-2",
+      },
+    ],
+    clauseEdges: [
+      {
+        id: "c0-0~c0-1",
+        a: "c0-0",
+        b: "c0-1",
+      },
+      {
+        id: "c0-0~c0-2",
+        a: "c0-0",
+        b: "c0-2",
+      },
+      {
+        id: "c0-1~c0-2",
+        a: "c0-1",
+        b: "c0-2",
+      },
+      {
+        id: "c1-0~c1-1",
+        a: "c1-0",
+        b: "c1-1",
+      },
+      {
+        id: "c1-0~c1-2",
+        a: "c1-0",
+        b: "c1-2",
+      },
+      {
+        id: "c1-1~c1-2",
+        a: "c1-1",
+        b: "c1-2",
+      },
+    ],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Try x1 = True.",
+      focus: ["v:x1"],
+      nodes: {
+        "c0-0": {
+          state: "ElementHighlight",
+        },
+        "c0-1": {
+          state: "ElementHighlight",
+        },
+        "c0-2": {
+          state: "ElementHighlight",
+        },
+        "c1-0": {
+          state: "Rejected",
+        },
+        "c1-1": {
+          state: "Rejected",
+        },
+        "c1-2": {
+          state: "Rejected",
+        },
+      },
+      groups: {
+        c0: {
+          state: "Covered",
+        },
+        c1: {
+          state: "Rejected",
+        },
+      },
+      assignment: {
+        "v:x1": true,
+      },
+    },
+    {
+      event: "Reject",
+      caption: "x1 = True fails: clause C2 (!x1 | !x1 | !x1) has no true literal left.",
+      focus: ["v:x1", "c1"],
+      nodes: {
+        "c0-0": {
+          state: "ElementHighlight",
+        },
+        "c0-1": {
+          state: "ElementHighlight",
+        },
+        "c0-2": {
+          state: "ElementHighlight",
+        },
+        "c1-0": {
+          state: "Rejected",
+        },
+        "c1-1": {
+          state: "Rejected",
+        },
+        "c1-2": {
+          state: "Rejected",
+        },
+      },
+      groups: {
+        c0: {
+          state: "Covered",
+        },
+        c1: {
+          state: "Rejected",
+        },
+      },
+      assignment: {
+        "v:x1": true,
+      },
+    },
+    {
+      event: "Try",
+      caption: "Try x1 = False.",
+      focus: ["v:x1"],
+      nodes: {
+        "c0-0": {
+          state: "Rejected",
+        },
+        "c0-1": {
+          state: "Rejected",
+        },
+        "c0-2": {
+          state: "Rejected",
+        },
+        "c1-0": {
+          state: "ElementHighlight",
+        },
+        "c1-1": {
+          state: "ElementHighlight",
+        },
+        "c1-2": {
+          state: "ElementHighlight",
+        },
+      },
+      groups: {
+        c0: {
+          state: "Rejected",
+        },
+        c1: {
+          state: "Covered",
+        },
+      },
+      assignment: {
+        "v:x1": false,
+      },
+    },
+    {
+      event: "Reject",
+      caption: "x1 = False fails: clause C1 (x1 | x1 | x1) has no true literal left.",
+      focus: ["v:x1", "c0"],
+      nodes: {
+        "c0-0": {
+          state: "Rejected",
+        },
+        "c0-1": {
+          state: "Rejected",
+        },
+        "c0-2": {
+          state: "Rejected",
+        },
+        "c1-0": {
+          state: "ElementHighlight",
+        },
+        "c1-1": {
+          state: "ElementHighlight",
+        },
+        "c1-2": {
+          state: "ElementHighlight",
+        },
+      },
+      groups: {
+        c0: {
+          state: "Rejected",
+        },
+        c1: {
+          state: "Covered",
+        },
+      },
+      assignment: {
+        "v:x1": false,
+      },
+    },
+    {
+      event: "Done",
+      caption: "Every branch was rejected, so there is no solution.",
+      focus: [],
+      nodes: {},
+      groups: {},
+      assignment: {},
+      ok: false,
     },
   ],
 };
