@@ -1774,7 +1774,10 @@ for (const [key, testCase] of Object.entries(AUTOMATON_CASES)) {
     await openAutomaton(page, testCase);
     const graph = page.locator(`${AUTOMATON}-graph`);
     await expect(graph).toHaveAttribute("data-automaton-kind", payload.kind);
-    await expect(graph.locator("[data-focusable]")).toHaveCount(payload.states.length);
+    // Every state is focusable, Garbage too (#250: the arrow keys move it).
+    await expect(graph.locator("[data-focusable]")).toHaveCount(
+      payload.states.length + (payload.garbage ? 1 : 0),
+    );
     await expect(graph.locator("[data-edge-id]")).toHaveCount(payload.transitions.length);
     await expect(graph.locator("[data-garbage]")).toHaveCount(payload.garbage ? 1 : 0);
     // Accept states get a double ring, the start state an entry arrow.
@@ -1791,7 +1794,7 @@ for (const [key, testCase] of Object.entries(AUTOMATON_CASES)) {
     await expect(tape(page).locator("[data-tape-cell]")).toHaveCount(payload.input.length);
     await expect(tape(page).locator("[data-tape-end]")).toHaveCount(1);
     // Every state says what it is, and can be reached by keyboard.
-    for (const piece of await graph.locator("[data-focusable]").all()) {
+    for (const piece of await graph.locator("[data-focusable]:not([data-garbage])").all()) {
       await expect(piece).toHaveAttribute("aria-label", /^State \S+, .*(on .* to |no moves out)/);
       await expect(piece).toHaveAttribute("tabindex", "0");
     }
@@ -3231,6 +3234,24 @@ test("Drag: an Automaton state moves with its arrows, Garbage moves too, and the
   await mouseDrag(page, automatonState(page, "garbage"), -120, 0);
   const garbage = await drawnCentre(automatonState(page, "garbage"));
   expect(before.garbage.x - garbage.x).toBeGreaterThan(30);
+
+  // Garbage takes focus like a state, and the arrow keys move it the same steps.
+  const garbageNode = automatonState(page, "garbage");
+  await expect(garbageNode).toHaveAttribute("tabindex", "0");
+  await expect(garbageNode).toHaveAttribute("aria-label", /^Garbage state, /);
+  await garbageNode.focus();
+  await page.keyboard.press("ArrowUp");
+  // The focus ring shows on it, as on a state.
+  expect(await garbageNode.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+  await expect.poll(async () => (await drawnCentre(garbageNode)).y).toBeCloseTo(garbage.y - 10, 1);
+  await expect(page.locator(`${AUTOMATON}-moved`)).toHaveText("Moved Garbage state up.");
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect.poll(async () => (await drawnCentre(garbageNode)).x).toBeCloseTo(garbage.x + 50, 1);
+  // Its idle look is kept.
+  await expect(garbageNode).toHaveAttribute("data-look", "idle");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => drawnCentre(garbageNode)).toEqual(garbage);
 
   // A tap still traces (and a second tap lets go).
   await wobblyClick(page, automatonState(page, "q:2"));

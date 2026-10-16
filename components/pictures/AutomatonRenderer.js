@@ -795,7 +795,8 @@ export default function AutomatonRenderer({
                 (move) => `${labels.get(move.state) ?? move.state} on ${move.symbol}`,
               );
               const parts = [
-                `${garbage.label} state: a missing move leads here and the input is rejected`,
+                `${garbage.label} state`,
+                "a missing move leads here and the input is rejected",
               ];
               if (stated) parts.push(pictureStateStyle(garbageState).legend);
               if (isActive) parts.push("active: the machine is here");
@@ -810,7 +811,11 @@ export default function AutomatonRenderer({
                   data-active={isActive ? "true" : undefined}
                   data-look={lit ? "entered" : "idle"}
                   data-traced={traced ? (faint ? "faint" : "trace") : undefined}
-                  role="img"
+                  // #250: focusable like a state, so the arrow keys can move it too.
+                  data-focusable=""
+                  tabIndex={0}
+                  role="group"
+                  aria-roledescription="state"
                   aria-label={parts.join(", ")}
                   style={faint ? { filter: FAINT_FILTER } : undefined}
                 >
