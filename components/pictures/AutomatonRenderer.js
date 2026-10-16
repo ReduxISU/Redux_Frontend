@@ -528,7 +528,8 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
               strokeLinecap="round"
             />
             <polygon points={fallArrow.arrow} fill={pictureStateStyle("Rejected").line} />
-            <ArrowLabel
+            <StatePill
+              testId="arrow-label"
               x={fallArrow.label.x}
               y={fallArrow.label.y}
               text={fall.symbol}
