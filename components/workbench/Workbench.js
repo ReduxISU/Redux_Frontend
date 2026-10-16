@@ -720,6 +720,7 @@ export default function Workbench({ problem }) {
         frame,
         frameIndex: currentStep,
         frameCount: runFrames.length,
+        frames: runFrames,
         name: selectedViz.name,
         showCaption: true,
         runs: otherRuns.length
