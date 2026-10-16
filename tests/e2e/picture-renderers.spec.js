@@ -26,8 +26,8 @@
 // #202: the Grouped Graph renderer (SAT and 3SAT's clause graph) after that, with the same
 // plain picture before Run and the same fit and zoom.
 // #207: the Packing renderer (Partition, Subset Sum, Knapsack, Bin Packing) last: the item pool,
-// each container's lines as rows to scale, every step's placement and totals, and no text that
-// meets another.
+// each container's lines as rows to scale, every step's placement and totals, no text that
+// meets another, and on a phone a drawing as narrow as its box, so its text is not shrunk.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel } from "./helpers";
@@ -3060,6 +3060,8 @@ for (const [key, capture] of Object.entries(PACKING_CASES)) {
   test(`Packing: the ${key} capture draws every item and container, and every step's placement`, async ({
     page,
   }) => {
+    // Every step of the run, checked piece by piece.
+    test.slow();
     const { payload } = capture;
     await openPacking(page, capture);
     const packing = page.locator(`${PACKING}-packing`);
@@ -3400,20 +3402,104 @@ function packingTextCollisions(page) {
 }
 
 for (const [key, capture] of Object.entries(PACKING_CASES)) {
-  test(`Packing: the ${key} capture's texts never meet, before Run and at every step`, async ({
-    page,
-  }) => {
-    await openPacking(page, capture);
-    expect(await packingTextCollisions(page)).toEqual([]);
-    await runToFrame(page, capture, 0);
-    expect(await packingTextCollisions(page)).toEqual([]);
-    for (let index = 1; index < capture.frames.length; index += 1) {
-      await page.locator("#workbench-steps-next").click();
-      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+  for (const width of [1280, 390, 320]) {
+    test(`Packing: the ${key} capture's texts never meet at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      // Every step of the run, checked piece by piece; on a phone the drawing is narrower.
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openPacking(page, capture);
+      // On a phone the problem's panel covers the steps until it is closed.
+      if (width < 600) await page.locator("#workbench-panel-close").click();
       expect(await packingTextCollisions(page)).toEqual([]);
-    }
+      await runToFrame(page, capture, 0);
+      expect(await packingTextCollisions(page)).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await packingTextCollisions(page)).toEqual([]);
+      }
+    });
+  }
+}
+
+/**
+ * The smallest text of the packing picture as drawn on screen, in CSS px (its font size times
+ * the diagram's scale), with the text it belongs to.
+ */
+function packingSmallestText(page) {
+  return page.locator(`${PACKING}-svg`).evaluate((svg) => {
+    const scale = svg.getScreenCTM().a;
+    return [...svg.querySelectorAll("text, tspan")]
+      .filter((text) => text.textContent.trim())
+      .map((text) => ({
+        text: text.textContent,
+        px: Number.parseFloat(getComputedStyle(text).fontSize) * scale,
+      }))
+      .reduce((smallest, text) => (text.px < smallest.px ? text : smallest));
   });
 }
+
+/** The smallest a packing label may be drawn on a 390 px phone, in CSS px. */
+const PHONE_TEXT_PX = 11;
+
+for (const key of ["partition", "knapsack", "binPacking"]) {
+  test(`Packing: on a 390 px phone the ${key} picture is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = PACKING_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openPacking(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    // The drawing takes the box's width (narrower than its 480), so fit draws it 1:1, whole.
+    const drawn = await page.locator(`${PACKING}-packing`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(480);
+    await expect(page.locator(`${PACKING}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${PACKING}-svg`);
+    const before = await packingSmallestText(page);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, Math.floor(capture.frames.length / 2));
+    const during = await packingSmallestText(page);
+    expect(during.px, `"${during.text}" is ${during.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    // Every row and the whole pool are inside the picture area, with nothing to scroll to.
+    const inside = await page.locator(`${PACKING}-svg`).evaluate((svg) => {
+      const area = svg.getBoundingClientRect();
+      return [...svg.querySelectorAll("[data-row-id], [data-item-id]")].every((piece) => {
+        const box = piece.getBoundingClientRect();
+        return (
+          box.left >= area.left - 0.5 &&
+          box.right <= area.right + 0.5 &&
+          box.top >= area.top - 0.5 &&
+          box.bottom <= area.bottom + 0.5
+        );
+      });
+    });
+    expect(inside).toBe(true);
+  });
+}
+
+test("Packing: on a 320 px phone a heading too long for the line wraps at its comma", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 900 });
+  await openPacking(page, BIN_PACKING_PACKING_FRAMES);
+  const heading = page.locator(`${PACKING}-packing [data-heading="containers"]`);
+  await expect(heading).toHaveText("BINS · CAPACITY 10, AT MOST 3");
+  await expect(heading.locator("tspan")).toHaveText(["BINS · CAPACITY 10,", "AT MOST 3"]);
+  await expect(page.locator(`${PACKING}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  expect((await packingSmallestText(page)).px).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+});
+
+test("Packing: a wide screen still draws the picture 480 wide, as large as its box allows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPacking(page, BIN_PACKING_PACKING_FRAMES);
+  await expect(page.locator(`${PACKING}-packing`)).toHaveAttribute("data-drawing-width", "480");
+  const smallest = await packingSmallestText(page);
+  expect(smallest.px).toBeGreaterThan(PHONE_TEXT_PX);
+});
 
 // --- #250: moving nodes and bending edges by hand -------------------------------------------
 //

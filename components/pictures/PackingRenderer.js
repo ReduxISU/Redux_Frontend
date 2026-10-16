@@ -18,20 +18,24 @@
 // container's lines as rows to scale below. Hovering, focusing or tapping an item traces it (its
 // tile and its piece in a row, in the trace color, everything else faded by color); a container
 // traces the items in it. The diagram opens fitted to its box and zooms and pans with
-// DiagramZoom.js.
+// DiagramZoom.js. The layout takes the box's width (up to its own 480), so on a phone the picture
+// is drawn at its own size, its text at 11.5 to 14 px, rather than shrunk to fit.
 //
 // #250: nothing here can be dragged. The pool is the instance's order and the rows are drawn to
 // scale from each frame's placement, so a moved piece would only say something the solver
 // didn't.
 
 import Box from "@mui/material/Box";
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
 import { FAINT_FILTER, groupColors, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import {
   beamTilt,
   formatAmount,
+  HEADING_LINE,
+  HEADING_SIZE,
+  HEADING_SPACING,
   layoutPacking,
   rowSegments,
   TRACK_HEIGHT,
@@ -42,8 +46,50 @@ import { pictureStateStyle, stateOf } from "./pictureStates";
 /** The dashed line a row's total is held to, and its dash. */
 const LINE_DASH = "5 4";
 
+/** How wide a cut piece must be to hold its » (and the room it keeps for it). */
+const CUT_ROOM = 16;
+
 function plural(count, word) {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+/** A heading over the pool or the rows, a line per `lines` entry. */
+function Heading({ id, lines, y }) {
+  return (
+    <text
+      x={20}
+      y={y}
+      data-heading={id}
+      fill={paletteVars.text.secondary}
+      fontFamily={MONO}
+      fontSize={HEADING_SIZE}
+      fontWeight={700}
+      letterSpacing={`${HEADING_SPACING}em`}
+    >
+      {lines.map((line, index) => (
+        // A space ends every line but the last, so the heading still reads as one sentence.
+        <tspan key={line} x={20} dy={index ? HEADING_LINE : 0}>
+          {index < lines.length - 1 ? `${line} ` : line}
+        </tspan>
+      ))}
+    </text>
+  );
+}
+
+/** The width of the box `ref` is on, in CSS px, kept current; null until it is measured. */
+function useBoxWidth(ref) {
+  const [width, setWidth] = useState(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const measure = () => setWidth(element.clientWidth || null);
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
 }
 
 /** A frame's container index per item, or null when the frame places nothing (before Run). */
@@ -73,7 +119,9 @@ function rowVerdict(row, containerState, total) {
  * @param {Object} props.frame The frame to draw.
  */
 export default function PackingRenderer({ idPrefix, name, payload, frame }) {
-  const layout = useMemo(() => layoutPacking(payload), [payload]);
+  const boxRef = useRef(null);
+  const boxWidth = useBoxWidth(boxRef);
+  const layout = useMemo(() => layoutPacking(payload, boxWidth ?? undefined), [payload, boxWidth]);
   const [hover, setHover] = useState(null);
   const [pinned, setPinned] = useState(null);
 
@@ -140,23 +188,19 @@ export default function PackingRenderer({ idPrefix, name, payload, frame }) {
 
   return (
     <Box
+      ref={boxRef}
       id={`${idPrefix}-packing`}
       data-packing-rule={layout.rule}
+      data-drawing-width={layout.width}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
     >
-      <DiagramZoom idPrefix={idPrefix} label={label} drawing={layout} resetOn={[payload]}>
-        <text
-          x={20}
-          y={22}
-          data-heading="items"
-          fill={paletteVars.text.secondary}
-          fontFamily={MONO}
-          fontSize={11.5}
-          fontWeight={700}
-          letterSpacing="0.08em"
-        >
-          {layout.poolHeading}
-        </text>
+      <DiagramZoom
+        idPrefix={idPrefix}
+        label={label}
+        drawing={layout}
+        resetOn={[payload, layout.width]}
+      >
+        <Heading id="items" lines={layout.poolHeading} y={22} />
         <g data-layer="items">
           {layout.items.map((item) => {
             const state = stateOf(frame?.items, item.id);
@@ -215,18 +259,7 @@ export default function PackingRenderer({ idPrefix, name, payload, frame }) {
             );
           })}
         </g>
-        <text
-          x={20}
-          y={layout.containersY}
-          data-heading="containers"
-          fill={paletteVars.text.secondary}
-          fontFamily={MONO}
-          fontSize={11.5}
-          fontWeight={700}
-          letterSpacing="0.08em"
-        >
-          {layout.containersHeading}
-        </text>
+        <Heading id="containers" lines={layout.containersHeading} y={layout.containersY} />
         <g data-layer="rows">
           {layout.rows.map((row) => {
             const state = stateOf(frame?.containers, row.container);
@@ -284,16 +317,32 @@ export default function PackingRenderer({ idPrefix, name, payload, frame }) {
                   fontWeight={700}
                 >
                   {row.label}
-                  <tspan
-                    dx={8}
-                    fill={paletteVars.text.secondary}
-                    fontSize={12}
-                    fontWeight={400}
+                  {row.noteY === null && (
+                    <tspan
+                      dx={8}
+                      fill={paletteVars.text.secondary}
+                      fontSize={12}
+                      fontWeight={400}
+                      data-row-sub=""
+                    >
+                      {row.sub}
+                    </tspan>
+                  )}
+                </text>
+                {/* Too long to share the line with the total: the note gets its own. */}
+                {row.noteY !== null && (
+                  <text
+                    x={20}
+                    y={row.noteY + 8}
                     data-row-sub=""
+                    dominantBaseline="central"
+                    fill={paletteVars.text.secondary}
+                    fontFamily={MONO}
+                    fontSize={12}
                   >
                     {row.sub}
-                  </tspan>
-                </text>
+                  </text>
+                )}
                 <text
                   x={layout.trackEnd}
                   y={row.y + 8}
@@ -333,59 +382,79 @@ export default function PackingRenderer({ idPrefix, name, payload, frame }) {
                   );
                   const traced = tracedItem?.id === item.id;
                   const text = formatAmount(piece.amount);
-                  // A cut piece keeps room at its end for the » that says so.
-                  const room = piece.clipped ? piece.width - 16 : piece.width;
+                  // The piece cut at the track's end keeps room at its end for the » that says so;
+                  // one too narrow for it (on a narrow drawing) has the » just past the track.
+                  const cut = piece.clipped && piece.width > 0;
+                  const cutInside = cut && piece.width >= CUT_ROOM;
+                  const room = cutInside ? piece.width - CUT_ROOM : piece.width;
                   const fits = room >= textWidth(text, 12.5) + 6;
                   const fill = over ? pictureStateStyle("Rejected").line : look.fill;
                   const ink = over ? paletteVars.surface.input : look.ink;
                   return (
-                    <g
-                      key={piece.id}
-                      data-piece-for={piece.id}
-                      data-over={over ? "true" : undefined}
-                      data-clipped={piece.clipped ? "true" : undefined}
-                      pointerEvents="none"
-                    >
-                      <rect
-                        x={piece.x}
-                        y={row.trackY + 3}
-                        width={piece.width}
-                        height={24}
-                        rx={4}
-                        fill={fill}
-                        stroke={traced ? TRACE_COLOR : over ? fill : look.line}
-                        strokeWidth={traced ? 3 : 1.4}
-                        strokeDasharray={traced || over ? undefined : look.dash}
-                      />
-                      {fits && (
+                    <Fragment key={piece.id}>
+                      <g
+                        data-piece-for={piece.id}
+                        data-over={over ? "true" : undefined}
+                        data-clipped={piece.clipped ? "true" : undefined}
+                        pointerEvents="none"
+                      >
+                        <rect
+                          x={piece.x}
+                          y={row.trackY + 3}
+                          width={piece.width}
+                          height={24}
+                          rx={4}
+                          fill={fill}
+                          stroke={traced ? TRACE_COLOR : over ? fill : look.line}
+                          strokeWidth={traced ? 3 : 1.4}
+                          strokeDasharray={traced || over ? undefined : look.dash}
+                        />
+                        {fits && (
+                          <text
+                            x={piece.x + room / 2}
+                            y={row.trackY + 15}
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            fill={ink}
+                            fontFamily={MONO}
+                            fontSize={12.5}
+                            fontWeight={700}
+                          >
+                            {text}
+                          </text>
+                        )}
+                        {cutInside && (
+                          <text
+                            x={layout.trackEnd - 4}
+                            y={row.trackY + 15}
+                            data-cut=""
+                            textAnchor="end"
+                            dominantBaseline="central"
+                            fill={ink}
+                            fontFamily={MONO}
+                            fontSize={12}
+                            fontWeight={700}
+                          >
+                            »
+                          </text>
+                        )}
+                      </g>
+                      {cut && !cutInside && (
                         <text
-                          x={piece.x + room / 2}
+                          x={layout.trackEnd + 3}
                           y={row.trackY + 15}
-                          textAnchor="middle"
+                          data-cut=""
                           dominantBaseline="central"
-                          fill={ink}
-                          fontFamily={MONO}
-                          fontSize={12.5}
-                          fontWeight={700}
-                        >
-                          {text}
-                        </text>
-                      )}
-                      {piece.clipped && (
-                        <text
-                          x={layout.trackEnd - 4}
-                          y={row.trackY + 15}
-                          textAnchor="end"
-                          dominantBaseline="central"
-                          fill={ink}
+                          fill={paletteVars.text.primary}
                           fontFamily={MONO}
                           fontSize={12}
                           fontWeight={700}
+                          pointerEvents="none"
                         >
                           »
                         </text>
                       )}
-                    </g>
+                    </Fragment>
                   );
                 })}
                 {/* A halo in the canvas color keeps the line readable across the pieces. */}

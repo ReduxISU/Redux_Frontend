@@ -17,14 +17,19 @@
 // The rows' label, the total read out and the line's label are on three lines (over the track,
 // at its right end, and under it), so no text can meet another however long the numbers get.
 // Partition also gets a balance beam under its sides that tips toward the heavier one.
+//
+// The drawing is as wide as the box it is drawn in (`width`), between MIN_WIDTH and WIDTH, so on
+// a phone it is drawn at its own size, not shrunk to fit: the tracks get shorter, the tiles wrap
+// sooner, a heading too long for the line wraps, and when a row's label and its total can't
+// share a line the rows put the label's note (`needs 5`, `holds 10`) on a line of its own.
 
-/** The drawing's width, and its margin. */
-const WIDTH = 480;
+/** The drawing's width at most (and before the box is measured), at least, and its margin. */
+export const WIDTH = 480;
+export const MIN_WIDTH = 240;
 const PAD = 20;
 
-/** The tracks' left end and length. */
+/** The tracks' left end. */
 const TRACK_X = PAD;
-const TRACK_WIDTH = WIDTH - 2 * PAD;
 
 /** An item tile's height, the gap between tiles, and a character's width at the tile's size. */
 const TILE_HEIGHT = 30;
@@ -34,6 +39,14 @@ const TILE_CHAR = 8.4;
 /** A row: its label line, the track, and the line's label under it. */
 const ROW_HEIGHT = 84;
 export const TRACK_HEIGHT = 30;
+
+/** How much lower a row's track sits when its note has a line of its own. */
+const NOTE_LINE = 18;
+
+/** The headings' size and letter spacing (em), and how far apart a wrapped heading's lines are. */
+export const HEADING_SIZE = 11.5;
+export const HEADING_SPACING = 0.08;
+export const HEADING_LINE = 16;
 
 /** A row's scale stops this far past its line when the instance's total would squash it. */
 const SQUASH = 2.5;
@@ -55,6 +68,28 @@ export function formatAmount(value) {
 /** About how wide `text` is at the picture's monospace sizes, in drawing units. */
 export function textWidth(text, size = 12.5) {
   return String(text).length * size * 0.62;
+}
+
+/**
+ * A heading broken into lines no wider than `room`: at its commas when it can (so "AT MOST 3"
+ * stays together), else at spaces; a longer word stays whole.
+ */
+function wrapHeading(text, room) {
+  const width = (line) => line.length * HEADING_SIZE * (0.62 + HEADING_SPACING);
+  const lines = [];
+  const add = (piece) => {
+    const last = lines.at(-1);
+    if (last !== undefined && width(`${last} ${piece}`) <= room) {
+      lines[lines.length - 1] = `${last} ${piece}`;
+    } else {
+      lines.push(piece);
+    }
+  };
+  for (const phrase of text.split(/(?<=,) /)) {
+    if (width(phrase) <= room) add(phrase);
+    else for (const word of phrase.split(" ")) add(word);
+  }
+  return lines;
 }
 
 /**
@@ -124,18 +159,23 @@ function containersHeading(payload, containers) {
  * The Packing picture's layout.
  *
  * @param {Object} payload The Packing payload.
+ * @param {number} [width] The width of the box it is drawn in, in CSS px (WIDTH until measured);
+ *   the drawing takes it, kept between MIN_WIDTH and WIDTH.
  * @returns {{minX: number, minY: number, width: number, height: number, rule: string,
- *   grouped: boolean, poolHeading: string, containersHeading: string, containersY: number,
+ *   grouped: boolean, poolHeading: string[], containersHeading: string[], containersY: number,
+ *   noteBelow: boolean,
  *   items: Array<{id: string, index: number, label: string, size: number, value: number|null,
  *     x: number, y: number, width: number, height: number}>,
  *   containers: Array<{id: string, index: number, label: string}>,
  *   rows: Array<{key: string, container: string, containerIndex: number, measure: string,
  *     kind: string, line: number, label: string, sub: string, lineLabel: string, y: number,
- *     trackY: number, trackWidth: number, scale: number, domain: number, lineX: number,
- *     lineLabelX: number}>,
+ *     noteY: number|null, trackY: number, trackWidth: number, trackEnd: number, scale: number,
+ *     domain: number, lineX: number, lineLabelX: number}>,
  *   beam: {x: number, y: number, half: number}|null, trackX: number, trackEnd: number}}
  */
-export function layoutPacking(payload) {
+export function layoutPacking(payload, width = WIDTH) {
+  const drawingWidth = Math.round(Math.min(WIDTH, Math.max(MIN_WIDTH, width || WIDTH)));
+  const trackWidth = drawingWidth - 2 * PAD;
   const rule = typeof payload?.rule === "string" ? payload.rule : "";
   const items = (Array.isArray(payload?.items) ? payload.items : [])
     .filter((item) => typeof item?.id === "string")
@@ -152,13 +192,20 @@ export function layoutPacking(payload) {
   // Partition's sides and Bin Packing's bins take group colors (from `assign`, an annotation).
   const grouped = rule === "partition" || rule === "binPacking";
 
+  // The headings, wrapped to the drawing's width.
+  const poolHeading = wrapHeading(
+    rule === "knapsack" ? "ITEMS · (WEIGHT, VALUE)" : "ITEMS",
+    trackWidth,
+  );
+  const heading = wrapHeading(containersHeading(payload, containers), trackWidth);
+
   // The pool: tiles left to right, wrapping at the drawing's edge.
-  const poolTop = 36;
+  const poolTop = 36 + (poolHeading.length - 1) * HEADING_LINE;
   let x = PAD;
   let y = poolTop;
   const tiles = items.map((item) => {
     const width = Math.max(38, Math.ceil(item.label.length * TILE_CHAR + 20));
-    if (x > PAD && x + width > WIDTH - PAD) {
+    if (x > PAD && x + width > drawingWidth - PAD) {
       x = PAD;
       y += TILE_HEIGHT + TILE_GAP;
     }
@@ -203,46 +250,62 @@ export function layoutPacking(payload) {
     const key = `${row.measure}:${row.kind}`;
     shared.set(key, Math.max(shared.get(key) ?? 0, domainOf(row)));
   }
+  // A row's label and note share a line with the total read out at the track's right end,
+  // unless the longest total the instance allows wouldn't fit beside them; then every row puts
+  // its note on a line of its own under the label.
+  const noteBelow = raw.some((row) => {
+    const readout = `${formatAmount(Math.max(totals[row.measure], row.line))} ✓`;
+    return (
+      textWidth(row.label, 14) + 8 + textWidth(row.sub, 12) + 12 + textWidth(readout, 14) >
+      trackWidth
+    );
+  });
+  const rowHeight = ROW_HEIGHT + (noteBelow ? NOTE_LINE : 0);
   const containersY = poolBottom + 40;
+  const rowsTop = containersY + (heading.length - 1) * HEADING_LINE + 16;
   const rows = raw.map((row, index) => {
     const domain = grouped ? shared.get(`${row.measure}:${row.kind}`) : domainOf(row);
-    const scale = TRACK_WIDTH / domain;
-    const top = containersY + 16 + index * ROW_HEIGHT;
+    const scale = trackWidth / domain;
+    const top = rowsTop + index * rowHeight;
     const lineX = TRACK_X + row.line * scale;
     const halfLabel = textWidth(row.lineLabel, 12) / 2 + 2;
     return {
       ...row,
       key: `${row.container}:${row.index}`,
       y: top,
-      trackY: top + 22,
+      noteY: noteBelow ? top + NOTE_LINE : null,
+      trackY: top + 22 + (noteBelow ? NOTE_LINE : 0),
       // A limit's track is the container itself, so it stops at the limit; a target's (or a
       // goal's) runs the whole length, the line marking the number to reach.
-      trackWidth: row.kind === "limit" ? Math.min(TRACK_WIDTH, row.line * scale) : TRACK_WIDTH,
+      trackWidth: row.kind === "limit" ? Math.min(trackWidth, row.line * scale) : trackWidth,
+      trackEnd: TRACK_X + trackWidth,
       scale,
       domain,
       lineX: round(lineX),
       lineLabelX: round(
-        Math.min(Math.max(lineX, TRACK_X + halfLabel), TRACK_X + TRACK_WIDTH - halfLabel),
+        Math.min(Math.max(lineX, TRACK_X + halfLabel), TRACK_X + trackWidth - halfLabel),
       ),
     };
   });
-  let bottom = containersY + 16 + rows.length * ROW_HEIGHT;
+  let bottom = rowsTop + rows.length * rowHeight;
   let beam = null;
   if (rule === "partition" && containers.length === 2) {
-    beam = { x: WIDTH / 2, y: bottom + 50, half: BEAM };
+    // The beam's ends keep room for their labels inside the drawing, however narrow it is.
+    beam = { x: drawingWidth / 2, y: bottom + 50, half: Math.min(BEAM, drawingWidth / 2 - 60) };
     bottom += 90;
   }
 
   return {
     minX: 0,
     minY: 0,
-    width: WIDTH,
+    width: drawingWidth,
     height: bottom + 8,
     rule,
     grouped,
-    poolHeading: rule === "knapsack" ? "ITEMS · (WEIGHT, VALUE)" : "ITEMS",
-    containersHeading: containersHeading(payload, containers),
+    poolHeading,
+    containersHeading: heading,
     containersY,
+    noteBelow,
     items: tiles,
     containers: containers.map(({ id, index, label }) => ({
       id,
@@ -252,7 +315,7 @@ export function layoutPacking(payload) {
     rows,
     beam,
     trackX: TRACK_X,
-    trackEnd: TRACK_X + TRACK_WIDTH,
+    trackEnd: TRACK_X + trackWidth,
   };
 }
 
@@ -269,7 +332,7 @@ export function layoutPacking(payload) {
 export function rowSegments(row, items, assign) {
   const pieces = [];
   if (!Array.isArray(assign)) return pieces;
-  const end = TRACK_X + TRACK_WIDTH;
+  const end = row.trackEnd;
   let at = 0;
   for (const item of items) {
     if (assign[item.index] !== row.containerIndex) continue;
