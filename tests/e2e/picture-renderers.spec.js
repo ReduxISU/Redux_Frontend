@@ -31,6 +31,9 @@
 // #217: the Search Tree renderer (backtracking and branch-and-bound runs) last: the tree as each
 // step leaves it, folds, the answer's path, one box for the whole run, opening at fit like every
 // picture, zooming in to readable text on a phone, and stepping that keeps the step in view.
+// #208: the Board renderer (Sudoku, N-Queens) after it: every square, clue, queen and ruled-out
+// square as each step leaves them, Hints, the trace of a square's row, column and box (or a
+// queen's lines of attack), and on a phone a board drawn at its own size, its text not shrunk.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel } from "./helpers";
@@ -62,6 +65,9 @@ import {
   MIN_CUT_FLOW_FRAMES,
   MIN_CUT_NO_PATH_FLOW_FRAMES,
   MIN_CUT_PARALLEL_FLOW_FRAMES,
+  N_QUEENS_BOARD_FRAMES,
+  N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES,
+  N_QUEENS_NONE_BOARD_FRAMES,
   N_QUEENS_SEARCH_TREE_FRAMES,
   NFA_BACKTRACK_REJECTED_AUTOMATON_FRAMES,
   NFA_DEFAULT_AUTOMATON_FRAMES,
@@ -85,6 +91,9 @@ import {
   SUBSET_SUM_APPROX_PACKING_FRAMES,
   SUBSET_SUM_CLIPPED_PACKING_FRAMES,
   SUBSET_SUM_PACKING_FRAMES,
+  SUDOKU_BOARD_FRAMES,
+  SUDOKU_CLASH_BOARD_FRAMES,
+  SUDOKU_SHORT_BOARD_FRAMES,
   TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES,
   TOPOLOGICAL_SORT_LAYERED_FRAMES,
   TSP_4CITY_SEARCH_TREE_FRAMES,
@@ -4209,6 +4218,434 @@ for (const width of [390, 320]) {
   });
 }
 
+// --- #208: the Board renderer (Sudoku, N-Queens) --------------------------------------------
+
+const BOARD = "#workbench-source-frames-board";
+
+/**
+ * Each board capture. The catalog CI's backend serves has no Board visualizations yet, so every
+ * capture is drawn on the 3SAT page (its visualization made to name Board): the picture is the
+ * capture's, whatever the page.
+ */
+const BOARD_CASES = {
+  sudokuShort: SUDOKU_SHORT_BOARD_FRAMES,
+  sudokuClash: SUDOKU_CLASH_BOARD_FRAMES,
+  sudoku: SUDOKU_BOARD_FRAMES,
+  queens: N_QUEENS_BOARD_FRAMES,
+  queensNone: N_QUEENS_NONE_BOARD_FRAMES,
+  queensConstructive: N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES,
+};
+
+async function openBoard(page, capture) {
+  await setEveryPictureType(page, "Board");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${BOARD}-board`)).toBeVisible();
+}
+
+const boardSquare = (page, id) => page.locator(`${BOARD}-board [data-square-id="${id}"]`);
+
+/** Frame `index`'s squares, pieces and links, checked square by square against the picture. */
+async function expectBoardFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const board = page.locator(`${BOARD}-board`);
+  const drawn = await board
+    .locator("[data-square-id]")
+    .evaluateAll((squares) =>
+      Object.fromEntries(
+        squares.map((square) => [
+          square.getAttribute("data-square-id"),
+          [
+            square.getAttribute("data-state"),
+            square.getAttribute("data-value"),
+            square.getAttribute("data-piece"),
+            square.getAttribute("data-focus"),
+          ],
+        ]),
+      ),
+    );
+  const { size } = capture.payload;
+  const pieces = new Map(frame.pieces.map((piece) => [piece.id, piece.kind]));
+  const focus = new Set(frame.focus);
+  for (let r = 0; r < size; r += 1) {
+    for (let c = 0; c < size; c += 1) {
+      const id = `r${r}c${c}`;
+      expect(drawn[id], id).toEqual([
+        frame.cells[id]?.state ?? "Background",
+        capture.payload.game === "queens" ? null : (frame.values[id] ?? null),
+        pieces.get(id) ?? null,
+        focus.has(id) ? "true" : null,
+      ]);
+    }
+  }
+  await expect(board.locator("[data-piece-id]")).toHaveCount(frame.pieces.length);
+  const links = await board
+    .locator("[data-link-from]")
+    .evaluateAll((all) =>
+      all.map(
+        (link) => `${link.getAttribute("data-link-from")}>${link.getAttribute("data-link-to")}`,
+      ),
+    );
+  expect(links).toEqual(frame.links.map((link) => `${link.from}>${link.to}`));
+}
+
+for (const [key, capture] of Object.entries(BOARD_CASES)) {
+  test(`Board: the ${key} capture draws every square and every step's values, pieces and links`, async ({
+    page,
+  }) => {
+    // Every step of the run, checked square by square.
+    test.slow();
+    const { payload } = capture;
+    await openBoard(page, capture);
+    const board = page.locator(`${BOARD}-board`);
+    await expect(board).toHaveAttribute("data-game", payload.game);
+    await expect(board.locator("[data-square-id]")).toHaveCount(payload.size * payload.size);
+    await expect(board.locator("[data-axis]")).toHaveCount(2 * payload.size);
+    await expect(board.locator("[data-axis]").first()).toHaveText(String(payload.labelsFrom));
+    // Nothing here can be dragged (#250 leaves the board alone).
+    await expect(page.locator(`${BOARD}-layout-reset`)).toHaveCount(0);
+    await expect(page.locator(`${BOARD}-svg`)).not.toHaveAttribute("data-editable", /./);
+
+    await runToFrame(page, capture, 0);
+    await expectBoardFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectBoardFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await board.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^Row \d+, column \d+, /);
+    }
+  });
+}
+
+/** Each square's drawn box, by id, in viewBox units. */
+function squareBoxes(page) {
+  return page.locator(`${BOARD}-board [data-square-id]`).evaluateAll((squares) =>
+    Object.fromEntries(
+      squares.map((square) => {
+        const box = square.querySelector("[data-body]").getBBox();
+        return [square.getAttribute("data-square-id"), `${box.x},${box.y},${box.width}`];
+      }),
+    ),
+  );
+}
+
+test("Board: before Run the Sudoku is its clues alone, and step 1 keeps every square in place", async ({
+  page,
+}) => {
+  const capture = SUDOKU_SHORT_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const board = page.locator(`${BOARD}-board`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(board.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(board.locator("[data-value]")).toHaveCount(capture.payload.clues.length);
+  for (const clue of capture.payload.clues) {
+    const square = boardSquare(page, clue.id);
+    await expect(square).toHaveAttribute("data-clue", "true");
+    await expect(square).toHaveAttribute("data-value", clue.value);
+    await expect(square.locator("[data-text]")).toHaveAttribute("font-weight", "700");
+  }
+  await expect(board.locator("[data-link-from]")).toHaveCount(0);
+  const before = await squareBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await squareBoxes(page)).toEqual(before);
+});
+
+test("Board: a chessboard before Run is empty, with its labels counted from 0", async ({
+  page,
+}) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const board = page.locator(`${BOARD}-board`);
+  await expect(board.locator("[data-piece-id]")).toHaveCount(0);
+  await expect(board.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(board.locator("[data-axis]").first()).toHaveText("0");
+  await expect(boardSquare(page, "r0c0")).toHaveAttribute("aria-label", "Row 0, column 0, empty");
+  const before = await squareBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await squareBoxes(page)).toEqual(before);
+});
+
+test("Board: clashing clues are Rejected and joined by a dashed link", async ({ page }) => {
+  const capture = SUDOKU_CLASH_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const index = capture.frames.findIndex((frame) => frame.links.length > 0);
+  expect(index).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, index);
+  const link = capture.frames[index].links[0];
+  await expect(boardSquare(page, link.from)).toHaveAttribute("data-state", "Rejected");
+  const drawn = page.locator(`${BOARD}-board [data-link-from="${link.from}"]`);
+  await expect(drawn.locator("line")).toHaveAttribute("stroke-dasharray", "5 4");
+  // A clash's square holds a digit, so it gets no cross over it.
+  await expect(drawn.locator("[data-cross]")).toHaveCount(0);
+  await expect(legendBody(page)).toContainText(
+    "Dashed line (a clash: both squares hold the same digit)",
+  );
+});
+
+test("Board: a queen's ruled-out squares get a cross and a link back to the queen", async ({
+  page,
+}) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const index = capture.frames.findIndex((frame) => frame.links.length > 0);
+  expect(index).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, index);
+  for (const link of capture.frames[index].links) {
+    const drawn = page.locator(
+      `${BOARD}-board [data-link-from="${link.from}"][data-link-to="${link.to}"]`,
+    );
+    await expect(drawn.locator("[data-cross]")).toHaveCount(1);
+    await expect(boardSquare(page, link.from)).toHaveAttribute("data-state", "Rejected");
+  }
+  await expect(legendBody(page)).toContainText("Crown (a queen on the board)");
+});
+
+test("Board: Committed queens turn Solution only on the confirmed answer", async ({ page }) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const committed = capture.frames.findIndex((frame) =>
+    Object.values(frame.cells).some((cell) => cell.state === "Committed"),
+  );
+  expect(committed).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, committed);
+  const square = page.locator(`${BOARD}-board [data-state="Committed"]`).first();
+  // Committed's outline is dashed, Solution's is not.
+  await expect(square.locator("rect").nth(1)).toHaveAttribute("stroke-dasharray", /\d/);
+  const last = capture.frames.at(-1);
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("End");
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(last.caption);
+  for (const piece of last.pieces) {
+    await expect(boardSquare(page, piece.id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(legendBody(page)).toContainText("Committed (kept so far)");
+  await expect(legendBody(page)).toContainText("Solution (answer)");
+});
+
+test("Board: Hints shades every square a placed queen attacks", async ({ page }) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  await runToFrame(page, capture, 0);
+  const board = page.locator(`${BOARD}-board`);
+  await expect(board.locator("[data-attacked]")).toHaveCount(0);
+  await page.locator(`${BOARD}-hints-on`).click();
+  await expect(page.locator(`${BOARD}-hints-on`)).toHaveAttribute("aria-pressed", "true");
+  const { size } = capture.payload;
+  const queens = capture.frames[0].pieces;
+  let expected = 0;
+  for (let r = 0; r < size; r += 1) {
+    for (let c = 0; c < size; c += 1) {
+      const onQueen = queens.some((q) => q.r === r && q.c === c);
+      const attacked = queens.some(
+        (q) => q.r === r || q.c === c || Math.abs(q.r - r) === Math.abs(q.c - c),
+      );
+      if (!onQueen && attacked) expected += 1;
+    }
+  }
+  await expect(board.locator("[data-attacked]")).toHaveCount(expected);
+  await page.locator(`${BOARD}-hints-off`).click();
+  await expect(board.locator("[data-attacked]")).toHaveCount(0);
+});
+
+test("Board: hovering, focusing or tapping a square traces its row, column and box, and fades the rest by color", async ({
+  page,
+}) => {
+  const capture = SUDOKU_BOARD_FRAMES;
+  await openBoard(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await boardSquare(page, "r4c4").hover();
+  await expect(boardSquare(page, "r4c4")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r4c0")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r0c4")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r3c5")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r0c0")).toHaveAttribute("data-traced", "faint");
+  const faded = await boardSquare(page, "r0c0").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(page.locator(`${BOARD}-board [data-trace-ring="r4c4"]`)).toHaveCount(1);
+
+  await page.mouse.move(0, 0);
+  await boardSquare(page, "r0c0").focus();
+  await expect(boardSquare(page, "r0c8")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r4c4")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(boardSquare(page, "r0c0")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Board: tracing a chessboard square draws a queen's lines of attack from it", async ({
+  page,
+}) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  await boardSquare(page, "r1c1").hover();
+  // From (1, 1) on a 4 by 4 board every one of the eight directions has a square.
+  await expect(page.locator(`${BOARD}-board [data-ray]`)).toHaveCount(8);
+  await expect(boardSquare(page, "r3c3")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r0c3")).toHaveAttribute("data-traced", "faint");
+  await boardSquare(page, "r0c0").hover();
+  await expect(page.locator(`${BOARD}-board [data-ray]`)).toHaveCount(3);
+});
+
+test("Board: on a phone a tap traces a square, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openBoard(page, SUDOKU_BOARD_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${BOARD}-svg`);
+  await page.locator(`${BOARD}-zoom-in`).click();
+  await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await boardSquare(page, "r4c4").focus();
+  await boardSquare(page, "r4c4").blur();
+  await boardSquare(page, "r4c4").click();
+  await expect(boardSquare(page, "r4c4")).toHaveAttribute("aria-pressed", "true");
+  await expect(boardSquare(page, "r0c0")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${BOARD}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Board: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openBoard(page, SUDOKU_BOARD_FRAMES);
+      const svg = page.locator(`${BOARD}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${BOARD}-svg`);
+      await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The clues and the labels follow the theme: no dark-on-dark, no light-on-white.
+      for (const selector of ['[data-clue="true"] [data-text]', "[data-axis]"]) {
+        const ink = await page
+          .locator(`${BOARD}-board ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+    });
+  }
+}
+
+/**
+ * Every place where two texts of `svg` meet, read off the screen, and every square whose text
+ * spills out of it.
+ * @returns {Promise<string[]>} One line per collision; empty when the picture is clear.
+ */
+function svgTextCollisions(page, svgSelector, boxSelector) {
+  return page.locator(svgSelector).evaluate((svg, boxes) => {
+    const found = [];
+    const texts = [...svg.querySelectorAll("text")].filter((text) => text.textContent.trim());
+    const rects = texts.map((text) => ({ text, box: text.getBoundingClientRect() }));
+    const meets = (a, b) =>
+      a.left < b.right - 0.5 &&
+      b.left < a.right - 0.5 &&
+      a.top < b.bottom - 0.5 &&
+      b.top < a.bottom - 0.5;
+    rects.forEach((a, i) => {
+      rects.forEach((b, j) => {
+        if (j > i && meets(a.box, b.box)) {
+          found.push(`"${a.text.textContent}" meets "${b.text.textContent}"`);
+        }
+      });
+    });
+    if (boxes) {
+      for (const group of svg.querySelectorAll(boxes)) {
+        const rect = group.querySelector("[data-body]").getBoundingClientRect();
+        for (const text of group.querySelectorAll("text")) {
+          const box = text.getBoundingClientRect();
+          if (
+            box.left < rect.left - 0.5 ||
+            box.right > rect.right + 0.5 ||
+            box.top < rect.top - 0.5 ||
+            box.bottom > rect.bottom + 0.5
+          ) {
+            found.push(`"${text.textContent}" spills out of its square`);
+          }
+        }
+      }
+    }
+    return found;
+  }, boxSelector);
+}
+
+/** The smallest text of `svg` as drawn on screen, in CSS px, with the text it belongs to. */
+function smallestText(page, svgSelector) {
+  return page.locator(svgSelector).evaluate((svg) => {
+    const scale = svg.getScreenCTM().a;
+    return [...svg.querySelectorAll("text, tspan")]
+      .filter((text) => text.textContent.trim())
+      .map((text) => ({
+        text: text.textContent,
+        px: Number.parseFloat(getComputedStyle(text).fontSize) * scale,
+      }))
+      .reduce((smallest, text) => (text.px < smallest.px ? text : smallest));
+  });
+}
+
+for (const [key, capture] of Object.entries(BOARD_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Board: the ${key} capture's texts never meet at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openBoard(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = () => svgTextCollisions(page, `${BOARD}-svg`, "[data-square-id]");
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["sudoku", "queensConstructive"]) {
+  test(`Board: on a 390 px phone the ${key} board is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = BOARD_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openBoard(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${BOARD}-svg`);
+    const before = await smallestText(page, `${BOARD}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, Math.floor(capture.frames.length / 2));
+    const during = await smallestText(page, `${BOARD}-svg`);
+    expect(during.px, `"${during.text}" is ${during.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    // The whole board is inside the picture area, with nothing to scroll to.
+    const inside = await page.locator(`${BOARD}-svg`).evaluate((svg) => {
+      const area = svg.getBoundingClientRect();
+      return [...svg.querySelectorAll("[data-square-id]")].every((square) => {
+        const box = square.getBoundingClientRect();
+        return (
+          box.left >= area.left - 0.5 &&
+          box.right <= area.right + 0.5 &&
+          box.top >= area.top - 0.5 &&
+          box.bottom <= area.bottom + 0.5
+        );
+      });
+    });
+    expect(inside).toBe(true);
+  });
+}
+
 // --- Every renderer opens at fit -------------------------------------------------------------
 //
 // Each registered picture type (components/pictures/registry.js), drawn from one capture on the
@@ -4219,6 +4656,7 @@ for (const width of [390, 320]) {
 const FIT_CASES = {
   Automaton: DFA_AUTOMATON_FRAMES,
   BipartiteGraph: SET_COVER_BIPARTITE_FRAMES,
+  Board: N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES,
   FlowNetwork: MIN_CUT_FLOW_FRAMES,
   Graph: CLIQUE_GRAPH_FRAMES,
   GroupedGraph: SAT3_CLAUSE_GRAPH_FRAMES,
