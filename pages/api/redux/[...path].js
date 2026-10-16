@@ -79,6 +79,9 @@ const rateLimitBuckets = new Map();
  * compute profile and was deliberately left out until T53 (#116) gave it a real caller
  * (`requestReducedInstance`, `lib/redux/index.js`) -- it is allowed below now.
  *
+ * `ProblemProvider/visualizeRun` (#252) runs a solver once and draws every picture of its
+ * problem from that run (`requestVisualizedRun`). A compute endpoint like `visualize`.
+ *
  * `ProblemProvider/reduce` and `ProblemProvider/mapSolution` (#229 stage 3) give the
  * workbench's Result panel the target instance's text and "Map a solution across". Both
  * build a reduction on the backend, so they are compute endpoints: rate-limited, body-capped
@@ -112,6 +115,7 @@ const ALLOWED_ENDPOINTS = new Map([
   ["ProblemProvider/verify", ["POST"]],
   ["ProblemProvider/visualize", ["POST"]],
   ["ProblemProvider/visualizeReduction", ["POST"]],
+  ["ProblemProvider/visualizeRun", ["POST"]],
   ["ProblemProvider/reduce", ["POST"]],
   ["ProblemProvider/mapSolution", ["POST"]],
 ]);
@@ -157,6 +161,7 @@ const COMPUTE_ENDPOINTS = new Set([
   "ProblemProvider/verify",
   "ProblemProvider/visualize",
   "ProblemProvider/visualizeReduction",
+  "ProblemProvider/visualizeRun",
   "ProblemProvider/reduce",
   "ProblemProvider/mapSolution",
 ]);
