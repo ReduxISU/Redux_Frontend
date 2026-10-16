@@ -4,8 +4,9 @@
 // picture `type`; a type with no renderer here falls back to the old flat-list request and
 // renderer; the step controls walk a format=frames run's frames, with each step's caption.
 //
-// Pinned to DFA Acceptance: it has one visualization whose picture type has a renderer
-// (the Table) and one whose type does not yet (the Automaton), and a fast solver. The catalog
+// Pinned to DFA Acceptance: it has two visualizations (the Table and the Automaton) and a fast
+// solver. Since #204 draws the Automaton, the foundation's tests answer its frames request as a
+// picture type nothing here draws (UNDRAWN_TYPE), to keep testing the fallback. The catalog
 // comes from the real backend like the rest of the suite; every picture and solve request is
 // answered here from payloads captured off the live API (tests/e2e/picture-payloads.js), so
 // CI needs no backend that serves format=frames. Catalog answers are only edited to set or
@@ -18,6 +19,8 @@
 // graph) at the end, with the same plain picture before Run and the same fit and zoom.
 // #205: the Layered Graph renderer (Topological Sort, the feedback sets, SCC and shortest
 // paths) after it, the same way.
+// #204: the Automaton renderer (DFA, NFA) after that: the Garbage state, the NFA's all-branches
+// steps and the One path picker, the tape, the same plain picture before Run and fit.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail } from "./helpers";
@@ -28,6 +31,7 @@ import {
   CLIQUE_GRAPH_FRAMES,
   DFA_AUTOMATON_FRAMES,
   DFA_AUTOMATON_LIST,
+  DFA_GARBAGE_AUTOMATON_FRAMES,
   DFA_TABLE_FRAMES,
   DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
   EXACT_COVER_BIPARTITE_FRAMES,
@@ -35,6 +39,9 @@ import {
   ILP_TABLE_FRAMES_WITH_BLANK,
   LARGE_GRAPH_FRAMES,
   MAX_CUT_GRAPH_FRAMES,
+  NFA_BACKTRACK_REJECTED_AUTOMATON_FRAMES,
+  NFA_DEFAULT_AUTOMATON_FRAMES,
+  NFA_SUBSET_AUTOMATON_FRAMES,
   NODE_SET_LAYERED_FRAMES,
   SAT3_FACTOR_GRAPH_FRAMES,
   SCC_LAYERED_FRAMES,
@@ -51,6 +58,10 @@ import {
 const PROBLEM = "DFA Acceptance";
 const TABLE_VIZ = "DFATableVisualization";
 const AUTOMATON_VIZ = "DFAVisualization";
+
+/** A picture type no renderer here draws, for the fallback tests. */
+const UNDRAWN_TYPE = "NotDrawnHere";
+const UNDRAWN_FRAMES = { ...DFA_AUTOMATON_FRAMES, type: UNDRAWN_TYPE };
 
 const VISUALIZE_REQUEST = /\/api\/redux\/ProblemProvider\/visualize\?/;
 const SOLVE_REQUEST = /\/api\/redux\/ProblemProvider\/solve/;
@@ -93,7 +104,7 @@ async function answerPictures(page, { tableFrames = DFA_TABLE_FRAMES } = {}) {
       // The table only ever needs its frames answer; a list request for it would be a bug.
       json = format === "frames" ? tableFrames : [];
     } else {
-      json = format === "frames" ? DFA_AUTOMATON_FRAMES : DFA_AUTOMATON_LIST;
+      json = format === "frames" ? UNDRAWN_FRAMES : DFA_AUTOMATON_LIST;
     }
     return route.fulfill({ json });
   });
@@ -129,8 +140,8 @@ test("a picture type with a renderer is drawn from format=frames, and one withou
   await expect(page.locator(`${TABLE_PREFIX}-table-caption`)).toHaveText(/: 1 row$/);
   expect(asked).toEqual([`${TABLE_VIZ} frames`]);
 
-  // The Automaton type has none yet: the frames answer is set aside, the list is asked for,
-  // and the old renderer draws it.
+  // A type with no renderer: the frames answer is set aside, the list is asked for, and the
+  // old renderer draws it.
   await chooseVisualization(page, "Deterministic Finite Automata Visualization");
   await expect(picture).toHaveAttribute("data-picture-kind", "frame");
   expect(asked).toEqual([
@@ -181,7 +192,7 @@ test("before Run a table draws the payload's blank, not the first step's work", 
 test("when pictureType already names a type with no renderer, only the old list is asked for", async ({
   page,
 }) => {
-  await setPictureTypes(page, { [TABLE_VIZ]: "Table", [AUTOMATON_VIZ]: "Automaton" });
+  await setPictureTypes(page, { [TABLE_VIZ]: "Table", [AUTOMATON_VIZ]: UNDRAWN_TYPE });
   const asked = await answerPictures(page);
   await page.goto(
     `/${encodeURIComponent(PROBLEM)}?viz=${encodeURIComponent("Deterministic Finite Automata Visualization")}`,
@@ -1665,5 +1676,373 @@ for (const [width, height] of [
     await page.locator(`${LAYERED}-zoom-in`).click();
     const zoomed = await areaSizes(page, svg);
     expect(zoomed.viewAspect).toBeCloseTo(zoomed.width / zoomed.height, 2);
+  });
+}
+
+// --- #204: the Automaton renderer (DFA, NFA) ---------------------------------------------------
+
+const AUTOMATON = "#workbench-source-frames-automaton";
+
+/**
+ * Each automaton capture with the problem page it is opened on and the visualizations allInfo is
+ * made to name Automaton (the page's first visualization is its table, so both are, and every
+ * picture request is answered with the capture).
+ */
+const AUTOMATON_CASES = {
+  dfa: {
+    problem: "DFA Acceptance",
+    viz: ["DFAVisualization", "DFATableVisualization"],
+    capture: DFA_AUTOMATON_FRAMES,
+  },
+  garbage: {
+    problem: "DFA Acceptance",
+    viz: ["DFAVisualization", "DFATableVisualization"],
+    capture: DFA_GARBAGE_AUTOMATON_FRAMES,
+  },
+  subset: {
+    problem: "NFA Acceptance",
+    viz: ["NFAVisualization", "NFATableVisualization"],
+    capture: NFA_SUBSET_AUTOMATON_FRAMES,
+  },
+  backtrack: {
+    problem: "NFA Acceptance",
+    viz: ["NFAVisualization", "NFATableVisualization"],
+    capture: NFA_BACKTRACK_REJECTED_AUTOMATON_FRAMES,
+  },
+  nfaDefault: {
+    problem: "NFA Acceptance",
+    viz: ["NFAVisualization", "NFATableVisualization"],
+    capture: NFA_DEFAULT_AUTOMATON_FRAMES,
+  },
+};
+
+async function openAutomaton(page, { problem, viz, capture }) {
+  await setPictureTypes(page, Object.fromEntries(viz.map((name) => [name, "Automaton"])));
+  await openPicture(page, problem, capture);
+  await expect(page.locator(`${AUTOMATON}-graph`)).toBeVisible();
+}
+
+const automatonState = (page, id) => page.locator(`${AUTOMATON}-graph [data-node-id="${id}"]`);
+const automatonArrow = (page, id) => page.locator(`${AUTOMATON}-graph [data-edge-id="${id}"]`);
+const tape = (page) => page.locator(`${AUTOMATON}-tape`);
+
+/** Frame `frame`'s states, checked piece by piece against the picture (absent = Background). */
+async function expectAutomatonStates(page, payload, frame) {
+  const ids = payload.states.map((state) => state.id);
+  if (payload.garbage) ids.push(payload.garbage.id);
+  for (const id of ids) {
+    await expect(automatonState(page, id)).toHaveAttribute(
+      "data-state",
+      frame.nodes[id]?.state ?? "Background",
+    );
+    if (frame.active.includes(id)) {
+      await expect(automatonState(page, id)).toHaveAttribute("data-active", "true");
+    } else {
+      await expect(automatonState(page, id)).not.toHaveAttribute("data-active", /./);
+    }
+  }
+  for (const transition of payload.transitions) {
+    await expect(automatonArrow(page, transition.id)).toHaveAttribute(
+      "data-state",
+      frame.edges[transition.id]?.state ?? "Background",
+    );
+  }
+  await expect(tape(page)).toHaveAttribute("data-position", String(frame.position));
+}
+
+for (const [key, testCase] of Object.entries(AUTOMATON_CASES)) {
+  test(`Automaton: the ${key} capture draws every state, arrow and step`, async ({ page }) => {
+    const { capture } = testCase;
+    const { payload } = capture;
+    await openAutomaton(page, testCase);
+    const graph = page.locator(`${AUTOMATON}-graph`);
+    await expect(graph).toHaveAttribute("data-automaton-kind", payload.kind);
+    await expect(graph.locator("[data-focusable]")).toHaveCount(payload.states.length);
+    await expect(graph.locator("[data-edge-id]")).toHaveCount(payload.transitions.length);
+    await expect(graph.locator("[data-garbage]")).toHaveCount(payload.garbage ? 1 : 0);
+    // Accept states get a double ring, the start state an entry arrow.
+    await expect(graph.locator("[data-accept-ring]")).toHaveCount(payload.accepting.length);
+    await expect(graph.locator("[data-start-arrow]")).toHaveCount(1);
+    await expect(automatonState(page, payload.start)).toHaveAttribute("data-start", "true");
+    // ε-moves are dashed; every arrow has an arrowhead and its symbols.
+    await expect(graph.locator("[data-epsilon]")).toHaveCount(
+      payload.transitions.filter((transition) => transition.epsilon).length,
+    );
+    await expect(graph.locator("[data-edge-id] polygon")).toHaveCount(payload.transitions.length);
+    await expect(graph.locator("[data-arrow-label]")).toHaveCount(payload.transitions.length);
+    // One tape cell per input symbol, and the end cell.
+    await expect(tape(page).locator("[data-tape-cell]")).toHaveCount(payload.input.length);
+    await expect(tape(page).locator("[data-tape-end]")).toHaveCount(1);
+    // Every state says what it is, and can be reached by keyboard.
+    for (const piece of await graph.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("aria-label", /^State \S+, .*(on .* to |no moves out)/);
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // The step controls walk every frame's states, active states and read position.
+    await runToFrame(page, capture, 0);
+    await expectAutomatonStates(page, payload, capture.frames[0]);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectAutomatonStates(page, payload, capture.frames[index]);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    await expect(tape(page).locator("[data-tape-end]")).toHaveAttribute(
+      "data-verdict",
+      last.ok ? "accept" : "reject",
+    );
+    // A run that found nothing never turns anything green.
+    if (!last.ok) {
+      await expect(graph.locator('[data-state="Solution"]')).toHaveCount(0);
+    }
+  });
+}
+
+test("Automaton: before Run the picture is the plain machine, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  const capture = NFA_SUBSET_AUTOMATON_FRAMES;
+  await openAutomaton(page, AUTOMATON_CASES.subset);
+  const graph = page.locator(`${AUTOMATON}-graph`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(graph.locator("[data-active]")).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  // No read position and no verdict: nothing has run.
+  await expect(tape(page)).not.toHaveAttribute("data-position", /./);
+  await expect(tape(page).locator("[data-head], [data-read], [data-just]")).toHaveCount(0);
+  await expect(tape(page).locator("[data-tape-end]")).toHaveText("end");
+  // The path picker only follows a run's steps, so it shows once there is one.
+  await expect(page.locator(`${AUTOMATON}-view`)).toHaveCount(0);
+  // The machine's own marks are there: the entry arrow, the double ring and the dashed ε-move.
+  await expect(graph.locator("[data-start-arrow]")).toHaveCount(1);
+  await expect(graph.locator("[data-accept-ring]")).toHaveCount(1);
+  await expect(automatonArrow(page, "q:0>q:1").locator("path")).toHaveAttribute(
+    "stroke-dasharray",
+    "5 4",
+  );
+  await expect(legendBody(page)).toContainText("Entry arrow (the start state)");
+  await expect(legendBody(page)).toContainText("Double ring (an accept state)");
+  await expect(legendBody(page)).toContainText("Dashed arrow (an ε-move");
+  await expect(legendBody(page)).not.toContainText("Highlighted");
+
+  const before = await nodeCentres(page, `${AUTOMATON}-graph`);
+  await runToFrame(page, capture, 0);
+  await expect(automatonState(page, "q:0")).toHaveAttribute("data-state", "ElementHighlight");
+  expect(await nodeCentres(page, `${AUTOMATON}-graph`)).toEqual(before);
+  // The tape's head is on the first symbol.
+  await expect(tape(page).locator('[data-tape-cell="0"]')).toHaveAttribute("data-head", "true");
+});
+
+test("Automaton: a DFA's missing moves lead to a separate red Garbage state the run falls into", async ({
+  page,
+}) => {
+  const capture = DFA_GARBAGE_AUTOMATON_FRAMES;
+  await openAutomaton(page, AUTOMATON_CASES.garbage);
+  const garbage = page.locator(`${AUTOMATON}-graph [data-garbage]`);
+  await expect(garbage).toHaveAttribute("data-node-id", "garbage");
+  await expect(garbage).toContainText("Garbage");
+  await expect(garbage).toHaveAttribute("aria-label", /missing moves: 1 on b; 2 on a; 3 on b/);
+  await expect(automatonState(page, "q:3")).toHaveAttribute("aria-label", /no move on b/);
+  // Drawn in red even before Run, dashed until the machine falls in; no arrow leads into it.
+  const body = garbage.locator("[data-body]");
+  await expect(body).toHaveAttribute("stroke-dasharray", "5 3");
+  const red = await body.evaluate((el) => getComputedStyle(el).stroke);
+  for (const transition of capture.payload.transitions) {
+    expect(transition.b).not.toBe("garbage");
+  }
+  await expect(legendBody(page)).toContainText("Garbage (where every missing move leads");
+
+  // Frame 4: 3 has no move on b, so the run falls into Garbage.
+  await runToFrame(page, capture, 3);
+  await expect(garbage).toHaveAttribute("data-state", "Rejected");
+  await expect(garbage).toHaveAttribute("data-active", "true");
+  await expect(body).not.toHaveAttribute("stroke-dasharray", /./);
+  expect(await body.evaluate((el) => getComputedStyle(el).stroke)).toBe(red);
+  await expect(tape(page).locator('[data-tape-cell="2"]')).toHaveAttribute("data-head", "true");
+
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(tape(page).locator("[data-tape-end]")).toHaveText("reject");
+  // Hovering a state with a missing move traces Garbage too; one without fades it.
+  await automatonState(page, "q:2").hover();
+  await expect(garbage).toHaveAttribute("data-traced", "trace");
+  await expect(automatonArrow(page, "q:2>q:3")).toHaveAttribute("data-traced", "trace");
+  await expect(automatonArrow(page, "q:1>q:2")).toHaveAttribute("data-traced", "faint");
+});
+
+test("Automaton: an NFA's steps show every active state at once by default", async ({ page }) => {
+  const capture = NFA_SUBSET_AUTOMATON_FRAMES;
+  await openAutomaton(page, AUTOMATON_CASES.subset);
+  await runToFrame(page, capture, 1);
+  await expect(page.locator(`${AUTOMATON}-graph`)).toHaveAttribute("data-run-view", "all");
+  await expect(page.locator(`${AUTOMATON}-view-all`)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(`${AUTOMATON}-graph [data-active]`)).toHaveCount(3);
+  for (const id of ["q:0", "q:1", "q:2"]) {
+    await expect(automatonState(page, id)).toHaveAttribute("data-state", "ElementHighlight");
+  }
+  // The symbol just read is marked, and the head sits on the next one.
+  await expect(tape(page).locator('[data-tape-cell="0"]')).toHaveAttribute("data-just", "true");
+  await expect(tape(page).locator('[data-tape-cell="1"]')).toHaveAttribute("data-head", "true");
+  await expect(tape(page)).toHaveAttribute(
+    "aria-label",
+    /1 symbol read; the head is on the 2nd, a/,
+  );
+  await expect(page.locator(`${AUTOMATON}-path`)).toHaveCount(0);
+});
+
+test("Automaton: One path follows a single run picked from the dropdown, and All branches goes back", async ({
+  page,
+}) => {
+  const capture = NFA_SUBSET_AUTOMATON_FRAMES;
+  const { paths } = capture.payload;
+  await openAutomaton(page, AUTOMATON_CASES.subset);
+  await runToFrame(page, capture, 2);
+
+  await page.locator(`${AUTOMATON}-view-one`).click();
+  const picker = page.locator(`${AUTOMATON}-path`);
+  await expect(picker).toBeVisible();
+  await expect(picker.locator("option")).toHaveText(paths.map((path) => path.label));
+  await expect(picker).toHaveValue(paths[0].id);
+  await expect(page.locator(`${AUTOMATON}-graph`)).toHaveAttribute("data-run-view", paths[0].id);
+  // The steps start over on the path's own frames.
+  const position = page.locator("#workbench-steps-position");
+  await expect(position).toHaveText(`Step 1 of ${paths[0].frames.length}`);
+  for (const [index, frame] of paths[0].frames.entries()) {
+    if (index > 0) await page.locator("#workbench-steps-next").click();
+    await expect(page.locator(`${CAPTION}-text`)).toHaveText(frame.caption);
+    await expectAutomatonStates(page, capture.payload, frame);
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(page.locator(`${AUTOMATON}-graph [data-active]`)).toHaveCount(1);
+
+  // A path that dies: its last state is Rejected, and the states it never reached Untraveled.
+  const dies = paths.find((path) => path.outcome === "dies");
+  await picker.selectOption(dies.id);
+  await expect(position).toHaveText(`Step 1 of ${dies.frames.length}`);
+  for (let index = 1; index < dies.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  await expectAutomatonStates(page, capture.payload, dies.frames.at(-1));
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(page.locator(`${AUTOMATON}-graph [data-state="Solution"]`)).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("Untraveled (never reached)");
+
+  await page.locator(`${AUTOMATON}-view-all`).click();
+  await expect(picker).toHaveCount(0);
+  await expect(position).toHaveText(`Step 1 of ${capture.frames.length}`);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[0].caption);
+});
+
+test("Automaton: a DFA has one run, so it offers no path picker", async ({ page }) => {
+  const capture = DFA_AUTOMATON_FRAMES;
+  await openAutomaton(page, AUTOMATON_CASES.dfa);
+  await runToFrame(page, capture, 0);
+  await expect(page.locator(`${AUTOMATON}-view`)).toHaveCount(0);
+  await expect(page.locator(`${AUTOMATON}-graph`)).not.toHaveAttribute("data-run-view", /./);
+});
+
+test("Automaton: hovering, focusing or tapping a state traces its moves and fades the rest by color", async ({
+  page,
+}) => {
+  await openAutomaton(page, AUTOMATON_CASES.subset);
+  await automatonState(page, "q:0").hover();
+  for (const id of ["q:0>q:1", "q:0>q:0"]) {
+    await expect(automatonArrow(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(automatonArrow(page, "q:1>q:2")).toHaveAttribute("data-traced", "faint");
+  await expect(automatonState(page, "q:1")).toHaveAttribute("data-traced", "trace");
+  await expect(automatonState(page, "q:3")).toHaveAttribute("data-traced", "faint");
+  const faded = await automatonState(page, "q:3").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+
+  await page.mouse.move(0, 0);
+  await automatonState(page, "q:1").focus();
+  await expect(automatonArrow(page, "q:1>q:2")).toHaveAttribute("data-traced", "trace");
+  await expect(automatonArrow(page, "q:0>q:1")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(automatonState(page, "q:1")).toHaveAttribute("aria-pressed", "true");
+  await expect(automatonState(page, "q:1")).toHaveAttribute(
+    "aria-label",
+    "State 1, on a to 2, from 0 on ε",
+  );
+  await expect(automatonState(page, "q:0")).toHaveAttribute(
+    "aria-label",
+    "State 0, start, on ε to 1; on a, b to 0",
+  );
+  await expect(automatonState(page, "q:3")).toHaveAttribute(
+    "aria-label",
+    "State 3, accepting, no moves out, from 2 on b",
+  );
+});
+
+test("Automaton: on a phone a tap traces a state, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openAutomaton(page, AUTOMATON_CASES.nfaDefault);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${AUTOMATON}-svg`);
+  await page.locator(`${AUTOMATON}-zoom-in`).click();
+  await expect(page.locator(`${AUTOMATON}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await automatonState(page, "q:3").focus();
+  await automatonState(page, "q:3").blur();
+  await automatonState(page, "q:3").click();
+  await expect(automatonState(page, "q:3")).toHaveAttribute("aria-pressed", "true");
+  await expect(automatonArrow(page, "q:3>q:2")).toHaveAttribute("data-traced", "trace");
+  await expectFits(page, `${AUTOMATON}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1280]) {
+    test(`Automaton: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openAutomaton(page, AUTOMATON_CASES.garbage);
+      const svg = page.locator(`${AUTOMATON}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${AUTOMATON}-svg`);
+      const tapeBox = await tape(page).boundingBox();
+      expect(tapeBox.x + tapeBox.width).toBeLessThanOrEqual(width);
+      await expect(page.locator(`${AUTOMATON}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The entry arrow follows the theme: no dark-on-dark, no light-on-white.
+      const ink = await page
+        .locator(`${AUTOMATON}-graph [data-start-arrow] polygon`)
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+for (const [width, height] of [
+  [1280, 800],
+  [1920, 1080],
+]) {
+  test(`Automaton: at ${width}x${height} the picture fills the pane and fits the screen`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await openAutomaton(page, AUTOMATON_CASES.nfaDefault);
+    const svg = `${AUTOMATON}-svg`;
+    await expect(page.locator(svg)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const sizes = await areaSizes(page, svg);
+        return Math.abs(sizes.width - sizes.content);
+      })
+      .toBeLessThanOrEqual(2);
+    await scrollPictureToTop(page);
+    const sizes = await areaSizes(page, svg);
+    expect(sizes.bottom).toBeLessThanOrEqual(sizes.viewport);
+    expect(sizes.viewAspect).toBeCloseTo(sizes.width / sizes.height, 2);
   });
 }
