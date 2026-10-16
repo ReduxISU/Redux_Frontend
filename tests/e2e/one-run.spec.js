@@ -14,10 +14,13 @@
 // every compute request is answered here from the capture in tests/e2e/run-payloads.js, so CI
 // needs no backend with visualizeRun. Some tests edit the capture (named where they do) to get
 // steps a three-step run doesn't have.
+//
+// #217: 3SAT's Search Tree at the end: the step kept when switching from the clause graph after a
+// backtracking run, and the note when the run's solver is one the tree can't draw.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, openPanel } from "./helpers";
-import { DFA_ONE_RUN } from "./run-payloads";
+import { gotoProblemDetail, openPanel, selectSolverByName } from "./helpers";
+import { DFA_ONE_RUN, SAT3_BACKTRACKING_ONE_RUN, SAT3_PPZ_ONE_RUN } from "./run-payloads";
 
 const PROBLEM = "DFA Acceptance";
 const TABLE_VIZ = "DFATableVisualization";
@@ -308,4 +311,145 @@ test("moved states stay with their picture when switching away and back", async 
   await chooseVisualization(page, AUTOMATON_NAME);
   await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Automaton");
   expect(await centre()).toEqual(before);
+});
+
+// --- #217: the Search Tree in one run ------------------------------------------------------
+//
+// 3SAT's Search Tree draws the steps of its backtracking solver as a tree, and only those: a
+// solver it can't draw (PPZ, whose steps are untyped) leaves it `shape_mismatch`. The catalog
+// CI's backend serves has no Search Tree visualization yet, so allInfo and allVisualizations are
+// made to list 3SAT's (its info as the local build sends it); the run is the capture in
+// tests/e2e/run-payloads.js.
+
+const SAT3 = "3SAT";
+const CLAUSES_VIZ = "Sat3DefaultVisualization";
+const TREE_VIZ = "Sat3SearchTreeVisualization";
+const TREE_NAME = "3SAT Search Tree";
+const TREE = "#workbench-source-frames-searchtree";
+const ALL_VISUALIZATIONS_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizations$/;
+const ALL_VISUALIZATION_TYPES_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizationTypes$/;
+
+/** 3SAT's Search Tree as the local build's allInfo describes it. */
+const TREE_INFO = {
+  visualizationName: TREE_NAME,
+  visualizationDefinition:
+    "The choices of 3SAT Backtracking as a tree: each level sets one variable, a red dashed node is a value that makes a clause false, and the numbers show the order in which queued branches were taken. With format=frames, the tree grows step by step and the path to the answer turns green.",
+  source: "",
+  sourceFile: "Problems/NPComplete/NPC_SAT3/Visualizations/Sat3SearchTreeVisualization.cs",
+  contributors: ["Michael Trosper"],
+  visualizationType: "BooleanSatisfiability",
+  pictureType: "SearchTree",
+};
+
+/**
+ * Lists 3SAT's Search Tree in the catalog (when the backend doesn't), answers visualizeRun with
+ * `run` and every single-picture request from it. Records every compute request asked for.
+ */
+async function answerSat3(page, run) {
+  await page.route(ALL_INFO_REQUEST, async (route) => {
+    const response = await route.fetch();
+    const info = await response.json();
+    if (info[CLAUSES_VIZ]) info[CLAUSES_VIZ].pictureType = "GroupedGraph";
+    info[TREE_VIZ] = { ...TREE_INFO, ...(info[TREE_VIZ] ?? {}), pictureType: "SearchTree" };
+    await route.fulfill({ response, json: info });
+  });
+  await page.route(ALL_VISUALIZATIONS_REQUEST, async (route) => {
+    const response = await route.fetch();
+    const lists = await response.json();
+    const sat3 = Array.isArray(lists.SAT3) ? lists.SAT3 : [];
+    lists.SAT3 = sat3.includes(TREE_VIZ) ? sat3 : [...sat3, TREE_VIZ];
+    await route.fulfill({ response, json: lists });
+  });
+  await page.route(ALL_VISUALIZATION_TYPES_REQUEST, async (route) => {
+    const response = await route.fetch();
+    if (!response.ok()) return route.fulfill({ response });
+    const types = await response.json();
+    types[TREE_VIZ] = TREE_INFO.visualizationType;
+    return route.fulfill({ response, json: types });
+  });
+  const asked = [];
+  await page.route(RUN_REQUEST, (route) => {
+    asked.push("run");
+    return route.fulfill({ json: run });
+  });
+  await page.route(VISUALIZE_REQUEST, (route) => {
+    const url = new URL(route.request().url());
+    const visualization = url.searchParams.get("visualization");
+    asked.push(`${visualization} ${url.searchParams.get("format") ?? "list"}`);
+    const picture = pictureOf(SAT3_BACKTRACKING_ONE_RUN, visualization);
+    return route.fulfill({
+      json: { type: picture.type, payload: picture.payload, frames: picture.frames },
+    });
+  });
+  await page.route(SOLVE_REQUEST, (route) => route.fulfill({ json: run.answer }));
+  return asked;
+}
+
+async function openSat3(page, run, solverName) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const asked = await answerSat3(page, run);
+  await gotoProblemDetail(page, SAT3, { expect });
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "GroupedGraph", {
+    timeout: 20_000,
+  });
+  await selectSolverByName(page, solverName, { expect });
+  return asked;
+}
+
+test("Search Tree: after a 3SAT backtracking run, the clause graph's step opens on the same step of the tree", async ({
+  page,
+}) => {
+  const runPictures = SAT3_BACKTRACKING_ONE_RUN;
+  const asked = await openSat3(page, runPictures, "3SAT Backtracking");
+  const clauses = pictureOf(runPictures, CLAUSES_VIZ).frames;
+  const tree = pictureOf(runPictures, TREE_VIZ).frames;
+  await run(page, clauses.length);
+  // Back to step 5 of the clause graph: x2 = True is tried after x1 = True.
+  await previousStep(page);
+  await previousStep(page);
+  await expect(page.locator(POSITION)).toHaveText(`Step 5 of ${clauses.length}`);
+  await expect(page.locator(CAPTION)).toHaveText(clauses[4].caption);
+
+  await chooseVisualization(page, TREE_NAME);
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "SearchTree");
+  await expect(page.locator(POSITION)).toHaveText(`Step 5 of ${tree.length}`);
+  await expect(page.locator(CAPTION)).toHaveText(tree[4].caption);
+  await expect(page.locator(`${TREE}-tree [data-node-id]`)).toHaveCount(tree[4].nodes.length);
+  await expect(page.locator(`${TREE}-tree [data-node-id="n3"]`)).toHaveAttribute(
+    "data-focus",
+    "true",
+  );
+  // Stepping on grows the tree, and going back to the clause graph keeps the step.
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${TREE}-tree [data-node-id="n1"]`)).toHaveAttribute(
+    "data-state",
+    "Solution",
+  );
+  await chooseVisualization(page, "3SAT Visualization");
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "GroupedGraph");
+  await expect(page.locator(POSITION)).toHaveText(`Step 6 of ${clauses.length}`);
+  expect(asked.filter((request) => request === "run")).toHaveLength(1);
+  await expect(page.locator(NOTE)).toHaveCount(0);
+});
+
+test("Search Tree: a 3SAT solver it can't draw leaves it waiting for a run, with the answer and why", async ({
+  page,
+}) => {
+  const runPictures = SAT3_PPZ_ONE_RUN;
+  const [gap] = runPictures.unavailable;
+  expect(gap).toMatchObject({ visualization: TREE_VIZ, reason: "shape_mismatch" });
+  await openSat3(page, runPictures, "PPZ Algorithm");
+  // PPZ's clause graph is the answer alone: one frame, no steps to walk.
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(CAPTION)).toHaveText(
+    pictureOf(runPictures, CLAUSES_VIZ).frames[0].caption,
+  );
+  await chooseVisualization(page, TREE_NAME);
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "SearchTree");
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(page.locator(`${TREE}-waiting`)).toBeVisible();
+  await expect(page.locator(NOTE)).toHaveText(
+    `${TREE_NAME} can't draw the steps of ${runPictures.solverName}, so it shows the instance. The answer: ${runPictures.answer}.`,
+  );
+  await expect(page.locator(POSITION)).toHaveCount(0);
 });

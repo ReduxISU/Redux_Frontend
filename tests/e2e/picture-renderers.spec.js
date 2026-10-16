@@ -25,9 +25,12 @@
 // the augmenting paths and back arcs, and the cut's S and T sides.
 // #202: the Grouped Graph renderer (SAT and 3SAT's clause graph) after that, with the same
 // plain picture before Run and the same fit and zoom.
-// #207: the Packing renderer (Partition, Subset Sum, Knapsack, Bin Packing) last: the item pool,
-// each container's lines as rows to scale, every step's placement and totals, and no text that
-// meets another.
+// #207: the Packing renderer (Partition, Subset Sum, Knapsack, Bin Packing) after that: the item
+// pool, each container's lines as rows to scale, every step's placement and totals, and no text
+// that meets another.
+// #217: the Search Tree renderer (backtracking and branch-and-bound runs) last: the tree as each
+// step leaves it, folds, the answer's path, one box for the whole run, and a phone that opens
+// a wide tree zoomed in on the step.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel } from "./helpers";
@@ -44,7 +47,10 @@ import {
   DFA_GARBAGE_AUTOMATON_FRAMES,
   DFA_TABLE_FRAMES,
   DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
+  DM3_SEARCH_TREE_FRAMES,
   EXACT_COVER_BIPARTITE_FRAMES,
+  GRAPH_COLORING_FAILED_SEARCH_TREE_FRAMES,
+  GRAPH_COLORING_SEARCH_TREE_FRAMES,
   HITTING_SET_BIPARTITE_FRAMES,
   ILP_TABLE_FRAMES_WITH_BLANK,
   KNAPSACK_OVER_PACKING_FRAMES,
@@ -56,6 +62,7 @@ import {
   MIN_CUT_FLOW_FRAMES,
   MIN_CUT_NO_PATH_FLOW_FRAMES,
   MIN_CUT_PARALLEL_FLOW_FRAMES,
+  N_QUEENS_SEARCH_TREE_FRAMES,
   NFA_BACKTRACK_REJECTED_AUTOMATON_FRAMES,
   NFA_DEFAULT_AUTOMATON_FRAMES,
   NFA_SUBSET_AUTOMATON_FRAMES,
@@ -65,6 +72,8 @@ import {
   SAT3_CLAUSE_GRAPH_FRAMES,
   SAT3_FACTOR_GRAPH_FRAMES,
   SAT3_FAILED_CLAUSE_GRAPH_FRAMES,
+  SAT3_SEARCH_TREE_FRAMES,
+  SAT3_UNSAT_SEARCH_TREE_FRAMES,
   SCC_LAYERED_FRAMES,
   SET_COVER_BIPARTITE_FRAMES,
   SET_COVER_FAILED_BIPARTITE_FRAMES,
@@ -77,6 +86,7 @@ import {
   SUBSET_SUM_PACKING_FRAMES,
   TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES,
   TOPOLOGICAL_SORT_LAYERED_FRAMES,
+  TSP_SEARCH_TREE_FRAMES,
 } from "./picture-payloads";
 
 const PROBLEM = "DFA Acceptance";
@@ -3060,6 +3070,8 @@ for (const [key, capture] of Object.entries(PACKING_CASES)) {
   test(`Packing: the ${key} capture draws every item and container, and every step's placement`, async ({
     page,
   }) => {
+    // Every step of the run, checked piece by piece.
+    test.slow();
     const { payload } = capture;
     await openPacking(page, capture);
     const packing = page.locator(`${PACKING}-packing`);
@@ -3403,6 +3415,8 @@ for (const [key, capture] of Object.entries(PACKING_CASES)) {
   test(`Packing: the ${key} capture's texts never meet, before Run and at every step`, async ({
     page,
   }) => {
+    // Every step of the run, checked piece by piece.
+    test.slow();
     await openPacking(page, capture);
     expect(await packingTextCollisions(page)).toEqual([]);
     await runToFrame(page, capture, 0);
@@ -3411,6 +3425,426 @@ for (const [key, capture] of Object.entries(PACKING_CASES)) {
       await page.locator("#workbench-steps-next").click();
       await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
       expect(await packingTextCollisions(page)).toEqual([]);
+    }
+  });
+}
+
+// --- #217: the Search Tree renderer (backtracking and branch-and-bound runs) ----------------
+
+const TREE = "#workbench-source-frames-searchtree";
+
+/**
+ * Each search tree capture. The catalog CI's backend serves has no Search Tree visualizations
+ * yet, so every capture is drawn on the 3SAT page (its clause graph's visualization made to name
+ * SearchTree): the picture is the capture's, whatever the page.
+ */
+const TREE_CASES = {
+  sat3: SAT3_SEARCH_TREE_FRAMES,
+  sat3Unsat: SAT3_UNSAT_SEARCH_TREE_FRAMES,
+  tsp: TSP_SEARCH_TREE_FRAMES,
+  coloring: GRAPH_COLORING_SEARCH_TREE_FRAMES,
+  coloringFailed: GRAPH_COLORING_FAILED_SEARCH_TREE_FRAMES,
+  queens: N_QUEENS_SEARCH_TREE_FRAMES,
+  dm3: DM3_SEARCH_TREE_FRAMES,
+};
+
+async function openTree(page, capture) {
+  await setEveryPictureType(page, "SearchTree");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${TREE}-tree`)).toBeVisible();
+}
+
+const treeNode = (page, id) => page.locator(`${TREE}-tree [data-node-id="${id}"]`);
+const treeEdge = (page, id) => page.locator(`${TREE}-tree [data-edge-into="${id}"]`);
+
+/** Frame `index`'s tree, checked node by node against the picture. */
+async function expectTreeFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const tree = page.locator(`${TREE}-tree`);
+  await expect(tree.locator("[data-node-id]")).toHaveCount(frame.nodes.length);
+  await expect(tree.locator("[data-edge-into]")).toHaveCount(
+    frame.nodes.filter((node) => node.parent !== null).length,
+  );
+  for (const node of frame.nodes) {
+    const drawn = treeNode(page, node.id);
+    await expect(drawn).toHaveAttribute("data-state", node.state);
+    await expect(drawn).toHaveAttribute("data-kind", node.kind);
+    await expect(drawn.locator("[data-label]")).toHaveText(node.label);
+  }
+  await expect(tree.locator("[data-focus]")).toHaveCount(frame.focus.length);
+  for (const id of frame.focus) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-focus", "true");
+  }
+  const summary = page.locator(`${TREE}-summary`);
+  await expect(summary).toHaveAttribute("data-total", String(frame.total));
+  await expect(summary).toHaveAttribute("data-cut", String(frame.cut));
+}
+
+for (const [key, capture] of Object.entries(TREE_CASES)) {
+  test(`Search Tree: the ${key} capture grows its tree step by step, every node as Redux sends it`, async ({
+    page,
+  }) => {
+    // Every step of the run, checked piece by piece.
+    test.slow();
+    await openTree(page, capture);
+    // Before Run there is no tree: the picture says it grows once the solver runs.
+    await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute(
+      "data-plain",
+      "true",
+    );
+    await expect(page.locator(`${TREE}-waiting`)).toContainText(
+      `The search tree of this ${capture.payload.problem} instance grows from the solver's choices, step by step.`,
+    );
+    await expect(page.locator(`${TREE}-svg`)).toHaveCount(0);
+    // Nothing here can be dragged (#250 leaves the tree alone).
+    await expect(page.locator(`${TREE}-layout-reset`)).toHaveCount(0);
+
+    await runToFrame(page, capture, 0);
+    await expectTreeFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectTreeFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await page.locator(`${TREE}-tree [data-focusable]`).all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /./);
+    }
+  });
+}
+
+/** Each drawn node's box, by id, in viewBox units. */
+function treeBoxes(page) {
+  return page.locator(`${TREE}-tree [data-node-id]`).evaluateAll((nodes) =>
+    Object.fromEntries(
+      nodes.map((node) => {
+        const box = node.querySelector("[data-body]").getBBox();
+        return [
+          node.getAttribute("data-node-id"),
+          { x: box.x, y: box.y, width: box.width, height: box.height },
+        ];
+      }),
+    ),
+  );
+}
+
+test("Search Tree: each level is a row, and a parent sits centred over its first and last child", async ({
+  page,
+}) => {
+  const capture = GRAPH_COLORING_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const frame = capture.frames.at(-1);
+  const boxes = await treeBoxes(page);
+  const centre = (id) => boxes[id].x + boxes[id].width / 2;
+  for (const node of frame.nodes) {
+    const children = frame.nodes.filter((child) => child.parent === node.id);
+    if (!children.length) continue;
+    for (const child of children) expect(boxes[child.id].y).toBeGreaterThan(boxes[node.id].y);
+    // Siblings left to right in the order Redux made them, and the parent over their middle.
+    const xs = children.map((child) => centre(child.id));
+    expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+    expect(centre(node.id)).toBeCloseTo((xs[0] + xs.at(-1)) / 2, 0);
+  }
+  // No two nodes on a row meet.
+  const ids = Object.keys(boxes);
+  for (const [i, a] of ids.entries()) {
+    for (const b of ids.slice(i + 1)) {
+      const p = boxes[a];
+      const q = boxes[b];
+      const meet =
+        p.x < q.x + q.width && q.x < p.x + p.width && p.y < q.y + q.height && q.y < p.y + p.height;
+      expect(meet, `${a} meets ${b}`).toBe(false);
+    }
+  }
+});
+
+test("Search Tree: the whole run shares one box, so the view and a node's size hold still while it grows", async ({
+  page,
+}) => {
+  const capture = N_QUEENS_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, 0);
+  const viewBox = await page.locator(`${TREE}-svg`).getAttribute("viewBox");
+  const first = await treeBoxes(page);
+  // A step later the tree has changed shape (Redux folded a branch), but the box is the same.
+  for (let index = 1; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+    expect(await page.locator(`${TREE}-svg`).getAttribute("viewBox")).toBe(viewBox);
+  }
+  const last = await treeBoxes(page);
+  expect(last.n0.height).toBe(first.n0.height);
+  expect(last.n0.width).toBe(first.n0.width);
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+});
+
+test("Search Tree: folds stand for the nodes Redux hid, and say how many", async ({ page }) => {
+  const capture = N_QUEENS_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, 0);
+  const frame = capture.frames[0];
+  const more = frame.nodes.find((node) => node.kind === "more");
+  const cut = frame.nodes.find((node) => node.kind === "cut");
+  await expect(treeNode(page, more.id)).toHaveAttribute("data-hidden", String(more.hidden));
+  await expect(treeNode(page, more.id)).toHaveAttribute(
+    "aria-label",
+    new RegExp(`^\\+${more.hidden} more, path .*, ${more.hidden} finished nodes folded away`),
+  );
+  await expect(treeNode(page, cut.id)).toHaveAttribute(
+    "aria-label",
+    new RegExp(`^${cut.hidden} cut, path .*, ${cut.hidden} branches cut`),
+  );
+  // A cut branch is dashed red, a fold of finished ones dotted grey.
+  await expect(treeEdge(page, cut.id)).toHaveAttribute("stroke-dasharray", "4 4");
+  await expect(treeEdge(page, more.id)).toHaveAttribute("stroke-dasharray", "2 3");
+  await expect(legendBody(page)).toContainText("+k more (a finished branch folded away)");
+  await expect(legendBody(page)).toContainText("k cut (that many cut branches drawn as one)");
+});
+
+test("Search Tree: the answer's path turns green, and best-first nodes show when they left the queue", async ({
+  page,
+}) => {
+  const capture = SAT3_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  for (const id of ["n0", "n1", "n3"]) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  for (const id of ["n1", "n3"]) {
+    await expect(treeEdge(page, id)).not.toHaveAttribute("stroke-dasharray", /./);
+  }
+  // Best-first: the order each node left the queue, and the one still queued waits dashed.
+  await expect(treeNode(page, "n0").locator('[data-badge="order"]')).toHaveText("1");
+  await expect(treeNode(page, "n1").locator('[data-badge="order"]')).toHaveText("2");
+  await expect(treeNode(page, "n2")).toHaveAttribute("data-kind", "queued");
+  await expect(treeNode(page, "n2")).toHaveAttribute("data-state", "Untraveled");
+  await expect(legendBody(page)).toContainText("Order (when the node left the queue)");
+});
+
+test("Search Tree: a branch explored and backed out of is solid red, and a run that finds nothing says no", async ({
+  page,
+}) => {
+  const failed = GRAPH_COLORING_FAILED_SEARCH_TREE_FRAMES;
+  await openTree(page, failed);
+  await runToFrame(page, failed, failed.frames.length - 1);
+  const node = failed.frames.at(-1).nodes.find((candidate) => candidate.kind === "failed");
+  await expect(treeNode(page, node.id)).toHaveAttribute("data-state", "Rejected");
+  await expect(treeEdge(page, node.id)).not.toHaveAttribute("stroke-dasharray", /./);
+  await expect(legendBody(page)).toContainText("Solid red branch (explored, then backed out of)");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(page.locator(`${TREE}-tree [data-state="Solution"]`)).toHaveCount(0);
+});
+
+test("Search Tree: a bound or clash is noted under its node, on two lines when it is long", async ({
+  page,
+}) => {
+  const capture = TSP_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const note = treeNode(page, "n2").locator("[data-note]");
+  await expect(note).toHaveAttribute("data-note", "lb 7450 ≥ 6830");
+  await expect(note.locator("tspan")).toHaveText(["lb 7450", "≥ 6830"]);
+  await expect(treeNode(page, "n2")).toHaveAttribute(
+    "aria-label",
+    "Denver, path New York → Denver, cut without exploring, Rejected (failed or ruled out), lb 7450 ≥ 6830",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Note under a node (the bound or clash that decided it)",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Dashed red branch (cut without exploring, by a bound or a clash)",
+  );
+  // The greedy tour that is the answer was found before the search: no node is its path.
+  await expect(page.locator(`${TREE}-tree [data-state="Solution"]`)).toHaveCount(0);
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Search Tree: hovering, focusing or tapping a node traces its path from the root", async ({
+  page,
+}) => {
+  const capture = TSP_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await treeNode(page, "n11").hover();
+  for (const id of ["n0", "n4", "n8", "n11"]) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  for (const id of ["n4", "n8", "n11"]) {
+    await expect(treeEdge(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(treeNode(page, "n1")).toHaveAttribute("data-traced", "faint");
+  await expect(treeEdge(page, "n1")).toHaveAttribute("data-traced", "faint");
+  const faded = await treeNode(page, "n1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+
+  await page.mouse.move(0, 0);
+  await treeNode(page, "n6").focus();
+  await expect(treeNode(page, "n1")).toHaveAttribute("data-traced", "trace");
+  await expect(treeNode(page, "n4")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(treeNode(page, "n6")).toHaveAttribute("aria-pressed", "true");
+  await expect(treeNode(page, "n1")).toHaveAttribute(
+    "aria-label",
+    "Chicago, path New York → Chicago, explored, Covered (rule met), lb 5470, left the queue 2, 3 children",
+  );
+});
+
+test("Search Tree: on a phone a wide tree opens zoomed in on the step, and stepping keeps it in view", async ({
+  page,
+}) => {
+  const capture = N_QUEENS_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, 0);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.locator("#workbench-panel-close").click();
+  // A new layout (another run) opens zoomed in at the phone's width; Fit shows it whole.
+  await page.locator("#workbench-run").click();
+  const zoom = page.locator(`${TREE}-zoom`);
+  await expect.poll(async () => Number(await zoom.getAttribute("data-zoom"))).toBeGreaterThan(1.5);
+  await expectFits(page, `${TREE}-svg`);
+  const inView = (id) =>
+    page.locator(`${TREE}-svg`).evaluate((svg, nodeId) => {
+      const node = svg.querySelector(`[data-node-id="${nodeId}"]`);
+      const a = node.getBoundingClientRect();
+      const b = svg.getBoundingClientRect();
+      return (
+        a.left >= b.left - 1 &&
+        a.right <= b.right + 1 &&
+        a.top >= b.top - 1 &&
+        a.bottom <= b.bottom + 1
+      );
+    }, id);
+  // The run opens on its last frame: its answer's leaf is in view.
+  const answer = capture.frames.at(-1).nodes.findLast((node) => node.state === "Solution");
+  expect(await inView(answer.id)).toBe(true);
+  // Stepping back through the run keeps each step's node in view.
+  for (let index = capture.frames.length - 2; index >= capture.frames.length - 6; index -= 1) {
+    await page.locator("#workbench-steps-previous").click();
+    const [focus] = capture.frames[index].focus;
+    await expect.poll(() => inView(focus)).toBe(true);
+  }
+  await page.locator(`${TREE}-zoom-reset`).click();
+  await expect(zoom).toHaveAttribute("data-zoom", "1.00");
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Search Tree: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await openTree(page, TSP_SEARCH_TREE_FRAMES);
+      await runToFrame(page, TSP_SEARCH_TREE_FRAMES, TSP_SEARCH_TREE_FRAMES.frames.length - 1);
+      await page.setViewportSize({ width, height: 900 });
+      const svg = page.locator(`${TREE}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${TREE}-svg`);
+      // The notes follow the theme: no dark-on-dark, no light-on-white.
+      const ink = await treeNode(page, "n0")
+        .locator("[data-note]")
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+/**
+ * Every place where two texts of the tree meet, or a text spills out of its node or crosses a
+ * node it doesn't belong to, or an edge runs through a text other than its own ends' labels.
+ * @returns {Promise<string[]>} One line per collision; empty when the picture is clear.
+ */
+function treeCollisions(page) {
+  return page.locator(`${TREE}-svg`).evaluate((svg) => {
+    const found = [];
+    const texts = [
+      ...svg.querySelectorAll("[data-node-id] [data-label], [data-node-id] [data-note]"),
+    ].map((text) => ({
+      name: `${text.closest("[data-node-id]").dataset.nodeId} "${text.textContent}"`,
+      owner: text.closest("[data-node-id]").dataset.nodeId,
+      box: text.getBBox(),
+    }));
+    const bodies = [...svg.querySelectorAll("[data-node-id] [data-body]")].map((body) => ({
+      owner: body.closest("[data-node-id]").dataset.nodeId,
+      box: body.getBBox(),
+    }));
+    const meets = (a, b) =>
+      a.x < b.x + b.width - 0.5 &&
+      b.x < a.x + a.width - 0.5 &&
+      a.y < b.y + b.height - 0.5 &&
+      b.y < a.y + a.height - 0.5;
+    texts.forEach((a, i) => {
+      texts.forEach((b, j) => {
+        if (j > i && meets(a.box, b.box)) found.push(`${a.name} meets ${b.name}`);
+      });
+      for (const body of bodies) {
+        if (body.owner !== a.owner && meets(a.box, body.box)) {
+          found.push(`${a.name} on node ${body.owner}`);
+        }
+      }
+    });
+    for (const body of bodies) {
+      const label = texts.find((text) => text.owner === body.owner);
+      if (
+        label &&
+        (label.box.x < body.box.x - 0.5 ||
+          label.box.x + label.box.width > body.box.x + body.box.width + 0.5)
+      ) {
+        found.push(`${label.name} spills out of its node`);
+      }
+    }
+    for (const path of svg.querySelectorAll("[data-edge-into]")) {
+      const child = path.dataset.edgeInto;
+      const length = path.getTotalLength();
+      for (const text of texts) {
+        if (text.owner === child) continue;
+        const inner = {
+          x: text.box.x + 1,
+          y: text.box.y + 1,
+          width: text.box.width - 2,
+          height: text.box.height - 2,
+        };
+        for (let at = 0; at <= length; at += 2) {
+          const point = path.getPointAtLength(at);
+          if (
+            point.x > inner.x &&
+            point.x < inner.x + inner.width &&
+            point.y > inner.y &&
+            point.y < inner.y + inner.height
+          ) {
+            found.push(`edge into ${child} runs through ${text.name}`);
+            break;
+          }
+        }
+      }
+    }
+    return found;
+  });
+}
+
+for (const [key, capture] of Object.entries(TREE_CASES)) {
+  test(`Search Tree: the ${key} capture's labels and notes never meet, at every step`, async ({
+    page,
+  }) => {
+    // Every step of the run, checked piece by piece.
+    test.slow();
+    await openTree(page, capture);
+    await runToFrame(page, capture, 0);
+    expect(await treeCollisions(page)).toEqual([]);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      expect(await treeCollisions(page)).toEqual([]);
     }
   });
 }
