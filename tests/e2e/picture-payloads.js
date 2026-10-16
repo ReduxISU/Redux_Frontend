@@ -4,8 +4,9 @@
 // (local/viz-integration) on 2026-10-14, so tests/e2e/picture-renderers.spec.js can answer the
 // picture requests itself and CI needs no backend that serves format=frames.
 // DFA Acceptance: the problem's default instance, 3 frames with the DFASolver. The Graph
-// pictures (#201), the Bipartite Graph pictures (#203) and the Layered Graph pictures (#205)
-// follow at the end, each with its instance and solver.
+// pictures (#201), the Bipartite Graph pictures (#203), the Layered Graph pictures (#205), the
+// Automaton pictures (#204) and the Flow Network pictures (#206) follow at the end, each with its
+// instance and solver.
 
 /** format=frames for DFATableVisualization: picture type Table (has a renderer). */
 export const DFA_TABLE_FRAMES = {
@@ -8059,6 +8060,1060 @@ export const NFA_DEFAULT_AUTOMATON_FRAMES = {
         },
       },
       edges: {},
+      ok: true,
+    },
+  ],
+};
+
+// #206: Flow Network pictures (Minimum S-T Cut, MinSTCutSolver: Edmonds-Karp), captured the same
+// way on 2026-10-15 from the published local build of local/viz-integration.
+
+// The problem default instance ({1,2,3,4},{((1,2),10),((1,3),2),((2,4),3),((3,4),5)},1,4): two
+// augmenting paths, then the cut S = {1,2}.
+export const MIN_CUT_FLOW_FRAMES = {
+  type: "FlowNetwork",
+  payload: {
+    kind: "flowNetwork",
+    layout: "sourceToSink",
+    rule: "minimumSTCut",
+    source: "1",
+    sink: "4",
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 1,
+        row: 1,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 2,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        capacity: 10,
+      },
+      {
+        id: "1>3",
+        a: "1",
+        b: "3",
+        capacity: 2,
+      },
+      {
+        id: "2>4",
+        a: "2",
+        b: "4",
+        capacity: 3,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        capacity: 5,
+      },
+    ],
+    layers: [["1"], ["2", "3"], ["4"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption:
+        "No flow yet. Each step finds a path from 1 to 4 with room left and pushes as much as it can.",
+      focus: [],
+      nodes: {},
+      edges: {},
+      flow: {
+        "1>2": 0,
+        "1>3": 0,
+        "2>4": 0,
+        "3>4": 0,
+      },
+      value: 0,
+      path: [],
+    },
+    {
+      event: "Accept",
+      caption: "Path 1: push 3 along 1 → 2 → 4. 2 → 4 is now full. Flow is now 3.",
+      focus: ["1", "1>2", "2", "2>4", "4"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "2>4": {
+          state: "ElementHighlight",
+        },
+      },
+      flow: {
+        "1>2": 3,
+        "1>3": 0,
+        "2>4": 3,
+        "3>4": 0,
+      },
+      value: 3,
+      path: [
+        {
+          edge: "1>2",
+          forward: true,
+          units: 3,
+        },
+        {
+          edge: "2>4",
+          forward: true,
+          units: 3,
+        },
+      ],
+    },
+    {
+      event: "Accept",
+      caption: "Path 2: push 2 along 1 → 3 → 4. 1 → 3 is now full. Flow is now 5.",
+      focus: ["1", "1>3", "3", "3>4", "4"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "ElementHighlight",
+        },
+        "2>4": {
+          state: "Covered",
+        },
+        "3>4": {
+          state: "ElementHighlight",
+        },
+      },
+      flow: {
+        "1>2": 3,
+        "1>3": 2,
+        "2>4": 3,
+        "3>4": 2,
+      },
+      value: 5,
+      path: [
+        {
+          edge: "1>3",
+          forward: true,
+          units: 2,
+        },
+        {
+          edge: "3>4",
+          forward: true,
+          units: 2,
+        },
+      ],
+    },
+    {
+      event: "Done",
+      caption:
+        "No augmenting path is left. The nodes still reachable from 1 form S = {1,2}. The 2 edges from S to T are full and add up to 5, equal to the maximum flow.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+      },
+      flow: {
+        "1>2": 3,
+        "1>3": 2,
+        "2>4": 3,
+        "3>4": 2,
+      },
+      value: 5,
+      path: [],
+      groups: {
+        1: 0,
+        2: 0,
+        3: 1,
+        4: 1,
+      },
+      cut: ["1>3", "2>4"],
+      ok: true,
+    },
+  ],
+};
+
+// ({s,a,b,c,d,t},{((s,a),1),((s,c),1),((a,b),1),((a,d),1),((c,b),1),((b,t),1),((d,t),1)},s,t): the
+// second path runs backward over a>b, taking back the flow the first sent there.
+export const MIN_CUT_BACKWARD_FLOW_FRAMES = {
+  type: "FlowNetwork",
+  payload: {
+    kind: "flowNetwork",
+    layout: "sourceToSink",
+    rule: "minimumSTCut",
+    source: "s",
+    sink: "t",
+    nodes: [
+      {
+        id: "s",
+        label: "s",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "a",
+        label: "a",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "b",
+        label: "b",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "c",
+        label: "c",
+        layer: 1,
+        row: 1,
+      },
+      {
+        id: "d",
+        label: "d",
+        layer: 2,
+        row: 1,
+      },
+      {
+        id: "t",
+        label: "t",
+        layer: 3,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "s>a",
+        a: "s",
+        b: "a",
+        capacity: 1,
+      },
+      {
+        id: "s>c",
+        a: "s",
+        b: "c",
+        capacity: 1,
+      },
+      {
+        id: "a>b",
+        a: "a",
+        b: "b",
+        capacity: 1,
+      },
+      {
+        id: "a>d",
+        a: "a",
+        b: "d",
+        capacity: 1,
+      },
+      {
+        id: "c>b",
+        a: "c",
+        b: "b",
+        capacity: 1,
+      },
+      {
+        id: "b>t",
+        a: "b",
+        b: "t",
+        capacity: 1,
+      },
+      {
+        id: "d>t",
+        a: "d",
+        b: "t",
+        capacity: 1,
+      },
+    ],
+    layers: [["s"], ["a", "c"], ["b", "d"], ["t"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption:
+        "No flow yet. Each step finds a path from s to t with room left and pushes as much as it can.",
+      focus: [],
+      nodes: {},
+      edges: {},
+      flow: {
+        "a>b": 0,
+        "a>d": 0,
+        "b>t": 0,
+        "c>b": 0,
+        "d>t": 0,
+        "s>a": 0,
+        "s>c": 0,
+      },
+      value: 0,
+      path: [],
+    },
+    {
+      event: "Accept",
+      caption:
+        "Path 1: push 1 along s → a → b → t. s → a, a → b and b → t are now full. Flow is now 1.",
+      focus: ["s", "s>a", "a", "a>b", "b", "b>t", "t"],
+      nodes: {
+        a: {
+          state: "ElementHighlight",
+        },
+        b: {
+          state: "ElementHighlight",
+        },
+        s: {
+          state: "ElementHighlight",
+        },
+        t: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "a>b": {
+          state: "ElementHighlight",
+        },
+        "b>t": {
+          state: "ElementHighlight",
+        },
+        "s>a": {
+          state: "ElementHighlight",
+        },
+      },
+      flow: {
+        "a>b": 1,
+        "a>d": 0,
+        "b>t": 1,
+        "c>b": 0,
+        "d>t": 0,
+        "s>a": 1,
+        "s>c": 0,
+      },
+      value: 1,
+      path: [
+        {
+          edge: "s>a",
+          forward: true,
+          units: 1,
+        },
+        {
+          edge: "a>b",
+          forward: true,
+          units: 1,
+        },
+        {
+          edge: "b>t",
+          forward: true,
+          units: 1,
+        },
+      ],
+    },
+    {
+      event: "Accept",
+      caption:
+        "Path 2: push 1 along s → c → b ⇠ a → d → t. It runs backward over a → b, taking back flow sent there earlier. s → c, c → b, a → d and d → t are now full. Flow is now 2.",
+      focus: ["s", "s>c", "c", "c>b", "b", "a>b", "a", "a>d", "d", "d>t", "t"],
+      nodes: {
+        a: {
+          state: "ElementHighlight",
+        },
+        b: {
+          state: "ElementHighlight",
+        },
+        c: {
+          state: "ElementHighlight",
+        },
+        d: {
+          state: "ElementHighlight",
+        },
+        s: {
+          state: "ElementHighlight",
+        },
+        t: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "a>b": {
+          state: "ElementHighlight",
+        },
+        "a>d": {
+          state: "ElementHighlight",
+        },
+        "b>t": {
+          state: "Covered",
+        },
+        "c>b": {
+          state: "ElementHighlight",
+        },
+        "d>t": {
+          state: "ElementHighlight",
+        },
+        "s>a": {
+          state: "Covered",
+        },
+        "s>c": {
+          state: "ElementHighlight",
+        },
+      },
+      flow: {
+        "a>b": 0,
+        "a>d": 1,
+        "b>t": 1,
+        "c>b": 1,
+        "d>t": 1,
+        "s>a": 1,
+        "s>c": 1,
+      },
+      value: 2,
+      path: [
+        {
+          edge: "s>c",
+          forward: true,
+          units: 1,
+        },
+        {
+          edge: "c>b",
+          forward: true,
+          units: 1,
+        },
+        {
+          edge: "a>b",
+          forward: false,
+          units: 1,
+        },
+        {
+          edge: "a>d",
+          forward: true,
+          units: 1,
+        },
+        {
+          edge: "d>t",
+          forward: true,
+          units: 1,
+        },
+      ],
+    },
+    {
+      event: "Done",
+      caption:
+        "No augmenting path is left. The nodes still reachable from s form S = {s}. The 2 edges from S to T are full and add up to 2, equal to the maximum flow.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "s>a": {
+          state: "Solution",
+        },
+        "s>c": {
+          state: "Solution",
+        },
+      },
+      flow: {
+        "a>b": 0,
+        "a>d": 1,
+        "b>t": 1,
+        "c>b": 1,
+        "d>t": 1,
+        "s>a": 1,
+        "s>c": 1,
+      },
+      value: 2,
+      path: [],
+      groups: {
+        a: 1,
+        b: 1,
+        c: 1,
+        d: 1,
+        s: 0,
+        t: 1,
+      },
+      cut: ["s>a", "s>c"],
+      ok: true,
+    },
+  ],
+};
+
+// ({s,a,b,c,t},{((s,a),4),((s,b),4),((a,c),3),((b,c),3),((a,b),1),((c,t),5),((b,t),2)},s,t): the
+// cut is not the smallest edge; b>t runs past c, so it is bowed around it.
+export const MIN_CUT_BOWED_FLOW_FRAMES = {
+  type: "FlowNetwork",
+  payload: {
+    kind: "flowNetwork",
+    layout: "sourceToSink",
+    rule: "minimumSTCut",
+    source: "s",
+    sink: "t",
+    nodes: [
+      {
+        id: "s",
+        label: "s",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "a",
+        label: "a",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "b",
+        label: "b",
+        layer: 1,
+        row: 1,
+      },
+      {
+        id: "c",
+        label: "c",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "t",
+        label: "t",
+        layer: 3,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "s>a",
+        a: "s",
+        b: "a",
+        capacity: 4,
+      },
+      {
+        id: "s>b",
+        a: "s",
+        b: "b",
+        capacity: 4,
+      },
+      {
+        id: "a>c",
+        a: "a",
+        b: "c",
+        capacity: 3,
+      },
+      {
+        id: "b>c",
+        a: "b",
+        b: "c",
+        capacity: 3,
+      },
+      {
+        id: "a>b",
+        a: "a",
+        b: "b",
+        capacity: 1,
+      },
+      {
+        id: "c>t",
+        a: "c",
+        b: "t",
+        capacity: 5,
+      },
+      {
+        id: "b>t",
+        a: "b",
+        b: "t",
+        capacity: 2,
+      },
+    ],
+    layers: [["s"], ["a", "b"], ["c"], ["t"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption:
+        "No flow yet. Each step finds a path from s to t with room left and pushes as much as it can.",
+      focus: [],
+      nodes: {},
+      edges: {},
+      flow: {
+        "a>b": 0,
+        "a>c": 0,
+        "b>c": 0,
+        "b>t": 0,
+        "c>t": 0,
+        "s>a": 0,
+        "s>b": 0,
+      },
+      value: 0,
+      path: [],
+    },
+    {
+      event: "Accept",
+      caption: "Path 1: push 2 along s → b → t. b → t is now full. Flow is now 2.",
+      focus: ["s", "s>b", "b", "b>t", "t"],
+      nodes: {
+        b: {
+          state: "ElementHighlight",
+        },
+        s: {
+          state: "ElementHighlight",
+        },
+        t: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "b>t": {
+          state: "ElementHighlight",
+        },
+        "s>b": {
+          state: "ElementHighlight",
+        },
+      },
+      flow: {
+        "a>b": 0,
+        "a>c": 0,
+        "b>c": 0,
+        "b>t": 2,
+        "c>t": 0,
+        "s>a": 0,
+        "s>b": 2,
+      },
+      value: 2,
+      path: [
+        {
+          edge: "s>b",
+          forward: true,
+          units: 2,
+        },
+        {
+          edge: "b>t",
+          forward: true,
+          units: 2,
+        },
+      ],
+    },
+    {
+      event: "Accept",
+      caption: "Path 2: push 3 along s → a → c → t. a → c is now full. Flow is now 5.",
+      focus: ["s", "s>a", "a", "a>c", "c", "c>t", "t"],
+      nodes: {
+        a: {
+          state: "ElementHighlight",
+        },
+        c: {
+          state: "ElementHighlight",
+        },
+        s: {
+          state: "ElementHighlight",
+        },
+        t: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "a>c": {
+          state: "ElementHighlight",
+        },
+        "b>t": {
+          state: "Covered",
+        },
+        "c>t": {
+          state: "ElementHighlight",
+        },
+        "s>a": {
+          state: "ElementHighlight",
+        },
+      },
+      flow: {
+        "a>b": 0,
+        "a>c": 3,
+        "b>c": 0,
+        "b>t": 2,
+        "c>t": 3,
+        "s>a": 3,
+        "s>b": 2,
+      },
+      value: 5,
+      path: [
+        {
+          edge: "s>a",
+          forward: true,
+          units: 3,
+        },
+        {
+          edge: "a>c",
+          forward: true,
+          units: 3,
+        },
+        {
+          edge: "c>t",
+          forward: true,
+          units: 3,
+        },
+      ],
+    },
+    {
+      event: "Accept",
+      caption: "Path 3: push 2 along s → b → c → t. s → b and c → t are now full. Flow is now 7.",
+      focus: ["s", "s>b", "b", "b>c", "c", "c>t", "t"],
+      nodes: {
+        b: {
+          state: "ElementHighlight",
+        },
+        c: {
+          state: "ElementHighlight",
+        },
+        s: {
+          state: "ElementHighlight",
+        },
+        t: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "a>c": {
+          state: "Covered",
+        },
+        "b>c": {
+          state: "ElementHighlight",
+        },
+        "b>t": {
+          state: "Covered",
+        },
+        "c>t": {
+          state: "ElementHighlight",
+        },
+        "s>b": {
+          state: "ElementHighlight",
+        },
+      },
+      flow: {
+        "a>b": 0,
+        "a>c": 3,
+        "b>c": 2,
+        "b>t": 2,
+        "c>t": 5,
+        "s>a": 3,
+        "s>b": 4,
+      },
+      value: 7,
+      path: [
+        {
+          edge: "s>b",
+          forward: true,
+          units: 2,
+        },
+        {
+          edge: "b>c",
+          forward: true,
+          units: 2,
+        },
+        {
+          edge: "c>t",
+          forward: true,
+          units: 2,
+        },
+      ],
+    },
+    {
+      event: "Done",
+      caption:
+        "No augmenting path is left. The nodes still reachable from s form S = {s,a,b,c}. The 2 edges from S to T are full and add up to 7, equal to the maximum flow.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "b>t": {
+          state: "Solution",
+        },
+        "c>t": {
+          state: "Solution",
+        },
+      },
+      flow: {
+        "a>b": 0,
+        "a>c": 3,
+        "b>c": 2,
+        "b>t": 2,
+        "c>t": 5,
+        "s>a": 3,
+        "s>b": 4,
+      },
+      value: 7,
+      path: [],
+      groups: {
+        a: 0,
+        b: 0,
+        c: 0,
+        s: 0,
+        t: 1,
+      },
+      cut: ["c>t", "b>t"],
+      ok: true,
+    },
+  ],
+};
+
+// ({1,2,3},{((1,2),2),((1,2),5),((2,3),4),((3,1),1)},1,3): 1>2 listed twice (one edge of capacity
+// 7, label 2,5), and 3>1 runs from T back to S, so it ends Untraveled.
+export const MIN_CUT_PARALLEL_FLOW_FRAMES = {
+  type: "FlowNetwork",
+  payload: {
+    kind: "flowNetwork",
+    layout: "sourceToSink",
+    rule: "minimumSTCut",
+    source: "1",
+    sink: "3",
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        capacity: 7,
+        label: "2,5",
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        capacity: 4,
+      },
+      {
+        id: "3>1",
+        a: "3",
+        b: "1",
+        capacity: 1,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption:
+        "No flow yet. Each step finds a path from 1 to 3 with room left and pushes as much as it can.",
+      focus: [],
+      nodes: {},
+      edges: {},
+      flow: {
+        "1>2": 0,
+        "2>3": 0,
+        "3>1": 0,
+      },
+      value: 0,
+      path: [],
+    },
+    {
+      event: "Accept",
+      caption: "Path 1: push 4 along 1 → 2 → 3. 2 → 3 is now full. Flow is now 4.",
+      focus: ["1", "1>2", "2", "2>3", "3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "2>3": {
+          state: "ElementHighlight",
+        },
+      },
+      flow: {
+        "1>2": 4,
+        "2>3": 4,
+        "3>1": 0,
+      },
+      value: 4,
+      path: [
+        {
+          edge: "1>2",
+          forward: true,
+          units: 4,
+        },
+        {
+          edge: "2>3",
+          forward: true,
+          units: 4,
+        },
+      ],
+    },
+    {
+      event: "Done",
+      caption:
+        "No augmenting path is left. The nodes still reachable from 1 form S = {1,2}. The only edge from S to T is full, and its capacity, 4, equals the maximum flow.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "2>3": {
+          state: "Solution",
+        },
+        "3>1": {
+          state: "Untraveled",
+        },
+      },
+      flow: {
+        "1>2": 4,
+        "2>3": 4,
+        "3>1": 0,
+      },
+      value: 4,
+      path: [],
+      groups: {
+        1: 0,
+        2: 0,
+        3: 1,
+      },
+      cut: ["2>3"],
+      ok: true,
+    },
+  ],
+};
+
+// ({1,2,3,4},{((1,2),3),((3,4),2)},1,4): no path from 1 to 4, so the flow and the cut are 0 with no
+// cut edges.
+export const MIN_CUT_NO_PATH_FLOW_FRAMES = {
+  type: "FlowNetwork",
+  payload: {
+    kind: "flowNetwork",
+    layout: "sourceToSink",
+    rule: "minimumSTCut",
+    source: "1",
+    sink: "4",
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 1,
+        row: 1,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 2,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        capacity: 3,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        capacity: 2,
+      },
+    ],
+    layers: [["1"], ["2", "3"], ["4"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption:
+        "No flow yet. Each step finds a path from 1 to 4 with room left and pushes as much as it can.",
+      focus: [],
+      nodes: {},
+      edges: {},
+      flow: {
+        "1>2": 0,
+        "3>4": 0,
+      },
+      value: 0,
+      path: [],
+    },
+    {
+      event: "Done",
+      caption:
+        "There is no path from 1 to 4 with room, so the maximum flow and the minimum cut are both 0.",
+      focus: [],
+      nodes: {},
+      edges: {},
+      flow: {
+        "1>2": 0,
+        "3>4": 0,
+      },
+      value: 0,
+      path: [],
+      groups: {
+        1: 0,
+        2: 0,
+        3: 1,
+        4: 1,
+      },
+      cut: [],
       ok: true,
     },
   ],
