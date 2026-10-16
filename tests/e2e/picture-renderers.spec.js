@@ -23,13 +23,18 @@
 // steps and the One path picker, the tape, the same plain picture before Run and fit.
 // #206: the Flow Network renderer (Minimum S-T Cut) after that: flow / capacity on every edge,
 // the augmenting paths and back arcs, and the cut's S and T sides.
-// #202: the Grouped Graph renderer (SAT and 3SAT's clause graph) last, with the same
+// #202: the Grouped Graph renderer (SAT and 3SAT's clause graph) after that, with the same
 // plain picture before Run and the same fit and zoom.
+// #207: the Packing renderer (Partition, Subset Sum, Knapsack, Bin Packing) last: the item pool,
+// each container's lines as rows to scale, every step's placement and totals, and no text that
+// meets another.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel } from "./helpers";
 import {
   ARC_SET_LAYERED_FRAMES,
+  BIN_PACKING_FFD_SHORT_PACKING_FRAMES,
+  BIN_PACKING_PACKING_FRAMES,
   CLIQUE_COVER_GRAPH_FRAMES,
   CLIQUE_FAILED_GRAPH_FRAMES,
   CLIQUE_GRAPH_FRAMES,
@@ -42,6 +47,8 @@ import {
   EXACT_COVER_BIPARTITE_FRAMES,
   HITTING_SET_BIPARTITE_FRAMES,
   ILP_TABLE_FRAMES_WITH_BLANK,
+  KNAPSACK_OVER_PACKING_FRAMES,
+  KNAPSACK_PACKING_FRAMES,
   LARGE_GRAPH_FRAMES,
   MAX_CUT_GRAPH_FRAMES,
   MIN_CUT_BACKWARD_FLOW_FRAMES,
@@ -53,6 +60,8 @@ import {
   NFA_DEFAULT_AUTOMATON_FRAMES,
   NFA_SUBSET_AUTOMATON_FRAMES,
   NODE_SET_LAYERED_FRAMES,
+  PARTITION_ODD_PACKING_FRAMES,
+  PARTITION_PACKING_FRAMES,
   SAT3_CLAUSE_GRAPH_FRAMES,
   SAT3_FACTOR_GRAPH_FRAMES,
   SAT3_FAILED_CLAUSE_GRAPH_FRAMES,
@@ -63,6 +72,9 @@ import {
   SSSP_PARALLEL_LAYERED_FRAMES,
   SSSP_UNREACHABLE_LAYERED_FRAMES,
   STEINER_GRAPH_FRAMES,
+  SUBSET_SUM_APPROX_PACKING_FRAMES,
+  SUBSET_SUM_CLIPPED_PACKING_FRAMES,
+  SUBSET_SUM_PACKING_FRAMES,
   TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES,
   TOPOLOGICAL_SORT_LAYERED_FRAMES,
 } from "./picture-payloads";
@@ -2961,6 +2973,445 @@ for (const [width, height] of [
     await page.locator(`${CLAUSES}-zoom-in`).click();
     const zoomed = await areaSizes(page, svg);
     expect(zoomed.viewAspect).toBeCloseTo(zoomed.width / zoomed.height, 2);
+  });
+}
+
+// --- #207: the Packing renderer (Partition, Subset Sum, Knapsack, Bin Packing) ---------------
+
+const PACKING = "#workbench-source-frames-packing";
+
+/**
+ * Each packing capture. Only Partition has a visualization in the catalog CI's backend serves
+ * (ghcr.io/reduxisu/redux:latest has none for Subset Sum, Knapsack or Bin Packing yet), so every
+ * capture is drawn on the Partition page: the picture is the capture's, whatever the page.
+ */
+const PACKING_CASES = {
+  partition: PARTITION_PACKING_FRAMES,
+  partitionOdd: PARTITION_ODD_PACKING_FRAMES,
+  subsetSum: SUBSET_SUM_PACKING_FRAMES,
+  subsetSumApprox: SUBSET_SUM_APPROX_PACKING_FRAMES,
+  subsetSumClipped: SUBSET_SUM_CLIPPED_PACKING_FRAMES,
+  knapsack: KNAPSACK_PACKING_FRAMES,
+  knapsackOver: KNAPSACK_OVER_PACKING_FRAMES,
+  binPacking: BIN_PACKING_PACKING_FRAMES,
+  binPackingShort: BIN_PACKING_FFD_SHORT_PACKING_FRAMES,
+};
+
+/** Sets every visualization's picture type in allInfo, so any problem page asks for frames. */
+async function setEveryPictureType(page, pictureType) {
+  await page.route(ALL_INFO_REQUEST, async (route) => {
+    const response = await route.fetch();
+    const info = await response.json();
+    for (const entry of Object.values(info)) {
+      if (entry && typeof entry === "object" && "visualizationName" in entry) {
+        entry.pictureType = pictureType;
+      }
+    }
+    await route.fulfill({ response, json: info });
+  });
+}
+
+async function openPacking(page, capture) {
+  await setEveryPictureType(page, "Packing");
+  await openPicture(page, "Partition", capture);
+  await expect(page.locator(`${PACKING}-packing`)).toBeVisible();
+}
+
+const packingItem = (page, id) => page.locator(`${PACKING}-packing [data-item-id="${id}"]`);
+const packingRows = (page, container) =>
+  page.locator(`${PACKING}-packing [data-container-id="${container}"]`);
+
+/** The rows each container is drawn as: one per line it has (a knapsack's weight and value). */
+function rowsOf(container) {
+  return ["target", "limit", "atLeast"].filter((key) => typeof container[key] === "number");
+}
+
+/** Frame `index`'s states, placement and totals, checked piece by piece against the picture. */
+async function expectPackingFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const { items, containers } = capture.payload;
+  for (const [position, item] of items.entries()) {
+    const drawn = packingItem(page, item.id);
+    await expect(drawn).toHaveAttribute("data-state", frame.items[item.id]?.state ?? "Background");
+    await expect(drawn).toHaveAttribute("data-container", String(frame.assign[position]));
+  }
+  for (const [position, container] of containers.entries()) {
+    const rows = packingRows(page, container.id);
+    await expect(rows).toHaveCount(rowsOf(container).length);
+    for (const row of await rows.all()) {
+      const measure = await row.getAttribute("data-measure");
+      await expect(row).toHaveAttribute(
+        "data-state",
+        frame.containers[container.id]?.state ?? "Background",
+      );
+      await expect(row).toHaveAttribute("data-total", String(frame.totals[position][measure]));
+      // One piece for each item placed in the container, in instance order.
+      const placed = items.filter((_, i) => frame.assign[i] === position).map((item) => item.id);
+      expect(
+        await row
+          .locator("[data-piece-for]")
+          .evaluateAll((pieces) => pieces.map((piece) => piece.getAttribute("data-piece-for"))),
+      ).toEqual(placed);
+    }
+  }
+}
+
+for (const [key, capture] of Object.entries(PACKING_CASES)) {
+  test(`Packing: the ${key} capture draws every item and container, and every step's placement`, async ({
+    page,
+  }) => {
+    const { payload } = capture;
+    await openPacking(page, capture);
+    const packing = page.locator(`${PACKING}-packing`);
+    await expect(packing).toHaveAttribute("data-packing-rule", payload.rule);
+    await expect(packing.locator("[data-item-id]")).toHaveCount(payload.items.length);
+    for (const item of payload.items) {
+      await expect(packingItem(page, item.id)).toContainText(item.label);
+    }
+    const rowCount = payload.containers.reduce((sum, box) => sum + rowsOf(box).length, 0);
+    await expect(packing.locator("[data-row-id]")).toHaveCount(rowCount);
+    for (const piece of await packing.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("aria-label", /^(Item |\S)/);
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // Nothing here can be dragged (#250 leaves the packing alone).
+    await expect(page.locator(`${PACKING}-layout-reset`)).toHaveCount(0);
+    await expect(page.locator(`${PACKING}-svg`)).not.toHaveAttribute("data-editable", /./);
+
+    await runToFrame(page, capture, 0);
+    await expectPackingFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectPackingFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+  });
+}
+
+/** Each item tile's drawn box, by id, in viewBox units. */
+function tileBoxes(page) {
+  return page.locator(`${PACKING}-packing [data-item-id]`).evaluateAll((items) =>
+    Object.fromEntries(
+      items.map((item) => {
+        const box = item.querySelector("[data-body]").getBBox();
+        return [item.getAttribute("data-item-id"), `${box.x},${box.y},${box.width}`];
+      }),
+    ),
+  );
+}
+
+test("Packing: before Run the picture is the plain instance, and step 1 keeps every tile in place", async ({
+  page,
+}) => {
+  const capture = PARTITION_PACKING_FRAMES;
+  await openPacking(page, capture);
+  const packing = page.locator(`${PACKING}-packing`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(packing.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(packing.locator("[data-group]")).toHaveCount(0);
+  await expect(packing.locator("[data-container]")).toHaveCount(0);
+  await expect(packing.locator("[data-piece-for]")).toHaveCount(0);
+  await expect(packing.locator("[data-total]")).toHaveCount(0);
+  await expect(packing.locator("[data-beam]")).toHaveAttribute("data-tilt", "0.0");
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  // The lines are the instance's, so they show: half the total on both sides.
+  await expect(packing.locator('[data-line-label="half = 5"]')).toHaveCount(2);
+  await expect(packing.locator('[data-row-sub=""]').first()).toHaveText("needs 5");
+
+  const before = await tileBoxes(page);
+  await runToFrame(page, capture, 0);
+  await expect(packing.locator("[data-piece-for]").first()).toBeVisible();
+  expect(await tileBoxes(page)).toEqual(before);
+  for (let index = 1; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  expect(await tileBoxes(page)).toEqual(before);
+});
+
+test("Packing: Partition colors each item by its side, and the beam tips toward the heavier side", async ({
+  page,
+}) => {
+  const capture = PARTITION_PACKING_FRAMES;
+  await openPacking(page, capture);
+  await runToFrame(page, capture, 0);
+  const frame = capture.frames[0];
+  // The first try puts only 1 on S1: S1 holds less, so the beam tips down on S2's side.
+  for (const [position, item] of capture.payload.items.entries()) {
+    await expect(packingItem(page, item.id)).toHaveAttribute(
+      "data-group",
+      String(frame.assign[position]),
+    );
+  }
+  const beam = page.locator(`${PACKING}-packing [data-beam]`);
+  const [s1, s2] = frame.totals.map((total) => total.size);
+  expect(s1).toBeLessThan(s2);
+  expect(Number(await beam.getAttribute("data-tilt"))).toBeGreaterThan(0);
+  await expect(beam.locator('[data-beam-side="0"]')).toHaveText(`S1 ${s1}`);
+  // Both sides miss half while a split is judged: Rejected, with ✗.
+  await expect(packingRows(page, "C1")).toHaveAttribute("data-state", "Rejected");
+  await expect(packingRows(page, "C1").locator("[data-readout]")).toHaveText(`${s1} ✗`);
+
+  // The answer: both sides Covered at 5, ✓, the beam level, every item green.
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("End");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  for (const id of ["C1", "C2"]) {
+    await expect(packingRows(page, id)).toHaveAttribute("data-state", "Covered");
+    await expect(packingRows(page, id)).toHaveAttribute("data-verdict", "met");
+    await expect(packingRows(page, id).locator("[data-readout]")).toHaveText("5 ✓");
+  }
+  await expect(beam).toHaveAttribute("data-tilt", "0.0");
+  await expect(
+    page.locator(`${PACKING}-packing [data-item-id]:not([data-state="Solution"])`),
+  ).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("S1 (items on this side)");
+  await expect(legendBody(page)).toContainText("S2 (items on this side)");
+  await expect(legendBody(page)).toContainText(
+    "Dashed line (the number a total must reach or stay within)",
+  );
+});
+
+test("Packing: Knapsack draws a Weight row and a Value row, and a try past W turns its piece red", async ({
+  page,
+}) => {
+  const capture = KNAPSACK_OVER_PACKING_FRAMES;
+  await openPacking(page, capture);
+  const rows = packingRows(page, "C1");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toHaveAttribute("data-measure", "size");
+  await expect(rows.nth(0)).toHaveAttribute("data-line-kind", "limit");
+  await expect(rows.nth(0).locator("[data-row-label]")).toContainText("Weight");
+  await expect(rows.nth(0).locator("[data-line-label]")).toHaveText("W = 50");
+  await expect(rows.nth(1)).toHaveAttribute("data-measure", "value");
+  await expect(rows.nth(1).locator("[data-row-label]")).toContainText("Value");
+  await expect(rows.nth(1).locator("[data-line-label]")).toHaveText("V = 250");
+  await expect(page.locator(`${PACKING}-packing [data-heading="containers"]`)).toHaveText(
+    "THE KNAPSACK",
+  );
+
+  // The try of all three items weighs 60: the piece that runs past W is red, the weight is ✗ and
+  // the value (280, at least 250) is ✓.
+  const index = capture.frames.findIndex((frame) => frame.totals[0].size > 50);
+  expect(capture.frames[index].totals[0]).toEqual({ size: 60, value: 280 });
+  await runToFrame(page, capture, index);
+  await expect(rows.nth(0)).toHaveAttribute("data-state", "Rejected");
+  await expect(rows.nth(0).locator("[data-readout]")).toHaveText("60 ✗");
+  await expect(rows.nth(1).locator("[data-readout]")).toHaveText("280 ✓");
+  await expect(rows.nth(0).locator('[data-piece-for="I3"]')).toHaveAttribute("data-over", "true");
+  await expect(rows.nth(0).locator('[data-piece-for="I1"]')).not.toHaveAttribute("data-over", /./);
+  await expect(rows.nth(1).locator("[data-over]")).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("Red piece (past the limit)");
+  // The run finds nothing: the last frame places nothing and says no.
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(page.locator(`${PACKING}-packing [data-piece-for]`)).toHaveCount(0);
+});
+
+test("Packing: Bin Packing's bins share one scale, and a full bin is as long as its capacity", async ({
+  page,
+}) => {
+  const capture = BIN_PACKING_PACKING_FRAMES;
+  await openPacking(page, capture);
+  await expect(page.locator(`${PACKING}-packing [data-heading="containers"]`)).toHaveText(
+    "BINS · CAPACITY 10, AT MOST 3",
+  );
+  await runToFrame(page, capture, capture.frames.length - 1);
+  // Every bin holds 10 at the end: each row's pieces end exactly at its line.
+  for (const id of ["C1", "C2", "C3"]) {
+    const row = packingRows(page, id);
+    await expect(row).toHaveAttribute("data-verdict", "met");
+    const ends = await row.evaluate((element) => {
+      const pieces = [...element.querySelectorAll("[data-piece-for] rect")].map((rect) =>
+        rect.getBBox(),
+      );
+      const last = pieces.at(-1);
+      const line = element.querySelector("[data-line]").getBBox();
+      const track = element.querySelector("[data-track]").getBBox();
+      return { end: last.x + last.width, line: line.x + line.width / 2, track: track.width };
+    });
+    expect(ends.end).toBeCloseTo(ends.line, 0);
+    expect(ends.track).toBeCloseTo(ends.line - 20, 0);
+  }
+  // Each bin's items take that bin's color.
+  const last = capture.frames.at(-1);
+  for (const [position, item] of capture.payload.items.entries()) {
+    await expect(packingItem(page, item.id)).toHaveAttribute(
+      "data-group",
+      String(last.assign[position]),
+    );
+  }
+  await expect(legendBody(page)).toContainText("Bin 3 (items in this bin)");
+});
+
+test("Packing: First Fit Decreasing marks the item no bin has room for, and ends on no", async ({
+  page,
+}) => {
+  const capture = BIN_PACKING_FFD_SHORT_PACKING_FRAMES;
+  await openPacking(page, capture);
+  const index = capture.frames.findIndex((frame) =>
+    Object.values(frame.items).some((entry) => entry.state === "Rejected"),
+  );
+  await runToFrame(page, capture, index);
+  const [id] = Object.entries(capture.frames[index].items).find(
+    ([, entry]) => entry.state === "Rejected",
+  );
+  await expect(packingItem(page, id)).toHaveAttribute("data-state", "Rejected");
+  await expect(packingItem(page, id)).toHaveAttribute("data-container", "-1");
+  await expect(packingItem(page, id)).toHaveAttribute("aria-label", /left out, Rejected/);
+});
+
+test("Packing: a try longer than the track is cut at its end, with nothing drawn past it", async ({
+  page,
+}) => {
+  const capture = SUBSET_SUM_CLIPPED_PACKING_FRAMES;
+  await openPacking(page, capture);
+  const index = capture.frames.findIndex((frame) => frame.totals[0].size === 22);
+  await runToFrame(page, capture, index);
+  const row = packingRows(page, "C1");
+  await expect(row.locator("[data-clipped]")).toHaveCount(1);
+  const fits = await row.evaluate((element) => {
+    const track = element.querySelector("[data-track]").getBBox();
+    return [...element.querySelectorAll("[data-piece-for] rect")].every((rect) => {
+      const box = rect.getBBox();
+      return box.x >= track.x - 0.5 && box.x + box.width <= track.x + track.width + 0.5;
+    });
+  });
+  expect(fits).toBe(true);
+  await expect(row.locator("[data-readout]")).toHaveText("22 ✗");
+});
+
+test("Packing: hovering, focusing or tapping an item traces it, and a container traces its items", async ({
+  page,
+}) => {
+  const capture = PARTITION_PACKING_FRAMES;
+  await openPacking(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const last = capture.frames.at(-1);
+  await packingItem(page, "I1").hover();
+  await expect(packingItem(page, "I1")).toHaveAttribute("data-traced", "trace");
+  await expect(packingItem(page, "I2")).toHaveAttribute("data-traced", "faint");
+  const side = last.assign[0];
+  await expect(packingRows(page, `C${side + 1}`)).toHaveAttribute("data-traced", "trace");
+  await expect(packingRows(page, `C${2 - side}`)).toHaveAttribute("data-traced", "faint");
+  const faded = await packingItem(page, "I2").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+
+  // A container traces the items in it, and the rest fade.
+  await page.mouse.move(0, 0);
+  await packingRows(page, "C2").focus();
+  for (const [position, item] of capture.payload.items.entries()) {
+    await expect(packingItem(page, item.id)).toHaveAttribute(
+      "data-traced",
+      last.assign[position] === 1 ? "trace" : "faint",
+    );
+  }
+  await page.keyboard.press("Enter");
+  await expect(packingRows(page, "C2")).toHaveAttribute("aria-pressed", "true");
+  await expect(packingRows(page, "C2")).toHaveAttribute(
+    "aria-label",
+    /^S2: needs 5, holds .+, total 5, line met, Covered \(rule met\)$/,
+  );
+  await expect(packingItem(page, "I1")).toHaveAttribute(
+    "aria-label",
+    `Item 3, size 3, in S${side + 1}, Solution (answer)`,
+  );
+});
+
+test("Packing: on a phone a tap traces an item, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openPacking(page, KNAPSACK_PACKING_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${PACKING}-svg`);
+  await page.locator(`${PACKING}-zoom-in`).click();
+  await expect(page.locator(`${PACKING}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await packingItem(page, "I2").focus();
+  await packingItem(page, "I2").blur();
+  await packingItem(page, "I2").click();
+  await expect(packingItem(page, "I2")).toHaveAttribute("aria-pressed", "true");
+  await expect(packingItem(page, "I1")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${PACKING}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Packing: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openPacking(page, KNAPSACK_PACKING_FRAMES);
+      const svg = page.locator(`${PACKING}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${PACKING}-svg`);
+      await expect(page.locator(`${PACKING}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The line labels follow the theme: no dark-on-dark, no light-on-white.
+      const ink = await page
+        .locator(`${PACKING}-packing [data-line-label]`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+/**
+ * Every place where two texts of the packing picture meet, read off the screen (so a tipped beam
+ * label counts where it is drawn), and every piece or tile whose number spills out of its box.
+ * @returns {Promise<string[]>} One line per collision; empty when the picture is clear.
+ */
+function packingTextCollisions(page) {
+  return page.locator(`${PACKING}-svg`).evaluate((svg) => {
+    const found = [];
+    const texts = [...svg.querySelectorAll("text")].filter((text) => text.textContent.trim());
+    const boxes = texts.map((text) => ({ text, box: text.getBoundingClientRect() }));
+    const meets = (a, b) =>
+      a.left < b.right - 0.5 &&
+      b.left < a.right - 0.5 &&
+      a.top < b.bottom - 0.5 &&
+      b.top < a.bottom - 0.5;
+    boxes.forEach((a, i) => {
+      boxes.forEach((b, j) => {
+        if (j > i && meets(a.box, b.box)) {
+          found.push(`"${a.text.textContent}" meets "${b.text.textContent}"`);
+        }
+      });
+    });
+    for (const group of svg.querySelectorAll("[data-piece-for], [data-item-id]")) {
+      const rect = group.querySelector("rect").getBoundingClientRect();
+      for (const text of group.querySelectorAll("text")) {
+        const box = text.getBoundingClientRect();
+        if (box.left < rect.left - 0.5 || box.right > rect.right + 0.5) {
+          found.push(`"${text.textContent}" spills out of its box`);
+        }
+      }
+    }
+    return found;
+  });
+}
+
+for (const [key, capture] of Object.entries(PACKING_CASES)) {
+  test(`Packing: the ${key} capture's texts never meet, before Run and at every step`, async ({
+    page,
+  }) => {
+    await openPacking(page, capture);
+    expect(await packingTextCollisions(page)).toEqual([]);
+    await runToFrame(page, capture, 0);
+    expect(await packingTextCollisions(page)).toEqual([]);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      expect(await packingTextCollisions(page)).toEqual([]);
+    }
   });
 }
 
