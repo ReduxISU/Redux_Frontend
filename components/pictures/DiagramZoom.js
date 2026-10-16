@@ -40,6 +40,12 @@
 // the piece (a dashed outline, and a short buzz where the phone can) before a drag moves it. The
 // arrow keys move a focused node (Shift for bigger steps), and the Reset layout button beside
 // Fit puts every piece back where the layout put it.
+//
+// #217: a renderer may also pass `follow`, the box of the piece a step is about (a search tree's
+// node). Zoomed in, a new step whose piece is out of the window pans the window to it, so a
+// reader stepping through a big picture on a phone zooms once and keeps the step in view. With
+// `minScale` too, a picture whose text would be too small to read at fit (a wide search tree on
+// a phone) opens zoomed in to a readable size around that piece instead; Fit shows it whole.
 
 import Box from "@mui/material/Box";
 import { useEffect, useRef, useState } from "react";
@@ -84,6 +90,9 @@ function fitBox(drawing, area) {
     height,
   };
 }
+
+/** How far past a renderer's `minScale` a picture too small to read at fit opens (#217). */
+const READABLE_ZOOM = 1.4;
 
 /** How much one press of + or - zooms. */
 const BUTTON_STEP = 1.5;
@@ -192,6 +201,31 @@ function zoomedAt(view, box, ctm, k, sx, sy) {
   );
 }
 
+/**
+ * The view panned (at its zoom) to centre `piece` (a box in drawing units), or null when the
+ * piece is already wholly inside the window.
+ */
+function viewShowing(view, box, piece) {
+  const w = box.width / view.k;
+  const h = box.height / view.k;
+  const left = box.minX + view.x;
+  const top = box.minY + view.y;
+  const inside =
+    piece.x >= left &&
+    piece.y >= top &&
+    piece.x + piece.width <= left + w &&
+    piece.y + piece.height <= top + h;
+  if (inside) return null;
+  return clampView(
+    {
+      k: view.k,
+      x: piece.x + piece.width / 2 - w / 2 - box.minX,
+      y: piece.y + piece.height / 2 - h / 2 - box.minY,
+    },
+    box,
+  );
+}
+
 function sameKeys(a, b) {
   return a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
 }
@@ -227,6 +261,13 @@ const zoomButtonSx = {
  * @param {import("react").ReactNode} [props.toolbar] The renderer's controls, at the right.
  * @param {Object} [props.editor] Moving and bending pieces by hand (diagramEdits.js
  *   makeEditor), with the Reset layout button; none for a picture that can't be rearranged.
+ * @param {{key: string, x: number, y: number, width: number, height: number}|null}
+ *   [props.follow] A box to keep in view while zoomed in (#217: the node a search tree's step
+ *   is about). When its key changes and the box is outside the zoomed window, the window pans
+ *   to centre it; at fit everything is in view already.
+ * @param {number|null} [props.minScale] The smallest scale (CSS px per drawing unit) the
+ *   picture's text can be read at (#217). When fit would draw it smaller, it opens zoomed in
+ *   around `follow` instead, once per layout.
  * @param {import("react").ReactNode} props.children The diagram's elements.
  */
 export default function DiagramZoom({
@@ -236,6 +277,8 @@ export default function DiagramZoom({
   resetOn,
   toolbar,
   editor = null,
+  follow = null,
+  minScale = null,
   children,
 }) {
   const svgRef = useRef(null);
@@ -268,11 +311,41 @@ export default function DiagramZoom({
   const [stored, setStored] = useState(FIT);
   const [storedFor, setStoredFor] = useState(resetOn);
   // React's "adjust state when a prop changes" pattern: a new instance or layout starts at fit.
-  if (!sameKeys(storedFor, resetOn)) {
+  const resetting = !sameKeys(storedFor, resetOn);
+  if (resetting) {
     setStoredFor(resetOn);
     setStored(FIT);
   }
   const view = clampView(stored, box);
+  // #217: a new step's piece outside the zoomed window brings the window to it.
+  const followKey = follow?.key ?? null;
+  const [followedKey, setFollowedKey] = useState(followKey);
+  if (followKey !== followedKey) {
+    setFollowedKey(followKey);
+    const next = follow && !resetting && view.k > 1.001 ? viewShowing(view, box, follow) : null;
+    if (next) setStored(next);
+  }
+  // #217: a picture too big to read at fit on this screen (its scale under `minScale`) opens
+  // zoomed in to a readable size around the piece it follows, once per layout; Fit still shows
+  // it whole.
+  const [readableFor, setReadableFor] = useState(null);
+  if (minScale && follow && area?.width > 0 && !sameKeys(readableFor ?? [], resetOn)) {
+    setReadableFor(resetOn);
+    const fitScale = area.width / box.width;
+    if (fitScale < minScale) {
+      const k = Math.min(MAX_ZOOM, (minScale * READABLE_ZOOM) / fitScale);
+      setStored(
+        clampView(
+          {
+            k,
+            x: follow.x + follow.width / 2 - box.width / k / 2 - box.minX,
+            y: follow.y + follow.height / 2 - box.height / k / 2 - box.minY,
+          },
+          box,
+        ),
+      );
+    }
+  }
   const zoomed = view.k > 1.001;
 
   // The latest view and box, for the native wheel listener (set up once, below).
@@ -561,27 +634,8 @@ export default function DiagramZoom({
     if (!zoomed) return;
     const piece = event.target.closest?.("[data-focusable]");
     if (!piece?.getBBox) return;
-    const bbox = piece.getBBox();
-    const w = box.width / view.k;
-    const h = box.height / view.k;
-    const left = box.minX + view.x;
-    const top = box.minY + view.y;
-    const inside =
-      bbox.x >= left &&
-      bbox.y >= top &&
-      bbox.x + bbox.width <= left + w &&
-      bbox.y + bbox.height <= top + h;
-    if (inside) return;
-    setStored(
-      clampView(
-        {
-          k: view.k,
-          x: bbox.x + bbox.width / 2 - w / 2 - box.minX,
-          y: bbox.y + bbox.height / 2 - h / 2 - box.minY,
-        },
-        box,
-      ),
-    );
+    const next = viewShowing(view, box, piece.getBBox());
+    if (next) setStored(next);
   }
 
   const w = box.width / view.k;
