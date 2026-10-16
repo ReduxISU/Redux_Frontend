@@ -193,8 +193,10 @@ test("before Run a table draws the payload's blank, not the first step's work", 
   await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
   await expect(picture.locator("[data-changed]")).toHaveCount(0);
 
-  // Run draws the first frame: the first try, with its totals.
+  // Run opens on the last frame; its first frame is the first try, with its totals.
   await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
+  await toFirstStep(page);
   await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[0].caption);
   // (A highlighted cell also says its state, for screen readers.)
   await expect(cell("r0c0")).toHaveText(/^0(\s|$)/);
@@ -231,8 +233,13 @@ test("the step controls walk a format=frames run, with each step's caption and s
 
   const [first, second, last] = DFA_TABLE_FRAMES.frames;
   const caption = page.locator(`${CAPTION}-text`);
+  // A run opens on its last step: the finished result, with its verdict.
+  await expect(page.locator("#workbench-steps-position")).toHaveText("Step 3 of 3");
+  await expect(caption).toHaveText(last.caption);
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  // The slider goes back through the steps.
+  await toFirstStep(page);
   await expect(caption).toHaveText(first.caption);
-  await expect(page.locator("#workbench-steps-position")).toHaveText("Step 1 of 3");
   await expect(page.locator(`${TABLE_PREFIX}-r1`)).toHaveCount(0);
 
   await page.locator("#workbench-steps-next").click();
@@ -257,6 +264,48 @@ test("the step controls walk a format=frames run, with each step's caption and s
 
   await page.locator("#workbench-steps-previous").click();
   await expect(caption).toHaveText(second.caption);
+});
+
+test("a run opens on its last step, Play there replays from step 1, and the slider goes back", async ({
+  page,
+}) => {
+  await setPictureTypes(page, { [TABLE_VIZ]: "Table" });
+  await answerPictures(page);
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Table");
+  // Before Run the picture is the plain one, with no steps.
+  await expect(page.locator("#workbench-steps-position")).toHaveCount(0);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+
+  await page.locator("#workbench-run").click();
+  const position = page.locator("#workbench-steps-position");
+  const caption = page.locator(`${CAPTION}-text`);
+  const frames = DFA_TABLE_FRAMES.frames;
+  await expect(position).toHaveText(`Step ${frames.length} of ${frames.length}`);
+  await expect(caption).toHaveText(frames.at(-1).caption);
+  await expect(page.locator("#workbench-steps-next")).toBeDisabled();
+
+  // The slider walks back a step at a time.
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(position).toHaveText(`Step ${frames.length - 1} of ${frames.length}`);
+  await expect(caption).toHaveText(frames.at(-2).caption);
+  await page.keyboard.press("End");
+  await expect(position).toHaveText(`Step ${frames.length} of ${frames.length}`);
+
+  // Play on the last step replays the run from step 1, and goes on from there.
+  await page.locator("#workbench-steps-play-pause").click();
+  await expect(position).toHaveText(`Step 1 of ${frames.length}`);
+  await expect(caption).toHaveText(frames[0].caption);
+  await expect(position).toHaveText(`Step 2 of ${frames.length}`);
+  await expect(position).toHaveText(`Step ${frames.length} of ${frames.length}`);
+  await expect(page.locator("#workbench-steps-play-pause")).toHaveAttribute("aria-label", "Play");
+
+  // Play from any other step goes on from there.
+  await page.locator("#workbench-steps-previous").click();
+  await expect(position).toHaveText(`Step ${frames.length - 1} of ${frames.length}`);
+  await page.locator("#workbench-steps-play-pause").click();
+  await expect(position).toHaveText(`Step ${frames.length} of ${frames.length}`);
 });
 
 test("Committed draws apart from Solution, dashed, and has its own Legend entry", async ({
@@ -336,16 +385,26 @@ async function openPicture(page, problem, capture) {
   });
 }
 
-/** Presses Run and steps forward to frame `index` (0-based). */
+/**
+ * Presses Run and goes to frame `index` (0-based). A run opens on its last frame, the finished
+ * result; this goes back to the first (the slider's Home key) and steps forward from there.
+ */
 async function runToFrame(page, capture, index) {
   await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-steps-position")).toHaveText(
-    `Step 1 of ${capture.frames.length}`,
-  );
+  const count = capture.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+  await toFirstStep(page);
   for (let step = 0; step < index; step += 1) {
     await page.locator("#workbench-steps-next").click();
   }
   await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+}
+
+/** Goes back to step 1 with the step slider's Home key. */
+async function toFirstStep(page) {
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("Home");
+  await expect(page.locator("#workbench-steps-position")).toHaveText(/^Step 1 of /);
 }
 
 const graphNode = (page, id) => page.locator(`${GRAPH}-graph [data-node-id="${id}"]`);
@@ -2064,9 +2123,12 @@ test("Automaton: One path follows a single run picked from the dropdown, and All
   await expect(picker.locator("option")).toHaveText(paths.map((path) => path.label));
   await expect(picker).toHaveValue(paths[0].id);
   await expect(page.locator(`${AUTOMATON}-graph`)).toHaveAttribute("data-run-view", paths[0].id);
-  // The steps start over on the path's own frames.
+  // The steps switch to the path's own frames, opening on its last (the path's result).
   const position = page.locator("#workbench-steps-position");
-  await expect(position).toHaveText(`Step 1 of ${paths[0].frames.length}`);
+  const ends = `Step ${paths[0].frames.length} of ${paths[0].frames.length}`;
+  await expect(position).toHaveText(ends);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(paths[0].frames.at(-1).caption);
+  await toFirstStep(page);
   for (const [index, frame] of paths[0].frames.entries()) {
     if (index > 0) await page.locator("#workbench-steps-next").click();
     await expect(page.locator(`${CAPTION}-text`)).toHaveText(frame.caption);
@@ -2079,10 +2141,7 @@ test("Automaton: One path follows a single run picked from the dropdown, and All
   // never reached Untraveled, and the tape marks the symbol it had no move for.
   const dies = paths.find((path) => path.outcome === "dies");
   await picker.selectOption(dies.id);
-  await expect(position).toHaveText(`Step 1 of ${dies.frames.length}`);
-  for (let index = 1; index < dies.frames.length; index += 1) {
-    await page.locator("#workbench-steps-next").click();
-  }
+  await expect(position).toHaveText(`Step ${dies.frames.length} of ${dies.frames.length}`);
   const dead = dies.frames.at(-1);
   await expectAutomatonStates(page, capture.payload, dead);
   await expect(automatonState(page, dead.active[0]).locator("[data-current]")).toHaveCount(1);
@@ -2096,8 +2155,8 @@ test("Automaton: One path follows a single run picked from the dropdown, and All
 
   await page.locator(`${AUTOMATON}-view-all`).click();
   await expect(picker).toHaveCount(0);
-  await expect(position).toHaveText(`Step 1 of ${capture.frames.length}`);
-  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[0].caption);
+  await expect(position).toHaveText(`Step ${capture.frames.length} of ${capture.frames.length}`);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
 });
 
 test("Automaton: a rejected run with no state left says so, and marks the active states while it runs", async ({

@@ -160,8 +160,8 @@ test("editing the instance after a run resets the picture to the base instance",
 
   await page.locator("#workbench-run").click();
   await expect(showing).toHaveText(solverName);
-  // The run's picture has steps to play; the base picture has none.
-  await expect(page.locator("#workbench-steps-position")).toContainText("Step 1 of 3");
+  // The run's picture has steps to play, and opens on its last; the base picture has none.
+  await expect(page.locator("#workbench-steps-position")).toContainText("Step 3 of 3");
 
   await openPanel(page, "instance", { expect });
   const edited = "(x1 | x2 | !x3)";
