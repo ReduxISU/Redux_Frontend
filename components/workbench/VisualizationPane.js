@@ -50,14 +50,18 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
  * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object,
  *     highlightIds?: string[]}
  *   | {kind: "picture", type: string, payload: Object|null, frame: Object,
- *      frameIndex: number|null, frameCount: number, name: string, showCaption: boolean}
+ *      frameIndex: number|null, frameCount: number, name: string, showCaption: boolean,
+ *      runs?: {options: Array<{id: string, label: string, accepted?: boolean}>,
+ *        value: string|null, onChange: Function}|null}
  *   | {kind: "loading", text: string}
  *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
  *      action?: {id: string, label: string, onClick: Function}}} PictureContent
  *   `compact` draws a short box (no picture is coming, so no room is held for one).
  *   `highlightIds` are the pieces the hovered or focused gadget row names (#229 stage 4).
  *   "picture" is a format=frames picture (#199), drawn by the renderer for its `type`;
- *   `frameIndex` is null for the default picture before Run (the plain frame).
+ *   `frameIndex` is null for the default picture before Run (the plain frame). `runs` are the
+ *   other runs the steps can follow instead of the solver's (#204: an NFA's paths), with the
+ *   one chosen (null: the solver's own).
  */
 function PictureBox({ idPrefix, content }) {
   let inner;
@@ -88,6 +92,7 @@ function PictureBox({ idPrefix, content }) {
         frameIndex={content.frameIndex}
         frameCount={content.frameCount}
         showCaption={content.showCaption}
+        runs={content.runs ?? null}
       />
     );
   } else if (content.kind === "loading") {
