@@ -51,6 +51,7 @@ import AutomatonRenderer, { automatonAnnotations, automatonRuns } from "./Automa
 import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
 import BoardRenderer, { boardAnnotations } from "./BoardRenderer";
 import FlowNetworkRenderer, { flowAnnotations } from "./FlowNetworkRenderer";
+import GeometryRenderer, { geometryAnnotations } from "./GeometryRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
@@ -64,6 +65,7 @@ export const PICTURE_RENDERERS = {
   BipartiteGraph: BipartiteGraphRenderer,
   Board: BoardRenderer,
   FlowNetwork: FlowNetworkRenderer,
+  Geometry: GeometryRenderer,
   Graph: GraphRenderer,
   GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
@@ -78,6 +80,7 @@ const PICTURE_ANNOTATIONS = {
   BipartiteGraph: bipartiteAnnotations,
   Board: boardAnnotations,
   FlowNetwork: flowAnnotations,
+  Geometry: geometryAnnotations,
   Graph: graphAnnotations,
   GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
