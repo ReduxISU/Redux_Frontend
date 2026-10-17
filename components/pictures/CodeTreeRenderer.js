@@ -504,7 +504,9 @@ function EncodedStrip({ idPrefix, payload, text, codes, bits, traced, onPoint })
                 lineHeight: 1.3,
                 border: "1px solid",
                 borderColor: lit ? TRACE_COLOR : paletteVars.border.main,
-                borderWidth: lit ? "2px" : "1px",
+                // The trace thickens the outline without growing the cell: a cell that grew
+                // would rewrap the strip, move it from under the pointer, and flicker.
+                boxShadow: lit ? `inset 0 0 0 1px ${TRACE_COLOR}` : "none",
                 borderRadius: "4px",
                 bgcolor: k % 2 ? paletteVars.surface.main : paletteVars.surface.input,
               }}
