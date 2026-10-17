@@ -46,6 +46,10 @@
 // #214: the Code Tree renderer (Lossless Data Compression) after that: every character, each
 // step's merges, states and codes on one layout for the whole run, the tidy tree, the text strip,
 // the trace, texts that meet nothing, and on a phone a tree on its side at its own size.
+// #210: the Quantum Circuit renderer (the quantum-algorithm problems) after that: every qubit
+// and gate, each step's column, outcome bars by amplitude sign, the measured read, a classical
+// solver's oracle calls, Shor's note, the trace, texts that meet nothing, and on a phone a small
+// circuit at its own size.
 
 import {
   LDC_CODE_TREE_FRAMES,
@@ -124,6 +128,20 @@ import {
   TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES,
   TSP_SEARCH_TREE_FRAMES,
 } from "./picture-payloads";
+import {
+  BV_CLASSICAL_QUANTUM_FRAMES,
+  BV_QUANTUM_FRAMES,
+  DEUTSCH_CLASSICAL_QUANTUM_FRAMES,
+  DEUTSCH_JOZSA_QUANTUM_FRAMES,
+  DEUTSCH_QUANTUM_FRAMES,
+  GROVER_MISS_QUANTUM_FRAMES,
+  GROVER_QUANTUM_FRAMES,
+  SHOR_NO_CIRCUIT_QUANTUM_FRAMES,
+  SHOR_QUANTUM_FRAMES,
+  SHOR_TRIAL_DIVISION_QUANTUM_FRAMES,
+  SIMON_QUANTUM_FRAMES,
+  UNSTRUCTURED_CLASSICAL_QUANTUM_FRAMES,
+} from "./quantum-payloads";
 import {
   JOB_SEQUENCING_NONE_SCHEDULE_FRAMES,
   JOB_SEQUENCING_SCHEDULE_FRAMES,
@@ -6597,6 +6615,474 @@ for (const key of ["default", "small"]) {
   });
 }
 
+// --- #210: the Quantum Circuit renderer (Deutsch, Deutsch-Jozsa, Bernstein-Vazirani, Simon,
+// Unstructured Search, Prime Factorization) --------------------------------------------------------
+
+const QUANTUM = "#workbench-source-frames-quantumcircuit";
+
+/**
+ * Each quantum capture. Every capture is drawn on the 3SAT page (its visualization made to name
+ * QuantumCircuit), as CI's backend may serve no Quantum Circuit visualization yet and has no
+ * quantum server: the picture is the capture's, whatever the page.
+ */
+const QUANTUM_CASES = {
+  bernsteinVazirani: BV_QUANTUM_FRAMES,
+  bernsteinVaziraniClassical: BV_CLASSICAL_QUANTUM_FRAMES,
+  deutsch: DEUTSCH_QUANTUM_FRAMES,
+  deutschClassical: DEUTSCH_CLASSICAL_QUANTUM_FRAMES,
+  deutschJozsa: DEUTSCH_JOZSA_QUANTUM_FRAMES,
+  simon: SIMON_QUANTUM_FRAMES,
+  grover: GROVER_QUANTUM_FRAMES,
+  groverMiss: GROVER_MISS_QUANTUM_FRAMES,
+  unstructuredClassical: UNSTRUCTURED_CLASSICAL_QUANTUM_FRAMES,
+  shor: SHOR_QUANTUM_FRAMES,
+  shorTrialDivision: SHOR_TRIAL_DIVISION_QUANTUM_FRAMES,
+  noCircuit: SHOR_NO_CIRCUIT_QUANTUM_FRAMES,
+};
+
+async function openQuantum(page, capture) {
+  await setEveryPictureType(page, "QuantumCircuit");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${QUANTUM}-quantum`)).toBeVisible();
+}
+
+const quantumGate = (page, id) => page.locator(`${QUANTUM}-quantum [data-gate-id="${id}"]`);
+const quantumWire = (page, id) => page.locator(`${QUANTUM}-quantum [data-qubit-id="${id}"]`);
+const quantumBar = (page, outcome) =>
+  page.locator(`${QUANTUM}-quantum [data-outcome="${outcome}"]`);
+
+/** Frame `index`'s columns, gates, qubits, bars, calls and answer, checked one by one. */
+async function expectQuantumFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const { payload } = capture;
+  const picture = page.locator(`${QUANTUM}-quantum`);
+  const drawn = await picture.evaluate((root) => ({
+    columns: Object.fromEntries(
+      [...root.querySelectorAll("[data-column-id]")].map((el) => [
+        el.getAttribute("data-column-id"),
+        [el.getAttribute("data-state"), el.getAttribute("data-future")],
+      ]),
+    ),
+    gates: Object.fromEntries(
+      [...root.querySelectorAll("[data-gate-id]")].map((el) => [
+        el.getAttribute("data-gate-id"),
+        el.getAttribute("data-state"),
+      ]),
+    ),
+    qubits: Object.fromEntries(
+      [...root.querySelectorAll("[data-qubit-id]")].map((el) => [
+        el.getAttribute("data-qubit-id"),
+        el.getAttribute("data-state"),
+      ]),
+    ),
+    bars: Object.fromEntries(
+      [...root.querySelectorAll("[data-outcome]")]
+        .filter((el) => el.hasAttribute("data-probability"))
+        .map((el) => [
+          el.getAttribute("data-outcome"),
+          Number(el.getAttribute("data-probability")),
+        ]),
+    ),
+    calls: root.querySelectorAll("[data-query]").length,
+    result: root.querySelector("[data-result]")?.getAttribute("data-result") ?? null,
+  }));
+  const columns = {};
+  const gates = {};
+  payload.columns.forEach((column, c) => {
+    const state = frame.columns[column.id]?.state ?? "Background";
+    columns[column.id] = [state, c >= frame.applied ? "true" : null];
+    for (const gate of column.gates) gates[gate.id] = frame.gates[gate.id]?.state ?? state;
+  });
+  expect(drawn.columns).toEqual(columns);
+  expect(drawn.gates).toEqual(gates);
+  expect(drawn.qubits).toEqual(
+    Object.fromEntries(
+      payload.qubits.map((q) => [q.id, frame.qubits[q.id]?.state ?? "Background"]),
+    ),
+  );
+  const bars = {};
+  for (const bar of frame.bars ?? []) {
+    if (bar.outcome < 2 ** payload.measure.length) bars[bar.outcome] = bar.probability;
+  }
+  if (frame.bars) {
+    for (let outcome = 0; outcome < 2 ** payload.measure.length; outcome += 1) {
+      bars[outcome] ??= 0;
+    }
+  }
+  expect(drawn.bars).toEqual(bars);
+  expect(drawn.calls).toBe(frame.queries.length);
+  expect(drawn.result).toBe(frame.result ?? null);
+  if (Number.isInteger(frame.outcome) && payload.measure.length) {
+    const read = frame.qubits[payload.qubits[payload.measure[0]].id]?.state;
+    if (read) await expect(quantumBar(page, frame.outcome)).toHaveAttribute("data-read", read);
+    const bits = frame.outcome.toString(2).padStart(payload.measure.length, "0");
+    for (const [i, k] of payload.measure.entries()) {
+      await expect(quantumWire(page, payload.qubits[k].id).locator("[data-bit-out]")).toHaveText(
+        bits[i],
+      );
+    }
+  }
+}
+
+for (const [key, capture] of Object.entries(QUANTUM_CASES)) {
+  test(`Quantum Circuit: the ${key} capture draws every qubit and gate, and every step's states, bars, calls and answer`, async ({
+    page,
+  }) => {
+    test.slow();
+    const { payload } = capture;
+    await openQuantum(page, capture);
+    const picture = page.locator(`${QUANTUM}-quantum`);
+    await expect(picture.locator("[data-qubit-id]")).toHaveCount(payload.qubits.length);
+    await expect(picture.locator("[data-gate-id]")).toHaveCount(
+      payload.columns.reduce((sum, column) => sum + column.gates.length, 0),
+    );
+    for (const qubit of payload.qubits) {
+      await expect(quantumWire(page, qubit.id).locator("[data-label]")).toHaveText(qubit.name);
+    }
+    await expect(picture.locator("[data-outcome]")).toHaveCount(
+      payload.simulated ? 2 ** payload.measure.length : 0,
+    );
+    if (payload.note) await expect(picture.locator("[data-note]")).toHaveText(payload.note);
+
+    await runToFrame(page, capture, 0);
+    await expectQuantumFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectQuantumFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^(Qubit |Outcome |\S.* on \S)/);
+    }
+  });
+}
+
+/** Each gate's and wire's drawn box by id, in viewBox units. */
+function quantumBoxes(page) {
+  return page
+    .locator(`${QUANTUM}-quantum [data-gate-id], ${QUANTUM}-quantum [data-qubit-id]`)
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((piece) => {
+          const box = piece.getBBox();
+          const id = piece.getAttribute("data-gate-id") ?? piece.getAttribute("data-qubit-id");
+          return [id, [box.x, box.y, box.width, box.height].map((v) => Math.round(v * 10) / 10)];
+        }),
+      ),
+    );
+}
+
+test("Quantum Circuit: before Run the circuit is the plain instance, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  const capture = BV_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  const picture = page.locator(`${QUANTUM}-quantum`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator("[data-future], [data-bar], [data-bit-out]")).toHaveCount(0);
+  await expect(picture.locator("[data-chart-empty]")).toHaveText("Bars appear once a column runs.");
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("4 qubits, 5 columns");
+  const before = await quantumBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await quantumBoxes(page)).toEqual(before);
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("1 of 5 columns run");
+});
+
+test("Quantum Circuit: the oracle flips signs, the last gates leave one outcome, and its read turns Solution", async ({
+  page,
+}) => {
+  const capture = BV_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, 2);
+  // Step 3 runs the oracle: half the outcomes' amplitudes turn negative, drawn in another color.
+  await expect(quantumGate(page, "g2_0")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(quantumGate(page, "g2_0")).toHaveAttribute("data-oracle", "true");
+  await expect(quantumGate(page, "g3_0")).toHaveAttribute("data-state", "Background");
+  await expect(page.locator(`${QUANTUM}-quantum [data-column-id="t3"]`)).toHaveAttribute(
+    "data-future",
+    "true",
+  );
+  await expect(quantumGate(page, "g3_0").locator("[data-body]")).toHaveAttribute(
+    "stroke-dasharray",
+    "3 2",
+  );
+  const fills = await page
+    .locator(`${QUANTUM}-quantum [data-outcome] [data-bar]`)
+    .evaluateAll((bars) => bars.map((bar) => bar.getAttribute("fill")));
+  expect(new Set(fills).size).toBe(2);
+  await expect(quantumBar(page, 1)).toHaveAttribute("data-sign", "-1");
+  await expect(quantumBar(page, 0)).toHaveAttribute("data-sign", "1");
+  for (const text of [
+    "Oracle (the black box holding the function f)",
+    "Blue bar (an outcome's probability; its amplitude is positive)",
+    "Orange bar (the same, with a negative amplitude)",
+    "Dashed grey gate (its column has not run)",
+  ]) {
+    await expect(legendBody(page)).toContainText(text);
+  }
+  await toFrame(page, capture, capture.frames.length - 1);
+  await expect(quantumBar(page, 5)).toHaveAttribute("data-probability", "1");
+  await expect(quantumBar(page, 5)).toHaveAttribute("data-read", "Solution");
+  await expect(quantumBar(page, 5).locator("[data-outcome-label]")).toHaveText("101");
+  for (const id of ["q0", "q1", "q2"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(quantumWire(page, "q3")).toHaveAttribute("data-state", "Background");
+  await expect(page.locator(`${QUANTUM}-quantum [data-result]`)).toHaveText("(1,0,1)");
+});
+
+test("Quantum Circuit: a Grover measurement that misses the marked item reads Rejected, and the run ends on no", async ({
+  page,
+}) => {
+  const capture = GROVER_MISS_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const { outcome } = capture.frames.at(-1);
+  // The simulation put item 1 at 100%; the quantum server read another item.
+  await expect(quantumBar(page, 1)).toHaveAttribute("data-probability", "1");
+  await expect(quantumBar(page, outcome)).toHaveAttribute("data-read", "Rejected");
+  for (const id of ["q0", "q1"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-state", "Rejected");
+  }
+  await expect(quantumGate(page, "g3_0")).toHaveAttribute("data-state", "Rejected");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+});
+
+test("Quantum Circuit: a classical solver's oracle calls are listed, and its circuit ends Untraveled", async ({
+  page,
+}) => {
+  const capture = BV_CLASSICAL_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, 1);
+  const calls = page.locator(`${QUANTUM}-quantum [data-query]`);
+  await expect(calls).toHaveText(["f(100) = 1", "f(010) = 0"]);
+  await expect(calls.nth(1)).toHaveAttribute("data-latest", "true");
+  await expect(quantumGate(page, "g2_0")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(page.locator(`${QUANTUM}-quantum [data-chart-empty]`)).toHaveText(
+    "A classical solver: no column runs.",
+  );
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("2 oracle calls");
+  await expect(legendBody(page)).toContainText("f(x) = y (an oracle call made classically)");
+  await toFrame(page, capture, capture.frames.length - 1);
+  for (const column of capture.payload.columns) {
+    await expect(
+      page.locator(`${QUANTUM}-quantum [data-column-id="${column.id}"]`),
+    ).toHaveAttribute("data-state", "Untraveled");
+  }
+  await expect(page.locator(`${QUANTUM}-quantum [data-result]`)).toHaveText("(1,0,1)");
+  // Simon's oracle answers with numbers.
+  await openQuantum(page, SIMON_QUANTUM_FRAMES);
+  await runToFrame(page, SIMON_QUANTUM_FRAMES, 2);
+  await expect(page.locator(`${QUANTUM}-quantum [data-query]`)).toHaveText([
+    "f(000) = 5",
+    "f(001) = 6",
+    "f(010) = 5",
+  ]);
+});
+
+test("Quantum Circuit: Shor's circuit is drawn with its note and no chart, and a number with no circuit shows only its note", async ({
+  page,
+}) => {
+  await openQuantum(page, SHOR_QUANTUM_FRAMES);
+  const picture = page.locator(`${QUANTUM}-quantum`);
+  await expect(picture.locator("[data-qubit-id]")).toHaveCount(12);
+  await expect(picture.locator("[data-stage]")).toHaveCount(4);
+  await expect(picture.locator("[data-outcome]")).toHaveCount(0);
+  await expect(picture.locator("[data-note]")).toHaveText(SHOR_QUANTUM_FRAMES.payload.note);
+  // The controlled multipliers are boxes over the work qubits, each with its control dot.
+  await expect(quantumGate(page, "g2_8")).toHaveAttribute(
+    "aria-label",
+    /^×2 on w0, w1, w2, w3, controlled by c7/,
+  );
+  await runToFrame(page, SHOR_QUANTUM_FRAMES, SHOR_QUANTUM_FRAMES.frames.length - 1);
+  await expect(picture.locator("[data-result]")).toHaveText("(3,5)");
+
+  await openQuantum(page, SHOR_NO_CIRCUIT_QUANTUM_FRAMES);
+  await expect(picture.locator("[data-qubit-id], [data-gate-id], [data-outcome]")).toHaveCount(0);
+  await expect(picture.locator("[data-note]")).toHaveText(
+    "No quantum circuit is needed for 12: the classical checks factor it completely.",
+  );
+  await runToFrame(page, SHOR_NO_CIRCUIT_QUANTUM_FRAMES, 1);
+  await expect(picture.locator("[data-result]")).toHaveText("(2,2)");
+});
+
+test("Quantum Circuit: a quantum server's counts are written under each outcome", async ({
+  page,
+}) => {
+  // Today's quantum server sends no counts; Redux passes them on when one does.
+  const capture = structuredClone(GROVER_QUANTUM_FRAMES);
+  capture.frames.at(-1).counts = { "01": 1000, 10: 24 };
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await expect(quantumBar(page, 1).locator("[data-count]")).toHaveText("×1000");
+  await expect(quantumBar(page, 2).locator("[data-count]")).toHaveText("×24");
+  await expect(quantumBar(page, 0).locator("[data-count]")).toHaveText("×0");
+  await expect(quantumBar(page, 1)).toHaveAttribute("aria-label", /came up 1000 times/);
+});
+
+test("Quantum Circuit: hovering, focusing or tapping a qubit, a gate or a bar traces what it touches, the rest fading by color", async ({
+  page,
+}) => {
+  const capture = BV_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  // x0 (q0): its H gates, the oracle and its meter stay; y's X fades.
+  await quantumWire(page, "q0").locator("[data-label]").hover();
+  for (const id of ["g1_0", "g2_0", "g3_0", "g4_0"]) {
+    await expect(quantumGate(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(quantumGate(page, "g0_3")).toHaveAttribute("data-traced", "faint");
+  await expect(quantumWire(page, "q1")).toHaveAttribute("data-traced", "faint");
+  const faded = await quantumGate(page, "g0_3").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  // The oracle touches every wire.
+  await page.mouse.move(0, 0);
+  await quantumGate(page, "g2_0").hover();
+  for (const id of ["q0", "q1", "q2", "q3"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  // A bar traces the measured wires.
+  await page.mouse.move(0, 0);
+  await quantumBar(page, 5).hover();
+  for (const id of ["q0", "q1", "q2"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(quantumWire(page, "q3")).toHaveAttribute("data-traced", "faint");
+  await expect(quantumBar(page, 4)).toHaveAttribute("data-traced", "faint");
+  await page.mouse.move(0, 0);
+  await quantumGate(page, "g0_3").focus();
+  await expect(quantumGate(page, "g0_3")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(quantumGate(page, "g0_3")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Quantum Circuit: on a phone a tap traces a gate after zooming in, and Shor's wide circuit zooms in to readable text", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openQuantum(page, BV_QUANTUM_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${QUANTUM}-svg`);
+  await page.locator(`${QUANTUM}-zoom-in`).click();
+  await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await quantumGate(page, "g2_0").focus();
+  await quantumGate(page, "g2_0").blur();
+  await quantumGate(page, "g2_0").click();
+  await expect(quantumGate(page, "g2_0")).toHaveAttribute("aria-pressed", "true");
+  await expect(quantumWire(page, "q3")).toHaveAttribute("data-traced", "trace");
+  await expect(quantumGate(page, "g0_3")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${QUANTUM}-svg`);
+
+  await openQuantum(page, SHOR_QUANTUM_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  await expectFits(page, `${QUANTUM}-svg`);
+  const atFit = await smallestText(page, `${QUANTUM}-svg`);
+  expect(atFit.px).toBeLessThan(PHONE_TEXT_PX);
+  for (let press = 0; press < 4; press += 1) {
+    if ((await smallestText(page, `${QUANTUM}-svg`)).px >= PHONE_TEXT_PX) break;
+    await page.locator(`${QUANTUM}-zoom-in`).click();
+  }
+  const zoomed = await smallestText(page, `${QUANTUM}-svg`);
+  expect(zoomed.px).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Quantum Circuit: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      const capture = BV_QUANTUM_FRAMES;
+      await openQuantum(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      await runToFrame(page, capture, 2);
+      const svg = page.locator(`${QUANTUM}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${QUANTUM}-svg`);
+      await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The names, the chart's title and its ticks follow the theme: no dark-on-dark, no
+      // light-on-white.
+      for (const selector of ["[data-label]", "[data-head]", "[data-tick]", "[data-role]"]) {
+        const ink = await page
+          .locator(`${QUANTUM}-quantum ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+    });
+  }
+}
+
+const QUANTUM_COLLISION_CASES = [
+  "bernsteinVazirani",
+  "bernsteinVaziraniClassical",
+  "simon",
+  "grover",
+  "groverMiss",
+  "shor",
+  "noCircuit",
+];
+
+for (const key of QUANTUM_COLLISION_CASES) {
+  const capture = QUANTUM_CASES[key];
+  for (const width of [1280, 390, 320]) {
+    test(`Quantum Circuit: the ${key} capture's texts never meet each other, a line or a gate at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openQuantum(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${QUANTUM}-svg`, null)),
+        ...(await drawnCollisions(page, `${QUANTUM}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["bernsteinVazirani", "deutsch", "simon", "grover"]) {
+  test(`Quantum Circuit: on a 390 px phone the ${key} circuit is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = QUANTUM_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openQuantum(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${QUANTUM}-quantum`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(400);
+    await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${QUANTUM}-svg`);
+    const before = await smallestText(page, `${QUANTUM}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, capture.frames.length - 1);
+    const after = await smallestText(page, `${QUANTUM}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
 // --- Every renderer opens at fit -------------------------------------------------------------
 //
 // Each registered picture type (components/pictures/registry.js), drawn from one capture on the
@@ -6615,6 +7101,7 @@ const FIT_CASES = {
   GroupedGraph: SAT3_CLAUSE_GRAPH_FRAMES,
   LayeredGraph: TOPOLOGICAL_SORT_LAYERED_FRAMES,
   Packing: PARTITION_PACKING_FRAMES,
+  QuantumCircuit: BV_QUANTUM_FRAMES,
   Schedule: PUMP_EM_SCHEDULE_FRAMES,
   SearchTree: TSP_SEARCH_TREE_FRAMES,
   Table: DFA_TABLE_FRAMES,

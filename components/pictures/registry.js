@@ -57,6 +57,7 @@ import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
 import PackingRenderer, { packingAnnotations } from "./PackingRenderer";
+import QuantumRenderer, { quantumAnnotations } from "./QuantumRenderer";
 import ScheduleRenderer, { scheduleAnnotations } from "./ScheduleRenderer";
 import SearchTreeRenderer, { searchTreeAnnotations } from "./SearchTreeRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
@@ -74,6 +75,7 @@ export const PICTURE_RENDERERS = {
   GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
   Packing: PackingRenderer,
+  QuantumCircuit: QuantumRenderer,
   Schedule: ScheduleRenderer,
   SearchTree: SearchTreeRenderer,
   Table: TableRenderer,
@@ -92,6 +94,7 @@ const PICTURE_ANNOTATIONS = {
   GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
   Packing: packingAnnotations,
+  QuantumCircuit: quantumAnnotations,
   Schedule: scheduleAnnotations,
   SearchTree: searchTreeAnnotations,
   TripartiteMatching: tripartiteAnnotations,
