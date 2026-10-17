@@ -3651,7 +3651,7 @@ export const JOB_SEQUENCING_SCHEDULE_FRAMES = {
     {
       event: "Done",
       caption:
-        "(1,3,5,4,0,2) is the first order that keeps the late penalty within K = 4, found after 191 orders. (40 not shown)",
+        "(1,3,5,4,0,2) is the first order that keeps the late penalty within K = 4, found after 191 orders (40 not shown).",
       focus: [],
       order: ["J1", "J3", "J5", "J4", "J0", "J2"],
       runs: [
