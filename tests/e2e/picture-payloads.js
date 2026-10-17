@@ -9,7 +9,8 @@
 // (#202) follow at the end, each with its instance and solver. The Packing pictures (#207) and
 // the Search Tree pictures (#217) come last, captured the same way on 2026-10-16 (Subset Sum's
 // FastApproximation, and the TSP and 3SAT trees, again after Redux #897-#900). The Board pictures
-// (#208) and the Geometry pictures (#212) follow them, captured the same way on 2026-10-16.
+// (#208) and the Geometry pictures (#212) follow them, captured the same way on 2026-10-16. The
+// Schedule pictures (#211) are in tests/e2e/schedule-payloads.js.
 
 /** format=frames for DFATableVisualization: picture type Table (has a renderer). */
 export const DFA_TABLE_FRAMES = {
