@@ -40,6 +40,9 @@
 // #211: the Schedule renderer (Job Sequencing, Pump Scheduling) after that: each job's run and
 // deadline, each pump's hours, the forward pass's band, the replay's tank line and costs, the
 // budget, texts that meet no other text, line or mark, and on a phone a picture at its own size.
+// #213: the Tripartite Matching renderer (3-Dimensional Matching) after that: the three columns
+// of names, each triple's line and list row, the ×2 badges, the Blocked and Committed triples,
+// the trace, texts that meet nothing, and on a phone the list under the columns.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel } from "./helpers";
@@ -59,7 +62,11 @@ import {
   DFA_GARBAGE_AUTOMATON_FRAMES,
   DFA_TABLE_FRAMES,
   DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
+  DM3_BACKTRACKING_TRIPARTITE_FRAMES,
+  DM3_NONE_TRIPARTITE_FRAMES,
   DM3_SEARCH_TREE_FRAMES,
+  DM3_TRIPARTITE_FRAMES,
+  DM3_WIDE_TRIPARTITE_FRAMES,
   EXACT_COVER_BIPARTITE_FRAMES,
   GRAPH_COLORING_FAILED_SEARCH_TREE_FRAMES,
   GRAPH_COLORING_SEARCH_TREE_FRAMES,
@@ -5863,6 +5870,332 @@ for (const key of ["jobs", "pumpCm", "pumpEm", "pumpFractional"]) {
   });
 }
 
+// --- #213: the Tripartite Matching renderer (3-Dimensional Matching) ----------------------------
+
+const TRIPARTITE = "#workbench-source-frames-tripartitematching";
+
+/**
+ * Each 3-Dimensional Matching capture. Every capture is drawn on the 3SAT page (its
+ * visualization made to name TripartiteMatching), as CI's backend may serve no Tripartite
+ * Matching visualization yet: the picture is the capture's, whatever the page.
+ */
+const TRIPARTITE_CASES = {
+  bruteForce: DM3_TRIPARTITE_FRAMES,
+  backtracking: DM3_BACKTRACKING_TRIPARTITE_FRAMES,
+  wide: DM3_WIDE_TRIPARTITE_FRAMES,
+  none: DM3_NONE_TRIPARTITE_FRAMES,
+};
+
+async function openTripartite(page, capture) {
+  await setEveryPictureType(page, "TripartiteMatching");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${TRIPARTITE}-tripartite`)).toBeVisible();
+}
+
+const tripartiteElement = (page, id) =>
+  page.locator(`${TRIPARTITE}-tripartite [data-element-id="${id}"]`);
+const tripartiteRow = (page, id) =>
+  page.locator(`${TRIPARTITE}-tripartite [data-triple-id="${id}"]`);
+const tripartiteLine = (page, id) =>
+  page.locator(`${TRIPARTITE}-tripartite [data-triple-line="${id}"]`);
+
+/** Every name of a payload, X then Y then Z. */
+const namesOf = (payload) => [...payload.x, ...payload.y, ...payload.z];
+
+/** Frame `index`'s names, triples, badges and choices, checked one by one against the picture. */
+async function expectTripartiteFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const picture = page.locator(`${TRIPARTITE}-tripartite`);
+  const elements = await picture
+    .locator("[data-element-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((element) => [
+          element.getAttribute("data-element-id"),
+          [
+            element.getAttribute("data-state"),
+            element.querySelector("[data-repeat]")?.getAttribute("data-repeat") ?? null,
+          ],
+        ]),
+      ),
+    );
+  for (const element of namesOf(capture.payload)) {
+    expect(elements[element.id], element.id).toEqual([
+      frame.elements[element.id]?.state ?? "Background",
+      frame.repeats[element.id] ? String(frame.repeats[element.id]) : null,
+    ]);
+  }
+  const triples = await picture.locator("[data-triple-id]").evaluateAll((all) =>
+    Object.fromEntries(
+      all.map((row) => {
+        const id = row.getAttribute("data-triple-id");
+        const line = row.ownerSVGElement.querySelector(`[data-triple-line="${id}"]`);
+        return [
+          id,
+          [row.getAttribute("data-state"), line.getAttribute("data-state"), row.dataset.chosen],
+        ];
+      }),
+    ),
+  );
+  const chosen = new Set(frame.chosen);
+  for (const triple of capture.payload.triples) {
+    const state = frame.triples[triple.id]?.state ?? "Background";
+    expect(triples[triple.id], triple.id).toEqual([
+      state,
+      state,
+      chosen.has(triple.id) ? "true" : undefined,
+    ]);
+  }
+}
+
+for (const [key, capture] of Object.entries(TRIPARTITE_CASES)) {
+  test(`Tripartite Matching: the ${key} capture draws every name and triple, and every step`, async ({
+    page,
+  }) => {
+    test.slow();
+    const { payload } = capture;
+    await openTripartite(page, capture);
+    const picture = page.locator(`${TRIPARTITE}-tripartite`);
+    await expect(picture.locator("[data-element-id]")).toHaveCount(namesOf(payload).length);
+    await expect(picture.locator("[data-triple-id]")).toHaveCount(payload.triples.length);
+    await expect(picture.locator("[data-triple-line]")).toHaveCount(payload.triples.length);
+    for (const element of namesOf(payload)) {
+      await expect(tripartiteElement(page, element.id).locator("[data-label]")).toHaveText(
+        element.name,
+      );
+    }
+    const names = new Map(namesOf(payload).map((element) => [element.id, element.name]));
+    for (const triple of payload.triples) {
+      await expect(tripartiteRow(page, triple.id).locator("[data-names]")).toHaveText(
+        [triple.x, triple.y, triple.z].map((id) => names.get(id)).join(" · "),
+      );
+    }
+
+    await runToFrame(page, capture, 0);
+    await expectTripartiteFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectTripartiteFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^(T\d+: |\S+ in [XYZ], )/);
+    }
+  });
+}
+
+/** Each name's pill and each list row, drawn boxes by id, in viewBox units. */
+function tripartiteBoxes(page) {
+  return page
+    .locator(
+      `${TRIPARTITE}-tripartite [data-element-id], ${TRIPARTITE}-tripartite [data-triple-id]`,
+    )
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((piece) => {
+          const box = piece.querySelector("[data-body]").getBBox();
+          const id = piece.getAttribute("data-element-id") ?? piece.getAttribute("data-triple-id");
+          return [id, `${box.x},${box.y},${box.width},${box.height}`];
+        }),
+      ),
+    );
+}
+
+test("Tripartite Matching: before Run the picture is the plain instance, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  const capture = DM3_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  const picture = page.locator(`${TRIPARTITE}-tripartite`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator("[data-repeat], [data-chosen]")).toHaveCount(0);
+  // Wide enough at 1280 px for the list to sit beside the columns.
+  await expect(picture).toHaveAttribute("data-wide", "true");
+  const before = await tripartiteBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await tripartiteBoxes(page)).toEqual(before);
+});
+
+test("Tripartite Matching: a name used three times is Rejected with a ×3 badge, and the triples sharing a name are Blocked", async ({
+  page,
+}) => {
+  const capture = DM3_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  const index = capture.frames.findIndex((frame) =>
+    Object.values(frame.repeats).some((count) => count === 3),
+  );
+  expect(index).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, index);
+  const frame = capture.frames[index];
+  const [id] = Object.entries(frame.repeats).find(([, count]) => count === 3);
+  await expect(tripartiteElement(page, id)).toHaveAttribute("data-state", "Rejected");
+  await expect(tripartiteElement(page, id).locator("[data-repeat]")).toHaveText("×3");
+  const blocked = Object.keys(frame.triples).filter((t) => frame.triples[t].state === "Blocked");
+  expect(blocked.length).toBeGreaterThan(0);
+  for (const triple of blocked) {
+    await expect(tripartiteLine(page, triple)).toHaveAttribute("stroke-dasharray", "4 4");
+  }
+  await expect(legendBody(page)).toContainText("×2 badge (how many chosen triples use the name)");
+  await expect(legendBody(page)).toContainText(
+    "Line (a triple of M, through one name of each of X, Y and Z)",
+  );
+  await expect(legendBody(page)).toContainText("Blocked (can't be picked)");
+});
+
+test("Tripartite Matching: backtracking keeps its choices Committed, and the answer turns them Solution", async ({
+  page,
+}) => {
+  const capture = DM3_BACKTRACKING_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  const index = capture.frames.findIndex((frame) =>
+    Object.values(frame.triples).some((triple) => triple.state === "Committed"),
+  );
+  await runToFrame(page, capture, index);
+  const [committed] = Object.entries(capture.frames[index].triples).find(
+    ([, triple]) => triple.state === "Committed",
+  );
+  await expect(tripartiteLine(page, committed)).toHaveAttribute("stroke-dasharray", "8 4");
+  await expect(tripartiteRow(page, committed)).toHaveAttribute("data-chosen", "true");
+  await toFrame(page, capture, capture.frames.length - 1);
+  for (const id of capture.frames.at(-1).chosen) {
+    await expect(tripartiteRow(page, id)).toHaveAttribute("data-state", "Solution");
+    await expect(tripartiteLine(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Tripartite Matching: hovering, focusing or tapping a name traces its triples, the rest fading by color", async ({
+  page,
+}) => {
+  const capture = DM3_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  // Paul (x1) is in T1 and T2: T1's names and T2's stay, the rest fade.
+  await tripartiteElement(page, "x1").hover();
+  await expect(tripartiteElement(page, "x1")).toHaveAttribute("data-traced", "trace");
+  for (const id of ["y1", "z1", "y2", "z3"]) {
+    await expect(tripartiteElement(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(tripartiteElement(page, "x2")).toHaveAttribute("data-traced", "faint");
+  await expect(tripartiteLine(page, "T1")).toHaveAttribute("data-traced", "trace");
+  await expect(tripartiteLine(page, "T3")).toHaveAttribute("data-traced", "faint");
+  await expect(tripartiteRow(page, "T4")).toHaveAttribute("data-traced", "faint");
+  const faded = await tripartiteElement(page, "x2").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  // A list row traces its three names.
+  await page.mouse.move(0, 0);
+  await tripartiteRow(page, "T6").hover();
+  for (const id of ["x3", "y3", "z1"]) {
+    await expect(tripartiteElement(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(tripartiteElement(page, "x1")).toHaveAttribute("data-traced", "faint");
+  await page.mouse.move(0, 0);
+  await tripartiteRow(page, "T2").focus();
+  await expect(tripartiteRow(page, "T2")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(tripartiteRow(page, "T2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Tripartite Matching: on a phone the list goes under the columns, and a tap traces a name after zooming in", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const capture = DM3_WIDE_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await expect(page.locator(`${TRIPARTITE}-tripartite`)).toHaveAttribute("data-wide", "false");
+  await expectFits(page, `${TRIPARTITE}-svg`);
+  await page.locator(`${TRIPARTITE}-zoom-in`).click();
+  await expect(page.locator(`${TRIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await tripartiteElement(page, "y3").focus();
+  await tripartiteElement(page, "y3").blur();
+  await tripartiteElement(page, "y3").click();
+  await expect(tripartiteElement(page, "y3")).toHaveAttribute("aria-pressed", "true");
+  await expect(tripartiteElement(page, "x1")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${TRIPARTITE}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Tripartite Matching: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openTripartite(page, DM3_TRIPARTITE_FRAMES);
+      const svg = page.locator(`${TRIPARTITE}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${TRIPARTITE}-svg`);
+      await expect(page.locator(`${TRIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The names, the heads and the list follow the theme: no dark-on-dark, no light-on-white.
+      for (const selector of ["[data-label]", "[data-head]", "[data-names]"]) {
+        const ink = await page
+          .locator(`${TRIPARTITE}-tripartite ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+    });
+  }
+}
+
+for (const [key, capture] of Object.entries(TRIPARTITE_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Tripartite Matching: the ${key} capture's texts never meet each other, a line or a badge at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openTripartite(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${TRIPARTITE}-svg`, null)),
+        ...(await drawnCollisions(page, `${TRIPARTITE}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["bruteForce", "wide"]) {
+  test(`Tripartite Matching: on a 390 px phone the ${key} picture is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = TRIPARTITE_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openTripartite(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${TRIPARTITE}-tripartite`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(790);
+    await expect(page.locator(`${TRIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${TRIPARTITE}-svg`);
+    const before = await smallestText(page, `${TRIPARTITE}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, capture.frames.length - 1);
+    const after = await smallestText(page, `${TRIPARTITE}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
 // --- Every renderer opens at fit -------------------------------------------------------------
 //
 // Each registered picture type (components/pictures/registry.js), drawn from one capture on the
@@ -5883,6 +6216,7 @@ const FIT_CASES = {
   Schedule: PUMP_EM_SCHEDULE_FRAMES,
   SearchTree: TSP_SEARCH_TREE_FRAMES,
   Table: DFA_TABLE_FRAMES,
+  TripartiteMatching: DM3_TRIPARTITE_FRAMES,
 };
 
 for (const width of [390, 1280]) {
@@ -6456,4 +6790,33 @@ test("Drag: a clause moves with its literals, and a literal stays inside its cla
 
   await wobblyClick(page, literal(page, "c1-0"));
   await expect(literal(page, "c1-0")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Drag: a Tripartite name only moves up and down its own column, and its triples follow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openTripartite(page, DM3_TRIPARTITE_FRAMES);
+  const austin = tripartiteElement(page, "y2");
+  const before = await drawnCentre(austin);
+  const line = tripartiteLine(page, "T2");
+  const d = await line.getAttribute("d");
+  await mouseDrag(page, austin, 120, 40);
+  const moved = await drawnCentre(austin);
+  expect(moved.x).toBeCloseTo(before.x, 1);
+  expect(moved.y - before.y).toBeGreaterThan(20);
+  // T2's line (Paul, Austin, Jake) now meets Austin where it is.
+  const ys = (await line.getAttribute("d")).match(/-?[\d.]+,-?[\d.]+/g).map((pair) => {
+    const [, y] = pair.split(",").map(Number);
+    return y;
+  });
+  expect(ys.some((y) => Math.abs(y - moved.y) < 10)).toBe(true);
+  expect(await line.getAttribute("d")).not.toEqual(d);
+  // Never above the first row, however far it is dragged.
+  await mouseDrag(page, austin, 0, -400);
+  const top = await drawnCentre(tripartiteElement(page, "y1"));
+  expect((await drawnCentre(austin)).y).toBeGreaterThanOrEqual(top.y - 0.5);
+  await page.locator(`${TRIPARTITE}-layout-reset`).click();
+  expect(await drawnCentre(austin)).toEqual(before);
+  await expect(line).toHaveAttribute("d", d);
 });
