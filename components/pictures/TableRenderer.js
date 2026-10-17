@@ -48,6 +48,7 @@ import {
   HEAD_SPACING,
   layoutTable,
   PILL_HEIGHT,
+  pillSize,
   ROW,
   textWidth,
   widestTexts,
@@ -131,7 +132,8 @@ function Arrow({ x1, y1, x2, y2, color, width, dash, ...rest }) {
   const length = Math.hypot(dx, dy) || 1;
   const ux = dx / length;
   const uy = dy / length;
-  const head = 7;
+  // A short arrow gets a smaller head, so the head never reaches back past the arrow's start.
+  const head = Math.min(7, length * 0.6);
   const baseX = x2 - ux * head;
   const baseY = y2 - uy * head;
   const r = (value) => Math.round(value * 100) / 100;
@@ -996,7 +998,7 @@ function rowsDrawing({ layout, payload, step, traced, traceProps, idPrefix, name
     const textW =
       value === null
         ? 0
-        : textWidth(value, pill ? font - 1 : font) + (pill ? 2 * layout.pillPad : 0);
+        : textWidth(value, pill ? pillSize(font) : font) + (pill ? 2 * layout.pillPad : 0);
     const width = Math.min(column.width - 4, Math.max(10, textW + 4));
     const x =
       column.align === "middle"
@@ -1220,7 +1222,7 @@ function rowsDrawing({ layout, payload, step, traced, traceProps, idPrefix, name
                   const tone = stated
                     ? { ink: rowStyle.ink, line: rowStyle.ink, bold: true }
                     : pillTone(column.key, value);
-                  const w = value.length * (font - 1) * 0.62 + 2 * layout.pillPad;
+                  const w = textWidth(value, pillSize(font)) + 2 * layout.pillPad;
                   const x0 = column.x + (column.width - Math.max(w, 0)) / 2;
                   const px = column.align === "start" ? column.textX : x0;
                   body = (
@@ -1244,7 +1246,7 @@ function rowsDrawing({ layout, payload, step, traced, traceProps, idPrefix, name
                         dominantBaseline="central"
                         fill={tone.ink}
                         fontFamily={MONO}
-                        fontSize={font - 1}
+                        fontSize={pillSize(font)}
                         fontWeight={tone.bold ? 700 : 400}
                         pointerEvents="none"
                       >

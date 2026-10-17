@@ -26,7 +26,7 @@
 
 /** The drawing's width at most (and before the box is measured) and at least. */
 export const MAX_WIDTH = 760;
-const MIN_WIDTH = 240;
+const MIN_WIDTH = 200;
 
 /** A character's width in the monospace font, in em (generous, so text never outgrows a cell). */
 const CHAR = 0.62;
@@ -55,17 +55,25 @@ const TIERS = [
   { font: 13, pad: 12, pill: 8 },
   { font: 12, pad: 8, pill: 6 },
   { font: 12, pad: 5, pill: 4 },
+  { font: 12, pad: 3, pill: 3 },
+  { font: 11, pad: 3, pill: 3 },
 ];
+
+/** A pill's text size for a table's text size: a size smaller, but never under 11. */
+export function pillSize(font) {
+  return Math.max(11, font - 1);
+}
 
 /** The columns whose values are drawn as pills (a verdict or a settled mark). */
 export const PILL_KEYS = new Set(["accepting", "holds", "settled"]);
 
 /** Edit Distance: a cell's side at most and at least, and the bands for the axes. */
 const MAX_CELL = 44;
-const MIN_CELL = 26;
+// At least room for a step's arrow between two neighbours' numbers.
+const MIN_CELL = 30;
 const SIDE_BAND = 20;
 const TOP_BAND = 22;
-const LETTER_BAND = 28;
+const LETTER_BAND = 24;
 
 function round(value) {
   return Math.round(value * 100) / 100;
@@ -271,7 +279,7 @@ function layoutRows(payload, width, frames, shownRows, widestIn) {
   const measure = (tier) => {
     const valueW = (c, text) => {
       const pill = PILL_KEYS.has(columns[c]?.key);
-      if (pill) return textWidth(text, tier.font - 1) + 2 * tier.pill + 2;
+      if (pill) return textWidth(text, pillSize(tier.font)) + 2 * tier.pill + 2;
       if (chipColumns.has(c)) return Math.max(CHIP_MIN, textWidth(text, tier.font) + 12);
       return textWidth(text, tier.font);
     };
