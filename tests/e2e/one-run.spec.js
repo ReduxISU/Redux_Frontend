@@ -17,10 +17,14 @@
 //
 // #217: 3SAT's Search Tree at the end: the step kept when switching from the clause graph after a
 // backtracking run, and the note when the run's solver is one the tree can't draw.
+//
+// #209: SSSP's step table last: drawn from the same run as the problem's Layered Graph, on the
+// same step, its rows as that step leaves them.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel, selectSolverByName } from "./helpers";
 import { DFA_ONE_RUN, SAT3_BACKTRACKING_ONE_RUN, SAT3_PPZ_ONE_RUN } from "./run-payloads";
+import { SSSP_ONE_RUN } from "./table-payloads";
 
 const PROBLEM = "DFA Acceptance";
 const TABLE_VIZ = "DFATableVisualization";
@@ -458,4 +462,63 @@ test("Search Tree: a 3SAT solver it can't draw leaves it waiting for a run, with
     `${TREE_NAME} can't draw the steps of ${runPictures.solverName}, so it shows the instance. The answer: ${runPictures.answer}.`,
   );
   await expect(page.locator(POSITION)).toHaveCount(0);
+});
+
+test("SSSP's step table is drawn from the same run as its Layered Graph, on the same step", async ({
+  page,
+}) => {
+  const graphViz = "SSSPVisualization";
+  const tableViz = "SSSPTableVisualization";
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route(ALL_INFO_REQUEST, async (route) => {
+    const response = await route.fetch();
+    const info = await response.json();
+    if (info[graphViz]) info[graphViz].pictureType = "LayeredGraph";
+    if (info[tableViz]) info[tableViz].pictureType = "Table";
+    await route.fulfill({ response, json: info });
+  });
+  const asked = [];
+  await page.route(RUN_REQUEST, (route) => {
+    asked.push("run");
+    return route.fulfill({ json: SSSP_ONE_RUN });
+  });
+  await page.route(VISUALIZE_REQUEST, (route) => {
+    const visualization = new URL(route.request().url()).searchParams.get("visualization");
+    asked.push(visualization);
+    const { type, payload, frames } = pictureOf(SSSP_ONE_RUN, visualization);
+    return route.fulfill({ json: { type, payload, frames } });
+  });
+  await page.route(SOLVE_REQUEST, (route) => route.fulfill({ json: SSSP_ONE_RUN.answer }));
+  await gotoProblemDetail(page, "Single Source Shortest Path Problem", { expect });
+  // The page opens on its first visualization, the step table.
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Table", {
+    timeout: 20_000,
+  });
+  const table = pictureOf(SSSP_ONE_RUN, tableViz).frames;
+  await run(page, table.length);
+  await previousStep(page);
+  await previousStep(page);
+  await expect(page.locator(POSITION)).toHaveText(`Step ${table.length - 2} of ${table.length}`);
+
+  // The Layered Graph is on the same step of the same run, and so is the table coming back.
+  await chooseVisualization(page, "Single Source Shortest Path Visualization");
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "LayeredGraph");
+  await expect(page.locator(POSITION)).toHaveText(`Step ${table.length - 2} of ${table.length}`);
+  await chooseVisualization(page, "SSSP Table Visualization");
+  await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Table");
+  await expect(page.locator(POSITION)).toHaveText(`Step ${table.length - 2} of ${table.length}`);
+  const frame = table[table.length - 3];
+  await expect(page.locator(CAPTION)).toHaveText(frame.caption);
+  for (const [index, row] of pictureOf(SSSP_ONE_RUN, tableViz).payload.rows.entries()) {
+    await expect(page.locator(`#workbench-source-frames-table-${row.id}`)).toHaveAttribute(
+      "data-state",
+      frame.rows[row.id]?.state ?? "Background",
+    );
+    await expect(page.locator(`#workbench-source-frames-table-r${index}c2`)).toHaveText(
+      frame.values[index][2],
+    );
+  }
+  // One run; the step table was only asked for alone before Run, for its plain picture.
+  expect(asked.filter((request) => request === "run")).toHaveLength(1);
+  expect(asked.filter((request) => request === tableViz)).toHaveLength(1);
 });

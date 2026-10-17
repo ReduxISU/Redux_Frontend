@@ -50,6 +50,11 @@
 // and gate, each step's column, outcome bars by amplitude sign, the measured read, a classical
 // solver's oracle calls, Shor's note, the trace, texts that meet nothing, and on a phone a small
 // circuit at its own size.
+// #209: the Table renderer (Edit Distance's grid, 0-1 ILP's matrix, and the step tables of DFA,
+// NFA, SSSP and SPSP) after that: the blank before Run, every step's cells, states and arrows, a
+// layout that holds still, the edits the answer spells out, the chips, shaded coefficients, pills
+// and tentative costs, the trace back to what a cell or a row came from, texts that meet nothing,
+// and on a phone a table at its own size.
 
 import {
   LDC_CODE_TREE_FRAMES,
@@ -152,6 +157,23 @@ import {
   PUMP_CM_SCHEDULE_FRAMES,
   PUMP_EM_SCHEDULE_FRAMES,
 } from "./schedule-payloads";
+import {
+  DFA_ACCEPT_TABLE_FRAMES,
+  DFA_REJECT_TABLE_FRAMES,
+  EDIT_DISTANCE_EMPTY_TABLE_FRAMES,
+  EDIT_DISTANCE_KITTEN_TABLE_FRAMES,
+  EDIT_DISTANCE_TABLE_FRAMES,
+  ILP_NONE_TABLE_FRAMES,
+  ILP_SEVERAL_TABLE_FRAMES,
+  ILP_TABLE_FRAMES,
+  NFA_BACKTRACK_TABLE_FRAMES,
+  NFA_REJECT_TABLE_FRAMES,
+  NFA_SUBSET_TABLE_FRAMES,
+  SPSP_EARLY_TABLE_FRAMES,
+  SPSP_TABLE_FRAMES,
+  SSSP_TABLE_FRAMES,
+  SSSP_UNREACHABLE_TABLE_FRAMES,
+} from "./table-payloads";
 
 const PROBLEM = "DFA Acceptance";
 const TABLE_VIZ = "DFATableVisualization";
@@ -421,19 +443,20 @@ test("Committed draws apart from Solution, dashed, and has its own Legend entry"
   const committed = page.locator(`${TABLE_PREFIX}-r0`);
   await expect(committed).toHaveAttribute("data-state", "Committed");
   await expect(page.locator(`${TABLE_PREFIX}-r1`)).toHaveAttribute("data-state", "Solution");
-  const cellStyle = (row) =>
-    page.locator(`${TABLE_PREFIX}-${row}c1`).evaluate((cell) => {
-      const style = getComputedStyle(cell);
+  // A stated row is filled and outlined in its state's colors; Committed's outline is dashed.
+  const rowStyle = (row) =>
+    page.locator(`${TABLE_PREFIX}-${row}`).evaluate((group) => {
+      const line = group.querySelector("[data-row-line]");
       return {
-        fill: style.backgroundColor,
-        line: style.borderTopStyle,
-        lineColor: style.borderTopColor,
+        fill: getComputedStyle(group.querySelector("[data-row-fill]")).fill,
+        dash: line.getAttribute("stroke-dasharray"),
+        lineColor: getComputedStyle(line).stroke,
       };
     });
-  const kept = await cellStyle("r0");
-  const answer = await cellStyle("r1");
-  expect(kept.line).toBe("dashed");
-  expect(answer.line).toBe("solid");
+  const kept = await rowStyle("r0");
+  const answer = await rowStyle("r1");
+  expect(kept.dash).toMatch(/\d/);
+  expect(answer.dash).toBeNull();
   expect(kept.fill).not.toBe(answer.fill);
   expect(kept.lineColor).not.toBe(answer.lineColor);
 
@@ -7083,11 +7106,560 @@ for (const key of ["bernsteinVazirani", "deutsch", "simon", "grover"]) {
   });
 }
 
+// --- #209: the Table renderer (Edit Distance, 0-1 ILP, and the step tables of DFA, NFA, SSSP
+// and SPSP) ------------------------------------------------------------------------------------
+
+const TABLE = TABLE_PREFIX;
+
+/**
+ * Each Table capture (tests/e2e/table-payloads.js). Every capture is drawn on the 3SAT page (its
+ * visualization made to name Table), as CI's backend serves none of these pictures yet: the
+ * picture is the capture's, whatever the page.
+ */
+const TABLE_CASES = {
+  editDistance: EDIT_DISTANCE_TABLE_FRAMES,
+  editDistanceKitten: EDIT_DISTANCE_KITTEN_TABLE_FRAMES,
+  editDistanceEmpty: EDIT_DISTANCE_EMPTY_TABLE_FRAMES,
+  ilp: ILP_TABLE_FRAMES,
+  ilpSeveral: ILP_SEVERAL_TABLE_FRAMES,
+  ilpNone: ILP_NONE_TABLE_FRAMES,
+  dfaAccept: DFA_ACCEPT_TABLE_FRAMES,
+  dfaReject: DFA_REJECT_TABLE_FRAMES,
+  nfaBacktrack: NFA_BACKTRACK_TABLE_FRAMES,
+  nfaSubset: NFA_SUBSET_TABLE_FRAMES,
+  nfaReject: NFA_REJECT_TABLE_FRAMES,
+  sssp: SSSP_TABLE_FRAMES,
+  ssspUnreachable: SSSP_UNREACHABLE_TABLE_FRAMES,
+  spsp: SPSP_TABLE_FRAMES,
+  spspEarly: SPSP_EARLY_TABLE_FRAMES,
+};
+
+async function openTable(page, capture) {
+  await setEveryPictureType(page, "Table");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${TABLE}-svg`)).toBeVisible();
+}
+
+const tableCell = (page, id) => page.locator(`${TABLE}-table [data-cell-id="${id}"]`);
+const tableRow = (page, id) => page.locator(`${TABLE}-table [data-row-id="${id}"]`);
+const tableReadout = (page) => page.locator(`${TABLE}-readout`);
+
+/** What `frame` should draw: each row's state, each cell's text, state and underline, and arrows. */
+function expectedTable(capture, frame) {
+  const { payload } = capture;
+  const values = frame.values ?? [];
+  const grid = payload.shape === "grid";
+  const count = grid ? payload.rows.length : Math.min(values.length, payload.rows.length);
+  const rows = {};
+  const cells = {};
+  for (let r = 0; r < count; r += 1) {
+    const rowId = payload.rows[r].id;
+    const rowState = frame.rows?.[rowId]?.state ?? "Background";
+    if (!grid) rows[rowId] = rowState;
+    payload.columns.forEach((_, c) => {
+      const id = `r${r}c${c}`;
+      cells[id] = [
+        values[r]?.[c] ?? "",
+        frame.cells?.[id]?.state ?? (grid ? "Background" : rowState),
+        (frame.changed ?? []).includes(id) ? "true" : null,
+      ];
+    });
+  }
+  return { rows, cells, arrows: grid ? (frame.arrows ?? []).length : 0 };
+}
+
+/** What the picture draws: each row's state, each cell's text, state and underline, and arrows. */
+function drawnTable(page) {
+  return page.locator(`${TABLE}-table`).evaluate((root) => ({
+    rows: Object.fromEntries(
+      [...root.querySelectorAll("[data-row-id]")].map((el) => [
+        el.getAttribute("data-row-id"),
+        el.getAttribute("data-state"),
+      ]),
+    ),
+    cells: Object.fromEntries(
+      [...root.querySelectorAll("[data-cell-id]")].map((el) => [
+        el.getAttribute("data-cell-id"),
+        [el.textContent, el.getAttribute("data-state"), el.getAttribute("data-changed")],
+      ]),
+    ),
+    arrows: root.querySelectorAll("[data-step-arrow]").length,
+  }));
+}
+
+/** The frames a long capture is checked on (all of a short one). */
+function tableIndices(capture) {
+  const count = capture.frames.length;
+  if (count <= 25) return [...Array(count).keys()];
+  return [0, 1, Math.floor(count / 2), count - 2, count - 1];
+}
+
+for (const [key, capture] of Object.entries(TABLE_CASES)) {
+  test(`Table: the ${key} capture draws its blank before Run, then every step's cells, states and arrows`, async ({
+    page,
+  }) => {
+    test.slow();
+    await openTable(page, capture);
+    await expect(page.locator(`${TABLE}-table`)).toHaveAttribute(
+      "data-table-shape",
+      capture.payload.shape,
+    );
+    expect(await drawnTable(page)).toEqual(
+      expectedTable(capture, { values: capture.payload.blank.values }),
+    );
+    const count = capture.frames.length;
+    await page.locator("#workbench-run").click();
+    await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+    for (const index of tableIndices(capture)) {
+      await toFrame(page, capture, index);
+      expect(await drawnTable(page), `frame ${index}`).toEqual(
+        expectedTable(capture, capture.frames[index]),
+      );
+    }
+    const last = capture.frames.at(-1);
+    await page.locator("#workbench-steps-slider input").press("End");
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of (await page.locator(`${TABLE}-table [data-focusable]`).all()).slice(0, 8)) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^(Cell \(|Step |Node |x = |row \d)/);
+    }
+  });
+}
+
+/** Every cell's body box and each heading's place, in drawing units, and the drawing's size. */
+function tableBoxes(page) {
+  return page.locator(`${TABLE}-svg`).evaluate((svg) => {
+    const round = (v) => Math.round(v * 10) / 10;
+    return {
+      cells: Object.fromEntries(
+        [...svg.querySelectorAll("[data-cell-id]")].map((el) => {
+          const box = el.querySelector("[data-body]").getBBox();
+          return [
+            el.getAttribute("data-cell-id"),
+            [box.x, box.y, box.width, box.height].map(round).join(","),
+          ];
+        }),
+      ),
+      heads: Object.fromEntries(
+        [...svg.querySelectorAll("[data-head][data-column-id]")].map((el) => [
+          el.getAttribute("data-column-id"),
+          el.getAttribute("x"),
+        ]),
+      ),
+      width: svg.closest("[data-drawing-width]").getAttribute("data-drawing-width"),
+    };
+  });
+}
+
+for (const key of ["editDistance", "ilp", "nfaBacktrack", "sssp", "spspEarly"]) {
+  test(`Table: the ${key} table keeps every cell where it was before Run, and nothing moves while stepping`, async ({
+    page,
+  }) => {
+    test.slow();
+    const capture = TABLE_CASES[key];
+    await openTable(page, capture);
+    const before = await tableBoxes(page);
+    await runToFrame(page, capture, 0);
+    const first = await tableBoxes(page);
+    // The columns keep their places and widths from before Run; a trace only gains row slots.
+    expect(first.heads).toEqual(before.heads);
+    expect(first.width).toBe(before.width);
+    for (const [id, box] of Object.entries(before.cells)) expect(first.cells[id], id).toBe(box);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      const now = await tableBoxes(page);
+      expect(now.width).toBe(first.width);
+      expect(now.heads).toEqual(first.heads);
+      for (const [id, box] of Object.entries(now.cells)) {
+        if (first.cells[id]) expect(box, `${id} at step ${index + 1}`).toBe(first.cells[id]);
+      }
+    }
+  });
+}
+
+test("Table: an Edit Distance cell reads three cells, solid from the one it took, and the answer spells out its edits", async ({
+  page,
+}) => {
+  const capture = EDIT_DISTANCE_TABLE_FRAMES;
+  await openTable(page, capture);
+  await expect(page.locator(`${TABLE}-edits [data-edits-empty]`)).toBeVisible();
+  await expect(page.locator(`${TABLE}-table-caption`)).toHaveText(
+    'Edit Distance Table Visualization: "horse" to "ros"',
+  );
+  await runToFrame(page, capture, 1);
+  const arrows = page.locator(`${TABLE}-table [data-step-arrow]`);
+  await expect(arrows).toHaveCount(3);
+  const best = page.locator(`${TABLE}-table [data-step-arrow][data-best="true"]`);
+  await expect(best).toHaveCount(1);
+  await expect(best).toHaveAttribute("data-step-arrow", "r0c0");
+  await expect(best.locator("line")).not.toHaveAttribute("stroke-dasharray", /./);
+  await expect(
+    page.locator(`${TABLE}-table [data-step-arrow][data-best="false"] line`).first(),
+  ).toHaveAttribute("stroke-dasharray", /\d/);
+  await expect(tableCell(page, "r0c0")).toHaveAttribute("data-arrow", "best");
+  await expect(tableCell(page, "r0c1")).toHaveAttribute("data-arrow", "read");
+  await expect(tableCell(page, "r1c0")).toHaveAttribute("data-arrow", "read");
+  await expect(tableCell(page, "r1c1")).toHaveAttribute("data-state", "ElementHighlight");
+  // The letters of the cell worked out are highlighted.
+  await expect(page.locator(`${TABLE}-table [data-current]`)).toHaveCount(2);
+  await expect(page.locator(`${TABLE}-table [data-letter="row-1"]`)).toHaveAttribute(
+    "data-current",
+    "true",
+  );
+
+  // The trace back keeps its path Committed, joined by arrows, until the answer turns it green.
+  const back = capture.frames.findIndex((frame) =>
+    Object.values(frame.cells).some((cell) => cell.state === "Committed"),
+  );
+  await toFrame(page, capture, back);
+  await expect(page.locator(`${TABLE}-table [data-step-arrow]`)).toHaveCount(0);
+  expect(await page.locator(`${TABLE}-table [data-path-arrow]`).count()).toBeGreaterThan(0);
+  await expect(page.locator(`${TABLE}-edits [data-edits-empty]`)).toBeVisible();
+
+  await page.locator("#workbench-steps-slider input").press("End");
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
+  await expect(page.locator(`${TABLE}-table [data-path-arrow]`)).toHaveCount(5);
+  // (horse, ros): replace h with r, keep o, delete r, keep s, delete e.
+  await expect(page.locator(`${TABLE}-edits`)).toHaveAttribute(
+    "data-edits",
+    "sub keep del keep del",
+  );
+  await expect(page.locator(`${TABLE}-edits`)).toContainText("R replace");
+  await expect(tableReadout(page)).toHaveText(
+    "The green path is one cheapest way: 1 replacement and 2 deletions. Hover or tap a cell to see what it was worked out from.",
+  );
+  await expect(legendBody(page)).toContainText("Solid arrow (the cell whose value this cell took)");
+});
+
+test("Table: an Edit Distance with an empty y is one column, and its answer is all deletions", async ({
+  page,
+}) => {
+  const capture = EDIT_DISTANCE_EMPTY_TABLE_FRAMES;
+  await openTable(page, capture);
+  await expect(page.locator(`${TABLE}-table [data-cell-id]`)).toHaveCount(4);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(page.locator(`${TABLE}-edits`)).toHaveAttribute("data-edits", "del del del");
+});
+
+test("Table: 0-1 ILP draws x as chips, shades the coefficients its 1s switch on, and a pill per row", async ({
+  page,
+}) => {
+  const capture = ILP_TABLE_FRAMES;
+  await openTable(page, capture);
+  // Before Run: every x is "?" in a dashed chip, nothing is shaded, and no row has a verdict.
+  const unset = page.locator(`${TABLE}-table [data-chip="?"]`);
+  await expect(unset).toHaveCount(3);
+  await expect(unset.first()).toHaveAttribute("stroke-dasharray", /\d/);
+  await expect(page.locator(`${TABLE}-table [data-on]`)).toHaveCount(0);
+  await expect(page.locator(`${TABLE}-table [data-pill]`)).toHaveCount(0);
+
+  // The answer (0 1 0): x2's column is what every row adds up.
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(tableCell(page, "r0c1").locator("[data-chip]")).toHaveAttribute("data-chip", "1");
+  const on = await page
+    .locator(`${TABLE}-table [data-on]`)
+    .evaluateAll((cells) => cells.map((cell) => cell.getAttribute("data-cell-id")));
+  expect(on.sort()).toEqual(["r1c1", "r2c1", "r3c1"]);
+  await expect(page.locator(`${TABLE}-table [data-pill="yes"]`)).toHaveCount(3);
+  for (const row of ["r1", "r2", "r3"]) {
+    await expect(tableRow(page, row)).toHaveAttribute("data-state", "Solution");
+  }
+  // The first try breaks two rows.
+  await toFrame(page, capture, 0);
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-state", "Rejected");
+  await expect(page.locator(`${TABLE}-table [data-pill="no"]`)).toHaveCount(2);
+  await expect(legendBody(page)).toContainText("Shaded coefficient");
+});
+
+test("Table: a 0-1 ILP with no 0-1 solution ends on its blank, and no", async ({ page }) => {
+  const capture = ILP_NONE_TABLE_FRAMES;
+  await openTable(page, capture);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(page.locator(`${TABLE}-table [data-chip="?"]`)).toHaveCount(3);
+  await expect(page.locator(`${TABLE}-table [data-pill]`)).toHaveCount(0);
+  await expect(
+    page.locator(`${TABLE}-table [data-row-id]:not([data-state="Background"])`),
+  ).toHaveCount(0);
+});
+
+test("Table: a DFA that falls into Garbage ends on a Rejected row, and an NFA's runs keep their slots", async ({
+  page,
+}) => {
+  await openTable(page, DFA_REJECT_TABLE_FRAMES);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(tableRow(page, "r4")).toHaveAttribute("data-state", "Rejected");
+  await expect(tableCell(page, "r4c3")).toHaveText("Garbage");
+
+  // NFA Backtracking draws one explored run at a time: a shorter run leaves the later slots empty.
+  const capture = NFA_BACKTRACK_TABLE_FRAMES;
+  await openTable(page, capture);
+  const shrinks = capture.frames.findIndex(
+    (frame, i) => i > 0 && frame.values.length < capture.frames[i - 1].values.length,
+  );
+  expect(shrinks).toBeGreaterThan(0);
+  await page.locator("#workbench-run").click();
+  await toFrame(page, capture, shrinks - 1);
+  const width = await page.locator(`${TABLE}-table`).getAttribute("data-drawing-width");
+  const longer = capture.frames[shrinks - 1].values.length;
+  await expect(page.locator(`${TABLE}-table [data-row-id]`)).toHaveCount(longer);
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${TABLE}-table [data-row-id]`)).toHaveCount(
+    capture.frames[shrinks].values.length,
+  );
+  await expect(page.locator(`${TABLE}-table`)).toHaveAttribute("data-drawing-width", width);
+});
+
+test("Table: Dijkstra's table writes a cost not settled yet in italics, and an unreachable node ends Untraveled", async ({
+  page,
+}) => {
+  const capture = SSSP_UNREACHABLE_TABLE_FRAMES;
+  await openTable(page, capture);
+  await expect(page.locator(`${TABLE}-table-caption`)).toHaveText("Shortest paths from 1");
+  await runToFrame(page, capture, 1);
+  await expect(tableCell(page, "r1c2")).toHaveAttribute("data-tentative", "true");
+  await expect(tableCell(page, "r1c2").locator("text")).toHaveAttribute("font-style", "italic");
+  await expect(tableCell(page, "r0c2")).not.toHaveAttribute("data-tentative", /./);
+  // This step lowered 2's and 3's costs: those cells are underlined.
+  await expect(tableCell(page, "r1c2").locator("[data-underline]")).toHaveCount(1);
+  await page.locator("#workbench-steps-slider input").press("End");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(tableRow(page, "r5")).toHaveAttribute("data-state", "Untraveled");
+  await expect(tableCell(page, "r5c1").locator("[data-pill]")).toHaveAttribute(
+    "data-pill",
+    "unreachable",
+  );
+  await expect(legendBody(page)).toContainText("Italic (a cost found but not settled yet");
+  await expect(legendBody(page)).toContainText("Untraveled");
+});
+
+test("Table: hovering, focusing or tapping an Edit Distance cell traces the cells it was worked out from", async ({
+  page,
+}) => {
+  const capture = EDIT_DISTANCE_TABLE_FRAMES;
+  await openTable(page, capture);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await tableCell(page, "r1c1").hover();
+  await expect(tableCell(page, "r1c1")).toHaveAttribute("data-traced", "trace");
+  await expect(tableCell(page, "r0c0")).toHaveAttribute("data-traced", "trace");
+  await expect(tableCell(page, "r3c3")).toHaveAttribute("data-traced", "faint");
+  const faded = await tableCell(page, "r3c3").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(page.locator(`${TABLE}-table [data-trace-source]`)).toHaveCount(3);
+  await expect(
+    page.locator(`${TABLE}-table [data-trace-source][data-kind="best"]`),
+  ).toHaveAttribute("data-trace-source", "r0c0");
+  await expect(tableReadout(page)).toHaveText(
+    "Cell (1,1) = 1: 'h' ≠ 'r', so the cheapest of replace 'h' with 'r' 1 + 0, delete 'h' 1 + 1, insert 'r' 1 + 1: replace, from (0,0).",
+  );
+  await page.mouse.move(0, 0);
+  await tableCell(page, "r2c2").focus();
+  await expect(page.locator(`${TABLE}-table [data-trace-source]`)).toHaveCount(1);
+  await expect(tableReadout(page)).toHaveText("Cell (2,2) = 1: 'o' = 'o', so it copies (1,1) (1).");
+  await page.keyboard.press("Enter");
+  await expect(tableCell(page, "r2c2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Table: hovering a trace row traces the step it continues from, or a node's path back to the source", async ({
+  page,
+}) => {
+  await openTable(page, DFA_ACCEPT_TABLE_FRAMES);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await tableRow(page, "r3").hover();
+  await expect(tableRow(page, "r3")).toHaveAttribute("data-traced", "trace");
+  await expect(tableRow(page, "r2")).toHaveAttribute("data-traced", "trace");
+  await expect(tableRow(page, "r0")).toHaveAttribute("data-traced", "faint");
+  const marks = await page
+    .locator(`${TABLE}-table [data-trace-mark]`)
+    .evaluateAll((all) => all.map((el) => el.getAttribute("data-trace-mark")).sort());
+  expect(marks).toEqual(["r2c3", "r3c2"]);
+  await expect(tableReadout(page)).toHaveText(
+    "Step 3: read 'a', 3 → 2. It continues from step 2, which ended in 3.",
+  );
+
+  await openTable(page, SSSP_TABLE_FRAMES);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await tableRow(page, "r4").hover();
+  for (const row of ["r0", "r2", "r4"]) {
+    await expect(tableRow(page, row)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-traced", "faint");
+  await expect(tableReadout(page)).toHaveText("Node 5: cost 9, via 3, path 1 → 3 → 5, settled #5.");
+  await page.mouse.move(0, 0);
+  await tableRow(page, "r3").focus();
+  await page.keyboard.press("Enter");
+  await expect(tableRow(page, "r3")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Table: hovering an ILP row traces the x's that are 1 and the coefficients they switch on", async ({
+  page,
+}) => {
+  await openTable(page, ILP_TABLE_FRAMES);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await tableRow(page, "r2").hover();
+  const marks = await page
+    .locator(`${TABLE}-table [data-trace-mark]`)
+    .evaluateAll((all) => all.map((el) => el.getAttribute("data-trace-mark")).sort());
+  expect(marks).toEqual(["r0c1", "r2c1", "r2c3"]);
+  await expect(tableRow(page, "r0")).toHaveAttribute("data-traced", "trace");
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-traced", "faint");
+  await expect(tableReadout(page)).toHaveText("row 2: -1 (x2) = -1, against its bound -1: holds.");
+});
+
+test("Table: on a phone a tap traces a row, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openTable(page, SSSP_TABLE_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${TABLE}-svg`);
+  await page.locator(`${TABLE}-zoom-in`).click();
+  await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await tableRow(page, "r1").focus();
+  await tableRow(page, "r1").blur();
+  await tableRow(page, "r1").click();
+  await expect(tableRow(page, "r1")).toHaveAttribute("aria-pressed", "true");
+  await expect(tableReadout(page)).toHaveText(/^Node 2: cost ∞/);
+  await expectFits(page, `${TABLE}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Table: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      for (const capture of [EDIT_DISTANCE_TABLE_FRAMES, ILP_TABLE_FRAMES, SSSP_TABLE_FRAMES]) {
+        await openTable(page, capture);
+        const svg = page.locator(`${TABLE}-svg`);
+        expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+        await expectFits(page, `${TABLE}-svg`);
+        await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+        // The headings and the cells' text follow the theme: no dark-on-dark, no light-on-white.
+        for (const selector of ["[data-head]", "[data-letter], [data-cell-id] text"]) {
+          const ink = await page
+            .locator(`${TABLE}-table`)
+            .locator(selector)
+            .first()
+            .evaluate((el) => getComputedStyle(el).fill);
+          const [r, g, b] = ink.match(/\d+/g).map(Number);
+          expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+        }
+      }
+    });
+  }
+}
+
+for (const [key, capture] of Object.entries(TABLE_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Table: the ${key} capture's texts never meet each other, a line or a mark at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openTable(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${TABLE}-svg`, "[data-cell-id]")),
+        ...(await drawnCollisions(page, `${TABLE}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      await page.locator("#workbench-run").click();
+      const count = capture.frames.length;
+      await expect(page.locator("#workbench-steps-position")).toHaveText(
+        `Step ${count} of ${count}`,
+      );
+      for (const index of tableIndices(capture)) {
+        await toFrame(page, capture, index);
+        expect(await clear(), `frame ${index}`).toEqual([]);
+      }
+    });
+  }
+}
+
+/** The tables a phone draws at their own size: every one at 390 px, the narrower ones at 320. */
+const TABLE_PHONE_CASES = {
+  390: Object.keys(TABLE_CASES),
+  320: [
+    "editDistance",
+    "editDistanceKitten",
+    "editDistanceEmpty",
+    "ilp",
+    "ilpNone",
+    "dfaAccept",
+    "dfaReject",
+    "nfaBacktrack",
+    "nfaSubset",
+    "nfaReject",
+    "sssp",
+    "ssspUnreachable",
+    "spsp",
+    "spspEarly",
+  ],
+};
+
+for (const [width, keys] of Object.entries(TABLE_PHONE_CASES)) {
+  for (const key of keys) {
+    test(`Table: on a ${width} px phone the ${key} table is drawn at its own size, every text at least ${PHONE_TEXT_PX} px`, async ({
+      page,
+    }) => {
+      const capture = TABLE_CASES[key];
+      await page.setViewportSize({ width: Number(width), height: 900 });
+      await openTable(page, capture);
+      await page.locator("#workbench-panel-close").click();
+      await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      await expectFits(page, `${TABLE}-svg`);
+      const before = await smallestText(page, `${TABLE}-svg`);
+      expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(
+        PHONE_TEXT_PX,
+      );
+      await page.locator("#workbench-run").click();
+      const count = capture.frames.length;
+      await expect(page.locator("#workbench-steps-position")).toHaveText(
+        `Step ${count} of ${count}`,
+      );
+      const after = await smallestText(page, `${TABLE}-svg`);
+      expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    });
+  }
+}
+
+test("Table: a table too wide for a 320 px phone opens at fit, and + zooms it in to readable text", async ({
+  page,
+}) => {
+  const capture = ILP_SEVERAL_TABLE_FRAMES;
+  await page.setViewportSize({ width: 320, height: 900 });
+  await openTable(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  await expectFits(page, `${TABLE}-svg`);
+  expect((await smallestText(page, `${TABLE}-svg`)).px).toBeLessThan(PHONE_TEXT_PX);
+  await page.locator(`${TABLE}-zoom-in`).click();
+  await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  const zoomed = await smallestText(page, `${TABLE}-svg`);
+  expect(zoomed.px, `"${zoomed.text}" is ${zoomed.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  await expectFits(page, `${TABLE}-svg`);
+});
+
 // --- Every renderer opens at fit -------------------------------------------------------------
 //
 // Each registered picture type (components/pictures/registry.js), drawn from one capture on the
 // 3SAT page, opens at fit at a phone's and a desktop's width: before Run (where it draws the
-// plain instance) and after it. The Table is text with no zoom, and fits its box's width.
+// plain instance) and after it. The Table too (#209): it is drawn in SVG like the rest.
 
 /** One capture per registered picture type. */
 const FIT_CASES = {
@@ -7104,7 +7676,7 @@ const FIT_CASES = {
   QuantumCircuit: BV_QUANTUM_FRAMES,
   Schedule: PUMP_EM_SCHEDULE_FRAMES,
   SearchTree: TSP_SEARCH_TREE_FRAMES,
-  Table: DFA_TABLE_FRAMES,
+  Table: EDIT_DISTANCE_KITTEN_TABLE_FRAMES,
   TripartiteMatching: DM3_TRIPARTITE_FRAMES,
 };
 
@@ -7120,14 +7692,6 @@ for (const width of [390, 1280]) {
       if (width < 600) await page.locator("#workbench-panel-close").click();
       const prefix = `#workbench-source-frames-${type.toLowerCase()}`;
       const atFit = async (when) => {
-        if (type === "Table") {
-          await expect(page.locator(`${prefix}-zoom`), `${type} ${when}`).toHaveCount(0);
-          const overflow = await page.evaluate(
-            () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-          );
-          expect(overflow, `${type} ${when}`).toBeLessThanOrEqual(0);
-          return;
-        }
         // The Search Tree has nothing to draw before Run.
         if (type === "SearchTree" && when === "before Run") return;
         await expect(page.locator(`${prefix}-zoom`), `${type} ${when}`).toHaveAttribute(
