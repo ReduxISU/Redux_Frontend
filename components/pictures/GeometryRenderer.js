@@ -69,11 +69,19 @@ function pathOf(ids, byId) {
  * @param {string} props.name The visualization's name, for the diagram's label.
  * @param {Object} props.payload The Geometry payload.
  * @param {Object} props.frame The frame to draw.
+ * @param {Object[]} [props.frames] Every frame of the run (none before Run): their lines keep
+ *   clear of the labels.
  */
-export default function GeometryRenderer({ idPrefix, name, payload, frame }) {
+export default function GeometryRenderer({ idPrefix, name, payload, frame, frames = [] }) {
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
-  const layout = useMemo(() => layoutGeometry(payload, boxWidth ?? undefined), [payload, boxWidth]);
+  // The labels keep clear of every line the run draws, so they hold still over its steps; a
+  // frame drawn on its own (no run passed) is its own run.
+  const run = frames.length ? frames : frame;
+  const layout = useMemo(
+    () => layoutGeometry(payload, boxWidth ?? undefined, Array.isArray(run) ? run : [run]),
+    [payload, boxWidth, run],
+  );
   const [hover, setHover] = useState(null);
   const [pinned, setPinned] = useState(null);
   const byId = useMemo(() => new Map(layout.points.map((point) => [point.id, point])), [layout]);

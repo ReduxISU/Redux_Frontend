@@ -4785,6 +4785,130 @@ function pointCentres(page) {
   );
 }
 
+/**
+ * Every place where a Geometry point's label or order badge meets a drawn line (a hull's edge,
+ * the chain, a popped point's dashed line or a bold axis) or another point's dot, read off the
+ * screen. A line is its centre line; a label is its text's box, a badge its circle.
+ * @returns {Promise<string[]>} One line per collision; empty when every label is clear.
+ */
+function geometryLineCollisions(page) {
+  return page.locator(`${GEOMETRY}-svg`).evaluate((svg) => {
+    const found = [];
+    const toScreen = (element, x, y) => {
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      return point.matrixTransform(element.getScreenCTM());
+    };
+    const segments = [];
+    const addPath = (element, closed) => {
+      const corners = element
+        .getAttribute("points")
+        .trim()
+        .split(/\s+/)
+        .map((pair) => pair.split(",").map(Number))
+        .map(([x, y]) => toScreen(element, x, y));
+      const name = element.getAttribute("data-piece-role")
+        ? `the ${element.getAttribute("data-piece-role")} hull`
+        : element.hasAttribute("data-hull")
+          ? "the hull"
+          : "the chain";
+      const count = closed ? corners.length : corners.length - 1;
+      for (let i = 0; i < count; i += 1) {
+        segments.push({ name, a: corners[i], b: corners[(i + 1) % corners.length] });
+      }
+    };
+    for (const polygon of svg.querySelectorAll('[data-layer="hulls"] polygon')) {
+      addPath(polygon, true);
+    }
+    for (const polyline of svg.querySelectorAll('[data-layer="hulls"] polyline')) {
+      addPath(polyline, false);
+    }
+    for (const line of svg.querySelectorAll('[data-layer="hulls"] line, [data-axis-line]')) {
+      const value = (name) => Number(line.getAttribute(name));
+      segments.push({
+        name: line.hasAttribute("data-popped")
+          ? `the popped line to ${line.getAttribute("data-popped")}`
+          : `the ${line.getAttribute("data-axis-line")} axis`,
+        a: toScreen(line, value("x1"), value("y1")),
+        b: toScreen(line, value("x2"), value("y2")),
+      });
+    }
+    // Whether the segment a-b passes through the box (shrunk half a pixel): Liang-Barsky.
+    const crosses = ({ a, b }, box) => {
+      const left = box.left + 0.5;
+      const right = box.right - 0.5;
+      const top = box.top + 0.5;
+      const bottom = box.bottom - 0.5;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      let t0 = 0;
+      let t1 = 1;
+      for (const [p, q] of [
+        [-dx, a.x - left],
+        [dx, right - a.x],
+        [-dy, a.y - top],
+        [dy, bottom - a.y],
+      ]) {
+        if (p === 0) {
+          if (q < 0) return false;
+        } else {
+          const t = q / p;
+          if (p < 0) t0 = Math.max(t0, t);
+          else t1 = Math.min(t1, t);
+          if (t0 > t1) return false;
+        }
+      }
+      return true;
+    };
+    // How far the segment a-b passes from (x, y).
+    const distance = ({ a, b }, x, y) => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const length = dx * dx + dy * dy;
+      const t = length ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length)) : 0;
+      return Math.hypot(a.x + t * dx - x, a.y + t * dy - y);
+    };
+    const meets = (a, b) =>
+      a.left < b.right - 0.5 &&
+      b.left < a.right - 0.5 &&
+      a.top < b.bottom - 0.5 &&
+      b.top < a.bottom - 0.5;
+    const groups = [...svg.querySelectorAll("[data-point-id]")];
+    const dots = groups.map((group) => ({
+      id: group.getAttribute("data-point-id"),
+      box: group.querySelector("[data-body]").getBoundingClientRect(),
+    }));
+    for (const group of groups) {
+      const id = group.getAttribute("data-point-id");
+      const label = group.querySelector("[data-label]").getBoundingClientRect();
+      for (const segment of segments) {
+        if (crosses(segment, label)) found.push(`"${id}" is crossed by ${segment.name}`);
+      }
+      for (const dot of dots) {
+        if (dot.id !== id && meets(dot.box, label)) found.push(`"${id}" meets ${dot.id}'s dot`);
+      }
+      const badge = group.querySelector("[data-badge] circle");
+      if (badge) {
+        const box = badge.getBoundingClientRect();
+        const x = (box.left + box.right) / 2;
+        const y = (box.top + box.bottom) / 2;
+        const r = (box.right - box.left) / 2;
+        for (const segment of segments) {
+          if (distance(segment, x, y) < r - 0.5) {
+            found.push(`${id}'s badge is crossed by ${segment.name}`);
+          }
+        }
+        for (const dot of dots) {
+          if (dot.id !== id && meets(dot.box, box))
+            found.push(`${id}'s badge meets ${dot.id}'s dot`);
+        }
+      }
+    }
+    return found;
+  });
+}
+
 test("Geometry: the points are drawn to scale, one scale for both axes, y up", async ({ page }) => {
   const capture = CONVEX_HULL_GEOMETRY_FRAMES;
   await openGeometry(page, capture);
@@ -4931,14 +5055,17 @@ for (const scheme of ["light", "dark"]) {
 
 for (const [key, capture] of Object.entries(GEOMETRY_CASES)) {
   for (const width of [1280, 390, 320]) {
-    test(`Geometry: the ${key} capture's texts never meet at ${width} px, before Run and at every step`, async ({
+    test(`Geometry: the ${key} capture's texts never meet each other, a line or a dot at ${width} px, before Run and at every step`, async ({
       page,
     }) => {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       await openGeometry(page, capture);
       if (width < 600) await page.locator("#workbench-panel-close").click();
-      const clear = () => svgTextCollisions(page, `${GEOMETRY}-svg`, null);
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${GEOMETRY}-svg`, null)),
+        ...(await geometryLineCollisions(page)),
+      ];
       expect(await clear()).toEqual([]);
       await runToFrame(page, capture, 0);
       expect(await clear()).toEqual([]);

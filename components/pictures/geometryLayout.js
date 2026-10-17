@@ -12,11 +12,15 @@
 // never meet one. The step is the roundest that keeps the x axis's numbers apart at the
 // drawing's width.
 //
-// Each point's label (P1, P2, ...) goes beside it where it meets no other label, no point and
-// no corner badge: the first of seven places round the point that is clear (right and above,
-// then right and below, and so on), further out if none is, and the least crowded one if no
-// place is clear. Each point first keeps a diagonal spot for its order badge (above left unless
-// that covers another point), which the answer's corners get, so a badge never covers a label.
+// Each point's label (P1, P2, ...) goes beside it where it meets no other label, no point, no
+// corner badge and no line the run ever draws (a hull's edge, the merge's chain, a popped
+// point's dashed line, or a bold axis): the first of eight places round the point that is clear
+// (right and above, then right and below, and so on), else in the first clear gap round it
+// (every 15 degrees, near first, then further out), and the least crowded place if none is
+// clear. The lines are every frame's at once, so a label holds still while the steps walk (it
+// may move once, when Run brings the lines). Each corner of an answer first keeps a spot for
+// its order badge (above left unless something is in the way there), so a badge never covers
+// a label or sits on a line.
 //
 // The drawing is as wide as its box (between MIN_WIDTH and WIDTH), so on a phone its text is
 // drawn at its own size, not shrunk to fit.
@@ -48,6 +52,14 @@ export const TICK_SIZE = 11;
 export const LABEL_SIZE = 11.5;
 const CHAR = 0.62;
 const LABEL_HEIGHT = 13;
+
+/**
+ * How far a label or a badge keeps from a line's centre (half the thickest line, and a little),
+ * and how much a line crossing a place counts against it, per unit of its length inside, beside
+ * an overlap's area.
+ */
+const LINE_PAD = 2;
+const LINE_WEIGHT = 10;
 
 /** How far apart the x axis's numbers keep at least, in drawing units. */
 const TICK_GAP = 14;
@@ -85,11 +97,6 @@ function ticksOf(low, high, step) {
   return ticks;
 }
 
-/** Whether two boxes ({x0, y0, x1, y1}) overlap. */
-function overlaps(a, b) {
-  return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
-}
-
 /** How much two boxes overlap, as an area. */
 function overlapArea(a, b) {
   const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
@@ -98,24 +105,118 @@ function overlapArea(a, b) {
 }
 
 /**
- * The places a label `w` wide may go round a point at (x, y), nearest first: right and above,
- * right and below, right, left, left and below, above, below (above and to the left is left for
- * the badge), then the same twice as far out.
+ * How long a stretch of the segment ({x1, y1, x2, y2}) runs inside the box, grown by `pad` on
+ * every side (0 when it misses): Liang-Barsky clipping.
+ */
+function lengthInside(segment, box, pad) {
+  const dx = segment.x2 - segment.x1;
+  const dy = segment.y2 - segment.y1;
+  let t0 = 0;
+  let t1 = 1;
+  for (const [p, q] of [
+    [-dx, segment.x1 - (box.x0 - pad)],
+    [dx, box.x1 + pad - segment.x1],
+    [-dy, segment.y1 - (box.y0 - pad)],
+    [dy, box.y1 + pad - segment.y1],
+  ]) {
+    if (p === 0) {
+      if (q < 0) return 0;
+    } else {
+      const t = q / p;
+      if (p < 0) t0 = Math.max(t0, t);
+      else t1 = Math.min(t1, t);
+      if (t0 >= t1) return 0;
+    }
+  }
+  return (t1 - t0) * Math.hypot(dx, dy);
+}
+
+/** How far the segment ({x1, y1, x2, y2}) passes from (x, y). */
+function distanceTo(segment, x, y) {
+  const dx = segment.x2 - segment.x1;
+  const dy = segment.y2 - segment.y1;
+  const length = dx * dx + dy * dy;
+  const t = length
+    ? Math.max(0, Math.min(1, ((x - segment.x1) * dx + (y - segment.y1) * dy) / length))
+    : 0;
+  return Math.hypot(segment.x1 + t * dx - x, segment.y1 + t * dy - y);
+}
+
+/**
+ * Every pair of points a line joins in some frame: the hulls' edges (a closed outline for three
+ * corners or more), the answer's, the merge's chain and a Reject step's popped points (a line
+ * from the chain's end to each), as GeometryRenderer.js draws them.
+ */
+function drawnPairs(frames, known) {
+  const pairs = new Map();
+  const join = (a, b) => {
+    if (a !== b && known.has(a) && known.has(b))
+      pairs.set(a < b ? `${a} ${b}` : `${b} ${a}`, [a, b]);
+  };
+  const outline = (ids, closed) => {
+    const list = (Array.isArray(ids) ? ids : []).filter((id) => known.has(id));
+    for (let i = 0; i + 1 < list.length; i += 1) join(list[i], list[i + 1]);
+    if (closed && list.length >= 3) join(list.at(-1), list[0]);
+  };
+  for (const frame of Array.isArray(frames) ? frames : []) {
+    if (!frame) continue;
+    for (const piece of Array.isArray(frame.pieces) ? frame.pieces : [])
+      outline(piece?.points, true);
+    outline(frame.hull, true);
+    const chain = (Array.isArray(frame.chain) ? frame.chain : []).filter((id) => known.has(id));
+    outline(chain, false);
+    if (frame.event === "Reject" && chain.length) {
+      for (const id of Array.isArray(frame.focus) ? frame.focus : []) join(chain.at(-1), id);
+    }
+  }
+  return [...pairs.values()];
+}
+
+/**
+ * The spots an order badge may take round its corner, in the order it tries them: the four
+ * diagonals (above left first), then straight above, left, right and below, each as far from
+ * the point as a diagonal one.
+ */
+const BADGE_WAYS = [
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+  [1, 1],
+  [0, -Math.SQRT2],
+  [-Math.SQRT2, 0],
+  [Math.SQRT2, 0],
+  [0, Math.SQRT2],
+];
+
+/**
+ * The places a label `w` wide may go round a point at (x, y), first choice first: right and
+ * above, right and below, right, left, left and below, above, below and left and above, close
+ * by; then, so a label can find the gap between the lines that leave its point, every 15
+ * degrees round it (from straight right, counterclockwise on the screen), close by, then a
+ * little further out each time, up to four times as far.
  */
 function labelPlaces(x, y, w) {
   const h = LABEL_HEIGHT;
-  const places = [];
-  for (const reach of [1, 2]) {
-    const d = DOT_RADIUS + 3 * reach;
-    places.push(
-      { x0: x + d, y0: y - d - h + 2, anchor: "start" },
-      { x0: x + d, y0: y + d - 2, anchor: "start" },
-      { x0: x + d + 2, y0: y - h / 2, anchor: "start" },
-      { x0: x - d - 2 - w, y0: y - h / 2, anchor: "start" },
-      { x0: x - d - w, y0: y + d - 2, anchor: "start" },
-      { x0: x - w / 2, y0: y - d - h - 1, anchor: "start" },
-      { x0: x - w / 2, y0: y + d + 1, anchor: "start" },
-    );
+  const d = DOT_RADIUS + 3;
+  const places = [
+    { x0: x + d, y0: y - d - h + 2 },
+    { x0: x + d, y0: y + d - 2 },
+    { x0: x + d + 2, y0: y - h / 2 },
+    { x0: x - d - 2 - w, y0: y - h / 2 },
+    { x0: x - d - w, y0: y + d - 2 },
+    { x0: x - w / 2, y0: y - d - h - 1 },
+    { x0: x - w / 2, y0: y + d + 1 },
+    { x0: x - d - w, y0: y - d - h + 2 },
+  ];
+  for (const reach of [1, 2, 3, 4]) {
+    for (let degrees = 0; degrees < 360; degrees += 15) {
+      const angle = (degrees * Math.PI) / 180;
+      const cos = Math.cos(angle);
+      const sin = -Math.sin(angle);
+      // Out along the angle until the label's nearest side is `reach` steps clear of the dot.
+      const out = DOT_RADIUS + 3 * reach + (w / 2) * Math.abs(cos) + (h / 2) * Math.abs(sin);
+      places.push({ x0: x + cos * out - w / 2, y0: y + sin * out - h / 2 });
+    }
   }
   return places.map((place) => ({ ...place, x1: place.x0 + w, y1: place.y0 + h }));
 }
@@ -126,6 +227,8 @@ function labelPlaces(x, y, w) {
  * @param {Object} payload The Geometry payload (`points: [{id, x, y}]`).
  * @param {number|null} [width] The width of the box it is drawn in, in CSS px (WIDTH until it is
  *   measured); the drawing takes it, kept between MIN_WIDTH and WIDTH.
+ * @param {Object[]} [frames] The run's frames (none before Run): every line they draw is kept
+ *   clear of the labels, so the labels hold still over the run.
  * @returns {{minX: number, minY: number, width: number, height: number,
  *   plot: {x: number, y: number, width: number, height: number},
  *   points: Array<{id: string, index: number, x: number, y: number, px: number, py: number,
@@ -133,7 +236,7 @@ function labelPlaces(x, y, w) {
  *   xTicks: Array<{value: number, text: string, at: number, axis: boolean, labelled: boolean}>,
  *   yTicks: Array<{value: number, text: string, at: number, axis: boolean, labelled: boolean}>}}
  */
-export function layoutGeometry(payload, width = WIDTH) {
+export function layoutGeometry(payload, width = WIDTH, frames = []) {
   const drawingWidth = Math.round(Math.min(WIDTH, Math.max(MIN_WIDTH, width || WIDTH)));
   const raw = (Array.isArray(payload?.points) ? payload.points : []).filter(
     (point) =>
@@ -230,7 +333,7 @@ export function layoutGeometry(payload, width = WIDTH) {
     };
   });
 
-  // The points, then their labels, placed one by one where nothing is in the way.
+  // The points, then their badges and labels, placed one by one where nothing is in the way.
   const points = raw.map((point, index) => ({
     id: point.id,
     index,
@@ -239,6 +342,23 @@ export function layoutGeometry(payload, width = WIDTH) {
     px: toX(point.x),
     py: toY(point.y),
   }));
+  const byId = new Map(points.map((point) => [point.id, point]));
+  // Every line the run draws over a label's way (the bold axes and the hulls, chains and popped
+  // points' lines of every frame), in drawing units.
+  const lines = [
+    ...xTicks
+      .filter((tick) => tick.axis)
+      .map((tick) => ({ x1: tick.at, y1: plot.y, x2: tick.at, y2: plot.y + plot.height })),
+    ...yTicks
+      .filter((tick) => tick.axis)
+      .map((tick) => ({ x1: plot.x, y1: tick.at, x2: plot.x + plot.width, y2: tick.at })),
+    ...drawnPairs(frames, byId).map(([a, b]) => ({
+      x1: byId.get(a).px,
+      y1: byId.get(a).py,
+      x2: byId.get(b).px,
+      y2: byId.get(b).py,
+    })),
+  ];
   const blocked = points.map((point) => ({
     x0: point.px - DOT_RADIUS - 1,
     y0: point.py - DOT_RADIUS - 1,
@@ -250,17 +370,29 @@ export function layoutGeometry(payload, width = WIDTH) {
     box.x1 <= plot.x + plot.width - 1 &&
     box.y0 >= plot.y + 1 &&
     box.y1 <= plot.y + plot.height - 1;
-  // Each point's badge spot: the first diagonal (above left, above right, below left, below
-  // right) that covers no other point and no other badge spot.
+  // How much is in the way of a box: what it covers of the points, badges and labels placed so
+  // far (`skip` is its own point's dot) and of the lines (each counted LINE_WEIGHT times its
+  // length inside, `crossing` measuring it), and a great deal more if it leaves the plot.
+  const crowding = (box, skip, crossing) =>
+    blocked.reduce(
+      (sum, other, index) => (index === skip ? sum : sum + overlapArea(other, box)),
+      0,
+    ) +
+    LINE_WEIGHT * lines.reduce((sum, line) => sum + crossing(line), 0) +
+    (inside(box) ? 0 : 1e6);
+  // The answer's corners (in any frame) keep a spot for their order badge first: the first of
+  // its ways that covers no other point, badge or line, else the least crowded. Every other
+  // point gets a spot too (unreserved), so a frame drawn on its own still has somewhere to put
+  // one.
+  const corners = new Set(
+    (Array.isArray(frames) ? frames : []).flatMap((frame) =>
+      Array.isArray(frame?.hull) ? frame.hull : [],
+    ),
+  );
   for (const point of points) {
-    const spots = [
-      [-1, -1],
-      [1, -1],
-      [-1, 1],
-      [1, 1],
-    ].map(([dx, dy]) => {
-      const x = point.px + dx * BADGE_OFFSET;
-      const y = point.py + dy * BADGE_OFFSET;
+    const spots = BADGE_WAYS.map(([dx, dy]) => {
+      const x = round(point.px + dx * BADGE_OFFSET);
+      const y = round(point.py + dy * BADGE_OFFSET);
       return {
         x,
         y,
@@ -270,27 +402,23 @@ export function layoutGeometry(payload, width = WIDTH) {
         y1: y + BADGE_RADIUS,
       };
     });
+    const cost = (spot) =>
+      crowding(spot, point.index, (line) =>
+        Math.max(0, BADGE_RADIUS + LINE_PAD - distanceTo(line, spot.x, spot.y)),
+      );
     const spot =
-      spots.find(
-        (box) =>
-          inside(box) &&
-          !blocked.some((other, index) => index !== point.index && overlaps(other, box)),
-      ) ?? spots[0];
+      spots.find((box) => cost(box) === 0) ??
+      spots.reduce((best, box) => (cost(box) < cost(best) ? box : best));
     point.badge = { x: spot.x, y: spot.y };
-    blocked.push(spot);
+    if (corners.has(point.id)) blocked.push(spot);
   }
   for (const point of points) {
     const w = point.id.length * LABEL_SIZE * CHAR + 2;
     const places = labelPlaces(point.px, point.py, w);
-    let chosen = places.find(
-      (place) => inside(place) && !blocked.some((box) => overlaps(box, place)),
-    );
-    if (!chosen) {
-      // Nowhere is clear: the place inside the plot that meets the least.
-      const crowding = (place) =>
-        blocked.reduce((sum, box) => sum + overlapArea(box, place), 0) + (inside(place) ? 0 : 1e6);
-      chosen = places.reduce((best, place) => (crowding(place) < crowding(best) ? place : best));
-    }
+    const cost = (place) => crowding(place, -1, (line) => lengthInside(line, place, LINE_PAD));
+    const chosen =
+      places.find((place) => cost(place) === 0) ??
+      places.reduce((best, place) => (cost(place) < cost(best) ? place : best));
     blocked.push(chosen);
     point.label = {
       x: round(chosen.x0 + 1),
