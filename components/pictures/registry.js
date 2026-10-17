@@ -22,7 +22,7 @@
 //      the payload alone, every piece in Background, and place it exactly where the run's steps
 //      will (a layout that is a pure function of the payload).
 //      Draw with React-owned SVG inside DiagramZoom.js (DiagramSvg.js with fit, zoom and pan;
-//      or plain HTML when the picture is text, as the Table is), take every color from
+//      the Table too, though it is text), take every color from
 //      pictureStates.js's pictureStateStyle(), and give every focusable piece an aria-label.
 //      A node-link picture also gets `layoutKey` (the instance and visualization drawn) and
 //      lets the reader move its nodes and bend its edges (#250): keep the changes with
@@ -60,7 +60,7 @@ import PackingRenderer, { packingAnnotations } from "./PackingRenderer";
 import QuantumRenderer, { quantumAnnotations } from "./QuantumRenderer";
 import ScheduleRenderer, { scheduleAnnotations } from "./ScheduleRenderer";
 import SearchTreeRenderer, { searchTreeAnnotations } from "./SearchTreeRenderer";
-import TableRenderer, { tablePlainFrame } from "./TableRenderer";
+import TableRenderer, { tableAnnotations, tablePlainFrame } from "./TableRenderer";
 import TripartiteRenderer, { tripartiteAnnotations } from "./TripartiteRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
@@ -97,6 +97,7 @@ const PICTURE_ANNOTATIONS = {
   QuantumCircuit: quantumAnnotations,
   Schedule: scheduleAnnotations,
   SearchTree: searchTreeAnnotations,
+  Table: tableAnnotations,
   TripartiteMatching: tripartiteAnnotations,
 };
 
