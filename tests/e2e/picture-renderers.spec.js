@@ -37,6 +37,9 @@
 // #212: the Geometry renderer (Convex Hull) after that: the points to scale on real axes, each
 // merge's hulls and chain, the answer's numbered corners, labels that meet nothing, and on a
 // phone a plot drawn at its own size.
+// #211: the Schedule renderer (Job Sequencing, Pump Scheduling) after that: each job's run and
+// deadline, each pump's hours, the forward pass's band, the replay's tank line and costs, the
+// budget, texts that meet no other text, line or mark, and on a phone a picture at its own size.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel } from "./helpers";
@@ -106,6 +109,16 @@ import {
   TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES,
   TSP_SEARCH_TREE_FRAMES,
 } from "./picture-payloads";
+import {
+  JOB_SEQUENCING_NONE_SCHEDULE_FRAMES,
+  JOB_SEQUENCING_SCHEDULE_FRAMES,
+  JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES,
+  PUMP_CM_FRACTIONAL_SCHEDULE_FRAMES,
+  PUMP_CM_NONE_SCHEDULE_FRAMES,
+  PUMP_CM_ROUNDED_SCHEDULE_FRAMES,
+  PUMP_CM_SCHEDULE_FRAMES,
+  PUMP_EM_SCHEDULE_FRAMES,
+} from "./schedule-payloads";
 
 const PROBLEM = "DFA Acceptance";
 const TABLE_VIZ = "DFATableVisualization";
@@ -5098,6 +5111,758 @@ for (const key of ["hull", "wide"]) {
   });
 }
 
+// --- #211: the Schedule renderer (Job Sequencing, Pump Scheduling) ------------------------------
+
+const SCHEDULE = "#workbench-source-frames-schedule";
+
+/**
+ * Each schedule capture. Every capture is drawn on the 3SAT page (its visualization made to name
+ * Schedule), as CI's backend may serve no Schedule visualization yet: the picture is the
+ * capture's, whatever the page.
+ */
+const JOB_CASES = {
+  jobs: JOB_SEQUENCING_SCHEDULE_FRAMES,
+  jobsSmall: JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES,
+  jobsNone: JOB_SEQUENCING_NONE_SCHEDULE_FRAMES,
+};
+const PUMP_CASES = {
+  pumpCm: PUMP_CM_SCHEDULE_FRAMES,
+  pumpEm: PUMP_EM_SCHEDULE_FRAMES,
+  pumpFractional: PUMP_CM_FRACTIONAL_SCHEDULE_FRAMES,
+  pumpRounded: PUMP_CM_ROUNDED_SCHEDULE_FRAMES,
+  pumpNone: PUMP_CM_NONE_SCHEDULE_FRAMES,
+};
+const SCHEDULE_CASES = { ...JOB_CASES, ...PUMP_CASES };
+
+async function openSchedule(page, capture) {
+  await setEveryPictureType(page, "Schedule");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${SCHEDULE}-schedule`)).toBeVisible();
+}
+
+const scheduleJob = (page, id) => page.locator(`${SCHEDULE}-schedule [data-job-id="${id}"]`);
+const scheduleHour = (page, id) => page.locator(`${SCHEDULE}-schedule [data-hour-id="${id}"]`);
+const scheduleHourHit = (page, id) => page.locator(`${SCHEDULE}-schedule [data-hour-hit="${id}"]`);
+
+/** Goes to frame `index` (0-based) of a run already started, with the step slider's keys. */
+async function toFrame(page, capture, index) {
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("Home");
+  for (let step = 0; step < index; step += 1) await page.keyboard.press("ArrowRight");
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+}
+
+/** Frame `index`'s jobs (state, start, end, late), checked job by job against the picture. */
+async function expectJobsFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const drawn = await page
+    .locator(`${SCHEDULE}-schedule [data-job-id]`)
+    .evaluateAll((jobs) =>
+      Object.fromEntries(
+        jobs.map((job) => [
+          job.getAttribute("data-job-id"),
+          [
+            job.getAttribute("data-state"),
+            job.getAttribute("data-start"),
+            job.getAttribute("data-end"),
+            job.getAttribute("data-late"),
+          ],
+        ]),
+      ),
+    );
+  const runs = new Map(frame.runs.map((run) => [run.job, run]));
+  for (const job of capture.payload.jobs) {
+    const run = runs.get(job.id);
+    expect(drawn[job.id], job.id).toEqual([
+      frame.jobs[job.id]?.state ?? "Background",
+      run ? String(run.start) : null,
+      run ? String(run.end) : null,
+      run ? String(run.late) : null,
+    ]);
+  }
+  await expect(page.locator(`${SCHEDULE}-schedule [data-late-part]`)).toHaveCount(
+    frame.runs.filter((run) => run.late && run.end > Math.max(run.start, 0)).length,
+  );
+}
+
+/**
+ * Frame `index`'s pumps, hours, band, tank line and costs, checked cell by cell against the
+ * picture.
+ */
+async function expectPumpsFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  const cells = await picture
+    .locator("[data-cell-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((cell) => [
+          cell.getAttribute("data-cell-id"),
+          [cell.getAttribute("data-on"), cell.getAttribute("data-state")],
+        ]),
+      ),
+    );
+  const hours = await picture
+    .locator("[data-hour-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((hour) => [
+          hour.getAttribute("data-hour-id"),
+          [hour.getAttribute("data-state"), hour.getAttribute("data-shown")],
+        ]),
+      ),
+    );
+  const { payload } = capture;
+  for (const [h, hour] of payload.hours.entries()) {
+    const run = frame.schedule[h];
+    expect(hours[hour.id], hour.id).toEqual([
+      frame.hours[hour.id]?.state ?? "Background",
+      run ? String(h <= frame.upTo) : null,
+    ]);
+    for (const pump of payload.pumps) {
+      const id = `${pump.id}${hour.id}`;
+      expect(cells[id], id).toEqual([
+        String(run?.on.includes(pump.id) ?? false),
+        frame.cells[id]?.state ?? "Background",
+      ]);
+    }
+  }
+  const shown = frame.schedule.slice(0, frame.upTo + 1);
+  await expect(picture.locator("[data-band]")).toHaveCount(
+    !frame.schedule.length && frame.reached.length ? 1 : 0,
+  );
+  if (shown.length) {
+    await expect(picture.locator("[data-tank-line]")).toHaveAttribute(
+      "data-tank-line",
+      String(shown.length),
+    );
+  } else {
+    await expect(picture.locator("[data-tank-line]")).toHaveCount(0);
+  }
+  await expect(picture.locator("[data-startup]")).toHaveCount(
+    shown.reduce((sum, hour) => sum + hour.starts.length, 0),
+  );
+  await expect(picture.locator("[data-cost]")).toHaveCount(
+    shown.filter((hour) => hour.energy > 0).length,
+  );
+  const { capacity, minimum } = payload.tank;
+  await expect(picture.locator("[data-tank-outside]")).toHaveCount(
+    shown.filter((hour) => hour.level < minimum || hour.level > capacity).length,
+  );
+  await expect(picture.locator("[data-focus-hour]")).toHaveCount(
+    frame.focus.filter((id) => payload.hours.some((hour) => hour.id === id)).length,
+  );
+}
+
+for (const [key, capture] of Object.entries(SCHEDULE_CASES)) {
+  test(`Schedule: the ${key} capture draws every row and every step as Redux sends it`, async ({
+    page,
+  }) => {
+    // Every step of the run (a sample of the default Job Sequencing's 152), checked piece by
+    // piece.
+    test.slow();
+    const { payload } = capture;
+    const jobs = payload.rule === "jobSequencing";
+    await openSchedule(page, capture);
+    const picture = page.locator(`${SCHEDULE}-schedule`);
+    await expect(picture).toHaveAttribute("data-rule", payload.rule);
+    if (jobs) {
+      await expect(picture.locator("[data-job-id]")).toHaveCount(payload.jobs.length);
+      for (const job of payload.jobs) {
+        await expect(scheduleJob(page, job.id).locator("[data-label]")).toHaveText(job.label);
+        await expect(scheduleJob(page, job.id).locator("[data-deadline]")).toHaveAttribute(
+          "data-deadline",
+          String(job.deadline),
+        );
+        await expect(scheduleJob(page, job.id).locator("[data-penalty]")).toHaveText(
+          String(job.penalty),
+        );
+      }
+    } else {
+      await expect(picture.locator("[data-pump-id]")).toHaveCount(payload.pumps.length);
+      await expect(picture.locator("[data-cell-id]")).toHaveCount(24 * payload.pumps.length);
+      await expect(picture.locator("[data-peak]")).toHaveCount(
+        payload.hours.filter((hour) => hour.peak).length,
+      );
+      for (const pump of payload.pumps) {
+        await expect(picture.locator(`[data-pump-id="${pump.id}"] [data-label]`)).toHaveText(
+          pump.name,
+        );
+      }
+    }
+    // Nothing here can be dragged (#250 leaves a schedule's time axis alone).
+    await expect(page.locator(`${SCHEDULE}-layout-reset`)).toHaveCount(0);
+    await expect(page.locator(`${SCHEDULE}-svg`)).not.toHaveAttribute("data-editable", /./);
+
+    const expectFrame = jobs ? expectJobsFrame : expectPumpsFrame;
+    const count = capture.frames.length;
+    if (count > 60) {
+      // Too long to walk: Run opens on the last frame; then the first and the middle.
+      await page.locator("#workbench-run").click();
+      await expect(page.locator("#workbench-steps-position")).toHaveText(
+        `Step ${count} of ${count}`,
+      );
+      await expectFrame(page, capture, count - 1);
+      await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+        capture.frames.at(-1).ok ? "Verdict: yes" : "Verdict: no",
+      );
+      for (const index of [0, Math.floor(count / 2)]) {
+        await toFrame(page, capture, index);
+        await expectFrame(page, capture, index);
+      }
+    } else {
+      await runToFrame(page, capture, 0);
+      await expectFrame(page, capture, 0);
+      for (let index = 1; index < count; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        await expectFrame(page, capture, index);
+      }
+      await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+        capture.frames.at(-1).ok ? "Verdict: yes" : "Verdict: no",
+      );
+    }
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", jobs ? /^Job \d+: takes / : /^Hour \d+ \(/);
+    }
+  });
+}
+
+/** Each job's row and each pump's cells, drawn boxes by id, in viewBox units. */
+function scheduleBoxes(page) {
+  return page
+    .locator(`${SCHEDULE}-schedule [data-job-id], ${SCHEDULE}-schedule [data-cell-id]`)
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((piece) => {
+          const box = piece.getBBox();
+          const id = piece.getAttribute("data-job-id") ?? piece.getAttribute("data-cell-id");
+          return [id, `${box.x},${box.y},${box.height}`];
+        }),
+      ),
+    );
+}
+
+test("Schedule: before Run the jobs are their deadlines alone, and step 1 keeps every row in place", async ({
+  page,
+}) => {
+  const capture = JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator("[data-run], [data-late-part]")).toHaveCount(0);
+  await expect(picture.locator("[data-deadline]")).toHaveCount(capture.payload.jobs.length);
+  // The axis runs to the payload's span.
+  await expect(picture.locator("[data-tick]").filter({ hasText: /^0$/ })).toHaveCount(1);
+  const before = await page
+    .locator(`${SCHEDULE}-schedule [data-job-id] [data-label]`)
+    .evaluateAll((labels) => labels.map((label) => label.getAttribute("y")));
+  await runToFrame(page, capture, 0);
+  expect(
+    await page
+      .locator(`${SCHEDULE}-schedule [data-job-id] [data-label]`)
+      .evaluateAll((labels) => labels.map((label) => label.getAttribute("y"))),
+  ).toEqual(before);
+});
+
+test("Schedule: before Run the pumps are all off with no tank line, and step 1 keeps every cell in place", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator('[data-on="true"]')).toHaveCount(0);
+  await expect(
+    picture.locator(
+      "[data-band], [data-tank-line], [data-cost], [data-startup], [data-budget-line]",
+    ),
+  ).toHaveCount(0);
+  // The tank's start, and its capacity marked on the axis.
+  await expect(picture.locator("[data-tank-start]")).toHaveCount(1);
+  await expect(picture.locator('[data-mark="capacity"]')).toHaveText("10,000");
+  const before = await scheduleBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await scheduleBoxes(page)).toEqual(before);
+});
+
+test("Schedule: a late job's bar turns solid red past its deadline, and its penalty counts", async ({
+  page,
+}) => {
+  const capture = JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  await runToFrame(page, capture, 0);
+  const frame = capture.frames[0];
+  const late = frame.runs.filter((run) => run.late);
+  expect(late.length).toBeGreaterThan(0);
+  for (const run of late) {
+    await expect(scheduleJob(page, run.job)).toHaveAttribute("data-state", "Rejected");
+    await expect(scheduleJob(page, run.job).locator("[data-late-part]")).toHaveCount(1);
+    await expect(scheduleJob(page, run.job).locator("[data-penalty]")).toHaveAttribute(
+      "font-weight",
+      "700",
+    );
+  }
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    `Late penalty ${frame.penalty} (K = ${capture.payload.k}). Hover or tap a job to read it.`,
+  );
+  await expect(legendBody(page)).toContainText(
+    "Tick (the job's deadline; red once the job runs past it)",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Solid red end (the part after the deadline: the job is late and its penalty counts)",
+  );
+  // The answer keeps its late job Rejected among the Solution ones.
+  await toFrame(page, capture, capture.frames.length - 1);
+  const last = capture.frames.at(-1);
+  for (const run of last.runs) {
+    await expect(scheduleJob(page, run.job)).toHaveAttribute(
+      "data-state",
+      run.late ? "Rejected" : "Solution",
+    );
+  }
+});
+
+test("Schedule: the forward pass grows its band hour by hour, and the replay draws the hours one at a time", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await runToFrame(page, capture, 3);
+  await expect(picture.locator("[data-band]")).toHaveAttribute("data-band", "4");
+  await expect(scheduleHour(page, "t3")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(picture.locator('[data-focus-hour="t3"]')).toHaveCount(1);
+  await expect(legendBody(page)).toContainText(
+    "Band (the tank levels the forward pass can still reach)",
+  );
+  // A replay step: the hours after it are faded by color and have no tank level or cost yet.
+  const replay = capture.frames.findIndex((frame) => frame.schedule.length && frame.upTo === 5);
+  expect(replay).toBeGreaterThan(0);
+  await toFrame(page, capture, replay);
+  await expect(picture.locator("[data-band]")).toHaveCount(0);
+  await expect(picture.locator("[data-tank-line]")).toHaveAttribute("data-tank-line", "6");
+  await expect(scheduleHour(page, "t9")).toHaveAttribute("data-shown", "false");
+  const faded = await scheduleHour(page, "t9").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(picture.locator('[data-cell-id="P1t9"]')).toHaveAttribute("data-state", "Committed");
+  // Hour 0 starts two pumps: a corner mark each, and a startup cap on its cost.
+  await expect(picture.locator("[data-startup]")).toHaveCount(2);
+  await expect(picture.locator('[data-startup-cost="t0"]')).toHaveCount(1);
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Hours 0 to 5: $11.36. Hover or tap an hour to read it.",
+  );
+  // The answer: every hour drawn, the pumps that run Solution.
+  await toFrame(page, capture, capture.frames.length - 1);
+  await expect(picture.locator('[data-cell-id="P1t0"]')).toHaveAttribute("data-state", "Solution");
+  await expect(picture.locator('[data-shown="false"]')).toHaveCount(0);
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Total $32.12. Hover or tap an hour to read it.",
+  );
+  for (const text of [
+    "Shaded hour (peak tariff: power costs more)",
+    "Dashed line (the tank's capacity)",
+    "Tank line (gallons at the end of each hour)",
+    "Corner mark and bar cap (a pump starts and pays its startup cost)",
+  ]) {
+    await expect(legendBody(page)).toContainText(text);
+  }
+});
+
+test("Schedule: Emergency Resilience marks its minimum and charts the share of its budget spent", async ({
+  page,
+}) => {
+  const capture = PUMP_EM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await expect(picture.locator('[data-mark="minimum"]')).toHaveText("2,000");
+  await expect(picture.locator('[data-limit="minimum"]')).toHaveCount(1);
+  await page.locator("#workbench-run").click();
+  const count = capture.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+  await expect(picture.locator("[data-budget-line]")).toHaveAttribute("data-budget-line", "24");
+  for (const text of ["0%", "50%", "100%"]) {
+    await expect(
+      picture.locator("[data-tick]").filter({ hasText: new RegExp(`^${text}$`) }),
+    ).toHaveCount(1);
+  }
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Total $55.55 of a $55.86 budget. Hover or tap an hour to read it.",
+  );
+  await expect(legendBody(page)).toContainText("Red dashed line (the tank's minimum)");
+  await expect(legendBody(page)).toContainText(
+    "Violet line, right axis (the share of the budget spent so far)",
+  );
+});
+
+test("Schedule: fractional gallons read as the instance wrote them, and a day ending at exactly 0 stays within the limits", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_FRACTIONAL_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await expect(picture.locator("[data-demand]").first()).toHaveText("0.3");
+  await expect(picture.locator('[data-pump-id="P1"]')).toContainText("0.1 gph");
+  await expect(picture.locator('[data-mark="capacity"]')).toHaveText("2.5");
+  await page.locator("#workbench-run").click();
+  const last = capture.frames.at(-1);
+  expect(last.schedule.at(-1).level).toBe(0);
+  await expect(picture.locator("[data-tank-outside]")).toHaveCount(0);
+  await expect(picture.locator('[data-hour-id][data-state="Rejected"]')).toHaveCount(0);
+  await scheduleHourHit(page, "t23").hover();
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Hour 23 (23:00, $0.06/kWh): demand 0.3 gal; no pump on; in 0, tank 0 gal; cost $0.00",
+  );
+});
+
+test("Schedule: a schedule that drains the tank shows its hours Rejected, with a red dot at each level", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_ROUNDED_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await page.locator("#workbench-run").click();
+  const last = capture.frames.at(-1);
+  const rejected = Object.keys(last.hours).filter((id) => last.hours[id].state === "Rejected");
+  expect(rejected.length).toBeGreaterThan(0);
+  await expect(picture.locator('[data-hour-id][data-state="Rejected"]')).toHaveCount(
+    rejected.length,
+  );
+  await expect(picture.locator("[data-hour-tint]")).toHaveCount(rejected.length);
+  await expect(picture.locator("[data-tank-outside]")).toHaveCount(rejected.length);
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  // The tank's scale reaches down to the lowest level, so the line stays on the chart.
+  const lowest = Math.min(...last.schedule.map((hour) => hour.level));
+  const scale = picture.locator('[data-layer="tank"]');
+  expect(Number(await scale.getAttribute("data-low"))).toBeLessThanOrEqual(lowest);
+  await expect(picture.locator("[data-tick]").filter({ hasText: /^-5$/ })).toHaveCount(1);
+  await expect(legendBody(page)).toContainText(
+    "Red dot (the tank leaves its limits at the end of that hour)",
+  );
+});
+
+test("Schedule: a forward pass where no state survives ends with its last hour Rejected, and no", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_NONE_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  const dead = capture.frames.findIndex((frame) => frame.event === "Reject");
+  await runToFrame(page, capture, dead);
+  const hour = capture.frames[dead].focus[0];
+  await expect(scheduleHour(page, hour)).toHaveAttribute("data-state", "Rejected");
+  await expect(picture.locator(`[data-focus-hour="${hour}"] rect`).first()).toHaveAttribute(
+    "stroke",
+    /rejected/,
+  );
+  await expect(picture.locator("[data-band]")).toHaveAttribute(
+    "data-band",
+    String(capture.frames[dead].reached.length),
+  );
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(picture.locator("[data-tank-line]")).toHaveCount(0);
+});
+
+test("Schedule: hovering, focusing or tapping a job traces it and reads it out, the rest fading by color", async ({
+  page,
+}) => {
+  const capture = JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await scheduleJob(page, "J2").hover();
+  await expect(scheduleJob(page, "J2")).toHaveAttribute("data-traced", "trace");
+  await expect(scheduleJob(page, "J0")).toHaveAttribute("data-traced", "faint");
+  const faded = await scheduleJob(page, "J0").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Job 2: takes 4, due 4, penalty 6; runs 3 to 7, late",
+  );
+  await page.mouse.move(0, 0);
+  await scheduleJob(page, "J1").focus();
+  await expect(scheduleJob(page, "J1")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(scheduleJob(page, "J1")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Schedule: hovering, focusing or tapping an hour traces its column and reads it out", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-steps-position")).toHaveText(/^Step 50 of 50$/);
+  await scheduleHourHit(page, "t9").hover();
+  await expect(scheduleHour(page, "t9")).toHaveAttribute("data-traced", "trace");
+  await expect(scheduleHour(page, "t3")).toHaveAttribute("data-traced", "faint");
+  await expect(page.locator(`${SCHEDULE}-schedule [data-trace-hour="t9"]`)).toHaveCount(1);
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Hour 9 (09:00, peak, $0.12/kWh): demand 1,000 gal; PumpA and PumpB on; in 550, tank 3,700 gal; cost $1.62",
+  );
+  await page.mouse.move(0, 0);
+  await scheduleHourHit(page, "t2").focus();
+  await expect(scheduleHour(page, "t2")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(scheduleHourHit(page, "t2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Schedule: on a phone a tap traces an hour, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const capture = PUMP_EM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${SCHEDULE}-svg`);
+  await page.locator(`${SCHEDULE}-zoom-in`).click();
+  await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await scheduleHourHit(page, "t12").focus();
+  await scheduleHourHit(page, "t12").blur();
+  await scheduleHourHit(page, "t12").click();
+  await expect(scheduleHourHit(page, "t12")).toHaveAttribute("aria-pressed", "true");
+  await expect(scheduleHour(page, "t0")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${SCHEDULE}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Schedule: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      for (const capture of [PUMP_EM_SCHEDULE_FRAMES, JOB_SEQUENCING_SCHEDULE_FRAMES]) {
+        await openSchedule(page, capture);
+        const svg = page.locator(`${SCHEDULE}-svg`);
+        await expect(svg).toBeVisible();
+        expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+        await expectFits(page, `${SCHEDULE}-svg`);
+        await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+        // The labels and the numbers follow the theme: no dark-on-dark, no light-on-white.
+        for (const selector of ["[data-label]", "[data-tick]", "[data-head]"]) {
+          const ink = await page
+            .locator(`${SCHEDULE}-schedule ${selector}`)
+            .first()
+            .evaluate((el) => getComputedStyle(el).fill);
+          const [r, g, b] = ink.match(/\d+/g).map(Number);
+          expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+        }
+      }
+    });
+  }
+}
+
+/**
+ * Every place where a text of `svg` meets a line or a marker drawn in it, read off the screen.
+ * A line is the centre line of a <line>, a <polyline>, a <polygon>, an M / L <path> or the
+ * outline of a <rect> drawn with no fill; a marker is a filled <circle>, <rect> or <path> (a bar,
+ * a cell, a dot, a startup mark, a badge) outside its own text's group, so a piece's body and
+ * its own label never count. Transparent hit areas and the tints behind a picture
+ * (`[data-layer="shade"]`) are neither.
+ * @returns {Promise<string[]>} One line per collision; empty when every text is clear.
+ */
+function drawnCollisions(page, svgSelector) {
+  return page.locator(svgSelector).evaluate((svg) => {
+    const found = [];
+    const toScreen = (element, x, y) => {
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      return point.matrixTransform(element.getScreenCTM());
+    };
+    const filled = (element) => {
+      const fill = element.getAttribute("fill");
+      return fill !== null && fill !== "none" && fill !== "transparent";
+    };
+    const stroked = (element) => {
+      const stroke = element.getAttribute("stroke");
+      return stroke !== null && stroke !== "none" && stroke !== "transparent";
+    };
+    const nameOf = (element) =>
+      `${element.tagName}${[...element.attributes]
+        .filter((attribute) => attribute.name.startsWith("data-"))
+        .map((attribute) => `[${attribute.name}${attribute.value ? `=${attribute.value}` : ""}]`)
+        .join("")}`;
+    const inShade = (element) => element.closest('[data-layer="shade"]') !== null;
+    const segments = [];
+    const addPoints = (element, list, closed) => {
+      const corners = list.map(([x, y]) => toScreen(element, x, y));
+      const count = closed ? corners.length : corners.length - 1;
+      for (let i = 0; i < count; i += 1) {
+        segments.push({ element, a: corners[i], b: corners[(i + 1) % corners.length] });
+      }
+    };
+    for (const element of svg.querySelectorAll("line, polyline, polygon, path, rect")) {
+      if (inShade(element) || !stroked(element)) continue;
+      const value = (name) => Number(element.getAttribute(name));
+      if (element.tagName === "line") {
+        addPoints(
+          element,
+          [
+            [value("x1"), value("y1")],
+            [value("x2"), value("y2")],
+          ],
+          false,
+        );
+      } else if (element.tagName === "polyline" || element.tagName === "polygon") {
+        const list = element
+          .getAttribute("points")
+          .trim()
+          .split(/\s+/)
+          .map((pair) => pair.split(",").map(Number));
+        addPoints(element, list, element.tagName === "polygon");
+      } else if (element.tagName === "path" && !filled(element)) {
+        // Each M starts a new run of L segments.
+        const runs = [];
+        for (const [, command, args] of element
+          .getAttribute("d")
+          .matchAll(/([MLml])\s*([-\d.,\s]+)/g)) {
+          const [x, y] = args
+            .trim()
+            .split(/[\s,]+/)
+            .map(Number);
+          if (command === "M" || command === "m" || !runs.length) runs.push([]);
+          runs.at(-1).push([x, y]);
+        }
+        for (const run of runs) addPoints(element, run, false);
+      } else if (element.tagName === "rect" && !filled(element)) {
+        const x = value("x");
+        const y = value("y");
+        const w = value("width");
+        const h = value("height");
+        addPoints(
+          element,
+          [
+            [x, y],
+            [x + w, y],
+            [x + w, y + h],
+            [x, y + h],
+          ],
+          true,
+        );
+      }
+    }
+    const markers = [...svg.querySelectorAll("circle, rect, path")].filter(
+      (element) => filled(element) && !inShade(element),
+    );
+    // Whether the segment a-b passes through the box (shrunk half a pixel): Liang-Barsky.
+    const crosses = ({ a, b }, box) => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      let t0 = 0;
+      let t1 = 1;
+      for (const [p, q] of [
+        [-dx, a.x - (box.left + 0.5)],
+        [dx, box.right - 0.5 - a.x],
+        [-dy, a.y - (box.top + 0.5)],
+        [dy, box.bottom - 0.5 - a.y],
+      ]) {
+        if (p === 0) {
+          if (q < 0) return false;
+        } else {
+          const t = q / p;
+          if (p < 0) t0 = Math.max(t0, t);
+          else t1 = Math.min(t1, t);
+          if (t0 > t1) return false;
+        }
+      }
+      return true;
+    };
+    const meets = (a, b) =>
+      a.left < b.right - 0.5 &&
+      b.left < a.right - 0.5 &&
+      a.top < b.bottom - 0.5 &&
+      b.top < a.bottom - 0.5;
+    for (const text of svg.querySelectorAll("text")) {
+      if (!text.textContent.trim()) continue;
+      const box = text.getBoundingClientRect();
+      const own = text.parentElement;
+      for (const segment of segments) {
+        if (!own.contains(segment.element) && crosses(segment, box)) {
+          found.push(`"${text.textContent}" is crossed by ${nameOf(segment.element)}`);
+        }
+      }
+      for (const marker of markers) {
+        if (marker.parentElement.contains(text)) continue;
+        if (meets(marker.getBoundingClientRect(), box)) {
+          found.push(`"${text.textContent}" meets ${nameOf(marker)}`);
+        }
+      }
+    }
+    return found;
+  });
+}
+
+for (const [key, capture] of Object.entries(SCHEDULE_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Schedule: the ${key} capture's texts never meet each other, a line or a mark at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openSchedule(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${SCHEDULE}-svg`, null)),
+        ...(await drawnCollisions(page, `${SCHEDULE}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      const count = capture.frames.length;
+      if (count > 60) {
+        // Too long to walk: the first, the middle and the last frames.
+        await page.locator("#workbench-run").click();
+        await expect(page.locator("#workbench-steps-position")).toHaveText(
+          `Step ${count} of ${count}`,
+        );
+        expect(await clear()).toEqual([]);
+        for (const index of [0, Math.floor(count / 2)]) {
+          await toFrame(page, capture, index);
+          expect(await clear()).toEqual([]);
+        }
+        return;
+      }
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < count; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["jobs", "pumpCm", "pumpEm", "pumpFractional"]) {
+  test(`Schedule: on a 390 px phone the ${key} picture is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = SCHEDULE_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openSchedule(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${SCHEDULE}-schedule`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(760);
+    await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${SCHEDULE}-svg`);
+    const before = await smallestText(page, `${SCHEDULE}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await page.locator("#workbench-run").click();
+    const count = capture.frames.length;
+    await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+    const after = await smallestText(page, `${SCHEDULE}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
 // --- Every renderer opens at fit -------------------------------------------------------------
 //
 // Each registered picture type (components/pictures/registry.js), drawn from one capture on the
@@ -5115,6 +5880,7 @@ const FIT_CASES = {
   GroupedGraph: SAT3_CLAUSE_GRAPH_FRAMES,
   LayeredGraph: TOPOLOGICAL_SORT_LAYERED_FRAMES,
   Packing: PARTITION_PACKING_FRAMES,
+  Schedule: PUMP_EM_SCHEDULE_FRAMES,
   SearchTree: TSP_SEARCH_TREE_FRAMES,
   Table: DFA_TABLE_FRAMES,
 };
