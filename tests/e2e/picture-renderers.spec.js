@@ -6724,6 +6724,37 @@ async function expectQuantumFrame(page, capture, index) {
   }
 }
 
+/** Every picture state a frame names, as pictureStates.js statesInFrames finds them. */
+function quantumFrameStates(value, found = new Set()) {
+  if (Array.isArray(value)) {
+    for (const item of value) quantumFrameStates(item, found);
+  } else if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "state" && typeof child === "string") found.add(child);
+      else quantumFrameStates(child, found);
+    }
+  }
+  return found;
+}
+
+/**
+ * The Legend lists only what the step on screen draws (#210): frame `index`'s states, and the
+ * dashed gate only while a gate still to come is drawn dashed.
+ */
+async function expectQuantumLegend(page, capture, index) {
+  const keys = await legendBody(page)
+    .locator("[data-legend-key]")
+    .evaluateAll((all) => all.map((el) => el.getAttribute("data-legend-key")));
+  const states = keys.filter((key) => key.startsWith("state-")).map((key) => key.slice(6));
+  expect(states.sort(), `step ${index + 1}'s states`).toEqual(
+    [...quantumFrameStates(capture.frames[index])].sort(),
+  );
+  const dashed = await page
+    .locator(`${QUANTUM}-quantum [data-future="true"] [data-gate-id][data-state="Background"]`)
+    .count();
+  expect(keys.includes("note-future"), `step ${index + 1}'s dashed gate`).toBe(dashed > 0);
+}
+
 for (const [key, capture] of Object.entries(QUANTUM_CASES)) {
   test(`Quantum Circuit: the ${key} capture draws every qubit and gate, and every step's states, bars, calls and answer`, async ({
     page,
@@ -6746,10 +6777,12 @@ for (const [key, capture] of Object.entries(QUANTUM_CASES)) {
 
     await runToFrame(page, capture, 0);
     await expectQuantumFrame(page, capture, 0);
+    await expectQuantumLegend(page, capture, 0);
     for (let index = 1; index < capture.frames.length; index += 1) {
       await page.locator("#workbench-steps-next").click();
       await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
       await expectQuantumFrame(page, capture, index);
+      await expectQuantumLegend(page, capture, index);
     }
     const last = capture.frames.at(-1);
     await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
@@ -6788,6 +6821,8 @@ test("Quantum Circuit: before Run the circuit is the plain instance, and step 1 
   await expect(picture.locator("[data-future], [data-bar], [data-bit-out]")).toHaveCount(0);
   await expect(picture.locator("[data-chart-empty]")).toHaveText("Bars appear once a column runs.");
   await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("4 qubits, 5 columns");
+  // Nothing is still to come before Run, so the Legend has no dashed gate.
+  await expect(legendBody(page).locator('[data-legend-key="note-future"]')).toHaveCount(0);
   const before = await quantumBoxes(page);
   await runToFrame(page, capture, 0);
   expect(await quantumBoxes(page)).toEqual(before);
@@ -6875,6 +6910,15 @@ test("Quantum Circuit: a Grover measurement that misses the marked items reads R
   }
   await expect(quantumGate(page, "g3_0")).toHaveAttribute("data-state", "Rejected");
   await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  // Redux #906: the miss gives the simulated chance a run finds a marked item, not "usually".
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "Item 0 is not marked: the measurement missed. A run finds a marked item about 50% of the time.",
+  );
+  // Redux #907: the Measure step names the four-way tie, not item 0.
+  await toFrame(page, capture, 3);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "Measure: every item is equally likely (25% each).",
+  );
 });
 
 test("Quantum Circuit: a classical solver's oracle calls are listed, and its circuit ends Untraveled", async ({
@@ -6934,6 +6978,8 @@ test("Quantum Circuit: Shor's circuit is drawn with its note and no chart, and a
   );
   await expect(picture.locator('[data-column-id="t3"]')).toHaveAttribute("data-future", "true");
   await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("3 of 12 columns run");
+  await expect(legendBody(page)).toContainText("Highlighted (looked at now)");
+  await expect(legendBody(page)).toContainText("Dashed grey gate (its column has not run)");
   await page.locator("#workbench-steps-next").click();
   await expect(page.locator(`${CAPTION}-text`)).toHaveText(
     "If c6 is 1, multiply the work register by 2^2 mod 15 = 4.",
@@ -6950,6 +6996,9 @@ test("Quantum Circuit: Shor's circuit is drawn with its note and no chart, and a
   await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("12 of 12 columns run");
   await expect(picture.locator("[data-column-id]")).toHaveCount(12);
   await expect(picture.locator('[data-state="Untraveled"], [data-future]')).toHaveCount(0);
+  // Its Legend lists only what the Done draws: nothing highlighted, nothing still to come.
+  await expect(legendBody(page)).not.toContainText("Highlighted");
+  await expect(legendBody(page)).not.toContainText("Dashed grey gate");
 
   await openQuantum(page, SHOR_NO_CIRCUIT_QUANTUM_FRAMES);
   await expect(picture.locator("[data-qubit-id], [data-gate-id], [data-outcome]")).toHaveCount(0);

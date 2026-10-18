@@ -31,9 +31,11 @@
 //      DiagramZoom an `editor` (makeEditor) with the type's own limits.
 //   2. Add it to PICTURE_RENDERERS below under the exact `type` Redux sends.
 //   3. If the picture draws annotations that are not states (group colors, order badges,
-//      missing edges), export a function (payload, frames) => [{key, text, swatch}] from the
-//      renderer's file and add it to PICTURE_ANNOTATIONS below, so the Legend lists them
-//      (swatch kinds: components/workbench/Legend.js).
+//      missing edges), export a function (payload, frames, {plain}) => [{key, text, swatch}]
+//      from the renderer's file and add it to PICTURE_ANNOTATIONS below, so the Legend lists
+//      them (swatch kinds: components/workbench/Legend.js). `plain` is true before Run. If the
+//      Legend should list only what the step on screen draws, not the whole run's, add the
+//      type to LEGEND_BY_STEP below too.
 //   4. Only if the type keeps instance data in its frames rather than its payload (the Table's
 //      cell text): add a function (payload, frames) => frame to PICTURE_PLAIN_FRAMES below that
 //      keeps that data and drops every state and step annotation.
@@ -100,6 +102,26 @@ const PICTURE_ANNOTATIONS = {
   TripartiteMatching: tripartiteAnnotations,
 };
 
+/**
+ * Picture types whose Legend lists only what the step on screen draws (see step 3 above). The
+ * rest list what any step of the run draws, so their key holds still while stepping. A Quantum
+ * Circuit's run changes what it draws from end to end (highlighted columns, dashed columns still
+ * to come, bars of each sign), so a whole-run key would list pieces its Done no longer draws.
+ */
+const LEGEND_BY_STEP = new Set(["QuantumCircuit"]);
+
+/**
+ * The frames a picture's Legend is listed from: the step on screen for a LEGEND_BY_STEP type,
+ * else every frame of the run (`frames`), or the plain frame before Run.
+ * @param {string} type The response's picture type.
+ * @param {Object} frame The frame on screen (the plain frame before Run).
+ * @param {Object[]|null} frames The run's frames, or null before Run.
+ * @returns {Object[]}
+ */
+export function pictureLegendFrames(type, frame, frames) {
+  return frames && !LEGEND_BY_STEP.has(type) ? frames : [frame];
+}
+
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
 const PICTURE_PLAIN_FRAMES = {
   Table: tablePlainFrame,
@@ -126,12 +148,17 @@ export function plainFrame(type, payload, frames) {
 }
 
 /**
- * The Legend entries for what a picture draws besides its states, over a run's frames.
+ * The Legend entries for what a picture draws besides its states, over the frames pictureLegendFrames
+ * gives.
+ * @param {string} type The response's picture type.
+ * @param {Object|null} payload The response's static part.
+ * @param {Object[]} frames The frames the Legend is listed from.
+ * @param {{plain?: boolean}} [options] `plain`: the picture is drawn before Run.
  * @returns {Array<{key: string, text: string, swatch: Object}>}
  */
-export function pictureAnnotations(type, payload, frames) {
+export function pictureAnnotations(type, payload, frames, { plain = false } = {}) {
   const annotate = Object.hasOwn(PICTURE_ANNOTATIONS, type) ? PICTURE_ANNOTATIONS[type] : null;
-  return annotate ? annotate(payload, frames) : [];
+  return annotate ? annotate(payload, frames, { plain }) : [];
 }
 
 /** True when this site draws `type` from a format=frames response. */

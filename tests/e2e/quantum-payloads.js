@@ -6,7 +6,9 @@
 // picture requests itself and CI needs neither a backend that serves them nor a quantum server.
 // Grover's and Shor's were taken again after Redux #902 and #903 and quantumsolver #23: Shor's
 // circuit runs column by column, and Grover's runs floor(pi/4 * sqrt(N)) rounds, so a 2-qubit
-// search with one marked item no longer misses.
+// search with one marked item no longer misses. Grover's miss was taken again after Redux #906
+// and #907 and quantumsolver #24 (floor(pi/4 * sqrt(N/M)) rounds, still 1 for 2 of 4 marked):
+// its Measure says the four-way tie, and its Done the 50% chance a run finds a marked item.
 // Kept apart from picture-payloads.js only for size (Biome checks files up to 1 MiB): each
 // quantum problem's default instance with its quantum solver and its classical one, Grover's
 // measurement both hitting and missing the marked item, and a number with no circuit to draw.
@@ -1223,7 +1225,7 @@ export const GROVER_MISS_QUANTUM_FRAMES = {
     },
     {
       event: "Try",
-      caption: "Measure: item 0 (00) with probability 25%.",
+      caption: "Measure: every item is equally likely (25% each).",
       focus: ["t3", "g3_0", "g3_1"],
       applied: 4,
       queries: [],
@@ -1260,7 +1262,7 @@ export const GROVER_MISS_QUANTUM_FRAMES = {
     {
       event: "Done",
       caption:
-        "Item 0 is not marked: the measurement missed. Running the circuit again usually finds a marked item.",
+        "Item 0 is not marked: the measurement missed. A run finds a marked item about 50% of the time.",
       focus: [],
       applied: 4,
       queries: [],
