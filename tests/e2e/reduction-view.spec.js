@@ -29,7 +29,10 @@ const REDUCE_REQUEST = /\/api\/redux\/ProblemProvider\/reduce\?/;
 
 const PHONE_TEXT_PX = 11;
 
-/** Each capture with the page that opens it: problem, target in the To dropdown, instance. */
+/**
+ * Each capture with the page that opens it: the problem, its target in the To dropdown, and the
+ * instance (the capture's own unless the page needs another).
+ */
 const CASES = {
   satTo3sat: { view: SAT_TO_3SAT_VIEW, problem: "SAT", target: /^3SAT/ },
   sat3ToClique: { view: SAT3_TO_CLIQUE_VIEW, problem: "3SAT", target: /^Clique(?!\s*Cover)/ },
@@ -38,10 +41,13 @@ const CASES = {
     problem: "Graph Coloring",
     target: /^Clique Cover/,
   },
+  // CI's backend (ghcr.io/reduxisu/redux:latest) has no Subset Sum page yet, so this capture is
+  // drawn on 3SAT's page with its Clique target: the view is the capture's, whatever the page.
   subsetSumToPartition: {
     view: SUBSET_SUM_TO_PARTITION_VIEW,
-    problem: "Subset Sum",
-    target: /^Partition/,
+    problem: "3SAT",
+    target: /^Clique(?!\s*Cover)/,
+    instance: SAT3_TO_CLIQUE_VIEW.source.instance,
   },
 };
 
@@ -79,13 +85,13 @@ async function openReduce(page, problem, instance, target) {
  * reductionView requests the page made, so a test can count them.
  */
 async function openView(page, key) {
-  const { view, problem, target } = CASES[key];
+  const { view, problem, target, instance } = CASES[key];
   const asked = [];
   await page.route(REDUCTION_VIEW_REQUEST, (route) => {
     asked.push(route.request().url());
     return route.fulfill({ json: view });
   });
-  await openReduce(page, problem, view.source.instance, target);
+  await openReduce(page, problem, instance ?? view.source.instance, target);
   await page.locator("#workbench-run").click();
   await expect(page.locator(VIEW)).toBeVisible();
   return asked;
