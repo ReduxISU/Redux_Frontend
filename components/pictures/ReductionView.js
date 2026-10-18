@@ -77,7 +77,8 @@ function setMark(element, name, value) {
 
 /**
  * Marks a pane's pieces: `data-rv-built="no"` on the ones not built yet, and, while a link is
- * shown, `data-rv-link` "hot" on the linked ones and "faint" on the rest. A faded piece that holds
+ * shown, `data-rv-link` "hot" on the linked ones and "faint" on the rest (dashed missing lines
+ * included). A faded piece that holds
  * a linked one (a clause around its literals) is left unfaded, so the linked one keeps its colors.
  * The pane itself gets the counts, for the tests and for anyone reading the DOM.
  */
@@ -97,6 +98,11 @@ function markPieces(root, hidden, hot) {
       if (link === "hot") hotCount += 1;
     }
     setMark(element, "data-rv-link", link);
+  }
+  // A picture's dashed "missing" lines have no id of their own (two ends): they fade with the
+  // rest while a link is shown.
+  for (const element of root.querySelectorAll("[data-phantom]")) {
+    setMark(element, "data-rv-link", hot ? "faint" : null);
   }
   if (hot) {
     for (const element of root.querySelectorAll('[data-rv-link="hot"]')) {
@@ -415,8 +421,11 @@ export default function ReductionView({ idPrefix, view, frameIndex, stack, activ
       const from = link.source.size ? listNames(link.source, names.source) : "the whole instance";
       const to = link.target.size ? listNames(link.target, names.target) : "the whole target";
       const count = link.gadgets.length;
-      const many = count === 1 ? (/^[aeiou]/.test(kinds) ? "an" : "a") : String(count);
-      readout = `${pointed}, linked by ${many} ${kinds} gadget${count === 1 ? "" : "s"}: ${source.problem} ${from} ${ARROW} ${target.problem} ${to}.`;
+      const by =
+        count === 1
+          ? `${/^[aeiou]/.test(kinds) ? "an" : "a"} ${kinds} gadget`
+          : `${count} gadgets (${kinds})`;
+      readout = `${pointed}, linked by ${by}: ${source.problem} ${from} ${ARROW} ${target.problem} ${to}.`;
     }
   } else if (link) {
     const from = link.source.size ? listNames(link.source, names.source) : "the whole instance";
