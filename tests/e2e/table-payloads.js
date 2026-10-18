@@ -2282,7 +2282,7 @@ export const ILP_SEVERAL_TABLE_FRAMES = {
   ],
 };
 
-/** 0-1 Integer Linear Programming (-1 -1 0),(1 1 0),(0 0 1)<=(-2 1 1), Integer Programming Brute Force: all 8 tries break a row, so the run ends on the blank, no. */
+/** 0-1 Integer Linear Programming (-1 -1 0),(1 1 0),(0 0 1)<=(-2 1 1), Integer Programming Brute Force: all 8 tries break a row, so the run ends on its last try, (1 1 1), with row 2 Rejected and rows 1 and 3 Covered, and no (recaptured after Redux #905). */
 export const ILP_NONE_TABLE_FRAMES = {
   type: "Table",
   payload: {
@@ -2466,16 +2466,20 @@ export const ILP_NONE_TABLE_FRAMES = {
     },
     {
       event: "Done",
-      caption: "All 8 assignments break some row, so no 0-1 solution exists.",
+      caption: "No 0-1 assignment satisfies every row: all 8 were tried, the last (1 1 1).",
       focus: [],
       values: [
-        ["?", "?", "?", null, null, null],
-        ["-1", "-1", "0", null, "-2", null],
-        ["1", "1", "0", null, "1", null],
-        ["0", "0", "1", null, "1", null],
+        ["1", "1", "1", null, null, null],
+        ["-1", "-1", "0", "-2", "-2", "yes"],
+        ["1", "1", "0", "2", "1", "no"],
+        ["0", "0", "1", "1", "1", "yes"],
       ],
-      rows: {},
-      cells: {},
+      rows: { r1: { state: "Covered" }, r2: { state: "Rejected" }, r3: { state: "Covered" } },
+      cells: {
+        r0c0: { state: "Rejected" },
+        r0c1: { state: "Rejected" },
+        r0c2: { state: "Rejected" },
+      },
       changed: [],
       step: 8,
       ok: false,
@@ -3551,7 +3555,7 @@ export const SSSP_UNREACHABLE_TABLE_FRAMES = {
   ],
 };
 
-/** Single Pair Shortest Path, the problem default (1 to 5), Dijkstra's Algorithm, SPSPTableVisualization: the answer's path green on Done. */
+/** Single Pair Shortest Path, the problem default (1 to 5), Dijkstra's Algorithm, SPSPTableVisualization: when 5 is settled only the path 1, 3, 5 is Solution and 2 and 4 stay Committed (recaptured after Redux #904); the answer's path green on Done. */
 export const SPSP_TABLE_FRAMES = {
   type: "Table",
   payload: {
@@ -3679,9 +3683,9 @@ export const SPSP_TABLE_FRAMES = {
       ],
       rows: {
         r0: { state: "Solution" },
-        r1: { state: "Solution" },
+        r1: { state: "Committed" },
         r2: { state: "Solution" },
-        r3: { state: "Solution" },
+        r3: { state: "Committed" },
         r4: { state: "ElementHighlight" },
       },
       cells: {},
@@ -3708,7 +3712,7 @@ export const SPSP_TABLE_FRAMES = {
   ],
 };
 
-/** Single Pair Shortest Path ({s,a,b,c,t}, s to t), Dijkstra's Algorithm, SPSPTableVisualization: stops once t is settled, before c is. */
+/** Single Pair Shortest Path ({s,a,b,c,t}, s to t), Dijkstra's Algorithm, SPSPTableVisualization: stops once t is settled, before c is; that step marks only the path s, a, t Solution and b Committed (recaptured after Redux #904). */
 export const SPSP_EARLY_TABLE_FRAMES = {
   type: "Table",
   payload: {
@@ -3816,7 +3820,7 @@ export const SPSP_EARLY_TABLE_FRAMES = {
       rows: {
         r0: { state: "Solution" },
         r1: { state: "Solution" },
-        r2: { state: "Solution" },
+        r2: { state: "Committed" },
         r4: { state: "ElementHighlight" },
       },
       cells: {},

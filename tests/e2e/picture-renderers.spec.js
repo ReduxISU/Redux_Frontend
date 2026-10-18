@@ -7375,16 +7375,41 @@ test("Table: 0-1 ILP draws x as chips, shades the coefficients its 1s switch on,
   await expect(legendBody(page)).toContainText("Shaded coefficient");
 });
 
-test("Table: a 0-1 ILP with no 0-1 solution ends on its blank, and no", async ({ page }) => {
+test("Table: a 0-1 ILP with no 0-1 solution ends on its last try, the rows it breaks Rejected, and no", async ({
+  page,
+}) => {
   const capture = ILP_NONE_TABLE_FRAMES;
   await openTable(page, capture);
   await page.locator("#workbench-run").click();
   await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
-  await expect(page.locator(`${TABLE}-table [data-chip="?"]`)).toHaveCount(3);
-  await expect(page.locator(`${TABLE}-table [data-pill]`)).toHaveCount(0);
-  await expect(
-    page.locator(`${TABLE}-table [data-row-id]:not([data-state="Background"])`),
-  ).toHaveCount(0);
+  // Redux #905: the Done keeps the last try, (1 1 1), not the blank.
+  await expect(page.locator(`${TABLE}-table [data-chip="?"]`)).toHaveCount(0);
+  await expect(page.locator(`${TABLE}-table [data-chip="1"]`)).toHaveCount(3);
+  for (const x of ["r0c0", "r0c1", "r0c2"]) {
+    await expect(tableCell(page, x)).toHaveAttribute("data-state", "Rejected");
+  }
+  await expect(tableRow(page, "r2")).toHaveAttribute("data-state", "Rejected");
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-state", "Covered");
+  await expect(tableRow(page, "r3")).toHaveAttribute("data-state", "Covered");
+  await expect(tableCell(page, "r2c5").locator("[data-pill]")).toHaveAttribute("data-pill", "no");
+  await expect(page.locator(`${TABLE}-table [data-pill="yes"]`)).toHaveCount(2);
+  await expect(page.locator(`${TABLE}-table [data-row-id][data-state="Solution"]`)).toHaveCount(0);
+});
+
+test("Table: SPSP's step that settles the target marks only the path Solution, the rest Committed", async ({
+  page,
+}) => {
+  // Redux #904: settling 5 ends the run, but 2 and 4 are not on the path 1, 3, 5.
+  const capture = SPSP_TABLE_FRAMES;
+  const stop = capture.frames.length - 2;
+  await openTable(page, capture);
+  await page.locator("#workbench-run").click();
+  await toFrame(page, capture, stop);
+  await expect(tableRow(page, "r0")).toHaveAttribute("data-state", "Solution");
+  await expect(tableRow(page, "r2")).toHaveAttribute("data-state", "Solution");
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-state", "Committed");
+  await expect(tableRow(page, "r3")).toHaveAttribute("data-state", "Committed");
+  await expect(tableRow(page, "r4")).toHaveAttribute("data-state", "ElementHighlight");
 });
 
 test("Table: a DFA that falls into Garbage ends on a Rejected row, and an NFA's runs keep their slots", async ({
