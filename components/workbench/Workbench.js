@@ -32,6 +32,13 @@
 //     the run can't draw shows the instance with a note saying why. On a backend without
 //     visualizeRun, and for a visualization only the old flat list draws, Run asks for the one
 //     chosen picture as before, and switching shows the instance until the next Run.
+//   - The Reduction View (#215): Run in Reduce mode first asks ProblemProvider/reductionView
+//     (lib/reductionView.js) for the whole reduction in one answer: the target built step by
+//     step, solved, and its answer mapped back, with both pictures and the gadgets that link
+//     them. The step controls walk its three phases and the two pictures draw side by side
+//     (components/pictures/ReductionView.js). A backend without it (404 or 405, remembered for
+//     the page), a reduction it can't show (400), or a failure gets the older requests below,
+//     so Reduce keeps working as it did.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -53,6 +60,12 @@ import { useFrameEdits } from "../../hooks/useFrameEdits";
 import { highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
+  hasSkippedPairs,
+  paneFrame,
+  reductionViewWorth,
+  requestReductionViewOrNull,
+} from "../../lib/reductionView";
+import {
   REDUX_API_BASE_URL,
   requestMappedSolution,
   requestReducedInstance,
@@ -61,8 +74,9 @@ import {
 } from "../../lib/redux";
 import { frameAtPosition, framePosition, RUN_END } from "../../lib/runSteps";
 import ComputeStatus from "../detail/ComputeStatus";
-import { statesInFrames } from "../pictures/pictureStates";
+import { pictureStateStyle, statesInFrames } from "../pictures/pictureStates";
 import { pictureAnnotations, pictureLegendFrames, pictureRuns } from "../pictures/registry";
+import { paletteVars } from "../theme";
 import CommandBar from "./CommandBar";
 import {
   reductionCard,
@@ -227,6 +241,8 @@ export default function Workbench({ problem }) {
     Boolean(reduceResult) &&
     reduceResult.instance === instance &&
     reduceResult.reductionClassName === selectedReduction?.className;
+  // #215: the current reduction's Reduction View, when Redux sent one.
+  const reduceView = mode === "reduce" && reduceCurrent ? (reduceResult.view ?? null) : null;
 
   // --- Verify (#229 stage 3) --------------------------------------------------------------
   // The target side is the reduction's target problem, checked against the instance the
@@ -285,6 +301,15 @@ export default function Workbench({ problem }) {
     );
     setRunView(null);
     setRunPosition(RUN_END);
+  }
+
+  // #215: where the Reduction View's steps are. A new reduction opens on its first step, the
+  // start of Build, as the mockup's does.
+  const [reduceStep, setReduceStep] = useState(0);
+  const [reduceStepsFor, setReduceStepsFor] = useState(reduceRun.result);
+  if (reduceStepsFor !== reduceRun.result) {
+    setReduceStepsFor(reduceRun.result);
+    setReduceStep(0);
   }
 
   // The Result dot only means "a run finished while you were not looking".
@@ -470,6 +495,42 @@ export default function Workbench({ problem }) {
     } else {
       const reduction = selectedReduction;
       finished = reduceRun.start(async (signal) => {
+        const ran = {
+          reductionClassName: reduction.className,
+          reductionName: reduction.name,
+          targetName: reduction.target,
+          targetVisualization: reduction.targetVisualization,
+          targetVerifier: reduction.targetVerifier ?? null,
+          instance: runInstance,
+          runId,
+        };
+        // #215: the Reduction View, when the backend has it for this reduction. It builds the
+        // target, solves it with a solver for the target and maps the answer back, so the
+        // source solver chosen above is not used.
+        const view = await requestReductionViewOrNull({
+          reduction: reduction.className,
+          instance: runInstance,
+          signal,
+        });
+        if (view) {
+          succeeded = true;
+          const closing = view.frames[view.frames.length - 1];
+          return {
+            ...ran,
+            view,
+            frames: [],
+            reductionName: view.reductionName || reduction.name,
+            targetInstance: view.target.instance,
+            gadgets: view.gadgets,
+            solverName: view.solverName,
+            solverClassName: null,
+            certificate: null,
+            mappedBack: {
+              text: closing?.caption ?? "",
+              ok: typeof closing?.ok === "boolean" ? closing.ok : null,
+            },
+          };
+        }
         // The target instance's text (for the Result panel and Check against: target) comes
         // from ProblemProvider/reduce, which needs no answer, so it is asked for alongside the
         // solve. Without it the run still draws; the target side of Verify just stays locked.
@@ -511,19 +572,15 @@ export default function Workbench({ problem }) {
         const built = await builtReduction;
         succeeded = true;
         return {
+          ...ran,
+          view: null,
           frames: Array.isArray(frames) ? frames : [],
-          reductionClassName: reduction.className,
-          reductionName: reduction.name,
-          targetName: reduction.target,
-          targetVisualization: reduction.targetVisualization,
-          targetVerifier: reduction.targetVerifier ?? null,
           targetInstance: built.instance,
           gadgets: built.gadgets,
           solverName: solver.name,
           solverClassName: solver.className,
           certificate,
-          instance: runInstance,
-          runId,
+          mappedBack: null,
         };
       });
     }
@@ -669,6 +726,8 @@ export default function Workbench({ problem }) {
   } else if (!canSolve) {
     modeNote =
       "A reduction carries a solver's answer across, and this problem has no solver to run.";
+  } else if (reductionViewWorth(selectedReduction?.className)) {
+    modeNote = `Run builds the ${selectedReduction.target} instance step by step, solves it, and maps its answer back to this one.`;
   } else {
     modeNote = `Run solves the instance with ${selectedSolver.name} first, then carries the answer across.`;
   }
@@ -690,6 +749,7 @@ export default function Workbench({ problem }) {
     showing = `Running the reduction to ${selectedReduction?.target ?? "the target"}.`;
   } else if (reduceCurrent) {
     showing = `${problem.name} ${ARROW} ${reduceResult.targetName} (${reduceResult.reductionName})`;
+    if (reduceView?.solverName) showing += `, solved by ${reduceView.solverName}`;
   } else {
     showing = NOT_RUN_TEXT;
   }
@@ -928,6 +988,9 @@ export default function Workbench({ problem }) {
     note = { text: "This run recorded no steps.", tone: "muted" };
   } else if (showingRunPicture) {
     note = null;
+  } else if (reduceView) {
+    // The Reduction View's own caption says what each step does.
+    note = null;
   } else if (mode === "reduce" && reduceCurrent) {
     note = {
       text: `The target picture is the ${reduceResult.targetName} instance the reduction built.`,
@@ -956,7 +1019,41 @@ export default function Workbench({ problem }) {
   // registry.js pictureLegendFrames).
   let legendStates = null;
   let legendAnnotations = null;
-  if (sourceContent.kind === "picture") {
+  if (reduceView) {
+    // #215: both pictures' states and annotations over the whole view, so the key holds still
+    // while stepping, and the view's own marks: the gadget link and, on a Graph target, the
+    // pairs a rule leaves unjoined.
+    const sides = [reduceView.source, reduceView.target];
+    const panes = sides.map((side, index) =>
+      reduceView.frames.map((frame) => paneFrame(frame, index === 0 ? "source" : "target", null)),
+    );
+    legendStates = statesInFrames(panes.flat());
+    const entries = [];
+    const seen = new Set();
+    sides.forEach((side, index) => {
+      for (const entry of pictureAnnotations(side.type, side.payload, panes[index])) {
+        const key = `${entry.key}|${entry.text}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        entries.push({ ...entry, key: `${index === 0 ? "source" : "target"}-${entry.key}` });
+      }
+    });
+    if (reduceView.target.type === "Graph" && hasSkippedPairs(reduceView)) {
+      entries.push({
+        key: "rule-says-no",
+        text: "Rule says no (a pair the reduction leaves unjoined on purpose)",
+        swatch: { kind: "line", color: pictureStateStyle("Blocked").line, dash: "6 5" },
+      });
+    }
+    if (reduceView.gadgets.length > 0) {
+      entries.push({
+        key: "gadget-link",
+        text: "Linked by a gadget (point at a piece to see what it became or came from)",
+        swatch: { kind: "ring", color: paletteVars.viz.gadget },
+      });
+    }
+    legendAnnotations = entries;
+  } else if (sourceContent.kind === "picture") {
     const frames = pictureLegendFrames(
       sourceContent.type,
       sourceContent.frame,
@@ -1375,7 +1472,16 @@ export default function Workbench({ problem }) {
                     currentStep,
                     onStepChange: setCurrentStep,
                   }
-                : null
+                : reduceView
+                  ? {
+                      frameCount: reduceView.frames.length,
+                      currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
+                      onStepChange: setReduceStep,
+                    }
+                  : null
+            }
+            reduction={
+              reduceView ? { view: reduceView, activeGadget, runId: reduceResult.runId } : null
             }
             note={note}
             legendFrames={legendFrames}

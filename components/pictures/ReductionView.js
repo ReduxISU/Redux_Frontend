@@ -1,0 +1,509 @@
+// components/pictures/ReductionView.js
+//
+// #215: the Reduction View. The instance you gave on the left, the instance the reduction builds
+// on the right (stacked on a phone, or while a panel is open), each drawn by the renderer its
+// picture type already has (./registry.js), so every picture type works on either side. One
+// list of frames walks three phases, Build, Solve and Map back (the design mockup's Reduction
+// tab and ReduxISU/Redux's PICTURE-TYPES.md, "Reduction"); the shared step controls under the
+// picture walk it, and ReductionPhaseBar above them names the phase and jumps to one.
+//
+// What this file adds on top of the two pictures, all through the `data-*-id` attributes every
+// renderer already marks its pieces with (lib/reductionView.js PIECE_ID_ATTRIBUTES), so no
+// renderer knows about the view:
+//   - During Build, the target pieces not built yet are hidden in place (`visibility: hidden`),
+//     so the layout is the finished target's from the first step and nothing moves.
+//   - Gadget links. Hovering, focusing or tapping a piece on either side marks every piece the
+//     gadgets that name it name, on both sides, in the gadget gold (`viz.gadget`, the color the
+//     Result panel's Gadgets rows use), and fades the rest by color (grayscale, the renderers' own
+//     trace fade), never by opacity. A tap pins the link until the same piece is tapped again,
+//     empty space is tapped, or Escape is pressed. A Gadgets row hovered in the Result panel
+//     draws its gadget the same way. A line under the pictures says what is linked, in words, so
+//     the link is not told by color alone and a screen reader hears it.
+//
+// The marks are data attributes set on the renderers' own elements after React draws them (and
+// again whenever a renderer adds elements of its own, through a MutationObserver), styled by this
+// component's stylesheet. React never sets those attributes, so it never clears them.
+
+import Box from "@mui/material/Box";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { GADGET_KINDS, OTHER_GADGET_KIND } from "../../data/gadgetKinds";
+import {
+  eventWord,
+  linkedPieces,
+  PIECE_SELECTOR,
+  paneFrame,
+  phaseStarts,
+  pieceIdOf,
+  pieceNamer,
+  placeInPhase,
+  REDUCTION_PHASES,
+  unbuiltIds,
+} from "../../lib/reductionView";
+import { paletteVars } from "../theme";
+import { COMPACT_MEDIA } from "../workbench/layout";
+import { FAINT_FILTER } from "./graphPieces";
+import PictureCanvas from "./PictureCanvas";
+
+const ARROW = "↦";
+const GADGET_RING = paletteVars.viz.gadget;
+// A gold outline around a linked piece's own shape: four unblurred shadows, one each way, so it
+// follows any shape a renderer draws (a node, a clause's hull, an edge, a packed item).
+const LINKED_FILTER = [
+  `drop-shadow(1.5px 0 0 ${GADGET_RING})`,
+  `drop-shadow(-1.5px 0 0 ${GADGET_RING})`,
+  `drop-shadow(0 1.5px 0 ${GADGET_RING})`,
+  `drop-shadow(0 -1.5px 0 ${GADGET_RING})`,
+].join(" ");
+
+const SHAPES = "circle, ellipse, rect, path, polygon, polyline, line";
+
+const KIND_LABELS = new Map(
+  [...GADGET_KINDS, OTHER_GADGET_KIND].map((entry) => [entry.kind, entry.label]),
+);
+
+/** Lowercase singular of a gadget kind's group label ("Edge rules" reads "edge rule"). */
+function kindWord(kind) {
+  const label = KIND_LABELS.get(kind) ?? OTHER_GADGET_KIND.label;
+  return label.replace(/s$/, "").toLowerCase();
+}
+
+function setMark(element, name, value) {
+  if (value === null) {
+    if (element.hasAttribute(name)) element.removeAttribute(name);
+  } else if (element.getAttribute(name) !== value) {
+    element.setAttribute(name, value);
+  }
+}
+
+/**
+ * Marks a pane's pieces: `data-rv-built="no"` on the ones not built yet, and, while a link is
+ * shown, `data-rv-link` "hot" on the linked ones and "faint" on the rest. A faded piece that holds
+ * a linked one (a clause around its literals) is left unfaded, so the linked one keeps its colors.
+ * The pane itself gets the counts, for the tests and for anyone reading the DOM.
+ */
+function markPieces(root, hidden, hot) {
+  if (!root) return;
+  let hotCount = 0;
+  let hiddenCount = 0;
+  const pieces = root.querySelectorAll(PIECE_SELECTOR);
+  for (const element of pieces) {
+    const id = pieceIdOf(element);
+    const isHidden = hidden.has(id);
+    if (isHidden) hiddenCount += 1;
+    setMark(element, "data-rv-built", isHidden ? "no" : null);
+    let link = null;
+    if (hot && !isHidden) {
+      link = hot.has(id) ? "hot" : "faint";
+      if (link === "hot") hotCount += 1;
+    }
+    setMark(element, "data-rv-link", link);
+  }
+  if (hot) {
+    for (const element of root.querySelectorAll('[data-rv-link="hot"]')) {
+      let holder = element.parentElement?.closest('[data-rv-link="faint"]');
+      while (holder && root.contains(holder)) {
+        holder.removeAttribute("data-rv-link");
+        holder = holder.parentElement?.closest('[data-rv-link="faint"]');
+      }
+    }
+  }
+  root.setAttribute("data-hidden-count", String(hiddenCount));
+  root.setAttribute("data-linked-count", hot ? String(hotCount) : "0");
+}
+
+/**
+ * One side of the view: its title and its picture, drawn by the picture type's own renderer,
+ * with the build and link marks on top.
+ */
+function ReductionPane({
+  idPrefix,
+  which,
+  title,
+  type,
+  payload,
+  name,
+  frame,
+  frames,
+  frameIndex,
+  hidden,
+  hot,
+  onPoint,
+}) {
+  const ref = useRef(null);
+  const marks = useRef({ hidden, hot });
+
+  // After every draw, and whenever a renderer adds elements of its own between draws.
+  useLayoutEffect(() => {
+    marks.current = { hidden, hot };
+    markPieces(ref.current, hidden, hot);
+  });
+  useEffect(() => {
+    const root = ref.current;
+    if (!root || typeof MutationObserver === "undefined") return undefined;
+    const observer = new MutationObserver(() =>
+      markPieces(root, marks.current.hidden, marks.current.hot),
+    );
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  const pieceAt = (target) => {
+    const element = target instanceof Element ? target.closest(PIECE_SELECTOR) : null;
+    if (!element || !ref.current?.contains(element)) return null;
+    if (element.getAttribute("data-rv-built") === "no") return null;
+    return pieceIdOf(element);
+  };
+
+  return (
+    <Box
+      component="section"
+      aria-labelledby={`${idPrefix}-title`}
+      sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
+    >
+      <Box
+        component="h3"
+        id={`${idPrefix}-title`}
+        sx={{
+          m: 0,
+          fontSize: "0.75rem",
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "text.secondary",
+        }}
+      >
+        {title}
+      </Box>
+      <Box
+        ref={ref}
+        id={idPrefix}
+        data-pane={which}
+        data-picture-type={type}
+        onPointerOver={(event) => {
+          if (event.pointerType === "mouse") onPoint(which, pieceAt(event.target), "hover");
+        }}
+        onPointerLeave={(event) => {
+          if (event.pointerType === "mouse") onPoint(which, null, "hover");
+        }}
+        onFocus={(event) => onPoint(which, pieceAt(event.target), "focus")}
+        onBlur={() => onPoint(which, null, "focus")}
+        onClick={(event) => onPoint(which, pieceAt(event.target), "tap")}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onPoint(which, null, "clear");
+        }}
+        sx={{
+          minWidth: 0,
+          backgroundColor: "surface.input",
+          borderRadius: "10px",
+          p: 2,
+          boxSizing: "border-box",
+          [COMPACT_MEDIA]: { p: 1 },
+          "& [data-rv-built='no']": { visibility: "hidden" },
+          "& [data-rv-link='faint']": { filter: `${FAINT_FILTER} !important` },
+          // The outline goes on a linked piece's shapes, not its text, so its label stays sharp.
+          [`& [data-rv-link='hot']:is(${SHAPES}), & [data-rv-link='hot'] :is(${SHAPES})`]: {
+            filter: `${LINKED_FILTER} !important`,
+          },
+        }}
+      >
+        <PictureCanvas
+          idPrefix={`${idPrefix}-frames`}
+          name={name}
+          type={type}
+          payload={payload}
+          frame={frame}
+          frameIndex={frameIndex}
+          frameCount={frames.length}
+          frames={frames}
+          showCaption={false}
+        />
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * The phase bar: "1 · Build", "2 · Solve", "3 · Map back", the current one marked. Each jumps to
+ * its phase's first step. Sits with the step controls, as the mockup's stepper has it.
+ * @param {Object} props
+ * @param {string} props.idPrefix
+ * @param {Object[]} props.frames The view's frames.
+ * @param {number} props.frameIndex The step on screen.
+ * @param {(index: number) => void} props.onStepChange
+ */
+export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }) {
+  const starts = phaseStarts(frames);
+  const current = frames[frameIndex]?.phase ?? null;
+  return (
+    <Box
+      id={idPrefix}
+      role="group"
+      aria-label="Reduction phases"
+      sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}
+    >
+      {REDUCTION_PHASES.map((phase, index) => {
+        const start = starts[phase.key];
+        const here = phase.key === current;
+        return (
+          <Box
+            key={phase.key}
+            component="button"
+            type="button"
+            id={`${idPrefix}-${phase.key}`}
+            data-phase={phase.key}
+            aria-current={here ? "step" : undefined}
+            disabled={start === undefined}
+            title={phase.about}
+            onClick={() => onStepChange(start)}
+            sx={{
+              minHeight: 36,
+              px: 1.5,
+              borderRadius: "999px",
+              border: "1px solid",
+              borderColor: here ? "brand.line" : "border.main",
+              boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.line}` : "none",
+              backgroundColor: here ? "surface.raised" : "surface.main",
+              color: here ? "text.primary" : "text.secondary",
+              fontFamily: "inherit",
+              fontSize: "0.8125rem",
+              fontWeight: here ? 700 : 500,
+              cursor: "pointer",
+              "&:disabled": { cursor: "not-allowed", color: "text.disabled" },
+            }}
+          >
+            {`${index + 1} · ${phase.label}`}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+/** The step's caption: its phase and place in it, what happened, and the verdict at the end. */
+function ReductionCaption({ id, frames, frameIndex }) {
+  const frame = frames[frameIndex];
+  if (!frame) return null;
+  const phase = REDUCTION_PHASES.find((entry) => entry.key === frame.phase);
+  const { index, count } = placeInPhase(frames, frameIndex);
+  const word = eventWord(frame.phase, frame.event);
+  const verdict =
+    typeof frame.ok === "boolean" ? (frame.ok ? "Verdict: yes" : "Verdict: no") : null;
+  return (
+    <Box
+      id={id}
+      aria-live="polite"
+      data-phase={frame.phase}
+      data-event={frame.event ?? ""}
+      sx={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "baseline",
+        gap: "4px 10px",
+        fontSize: "0.875rem",
+        color: "text.primary",
+      }}
+    >
+      <Box
+        component="span"
+        id={`${id}-phase`}
+        sx={{
+          fontSize: "0.75rem",
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "text.secondary",
+        }}
+      >
+        {`${phase?.label ?? frame.phase} ${index + 1} of ${count}`}
+      </Box>
+      {word && (
+        <Box component="span" id={`${id}-event`} sx={{ fontWeight: 700 }}>
+          {word}
+        </Box>
+      )}
+      <Box component="span" id={`${id}-text`}>
+        {frame.caption}
+      </Box>
+      {verdict && (
+        <Box
+          component="span"
+          id={`${id}-verdict`}
+          sx={{ fontWeight: 700, color: frame.ok ? "success.light" : "error.light" }}
+        >
+          {verdict}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function listNames(ids, nameOf, limit = 6) {
+  const names = [...ids].map(nameOf);
+  if (names.length <= limit) return names.join(", ");
+  return `${names.slice(0, limit).join(", ")} and ${names.length - limit} more`;
+}
+
+/**
+ * @param {Object} props
+ * @param {string} props.idPrefix Prefixes every id rendered here.
+ * @param {ReturnType<typeof import("../../lib/reductionView").normalizeReductionView>} props.view
+ * @param {number} props.frameIndex The step on screen.
+ * @param {boolean} props.stack Stack the two pictures (a panel is open beside the pane).
+ * @param {{sourceIds: string[], targetIds: string[]}|null} [props.activeGadget] The gadget a
+ *   Gadgets row in the Result panel is pointing at, drawn when no piece is.
+ */
+export default function ReductionView({ idPrefix, view, frameIndex, stack, activeGadget = null }) {
+  const { source, target, gadgets } = view;
+  const sourceFrames = useMemo(
+    () => view.frames.map((frame) => paneFrame(frame, "source", source.type)),
+    [view, source.type],
+  );
+  const targetFrames = useMemo(
+    () => view.frames.map((frame) => paneFrame(frame, "target", target.type)),
+    [view, target.type],
+  );
+  const names = useMemo(
+    () => ({ source: pieceNamer(source.payload), target: pieceNamer(target.payload) }),
+    [source.payload, target.payload],
+  );
+  const index = Math.min(Math.max(frameIndex, 0), view.frames.length - 1);
+  const frame = view.frames[index];
+  const hiddenTarget = useMemo(() => unbuiltIds(view, frame), [view, frame]);
+  const noneHidden = useMemo(() => new Set(), []);
+
+  // What is pointed at: hovered or focused (`hover`), or tapped (`pinned`, kept until tapped
+  // again). The hover wins while there is one, as the renderers' own traces do.
+  const [hover, setHover] = useState(null);
+  const [pinned, setPinned] = useState(null);
+  function point(which, id, how) {
+    if (how === "clear") {
+      setHover(null);
+      setPinned(null);
+    } else if (how === "tap") {
+      setPinned((current) =>
+        id === null || (current?.which === which && current.id === id) ? null : { which, id },
+      );
+    } else {
+      setHover(id === null ? null : { which, id });
+    }
+  }
+  const pointer = hover ?? pinned;
+
+  let link = null;
+  if (pointer) {
+    link = { ...linkedPieces(gadgets, pointer.which, pointer.id), pointer };
+  } else if (activeGadget) {
+    link = {
+      source: new Set(activeGadget.sourceIds),
+      target: new Set(activeGadget.targetIds),
+      gadgets: [activeGadget.index],
+      pointer: null,
+    };
+  }
+
+  let readout;
+  if (link?.pointer) {
+    const { which, id } = link.pointer;
+    const problem = which === "source" ? source.problem : target.problem;
+    const pointed = `${names[which](id)} (${problem})`;
+    if (link.gadgets.length === 0) {
+      readout = `${pointed}: no gadget names this piece.`;
+    } else {
+      const kinds = [...new Set(link.gadgets.map((gadgetIndex) => gadgets[gadgetIndex].kind))]
+        .map(kindWord)
+        .join(", ");
+      const from = link.source.size ? listNames(link.source, names.source) : "the whole instance";
+      const to = link.target.size ? listNames(link.target, names.target) : "the whole target";
+      const count = link.gadgets.length;
+      const many = count === 1 ? (/^[aeiou]/.test(kinds) ? "an" : "a") : String(count);
+      readout = `${pointed}, linked by ${many} ${kinds} gadget${count === 1 ? "" : "s"}: ${source.problem} ${from} ${ARROW} ${target.problem} ${to}.`;
+    }
+  } else if (link) {
+    const from = link.source.size ? listNames(link.source, names.source) : "the whole instance";
+    const to = link.target.size ? listNames(link.target, names.target) : "the whole target";
+    readout = `Gadget: ${source.problem} ${from} ${ARROW} ${target.problem} ${to}.`;
+  } else {
+    readout =
+      gadgets.length > 0
+        ? "Point at a piece on either side, or tap it, to see what it became or came from."
+        : "This reduction lists no gadgets, so its pieces are not linked across.";
+  }
+
+  return (
+    <Box
+      id={idPrefix}
+      data-phase={frame.phase}
+      data-frame-index={index}
+      data-linked={link ? "true" : "false"}
+      sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
+    >
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: stack ? "minmax(0, 1fr)" : "minmax(0, 1fr) auto minmax(0, 1fr)",
+          alignItems: "stretch",
+          gap: "10px",
+          [COMPACT_MEDIA]: { gridTemplateColumns: "minmax(0, 1fr)" },
+        }}
+      >
+        <ReductionPane
+          idPrefix={`${idPrefix}-source`}
+          which="source"
+          title={`${source.problem} · the instance you gave`}
+          type={source.type}
+          payload={source.payload}
+          name={source.problem}
+          frame={sourceFrames[index]}
+          frames={sourceFrames}
+          frameIndex={index}
+          hidden={noneHidden}
+          hot={link ? link.source : null}
+          onPoint={point}
+        />
+        <Box
+          aria-hidden="true"
+          sx={{
+            alignSelf: "center",
+            justifySelf: "center",
+            fontSize: "1.5rem",
+            lineHeight: 1,
+            color: "text.secondary",
+            transform: stack ? "rotate(90deg)" : "none",
+            [COMPACT_MEDIA]: { transform: "rotate(90deg)" },
+          }}
+        >
+          {ARROW}
+        </Box>
+        <ReductionPane
+          idPrefix={`${idPrefix}-target`}
+          which="target"
+          title={`${target.problem} · built by the reduction`}
+          type={target.type}
+          payload={target.payload}
+          name={target.problem}
+          frame={targetFrames[index]}
+          frames={targetFrames}
+          frameIndex={index}
+          hidden={hiddenTarget}
+          hot={link ? link.target : null}
+          onPoint={point}
+        />
+      </Box>
+      <Box
+        id={`${idPrefix}-link`}
+        aria-live="polite"
+        data-linked={link ? "true" : "false"}
+        sx={{
+          fontSize: "0.8125rem",
+          color: link ? "text.primary" : "text.secondary",
+          borderLeft: "3px solid",
+          borderColor: link ? GADGET_RING : "transparent",
+          pl: 1,
+        }}
+      >
+        {readout}
+      </Box>
+      <ReductionCaption id={`${idPrefix}-caption`} frames={view.frames} frameIndex={index} />
+    </Box>
+  );
+}
