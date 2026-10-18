@@ -4,6 +4,9 @@
 // local build of the full Redux backend (local/viz-integration) with the quantum solver service
 // (ReduxISU/quantumsolver) on 2026-10-17, so tests/e2e/picture-renderers.spec.js can answer the
 // picture requests itself and CI needs neither a backend that serves them nor a quantum server.
+// Grover's and Shor's were taken again after Redux #902 and #903 and quantumsolver #23: Shor's
+// circuit runs column by column, and Grover's runs floor(pi/4 * sqrt(N)) rounds, so a 2-qubit
+// search with one marked item no longer misses.
 // Kept apart from picture-payloads.js only for size (Biome checks files up to 1 MiB): each
 // quantum problem's default instance with its quantum solver and its classical one, Grover's
 // measurement both hitting and missing the marked item, and a number with no circuit to draw.
@@ -1107,7 +1110,7 @@ export const GROVER_QUANTUM_FRAMES = {
     },
     {
       event: "Done",
-      caption: "Item 1 is marked, found with 1 rounds of Grover's algorithm.",
+      caption: "Item 1 is marked, found with 1 round of Grover's algorithm.",
       focus: [],
       applied: 4,
       queries: [],
@@ -1123,7 +1126,7 @@ export const GROVER_QUANTUM_FRAMES = {
   ],
 };
 
-/** format=frames, Unstructured Search, the problem default, Grover's Algorithm: the simulation says item 1 at 100%, but the quantum server measured an unmarked item, so the read is Rejected and the run ends on no. */
+/** format=frames, Unstructured Search, (0, 1, 1, 0), Grover's Algorithm: with two of four items marked, one round leaves every item at 25%, the marked ones 50% together, and the quantum server measured the unmarked item 0, so the read is Rejected and the run ends on no. */
 export const GROVER_MISS_QUANTUM_FRAMES = {
   type: "QuantumCircuit",
   payload: {
@@ -1185,7 +1188,7 @@ export const GROVER_MISS_QUANTUM_FRAMES = {
     {
       event: "Try",
       caption:
-        "Round 1: the oracle flips the sign of the marked item. The probabilities stay the same; only the sign changes.",
+        "Round 1: the oracle flips the sign of the marked items. The probabilities stay the same; only the signs change.",
       focus: ["t1", "g1_0"],
       applied: 2,
       queries: [],
@@ -1196,14 +1199,14 @@ export const GROVER_MISS_QUANTUM_FRAMES = {
       bars: [
         { outcome: 0, probability: 0.25, sign: 1 },
         { outcome: 1, probability: 0.25, sign: -1 },
-        { outcome: 2, probability: 0.25, sign: 1 },
+        { outcome: 2, probability: 0.25, sign: -1 },
         { outcome: 3, probability: 0.25, sign: 1 },
       ],
     },
     {
       event: "Try",
       caption:
-        "Round 1: reflect every amplitude about the average. The marked item now has probability 100%.",
+        "Round 1: reflect every amplitude about the average. The marked items now have probability 50%.",
       focus: ["t2", "g2_0"],
       applied: 3,
       queries: [],
@@ -1211,11 +1214,16 @@ export const GROVER_MISS_QUANTUM_FRAMES = {
       gates: { g2_0: { state: "ElementHighlight" } },
       qubits: {},
       step: 2,
-      bars: [{ outcome: 1, probability: 1, sign: 1 }],
+      bars: [
+        { outcome: 0, probability: 0.25, sign: -1 },
+        { outcome: 1, probability: 0.25, sign: 1 },
+        { outcome: 2, probability: 0.25, sign: 1 },
+        { outcome: 3, probability: 0.25, sign: -1 },
+      ],
     },
     {
       event: "Try",
-      caption: "Measure: item 1 (01) with probability 100%.",
+      caption: "Measure: item 0 (00) with probability 25%.",
       focus: ["t3", "g3_0", "g3_1"],
       applied: 4,
       queries: [],
@@ -1223,11 +1231,16 @@ export const GROVER_MISS_QUANTUM_FRAMES = {
       gates: { g3_0: { state: "ElementHighlight" }, g3_1: { state: "ElementHighlight" } },
       qubits: {},
       step: 3,
-      bars: [{ outcome: 1, probability: 1, sign: 1 }],
+      bars: [
+        { outcome: 0, probability: 0.25, sign: -1 },
+        { outcome: 1, probability: 0.25, sign: 1 },
+        { outcome: 2, probability: 0.25, sign: 1 },
+        { outcome: 3, probability: 0.25, sign: -1 },
+      ],
     },
     {
       event: "Reject",
-      caption: "The quantum server measured item 2 (10), which is not marked.",
+      caption: "The quantum server measured item 0 (00), which is not marked.",
       focus: ["t3"],
       applied: 4,
       queries: [],
@@ -1235,14 +1248,19 @@ export const GROVER_MISS_QUANTUM_FRAMES = {
       gates: { g3_0: { state: "Rejected" }, g3_1: { state: "Rejected" } },
       qubits: { q0: { state: "Rejected" }, q1: { state: "Rejected" } },
       step: 4,
-      bars: [{ outcome: 1, probability: 1, sign: 1 }],
-      outcome: 2,
-      result: "2",
+      bars: [
+        { outcome: 0, probability: 0.25, sign: -1 },
+        { outcome: 1, probability: 0.25, sign: 1 },
+        { outcome: 2, probability: 0.25, sign: 1 },
+        { outcome: 3, probability: 0.25, sign: -1 },
+      ],
+      outcome: 0,
+      result: "0",
     },
     {
       event: "Done",
       caption:
-        "Item 2 is not marked: the measurement missed. Running the circuit again usually finds a marked item.",
+        "Item 0 is not marked: the measurement missed. Running the circuit again usually finds a marked item.",
       focus: [],
       applied: 4,
       queries: [],
@@ -1250,9 +1268,14 @@ export const GROVER_MISS_QUANTUM_FRAMES = {
       gates: { g3_0: { state: "Rejected" }, g3_1: { state: "Rejected" } },
       qubits: { q0: { state: "Rejected" }, q1: { state: "Rejected" } },
       step: 5,
-      bars: [{ outcome: 1, probability: 1, sign: 1 }],
-      outcome: 2,
-      result: "2",
+      bars: [
+        { outcome: 0, probability: 0.25, sign: -1 },
+        { outcome: 1, probability: 0.25, sign: 1 },
+        { outcome: 2, probability: 0.25, sign: 1 },
+        { outcome: 3, probability: 0.25, sign: -1 },
+      ],
+      outcome: 0,
+      result: "0",
       ok: false,
     },
   ],
@@ -1350,7 +1373,7 @@ export const UNSTRUCTURED_CLASSICAL_QUANTUM_FRAMES = {
   ],
 };
 
-/** format=frames, Prime Factorization, the problem default (15), Shor's Algorithm: twelve qubits, drawn but not simulated, and the quantum server's answer (3,5). */
+/** format=frames, Prime Factorization, the problem default (15), Shor's Algorithm: twelve qubits, drawn but not simulated, run column by column (the controlled multipliers 2^1 to 2^128 mod 15), and the quantum server's answer (3,5). */
 export const SHOR_QUANTUM_FRAMES = {
   type: "QuantumCircuit",
   payload: {
@@ -1462,40 +1485,184 @@ export const SHOR_QUANTUM_FRAMES = {
       step: 0,
     },
     {
-      event: "Accept",
-      caption: "The quantum server answered (3,5).",
-      focus: [],
-      applied: 0,
+      event: "Try",
+      caption: "Set the work register to 1.",
+      focus: ["t0", "g0_11"],
+      applied: 1,
       queries: [],
-      columns: {},
-      gates: {},
+      columns: { t0: { state: "ElementHighlight" } },
+      gates: { g0_11: { state: "ElementHighlight" } },
       qubits: {},
       step: 1,
+    },
+    {
+      event: "Try",
+      caption: "Apply H to the 8 counting qubits: every exponent from 0 to 255 at once.",
+      focus: ["t1", "g1_0", "g1_1", "g1_2", "g1_3", "g1_4", "g1_5", "g1_6", "g1_7"],
+      applied: 2,
+      queries: [],
+      columns: { t1: { state: "ElementHighlight" } },
+      gates: {
+        g1_0: { state: "ElementHighlight" },
+        g1_1: { state: "ElementHighlight" },
+        g1_2: { state: "ElementHighlight" },
+        g1_3: { state: "ElementHighlight" },
+        g1_4: { state: "ElementHighlight" },
+        g1_5: { state: "ElementHighlight" },
+        g1_6: { state: "ElementHighlight" },
+        g1_7: { state: "ElementHighlight" },
+      },
+      qubits: {},
+      step: 2,
+    },
+    {
+      event: "Try",
+      caption: "If c7 is 1, multiply the work register by 2^1 mod 15 = 2.",
+      focus: ["t2", "g2_8"],
+      applied: 3,
+      queries: [],
+      columns: { t2: { state: "ElementHighlight" } },
+      gates: { g2_8: { state: "ElementHighlight" } },
+      qubits: {},
+      step: 3,
+    },
+    {
+      event: "Try",
+      caption: "If c6 is 1, multiply the work register by 2^2 mod 15 = 4.",
+      focus: ["t3", "g3_8"],
+      applied: 4,
+      queries: [],
+      columns: { t3: { state: "ElementHighlight" } },
+      gates: { g3_8: { state: "ElementHighlight" } },
+      qubits: {},
+      step: 4,
+    },
+    {
+      event: "Try",
+      caption:
+        "If c5 is 1, multiply the work register by 2^4 mod 15 = 1. That is ×1, so nothing happens.",
+      focus: ["t4", "g4_8"],
+      applied: 5,
+      queries: [],
+      columns: { t4: { state: "ElementHighlight" } },
+      gates: { g4_8: { state: "ElementHighlight" } },
+      qubits: {},
+      step: 5,
+    },
+    {
+      event: "Try",
+      caption:
+        "If c4 is 1, multiply the work register by 2^8 mod 15 = 1. That is ×1, so nothing happens.",
+      focus: ["t5", "g5_8"],
+      applied: 6,
+      queries: [],
+      columns: { t5: { state: "ElementHighlight" } },
+      gates: { g5_8: { state: "ElementHighlight" } },
+      qubits: {},
+      step: 6,
+    },
+    {
+      event: "Try",
+      caption:
+        "If c3 is 1, multiply the work register by 2^16 mod 15 = 1. That is ×1, so nothing happens.",
+      focus: ["t6", "g6_8"],
+      applied: 7,
+      queries: [],
+      columns: { t6: { state: "ElementHighlight" } },
+      gates: { g6_8: { state: "ElementHighlight" } },
+      qubits: {},
+      step: 7,
+    },
+    {
+      event: "Try",
+      caption:
+        "If c2 is 1, multiply the work register by 2^32 mod 15 = 1. That is ×1, so nothing happens.",
+      focus: ["t7", "g7_8"],
+      applied: 8,
+      queries: [],
+      columns: { t7: { state: "ElementHighlight" } },
+      gates: { g7_8: { state: "ElementHighlight" } },
+      qubits: {},
+      step: 8,
+    },
+    {
+      event: "Try",
+      caption:
+        "If c1 is 1, multiply the work register by 2^64 mod 15 = 1. That is ×1, so nothing happens.",
+      focus: ["t8", "g8_8"],
+      applied: 9,
+      queries: [],
+      columns: { t8: { state: "ElementHighlight" } },
+      gates: { g8_8: { state: "ElementHighlight" } },
+      qubits: {},
+      step: 9,
+    },
+    {
+      event: "Try",
+      caption:
+        "If c0 is 1, multiply the work register by 2^128 mod 15 = 1. That is ×1, so nothing happens.",
+      focus: ["t9", "g9_8"],
+      applied: 10,
+      queries: [],
+      columns: { t9: { state: "ElementHighlight" } },
+      gates: { g9_8: { state: "ElementHighlight" } },
+      qubits: {},
+      step: 10,
+    },
+    {
+      event: "Try",
+      caption:
+        "Inverse quantum Fourier transform on the counting qubits: the period 4 shows up as evenly spaced peaks.",
+      focus: ["t10", "g10_0"],
+      applied: 11,
+      queries: [],
+      columns: { t10: { state: "ElementHighlight" } },
+      gates: { g10_0: { state: "ElementHighlight" } },
+      qubits: {},
+      step: 11,
+    },
+    {
+      event: "Try",
+      caption: "Measure the counting qubits.",
+      focus: ["t11", "g11_0", "g11_1", "g11_2", "g11_3", "g11_4", "g11_5", "g11_6", "g11_7"],
+      applied: 12,
+      queries: [],
+      columns: { t11: { state: "ElementHighlight" } },
+      gates: {
+        g11_0: { state: "ElementHighlight" },
+        g11_1: { state: "ElementHighlight" },
+        g11_2: { state: "ElementHighlight" },
+        g11_3: { state: "ElementHighlight" },
+        g11_4: { state: "ElementHighlight" },
+        g11_5: { state: "ElementHighlight" },
+        g11_6: { state: "ElementHighlight" },
+        g11_7: { state: "ElementHighlight" },
+      },
+      qubits: {},
+      step: 12,
+    },
+    {
+      event: "Accept",
+      caption: "The quantum server answered (3,5).",
+      focus: ["t11"],
+      applied: 12,
+      queries: [],
+      columns: { t11: { state: "ElementHighlight" } },
+      gates: {},
+      qubits: {},
+      step: 13,
       result: "(3,5)",
     },
     {
       event: "Done",
       caption: "15 = 3 × 5.",
       focus: [],
-      applied: 0,
+      applied: 12,
       queries: [],
-      columns: {
-        t0: { state: "Untraveled" },
-        t1: { state: "Untraveled" },
-        t10: { state: "Untraveled" },
-        t11: { state: "Untraveled" },
-        t2: { state: "Untraveled" },
-        t3: { state: "Untraveled" },
-        t4: { state: "Untraveled" },
-        t5: { state: "Untraveled" },
-        t6: { state: "Untraveled" },
-        t7: { state: "Untraveled" },
-        t8: { state: "Untraveled" },
-        t9: { state: "Untraveled" },
-      },
+      columns: {},
       gates: {},
       qubits: {},
-      step: 2,
+      step: 14,
       result: "(3,5)",
       ok: true,
     },

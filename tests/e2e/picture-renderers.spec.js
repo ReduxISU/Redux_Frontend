@@ -6837,15 +6837,38 @@ test("Quantum Circuit: the oracle flips signs, the last gates leave one outcome,
   await expect(page.locator(`${QUANTUM}-quantum [data-result]`)).toHaveText("(1,0,1)");
 });
 
-test("Quantum Circuit: a Grover measurement that misses the marked item reads Rejected, and the run ends on no", async ({
+test("Quantum Circuit: Grover's search finds the one marked item in 1 round, and the read turns Solution", async ({
+  page,
+}) => {
+  // quantumsolver #23: floor(pi/4 * sqrt(4)) = 1 round leaves the marked item at 100%, so a
+  // 2-qubit search can no longer miss; Redux #902: "1 round", not "1 rounds".
+  const capture = GROVER_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "Item 1 is marked, found with 1 round of Grover's algorithm.",
+  );
+  await expect(quantumBar(page, 1)).toHaveAttribute("data-probability", "1");
+  await expect(quantumBar(page, 1)).toHaveAttribute("data-read", "Solution");
+  for (const id of ["q0", "q1"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(page.locator(`${QUANTUM}-quantum [data-result]`)).toHaveText("1");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Quantum Circuit: a Grover measurement that misses the marked items reads Rejected, and the run ends on no", async ({
   page,
 }) => {
   const capture = GROVER_MISS_QUANTUM_FRAMES;
   await openQuantum(page, capture);
   await runToFrame(page, capture, capture.frames.length - 1);
   const { outcome } = capture.frames.at(-1);
-  // The simulation put item 1 at 100%; the quantum server read another item.
-  await expect(quantumBar(page, 1)).toHaveAttribute("data-probability", "1");
+  // Two of four items marked: one round leaves every item at 25%, and the quantum server read
+  // an unmarked one.
+  for (const item of [0, 1, 2, 3]) {
+    await expect(quantumBar(page, item)).toHaveAttribute("data-probability", "0.25");
+  }
   await expect(quantumBar(page, outcome)).toHaveAttribute("data-read", "Rejected");
   for (const id of ["q0", "q1"]) {
     await expect(quantumWire(page, id)).toHaveAttribute("data-state", "Rejected");
@@ -6900,8 +6923,33 @@ test("Quantum Circuit: Shor's circuit is drawn with its note and no chart, and a
     "aria-label",
     /^×2 on w0, w1, w2, w3, controlled by c7/,
   );
-  await runToFrame(page, SHOR_QUANTUM_FRAMES, SHOR_QUANTUM_FRAMES.frames.length - 1);
+  // Redux #903: the run goes column by column, each multiplier's caption naming its own power.
+  await runToFrame(page, SHOR_QUANTUM_FRAMES, 3);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "If c7 is 1, multiply the work register by 2^1 mod 15 = 2.",
+  );
+  await expect(picture.locator('[data-column-id="t2"]')).toHaveAttribute(
+    "data-state",
+    "ElementHighlight",
+  );
+  await expect(picture.locator('[data-column-id="t3"]')).toHaveAttribute("data-future", "true");
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("3 of 12 columns run");
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "If c6 is 1, multiply the work register by 2^2 mod 15 = 4.",
+  );
+  await expect(picture.locator('[data-column-id="t3"]')).toHaveAttribute(
+    "data-state",
+    "ElementHighlight",
+  );
+  await expect(picture.locator('[data-column-id="t3"]')).not.toHaveAttribute("data-future");
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("4 of 12 columns run");
+  // Its Done draws the circuit as run: no column Untraveled or still to come.
+  await toFrame(page, SHOR_QUANTUM_FRAMES, SHOR_QUANTUM_FRAMES.frames.length - 1);
   await expect(picture.locator("[data-result]")).toHaveText("(3,5)");
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("12 of 12 columns run");
+  await expect(picture.locator("[data-column-id]")).toHaveCount(12);
+  await expect(picture.locator('[data-state="Untraveled"], [data-future]')).toHaveCount(0);
 
   await openQuantum(page, SHOR_NO_CIRCUIT_QUANTUM_FRAMES);
   await expect(picture.locator("[data-qubit-id], [data-gate-id], [data-outcome]")).toHaveCount(0);
