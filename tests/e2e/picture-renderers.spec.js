@@ -7403,6 +7403,8 @@ test("Table: 0-1 ILP draws x as chips, shades the coefficients its 1s switch on,
   await expect(unset.first()).toHaveAttribute("stroke-dasharray", /\d/);
   await expect(page.locator(`${TABLE}-table [data-on]`)).toHaveCount(0);
   await expect(page.locator(`${TABLE}-table [data-pill]`)).toHaveCount(0);
+  // The caption counts the three constraints, not the x row above them.
+  await expect(page.locator(`${TABLE}-table-caption`)).toHaveText(/: 3 rows$/);
 
   // The answer (0 1 0): x2's column is what every row adds up.
   await page.locator("#workbench-run").click();

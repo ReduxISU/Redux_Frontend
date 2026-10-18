@@ -230,9 +230,11 @@ export default function TableRenderer({ idPrefix, name, payload, frame, frameInd
   }
 
   // The caption: the payload's title, or how many rows are drawn. Before Run only the rows drawn
-  // are counted: "1 of 2 rows" would give away how long the run's trace is.
-  const rowCount = Array.isArray(payload?.rows) ? payload.rows.length : 0;
-  const shownCount = Math.min(values.length, rowCount);
+  // are counted: "1 of 2 rows" would give away how long the run's trace is. A matrix's first row
+  // is its x, not a constraint, so it isn't counted.
+  const skipped = payload?.shape === "matrix" ? 1 : 0;
+  const rowCount = Math.max(0, (Array.isArray(payload?.rows) ? payload.rows.length : 0) - skipped);
+  const shownCount = Math.max(0, Math.min(values.length - skipped, rowCount));
   const grid = payload?.shape === "grid";
   const word = (list) =>
     (Array.isArray(list) ? list.slice(1) : []).map((p) => p.label ?? "").join("");
