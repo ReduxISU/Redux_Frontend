@@ -858,10 +858,16 @@ function ChartAxes({ chart }) {
 
 /**
  * The Legend's entries for what a Quantum Circuit draws besides states: the oracle box, the
- * bars by their amplitude's sign, the columns still to come, and the oracle calls.
+ * bars by their amplitude's sign, the columns still to come, and the oracle calls, each only
+ * when `frames` draw it. The Legend passes the step on screen alone (registry.js
+ * pictureLegendFrames), so a Done lists no dashed gate once every column has run, nor bars it no
+ * longer shows.
+ * @param {Object|null} payload
+ * @param {Object[]} frames
+ * @param {{plain?: boolean}} [options] `plain`: before Run, when nothing is still to come.
  * @returns {Array<{key: string, text: string, swatch: Object}>}
  */
-export function quantumAnnotations(payload, frames) {
+export function quantumAnnotations(payload, frames, { plain = false } = {}) {
   const list = Array.isArray(frames) ? frames.filter(Boolean) : [];
   const entries = [];
   const columns = Array.isArray(payload?.columns) ? payload.columns : [];
@@ -896,7 +902,19 @@ export function quantumAnnotations(payload, frames) {
       swatch: { fill: barFill(0), line: barFill(0) },
     });
   }
-  if (list.some((frame) => (frame.applied ?? 0) < columns.length)) {
+  // A gate is dashed when its column has not run and nothing gives it a state (as gateLook).
+  const dashed = (frame) => {
+    const applied = Number.isInteger(frame.applied) ? frame.applied : 0;
+    return columns.some(
+      (column, index) =>
+        index >= applied &&
+        (column.gates ?? []).some((gate) => {
+          const own = stateOf(frame.gates, gate?.id);
+          return (own !== "Background" ? own : stateOf(frame.columns, column.id)) === "Background";
+        }),
+    );
+  };
+  if (!plain && list.some(dashed)) {
     entries.push({
       key: "future",
       text: "Dashed grey gate (its column has not run)",
