@@ -12,6 +12,7 @@
 //
 // #215: in Reduce mode, once Redux has sent a Reduction View, the two pictures are that view
 // (components/pictures/ReductionView.js) instead, and its phase bar sits above the step controls.
+// Each of its pictures keeps its Visualization Type dropdown at its top right (#912).
 //
 // The pictures themselves come from the renderers: a format=frames picture through
 // components/pictures/PictureCanvas.js (#199), every other one through the older
@@ -222,8 +223,11 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  *   uses (#199), for the Legend.
  * @param {Array<{key: string, text: string, swatch: Object}>|null} [props.legendAnnotations]
  *   What a format=frames picture draws besides states (#201), for the Legend.
- * @param {{view: Object, activeGadget: Object|null, runId: number}|null} [props.reduction] A
- *   Reduction View to draw in place of `source` and `target` (#215); `steps` walk its frames.
+ * @param {{view: Object, activeGadget: Object|null, runId: number, loading?: string|null,
+ *   types?: {source: Object|null, target: Object|null}}|null} [props.reduction] A Reduction
+ *   View to draw in place of `source` and `target` (#215); `steps` walk its frames. `types` are
+ *   its sides' Visualization Type dropdowns (ReduxISU/Redux#912), shaped as `source.type`;
+ *   `loading` is said in place of the pictures while another picture is drawn.
  */
 export default function VisualizationPane({
   idPrefix,
@@ -345,12 +349,28 @@ export default function VisualizationPane({
 
       {reduction ? (
         <ReductionView
-          key={reduction.runId}
+          // A new run, or another picture on either side, starts with nothing pointed at.
+          key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
           idPrefix={`${idPrefix}-reduction`}
           view={reduction.view}
           frameIndex={steps?.currentStep ?? 0}
           stack={stack}
           activeGadget={reduction.activeGadget}
+          loading={reduction.loading ?? null}
+          typeControls={{
+            source: reduction.types?.source && (
+              <VisualizationTypeControl
+                id={`${idPrefix}-source-type`}
+                {...reduction.types.source}
+              />
+            ),
+            target: reduction.types?.target && (
+              <VisualizationTypeControl
+                id={`${idPrefix}-target-type`}
+                {...reduction.types.target}
+              />
+            ),
+          }}
         />
       ) : (
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>

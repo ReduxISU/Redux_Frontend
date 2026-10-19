@@ -19,12 +19,18 @@
 //     empty space is tapped, or Escape is pressed. A Gadgets row hovered in the Result panel
 //     draws its gadget the same way. A line under the pictures says what is linked, in words, so
 //     the link is not told by color alone and a screen reader hears it.
+//   - Each side's Visualization Type dropdown (ReduxISU/Redux#912) at the pane's top right, as in
+//     the two-pane layout. Choosing another picture asks Redux again (components/workbench/
+//     Workbench.js); while it does, both panes say so instead of showing the old pictures. A
+//     target picture that lacks the pieces the build adds (buildReveal "whole") is shown whole
+//     during Build, with a line saying so.
 //
 // The marks are data attributes set on the renderers' own elements after React draws them (and
 // again whenever a renderer adds elements of its own, through a MutationObserver), styled by this
 // component's stylesheet. React never sets those attributes, so it never clears them.
 
 import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GADGET_KINDS, OTHER_GADGET_KIND } from "../../data/gadgetKinds";
 import {
@@ -125,6 +131,9 @@ function ReductionPane({
   idPrefix,
   which,
   title,
+  typeControl,
+  loading,
+  note,
   type,
   payload,
   name,
@@ -166,64 +175,111 @@ function ReductionPane({
       aria-labelledby={`${idPrefix}-title`}
       sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
     >
+      {/* The title wraps beside the dropdown rather than pushing it to a line of its own, so
+          both panes' headers are the dropdown's height and the pictures line up side by side. */}
       <Box
-        component="h3"
-        id={`${idPrefix}-title`}
         sx={{
-          m: 0,
-          fontSize: "0.75rem",
-          fontWeight: 700,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "text.secondary",
+          display: "flex",
+          flexWrap: "nowrap",
+          justifyContent: "space-between",
+          alignItems: "flex-end",
+          gap: 1,
+          [COMPACT_MEDIA]: { flexWrap: "wrap" },
         }}
       >
-        {title}
+        <Box
+          component="h3"
+          id={`${idPrefix}-title`}
+          sx={{
+            m: 0,
+            minWidth: 0,
+            pb: typeControl ? 1.25 : 0,
+            fontSize: "0.75rem",
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "text.secondary",
+          }}
+        >
+          {title}
+        </Box>
+        {typeControl}
       </Box>
-      <Box
-        ref={ref}
-        id={idPrefix}
-        data-pane={which}
-        data-picture-type={type}
-        onPointerOver={(event) => {
-          if (event.pointerType === "mouse") onPoint(which, pieceAt(event.target), "hover");
-        }}
-        onPointerLeave={(event) => {
-          if (event.pointerType === "mouse") onPoint(which, null, "hover");
-        }}
-        onFocus={(event) => onPoint(which, pieceAt(event.target), "focus")}
-        onBlur={() => onPoint(which, null, "focus")}
-        onClick={(event) => onPoint(which, pieceAt(event.target), "tap")}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onPoint(which, null, "clear");
-        }}
-        sx={{
-          minWidth: 0,
-          backgroundColor: "surface.input",
-          borderRadius: "10px",
-          p: 2,
-          boxSizing: "border-box",
-          [COMPACT_MEDIA]: { p: 1 },
-          "& [data-rv-built='no']": { visibility: "hidden" },
-          "& [data-rv-link='faint']": { filter: `${FAINT_FILTER} !important` },
-          // The outline goes on a linked piece's shapes, not its text, so its label stays sharp.
-          [`& [data-rv-link='hot']:is(${SHAPES}), & [data-rv-link='hot'] :is(${SHAPES})`]: {
-            filter: `${LINKED_FILTER} !important`,
-          },
-        }}
-      >
-        <PictureCanvas
-          idPrefix={`${idPrefix}-frames`}
-          name={name}
-          type={type}
-          payload={payload}
-          frame={frame}
-          frameIndex={frameIndex}
-          frameCount={frames.length}
-          frames={frames}
-          showCaption={false}
-        />
-      </Box>
+      {loading ? (
+        <Box
+          id={idPrefix}
+          data-pane={which}
+          data-loading="true"
+          role="status"
+          sx={{
+            minHeight: 320,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 1.5,
+            color: "text.secondary",
+            backgroundColor: "surface.input",
+            borderRadius: "10px",
+            p: 2,
+            boxSizing: "border-box",
+          }}
+        >
+          <CircularProgress size={18} aria-hidden="true" />
+          {loading}
+        </Box>
+      ) : (
+        <Box
+          ref={ref}
+          id={idPrefix}
+          data-pane={which}
+          data-picture-type={type}
+          onPointerOver={(event) => {
+            if (event.pointerType === "mouse") onPoint(which, pieceAt(event.target), "hover");
+          }}
+          onPointerLeave={(event) => {
+            if (event.pointerType === "mouse") onPoint(which, null, "hover");
+          }}
+          onFocus={(event) => onPoint(which, pieceAt(event.target), "focus")}
+          onBlur={() => onPoint(which, null, "focus")}
+          onClick={(event) => onPoint(which, pieceAt(event.target), "tap")}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onPoint(which, null, "clear");
+          }}
+          sx={{
+            minWidth: 0,
+            backgroundColor: "surface.input",
+            borderRadius: "10px",
+            p: 2,
+            boxSizing: "border-box",
+            [COMPACT_MEDIA]: { p: 1 },
+            "& [data-rv-built='no']": { visibility: "hidden" },
+            "& [data-rv-link='faint']": {
+              filter: `${FAINT_FILTER} !important`,
+            },
+            // The outline goes on a linked piece's shapes, not its text, so its label stays sharp.
+            [`& [data-rv-link='hot']:is(${SHAPES}), & [data-rv-link='hot'] :is(${SHAPES})`]: {
+              filter: `${LINKED_FILTER} !important`,
+            },
+          }}
+        >
+          <PictureCanvas
+            idPrefix={`${idPrefix}-frames`}
+            name={name}
+            type={type}
+            payload={payload}
+            frame={frame}
+            frameIndex={frameIndex}
+            frameCount={frames.length}
+            frames={frames}
+            showCaption={false}
+          />
+        </Box>
+      )}
+      {note && !loading && (
+        <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
+          {note}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -357,8 +413,20 @@ function listNames(ids, nameOf, limit = 6) {
  * @param {boolean} props.stack Stack the two pictures (a panel is open beside the pane).
  * @param {{sourceIds: string[], targetIds: string[]}|null} [props.activeGadget] The gadget a
  *   Gadgets row in the Result panel is pointing at, drawn when no piece is.
+ * @param {{source?: import("react").ReactNode, target?: import("react").ReactNode}} [props.typeControls]
+ *   Each side's Visualization Type dropdown, drawn at the pane's top right.
+ * @param {string|null} [props.loading] Said in both panes, in place of the pictures, while
+ *   another picture is being drawn (`view` is then the one before it, for the titles).
  */
-export default function ReductionView({ idPrefix, view, frameIndex, stack, activeGadget = null }) {
+export default function ReductionView({
+  idPrefix,
+  view,
+  frameIndex,
+  stack,
+  activeGadget = null,
+  typeControls = {},
+  loading = null,
+}) {
   const { source, target, gadgets } = view;
   const sourceFrames = useMemo(
     () => view.frames.map((frame) => paneFrame(frame, "source", source.type)),
@@ -375,6 +443,14 @@ export default function ReductionView({ idPrefix, view, frameIndex, stack, activ
   const index = Math.min(Math.max(frameIndex, 0), view.frames.length - 1);
   const frame = view.frames[index];
   const hiddenTarget = useMemo(() => unbuiltIds(view, frame), [view, frame]);
+  // A target picture without the build's pieces is shown whole while it is built (#912).
+  let targetNote = null;
+  if (frame.phase === "build" && target.buildReveal === "whole") {
+    targetNote =
+      target.type === "SearchTree"
+        ? "The search tree grows when the solver runs, in Solve."
+        : "This picture can't show the target piece by piece, so it shows it whole while it is built.";
+  }
   const noneHidden = useMemo(() => new Set(), []);
 
   // What is pointed at: hovered or focused (`hover`), or tapped (`pinned`, kept until tapped
@@ -444,6 +520,10 @@ export default function ReductionView({ idPrefix, view, frameIndex, stack, activ
       data-phase={frame.phase}
       data-frame-index={index}
       data-linked={link ? "true" : "false"}
+      data-loading={loading ? "true" : "false"}
+      data-source-visualization={source.visualization ?? ""}
+      data-target-visualization={target.visualization ?? ""}
+      data-build-reveal={target.buildReveal}
       sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
     >
       <Box
@@ -459,6 +539,8 @@ export default function ReductionView({ idPrefix, view, frameIndex, stack, activ
           idPrefix={`${idPrefix}-source`}
           which="source"
           title={`${source.problem} · the instance you gave`}
+          typeControl={typeControls.source ?? null}
+          loading={loading}
           type={source.type}
           payload={source.payload}
           name={source.problem}
@@ -487,6 +569,9 @@ export default function ReductionView({ idPrefix, view, frameIndex, stack, activ
           idPrefix={`${idPrefix}-target`}
           which="target"
           title={`${target.problem} · built by the reduction`}
+          typeControl={typeControls.target ?? null}
+          loading={loading}
+          note={targetNote}
           type={target.type}
           payload={target.payload}
           name={target.problem}
@@ -498,21 +583,25 @@ export default function ReductionView({ idPrefix, view, frameIndex, stack, activ
           onPoint={point}
         />
       </Box>
-      <Box
-        id={`${idPrefix}-link`}
-        aria-live="polite"
-        data-linked={link ? "true" : "false"}
-        sx={{
-          fontSize: "0.8125rem",
-          color: link ? "text.primary" : "text.secondary",
-          borderLeft: "3px solid",
-          borderColor: link ? GADGET_RING : "transparent",
-          pl: 1,
-        }}
-      >
-        {readout}
-      </Box>
-      <ReductionCaption id={`${idPrefix}-caption`} frames={view.frames} frameIndex={index} />
+      {!loading && (
+        <Box
+          id={`${idPrefix}-link`}
+          aria-live="polite"
+          data-linked={link ? "true" : "false"}
+          sx={{
+            fontSize: "0.8125rem",
+            color: link ? "text.primary" : "text.secondary",
+            borderLeft: "3px solid",
+            borderColor: link ? GADGET_RING : "transparent",
+            pl: 1,
+          }}
+        >
+          {readout}
+        </Box>
+      )}
+      {!loading && (
+        <ReductionCaption id={`${idPrefix}-caption`} frames={view.frames} frameIndex={index} />
+      )}
     </Box>
   );
 }

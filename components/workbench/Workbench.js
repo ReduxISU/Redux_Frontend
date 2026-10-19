@@ -39,6 +39,13 @@
 //     (components/pictures/ReductionView.js). A backend without it (404 or 405, remembered for
 //     the page), a reduction it can't show (400), or a failure gets the older requests below,
 //     so Reduce keeps working as it did.
+//     Each side's Visualization Type dropdown stays in the view (ReduxISU/Redux#912), listing the
+//     pictures the view can draw for that side (lib/reductionView.js viewPictureWorkable).
+//     Choosing one asks Redux for the view again with that picture, on the same phase and step;
+//     the choice is kept for the page's life (the source's is the Visualization Type the Solve
+//     panes use), and a source picture picked before Run is used when the view can draw it. The
+//     dropdown shows what Redux says it drew, so a backend that ignores the choice (older than
+//     #912) gets a fixed dropdown naming the default.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -64,6 +71,8 @@ import {
   paneFrame,
   reductionViewWorth,
   requestReductionViewOrNull,
+  samePlaceIn,
+  viewPictureWorkable,
 } from "../../lib/reductionView";
 import {
   REDUX_API_BASE_URL,
@@ -145,6 +154,54 @@ function runGapNote(gap, visualizationName, solverName, answer, runLabel) {
   return `${visualizationName} isn't drawn from this run, so it shows the instance. ${answerText} Press ${runLabel} to draw a run in it.`;
 }
 
+/** What the Result panel says about a Reduction View's solve and map back. */
+function viewRunFields(view) {
+  const closing = view.frames[view.frames.length - 1];
+  return {
+    solverName: view.solverName,
+    mappedBack: {
+      text: closing?.caption ?? "",
+      ok: typeof closing?.ok === "boolean" ? closing.ok : null,
+    },
+  };
+}
+
+/**
+ * One side's Visualization Type dropdown in the Reduction View (ReduxISU/Redux#912). Its value
+ * is the picture Redux says it drew (or the one being asked for while it draws it); a backend
+ * that does not say (older than #912) always draws the side's default, so the dropdown is fixed
+ * on the visualization drawing that picture type, the default first.
+ * @param {"source"|"target"} which
+ * @param {Object[]} all Every visualization of the side's problem, the default first.
+ * @param {{visualization: string|null, type: string}} side The view's side.
+ * @param {string|null} pending The picture being asked for, while it is.
+ * @param {(className: string) => void} onPick
+ */
+function viewTypeControl(which, all, side, pending, onPick) {
+  const option = (visualization) => ({
+    value: visualization.className,
+    label: visualization.name,
+    tags: visualizationTags(visualization),
+    card: visualizationCard(visualization, which),
+  });
+  if (!side.visualization) {
+    const drawn = all.find((visualization) => visualization.pictureType === side.type) ?? all[0];
+    return drawn ? { options: [option(drawn)], value: drawn.className } : null;
+  }
+  const value = pending ?? side.visualization;
+  const workable = all.filter((visualization) => viewPictureWorkable(visualization, which));
+  if (!workable.some((visualization) => visualization.className === value)) {
+    const named = all.find((visualization) => visualization.className === value);
+    workable.unshift(named ?? { className: value, name: value });
+  }
+  return { options: workable.map(option), value, onChange: onPick };
+}
+
+/** The name of a visualization among `all` by class name, or null. */
+function visualizationName(all, className) {
+  return all.find((visualization) => visualization.className === className)?.name ?? null;
+}
+
 function findIndexByName(items, name) {
   if (typeof name !== "string" || !name) return 0;
   const index = items.findIndex((item) => item.name === name);
@@ -199,6 +256,11 @@ export default function Workbench({ problem }) {
   // The gadget row being hovered or focused, by the run it belongs to: `{runId, index}`.
   const [gadgetHighlight, setGadgetHighlight] = useState(null);
   const runIdRef = useRef(0);
+  // #912: the picture each side of the Reduction View is drawn with, kept for the page's life.
+  // The source's follows the Visualization Type (null) until one is picked in the view; the
+  // target's is kept per target problem.
+  const [sourceViewPick, setSourceViewPick] = useState(null);
+  const [targetViewPicks, setTargetViewPicks] = useState({});
 
   const selectedSolver = solvers[solverIndex] ?? null;
   const selectedViz = visualizations[vizIndex] ?? null;
@@ -212,6 +274,9 @@ export default function Workbench({ problem }) {
   const solveRun = useComputeRequest({ subject: "instance" });
   const pictureRun = useComputeRequest({ subject: "instance" });
   const reduceRun = useComputeRequest({ subject: "instance" });
+  // #912: asking for the Reduction View again with another picture on one side. Its own
+  // request, so a slower answer to an earlier pick never lands over a later one.
+  const viewSwitch = useComputeRequest({ subject: "instance" });
 
   const solveResult = solveRun.status === COMPUTE_DONE ? solveRun.result : null;
   const pictureResult = pictureRun.status === COMPUTE_DONE ? pictureRun.result : null;
@@ -241,8 +306,19 @@ export default function Workbench({ problem }) {
     Boolean(reduceResult) &&
     reduceResult.instance === instance &&
     reduceResult.reductionClassName === selectedReduction?.className;
-  // #215: the current reduction's Reduction View, when Redux sent one.
-  const reduceView = mode === "reduce" && reduceCurrent ? (reduceResult.view ?? null) : null;
+  // #215: the current reduction's Reduction View, when Redux sent one; #912: drawn with the
+  // pictures last picked for it, once Redux has sent that view.
+  const [switchedView, setSwitchedView] = useState(null);
+  const [switchNote, setSwitchNote] = useState(null);
+  const [switchPending, setSwitchPending] = useState(null);
+  const switchedCurrent =
+    reduceCurrent && Boolean(switchedView) && switchedView.runId === reduceResult.runId;
+  const reduceView =
+    mode === "reduce" && reduceCurrent
+      ? ((switchedCurrent ? switchedView.view : reduceResult.view) ?? null)
+      : null;
+  const switching =
+    Boolean(reduceView) && viewSwitch.isRunning && switchPending?.runId === reduceResult.runId;
 
   // --- Verify (#229 stage 3) --------------------------------------------------------------
   // The target side is the reduction's target problem, checked against the instance the
@@ -311,6 +387,20 @@ export default function Workbench({ problem }) {
     setReduceStepsFor(reduceRun.result);
     setReduceStep(0);
   }
+  // #912: another picture's view opens on the same phase and step as the one before it.
+  const [switchLanded, setSwitchLanded] = useState(viewSwitch.result);
+  if (switchLanded !== viewSwitch.result) {
+    const landed = viewSwitch.result;
+    setSwitchLanded(landed);
+    if (landed && landed.runId === reduceResult?.runId) {
+      if (landed.view) {
+        setSwitchedView({ runId: landed.runId, view: landed.view });
+        setReduceStep(samePlaceIn(landed.fromFrames, landed.fromIndex, landed.view.frames));
+      } else {
+        setSwitchNote("Redux couldn't draw that picture here, so the view keeps the one before.");
+      }
+    }
+  }
 
   // The Result dot only means "a run finished while you were not looking".
   if (resultNew && panel === "result") {
@@ -345,6 +435,7 @@ export default function Workbench({ problem }) {
   // another of the picture's runs) leaves the kept moment as it was.
   function chooseVisualization(index) {
     setVizIndex(index);
+    setSourceViewPick(null);
     if (!pictureRunCurrent || !pictureResult.run) return;
     let position = runPosition;
     if (showingRunPicture && !chosenRun) {
@@ -425,6 +516,54 @@ export default function Workbench({ problem }) {
     );
   }
 
+  // #912: the pictures the Reduction View is asked for: the source's Visualization Type (or the
+  // one picked in the view) and the target's last pick, each only when the view can draw it.
+  const sourceViewPicture =
+    sourceViewPick ?? (viewPictureWorkable(selectedViz, "source") ? selectedViz.className : null);
+  function targetViewPicture(reduction) {
+    const pick = targetViewPicks[reduction?.target];
+    return pick &&
+      (reduction?.targetVisualizations ?? []).some(
+        (visualization) =>
+          visualization.className === pick && viewPictureWorkable(visualization, "target"),
+      )
+      ? pick
+      : null;
+  }
+
+  /** Draws one side of the Reduction View with another picture, on the same step. */
+  function chooseViewPicture(which, className) {
+    if (!reduceView) return;
+    const run = reduceResult;
+    let source = sourceViewPicture;
+    let target = targetViewPicture(selectedReduction);
+    if (which === "source") {
+      source = className;
+      setSourceViewPick(className);
+      const index = visualizations.findIndex(
+        (visualization) => visualization.className === className,
+      );
+      if (index !== -1) setVizIndex(index);
+    } else {
+      target = className;
+      setTargetViewPicks((picks) => ({ ...picks, [run.targetName]: className }));
+    }
+    const fromFrames = reduceView.frames;
+    const fromIndex = Math.min(reduceStep, fromFrames.length - 1);
+    setSwitchNote(null);
+    setSwitchPending({ runId: run.runId, which, source, target });
+    viewSwitch.start(async (signal) => {
+      const view = await requestReductionViewOrNull({
+        reduction: run.reductionClassName,
+        instance: run.instance,
+        sourceVisualization: source,
+        targetVisualization: target,
+        signal,
+      });
+      return { view, runId: run.runId, fromFrames, fromIndex };
+    });
+  }
+
   const isRunning = solveRun.isRunning || pictureRun.isRunning || reduceRun.isRunning;
   const hasInstance = instance.trim() !== "";
   const canSolve = Boolean(selectedSolver?.className);
@@ -455,6 +594,9 @@ export default function Workbench({ problem }) {
     let succeeded = false;
     const solver = selectedSolver;
 
+    // A new Run draws with the pictures picked so far; a switch still on its way is dropped.
+    viewSwitch.reset();
+    setSwitchNote(null);
     let finished;
     if (mode === "solve") {
       const visualization = selectedViz;
@@ -494,6 +636,10 @@ export default function Workbench({ problem }) {
       finished = Promise.all([answer, picture]);
     } else {
       const reduction = selectedReduction;
+      const pictures = {
+        sourceVisualization: sourceViewPicture,
+        targetVisualization: targetViewPicture(reduction),
+      };
       finished = reduceRun.start(async (signal) => {
         const ran = {
           reductionClassName: reduction.className,
@@ -510,11 +656,11 @@ export default function Workbench({ problem }) {
         const view = await requestReductionViewOrNull({
           reduction: reduction.className,
           instance: runInstance,
+          ...pictures,
           signal,
         });
         if (view) {
           succeeded = true;
-          const closing = view.frames[view.frames.length - 1];
           return {
             ...ran,
             view,
@@ -522,13 +668,9 @@ export default function Workbench({ problem }) {
             reductionName: view.reductionName || reduction.name,
             targetInstance: view.target.instance,
             gadgets: view.gadgets,
-            solverName: view.solverName,
             solverClassName: null,
             certificate: null,
-            mappedBack: {
-              text: closing?.caption ?? "",
-              ok: typeof closing?.ok === "boolean" ? closing.ok : null,
-            },
+            ...viewRunFields(view),
           };
         }
         // The target instance's text (for the Result panel and Check against: target) comes
@@ -891,21 +1033,34 @@ export default function Workbench({ problem }) {
         text: `Press Run to build the ${targetLabel} instance from this one.`,
       };
     }
+    // #912: before a Run that draws a Reduction View, the target's picture can be picked
+    // here too, from the ones the view can draw; the Run draws the target with it.
+    const viewTargets =
+      !reduceCurrent && reductionViewWorth(selectedReduction?.className)
+        ? (selectedReduction.targetVisualizations ?? []).filter((visualization) =>
+            viewPictureWorkable(visualization, "target"),
+          )
+        : [];
+    const targetOption = (visualization) => ({
+      value: visualization.className,
+      label: visualization.name,
+      tags: visualizationTags(visualization),
+      card: visualizationCard(visualization, "target"),
+    });
+    let targetType = null;
+    if (viewTargets.length > 1) {
+      targetType = {
+        options: viewTargets.map(targetOption),
+        value: targetViewPicture(selectedReduction) ?? viewTargets[0].className,
+        onChange: (className) =>
+          setTargetViewPicks((picks) => ({ ...picks, [selectedReduction.target]: className })),
+      };
+    } else if (targetViz) {
+      targetType = { options: [targetOption(targetViz)], value: targetViz.className };
+    }
     target = {
       title: `Target: ${targetLabel}`,
-      type: targetViz
-        ? {
-            options: [
-              {
-                value: "0",
-                label: targetViz.name,
-                tags: visualizationTags(targetViz),
-                card: visualizationCard(targetViz, "target"),
-              },
-            ],
-            value: "0",
-          }
-        : null,
+      type: targetType,
       content,
     };
   }
@@ -990,7 +1145,7 @@ export default function Workbench({ problem }) {
     note = null;
   } else if (reduceView) {
     // The Reduction View's own caption says what each step does.
-    note = null;
+    note = switchNote && !switching ? { text: switchNote, tone: "warning" } : null;
   } else if (mode === "reduce" && reduceCurrent) {
     note = {
       text: `The target picture is the ${reduceResult.targetName} instance the reduction built.`,
@@ -1190,7 +1345,53 @@ export default function Workbench({ problem }) {
             : null,
       }
     : null;
-  const reduceSummary = reduceResult ? { ...reduceResult, elapsedMs: reduceRun.elapsedMs } : null;
+  const reduceSummary = reduceResult
+    ? {
+        ...reduceResult,
+        // #912: another target picture may run another solver; the panel reports the view shown.
+        ...(switchedCurrent && switchedView.view ? viewRunFields(switchedView.view) : {}),
+        elapsedMs: reduceRun.elapsedMs,
+      }
+    : null;
+
+  // #912: the Reduction View's dropdowns, and what it says while it draws another picture.
+  let reductionPane = null;
+  if (reduceView) {
+    const targetAll =
+      reductions.find((reduction) => reduction.className === reduceResult.reductionClassName)
+        ?.targetVisualizations ?? [];
+    const sourceAll = problem.visualizations ?? [];
+    let loading = null;
+    if (switching) {
+      const name =
+        switchPending.which === "source"
+          ? visualizationName(sourceAll, switchPending.source)
+          : visualizationName(targetAll, switchPending.target);
+      loading = `Drawing the reduction again with ${name ?? "the picture you chose"}.`;
+    }
+    reductionPane = {
+      view: reduceView,
+      activeGadget,
+      runId: reduceResult.runId,
+      loading,
+      types: {
+        source: viewTypeControl(
+          "source",
+          sourceAll,
+          reduceView.source,
+          switching ? switchPending.source : null,
+          (className) => chooseViewPicture("source", className),
+        ),
+        target: viewTypeControl(
+          "target",
+          targetAll,
+          reduceView.target,
+          switching ? switchPending.target : null,
+          (className) => chooseViewPicture("target", className),
+        ),
+      },
+    };
+  }
 
   return (
     <Box
@@ -1472,7 +1673,7 @@ export default function Workbench({ problem }) {
                     currentStep,
                     onStepChange: setCurrentStep,
                   }
-                : reduceView
+                : reduceView && !switching
                   ? {
                       frameCount: reduceView.frames.length,
                       currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
@@ -1480,9 +1681,7 @@ export default function Workbench({ problem }) {
                     }
                   : null
             }
-            reduction={
-              reduceView ? { view: reduceView, activeGadget, runId: reduceResult.runId } : null
-            }
+            reduction={reductionPane}
             note={note}
             legendFrames={legendFrames}
             legendStates={legendStates}

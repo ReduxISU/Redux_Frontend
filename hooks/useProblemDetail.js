@@ -221,11 +221,12 @@ function buildReductions(
     for (const [toCode, edges] of Object.entries(toMap)) {
       for (const edge of edges) {
         if (fromCode === problemCode) {
-          const [targetVisualization] = buildVisualizations(
+          const targetVisualizations = buildVisualizations(
             visualizationsByProblem[toCode],
             info,
             visualizationTypesByInstance,
           );
+          const [targetVisualization] = targetVisualizations;
           to.push({
             target: codeToName.get(toCode) ?? toCode,
             cost: REDUCTION_COST_MAP[edge.cost],
@@ -239,6 +240,9 @@ function buildReductions(
             // the way solvers/visualizations/verifiers require.
             name: edge.reductionName ?? edge.className,
             targetVisualization: targetVisualization ?? null,
+            // ReduxISU/Redux#912: every visualization of the target problem, the default first,
+            // so the Reduction View can offer the target's other pictures.
+            targetVisualizations,
             // #229: what the Using and To dropdowns' tags and info cards read. The raw enum
             // members (labelled through data/taxonomy.js's backendEnumLabel); `bigO` is the
             // reduction's own declared cost ("O(n^2), n = 3 * |SAT3.clauses| ..."), which
