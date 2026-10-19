@@ -4,7 +4,8 @@
 // Redux (local/viz-integration) on 2026-10-18, so tests/e2e/reduction-view.spec.js can answer the
 // request itself: CI's backend (ghcr.io/reduxisu/redux:latest) has no Reduction View yet. One
 // reduction whose two sides are formulas, two whose target is a graph, and one between numbers.
-// Biome checks files up to 1 MiB, so the one long solve is trimmed (said on its capture).
+// Graph Coloring to Clique Cover was recaptured on 2026-10-19, after the Reduction View began keeping
+// 20 solve steps (ReduxISU/Redux#910): its run is whole now, so no capture is trimmed.
 
 /** SAT to 3SAT, Karp's 3SAT Reduction (KarpSATToSAT3), SAT's default instance (!x3 | x4 | !x2 | x1 | x2) & (!x4 | !x1) & (x4 | x3 | !x1), solved by 3SAT Backtracking: a Grouped Graph on both sides. Build splits the five-literal clause C1 into a chain of three joined by the new variables x5 and x6, pads C2, and keeps C3; the whole run, 30 frames, ends mapped back and valid. */
 export const SAT_TO_3SAT_VIEW = {
@@ -2217,7 +2218,7 @@ export const SAT3_TO_CLIQUE_VIEW = {
   ],
 };
 
-/** Graph Coloring to Clique Cover (GraphColoringToCliqueCover), (({a,b,c,d,e},{{a,b},{b,c},{c,d},{d,e},{e,a},{a,c}}),3), solved by Clique Cover Brute Force: a Graph becomes its complement. Trimmed for size: Clique Cover Brute Force tries 72 covers, and only the first three and the last three of those solve frames are kept (their `step` numbers still say where they came from); Build and Map back are whole. */
+/** Graph Coloring to Clique Cover (GraphColoringToCliqueCover), (({a,b,c,d,e},{{a,b},{b,c},{c,d},{d,e},{e,a},{a,c}}),3), solved by Clique Cover Brute Force: a Graph becomes its complement. The whole run, 35 frames. Clique Cover Brute Force finds the cover on its 71st try; the Reduction View keeps its first 20 tries (Redux#910), then the Accept that found the cover and the Done, which says the other 50 were not shown. */
 export const COLORING_TO_CLIQUE_COVER_VIEW = {
   type: "Reduction",
   kind: "reduction",
@@ -2529,8 +2530,255 @@ export const COLORING_TO_CLIQUE_COVER_VIEW = {
     {
       phase: "solve",
       event: "Reject",
-      caption: "Try {c,e},{a,b,d},{}: a and b are in one group but aren't joined.",
-      step: 69,
+      caption: "Try {b,c,d,e},{},{}: node a is in no clique.",
+      step: 3,
+      sourceFocus: [],
+      targetFocus: ["a"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { a: { state: "Rejected" } },
+        edges: {
+          "b-d": { state: "ElementHighlight" },
+          "b-e": { state: "ElementHighlight" },
+          "c-e": { state: "ElementHighlight" },
+        },
+        phantoms: [
+          { a: "b", b: "c", state: "Rejected" },
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { b: 0, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {a,c,d,e},{b},{}: a and c are in one group but aren't joined.",
+      step: 4,
+      sourceFocus: [],
+      targetFocus: ["a", "c"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { a: { state: "Rejected" }, c: { state: "Rejected" } },
+        edges: { "a-d": { state: "ElementHighlight" }, "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "a", b: "c", state: "Rejected" },
+          { a: "a", b: "e", state: "Rejected" },
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { a: 0, b: 1, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {c,d,e},{a,b},{}: c and d are in one group but aren't joined.",
+      step: 5,
+      sourceFocus: [],
+      targetFocus: ["c", "d"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { c: { state: "Rejected" }, d: { state: "Rejected" } },
+        edges: { "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+          { a: "a", b: "b", state: "Rejected" },
+        ],
+        groups: { a: 1, b: 1, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {c,d,e},{b},{a}: c and d are in one group but aren't joined.",
+      step: 6,
+      sourceFocus: [],
+      targetFocus: ["c", "d"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { c: { state: "Rejected" }, d: { state: "Rejected" } },
+        edges: { "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { a: 2, b: 1, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {c,d,e},{b},{}: node a is in no clique.",
+      step: 7,
+      sourceFocus: [],
+      targetFocus: ["a"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { a: { state: "Rejected" } },
+        edges: { "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { b: 1, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {a,c,d,e},{},{b}: a and c are in one group but aren't joined.",
+      step: 8,
+      sourceFocus: [],
+      targetFocus: ["a", "c"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { a: { state: "Rejected" }, c: { state: "Rejected" } },
+        edges: { "a-d": { state: "ElementHighlight" }, "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "a", b: "c", state: "Rejected" },
+          { a: "a", b: "e", state: "Rejected" },
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { a: 0, b: 2, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {c,d,e},{a},{b}: c and d are in one group but aren't joined.",
+      step: 9,
+      sourceFocus: [],
+      targetFocus: ["c", "d"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { c: { state: "Rejected" }, d: { state: "Rejected" } },
+        edges: { "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { a: 1, b: 2, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {c,d,e},{},{a,b}: c and d are in one group but aren't joined.",
+      step: 10,
+      sourceFocus: [],
+      targetFocus: ["c", "d"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { c: { state: "Rejected" }, d: { state: "Rejected" } },
+        edges: { "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+          { a: "a", b: "b", state: "Rejected" },
+        ],
+        groups: { a: 2, b: 2, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {c,d,e},{},{b}: node a is in no clique.",
+      step: 11,
+      sourceFocus: [],
+      targetFocus: ["a"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { a: { state: "Rejected" } },
+        edges: { "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { b: 2, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {a,c,d,e},{},{}: node b is in no clique.",
+      step: 12,
+      sourceFocus: [],
+      targetFocus: ["b"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { b: { state: "Rejected" } },
+        edges: { "a-d": { state: "ElementHighlight" }, "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "a", b: "c", state: "Rejected" },
+          { a: "a", b: "e", state: "Rejected" },
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { a: 0, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {c,d,e},{a},{}: node b is in no clique.",
+      step: 13,
+      sourceFocus: [],
+      targetFocus: ["b"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { b: { state: "Rejected" } },
+        edges: { "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { a: 1, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {c,d,e},{},{a}: node b is in no clique.",
+      step: 14,
+      sourceFocus: [],
+      targetFocus: ["b"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { b: { state: "Rejected" } },
+        edges: { "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { a: 2, c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {c,d,e},{},{}: nodes a and b are in no clique.",
+      step: 15,
+      sourceFocus: [],
+      targetFocus: ["a", "b"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { a: { state: "Rejected" }, b: { state: "Rejected" } },
+        edges: { "c-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "c", b: "d", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { c: 0, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {a,b,d,e},{c},{}: a and b are in one group but aren't joined.",
+      step: 16,
       sourceFocus: [],
       targetFocus: ["a", "b"],
       source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
@@ -2539,17 +2787,69 @@ export const COLORING_TO_CLIQUE_COVER_VIEW = {
         edges: {
           "a-d": { state: "ElementHighlight" },
           "b-d": { state: "ElementHighlight" },
-          "c-e": { state: "ElementHighlight" },
+          "b-e": { state: "ElementHighlight" },
         },
-        phantoms: [{ a: "a", b: "b", state: "Rejected" }],
-        groups: { a: 1, b: 1, c: 0, d: 1, e: 0 },
+        phantoms: [
+          { a: "a", b: "b", state: "Rejected" },
+          { a: "a", b: "e", state: "Rejected" },
+          { a: "d", b: "e", state: "Rejected" },
+        ],
+        groups: { a: 0, b: 0, c: 1, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {b,d,e},{a,c},{}: d and e are in one group but aren't joined.",
+      step: 17,
+      sourceFocus: [],
+      targetFocus: ["d", "e"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { d: { state: "Rejected" }, e: { state: "Rejected" } },
+        edges: { "b-d": { state: "ElementHighlight" }, "b-e": { state: "ElementHighlight" } },
+        phantoms: [
+          { a: "d", b: "e", state: "Rejected" },
+          { a: "a", b: "c", state: "Rejected" },
+        ],
+        groups: { a: 1, b: 0, c: 1, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {b,d,e},{c},{a}: d and e are in one group but aren't joined.",
+      step: 18,
+      sourceFocus: [],
+      targetFocus: ["d", "e"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { d: { state: "Rejected" }, e: { state: "Rejected" } },
+        edges: { "b-d": { state: "ElementHighlight" }, "b-e": { state: "ElementHighlight" } },
+        phantoms: [{ a: "d", b: "e", state: "Rejected" }],
+        groups: { a: 2, b: 0, c: 1, d: 0, e: 0 },
+      },
+    },
+    {
+      phase: "solve",
+      event: "Reject",
+      caption: "Try {b,d,e},{c},{}: node a is in no clique.",
+      step: 19,
+      sourceFocus: [],
+      targetFocus: ["a"],
+      source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
+      target: {
+        nodes: { a: { state: "Rejected" } },
+        edges: { "b-d": { state: "ElementHighlight" }, "b-e": { state: "ElementHighlight" } },
+        phantoms: [{ a: "d", b: "e", state: "Rejected" }],
+        groups: { b: 0, c: 1, d: 0, e: 0 },
       },
     },
     {
       phase: "solve",
       event: "Accept",
       caption: "Try {c,e},{b,d},{a}. Every group is a clique.",
-      step: 70,
+      step: 20,
       sourceFocus: [],
       targetFocus: [],
       source: { nodes: {}, edges: {}, phantoms: [], groups: {} },
@@ -2563,8 +2863,9 @@ export const COLORING_TO_CLIQUE_COVER_VIEW = {
     {
       phase: "solve",
       event: "Accept",
-      caption: "{c,e},{b,d},{a} covers the nodes with cliques, found after 71 tries.",
-      step: 71,
+      caption:
+        "{c,e},{b,d},{a} covers the nodes with cliques, found after 71 tries (50 not shown).",
+      step: 21,
       sourceFocus: [],
       targetFocus: [],
       source: { nodes: {}, edges: {}, phantoms: [], groups: {} },

@@ -168,6 +168,7 @@ const COMPUTE_ENDPOINTS = new Set([
   "ProblemProvider/visualizeRun",
   "ProblemProvider/reduce",
   "ProblemProvider/mapSolution",
+  "ProblemProvider/reductionView",
 ]);
 
 export const config = {
