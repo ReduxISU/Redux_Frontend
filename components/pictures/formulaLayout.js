@@ -31,7 +31,8 @@ const PAD = 9;
 const BOX_HEIGHT = PILL_HEIGHT + 2 * PAD;
 const OR_WIDTH = 24;
 const AND_WIDTH = 34;
-const LABEL_HEIGHT = 18;
+// Room for a clause name above its box, clear of a gadget ring round the box (#270).
+const LABEL_HEIGHT = 22;
 const ROW_GAP = 16;
 const CHIP_WIDTH = 66;
 const CHIP_HEIGHT = 30;
