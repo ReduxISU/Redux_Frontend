@@ -56,7 +56,7 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
  *     highlightIds?: string[]}
  *   | {kind: "picture", type: string, payload: Object|null, layoutKey?: string, frame: Object,
  *      frameIndex: number|null, frameCount: number, frames?: Object[], name: string,
- *      showCaption: boolean, runs?: {options: Array<{id: string, label: string, accepted?: boolean}>,
+ *      showCaption: boolean, highlightIds?: string[], runs?: {options: Array<{id: string, label: string, accepted?: boolean}>,
  *        value: string|null, onChange: Function}|null}
  *   | {kind: "loading", text: string}
  *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
@@ -101,6 +101,7 @@ function PictureBox({ idPrefix, content }) {
         frameCount={content.frameCount}
         frames={content.frames ?? null}
         showCaption={content.showCaption}
+        highlightIds={content.highlightIds}
         runs={content.runs ?? null}
       />
     );
@@ -151,7 +152,9 @@ function PictureBox({ idPrefix, content }) {
       data-picture-kind={content.kind}
       data-picture-type={content.kind === "picture" ? content.type : undefined}
       data-gadget-highlight-count={
-        content.kind === "frame" && content.highlightIds ? content.highlightIds.length : undefined
+        (content.kind === "frame" || content.kind === "picture") && content.highlightIds
+          ? content.highlightIds.length
+          : undefined
       }
       sx={{
         minHeight: content.compact ? 160 : PICTURE_MIN_HEIGHT,
@@ -357,6 +360,8 @@ export default function VisualizationPane({
           stack={stack}
           activeGadget={reduction.activeGadget}
           loading={reduction.loading ?? null}
+          colorMode={reduction.colorMode ?? "plain"}
+          onColorMode={reduction.onColorMode ?? null}
           typeControls={{
             source: reduction.types?.source && (
               <VisualizationTypeControl

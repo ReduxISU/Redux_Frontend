@@ -25,14 +25,28 @@
 //     target picture that lacks the pieces the build adds (buildReveal "whole") is shown whole
 //     during Build, with a line saying so.
 //
-// The marks are data attributes set on the renderers' own elements after React draws them (and
-// again whenever a renderer adds elements of its own, through a MutationObserver), styled by this
-// component's stylesheet. React never sets those attributes, so it never clears them.
+// The build and fade marks are data attributes set on the renderers' own elements after React
+// draws them (and again whenever a renderer adds elements of its own, through a
+// MutationObserver), styled by this component's stylesheet. React never sets those attributes, so
+// it never clears them.
+//
+// #239: the gadget marks themselves are drawn by the renderers (gadgetRings.js), from the
+// `highlightIds` and `gadgetColors` each pane passes down: a ring around a node or a box, a band
+// under an edge. A Plain / Color switch beside the line under the pictures picks how:
+//   - Plain marks the linked pieces in the gadget gold while something is pointed at.
+//   - Color gives every gadget its own color (lib/gadgets.js gadgetColorMap, cycling
+//     GADGET_PALETTE) on both sides all the time, so a piece and what it became match by eye;
+//     pointing still fades what is not linked.
+// The choice is kept for the viewer (hooks/useGadgetColorMode.js). During Build the caption lists
+// the gadgets the step made, in plain words, and the step's bound when it sets one. A dashed
+// "Rule says no" line is a piece too (lib/reductionView.js gives it to its edge rule). A picture
+// that draws none of the pieces a side's gadgets name (a Search Tree) says links can't be shown.
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { GADGET_KINDS, OTHER_GADGET_KIND } from "../../data/gadgetKinds";
+import { GADGET_EMPTY_SIDE, GADGET_KINDS, OTHER_GADGET_KIND } from "../../data/gadgetKinds";
+import { describeGadget, gadgetColorMap, gadgetIdName } from "../../lib/gadgets";
 import {
   eventWord,
   linkedPieces,
@@ -43,25 +57,29 @@ import {
   pieceNamer,
   placeInPhase,
   REDUCTION_PHASES,
+  sideLinkable,
   unbuiltIds,
 } from "../../lib/reductionView";
 import { paletteVars } from "../theme";
 import { COMPACT_MEDIA } from "../workbench/layout";
-import { FAINT_FILTER } from "./graphPieces";
+import { GADGET_PALETTE } from "./gadgetRings";
+import { FAINT_FILTER, PictureToggle } from "./graphPieces";
 import PictureCanvas from "./PictureCanvas";
 
 const ARROW = "↦";
 const GADGET_RING = paletteVars.viz.gadget;
-// A gold outline around a linked piece's own shape: four unblurred shadows, one each way, so it
-// follows any shape a renderer draws (a node, a clause's hull, an edge, a packed item).
-const LINKED_FILTER = [
-  `drop-shadow(1.5px 0 0 ${GADGET_RING})`,
-  `drop-shadow(-1.5px 0 0 ${GADGET_RING})`,
-  `drop-shadow(0 1.5px 0 ${GADGET_RING})`,
-  `drop-shadow(0 -1.5px 0 ${GADGET_RING})`,
-].join(" ");
 
-const SHAPES = "circle, ellipse, rect, path, polygon, polyline, line";
+/** The Plain / Color switch's choices (#239). */
+const MARK_MODES = [
+  { value: "plain", label: "Plain" },
+  { value: "color", label: "Color" },
+];
+
+/** How many of a step's gadgets the caption lists before "and n more". */
+const STEP_GADGET_LIMIT = 4;
+
+const LINKS_UNAVAILABLE =
+  "Gadget links can't be shown on this picture: it doesn't draw the pieces the gadgets name.";
 
 const KIND_LABELS = new Map(
   [...GADGET_KINDS, OTHER_GADGET_KIND].map((entry) => [entry.kind, entry.label]),
@@ -105,10 +123,19 @@ function markPieces(root, hidden, hot) {
     }
     setMark(element, "data-rv-link", link);
   }
-  // A picture's dashed "missing" lines have no id of their own (two ends): they fade with the
-  // rest while a link is shown.
-  for (const element of root.querySelectorAll("[data-phantom]")) {
+  // A picture's dashed "missing" lines without an id of their own (two ends) fade with the rest
+  // while a link is shown. ("Rule says no" lines have ids, #239, and are pieces above.)
+  for (const element of root.querySelectorAll("[data-phantom]:not([data-phantom-id])")) {
     setMark(element, "data-rv-link", hot ? "faint" : null);
+  }
+  // A gadget mark a renderer draws beside its piece rather than inside it (a band under an
+  // edge drawn as a bare path) follows its piece: hidden while the piece is, faded with it.
+  for (const element of root.querySelectorAll("[data-gadget-ring]")) {
+    if (element.parentElement?.closest(PIECE_SELECTOR)) continue;
+    const id = element.getAttribute("data-gadget-ring");
+    const isHidden = hidden.has(id);
+    setMark(element, "data-rv-built", isHidden ? "no" : null);
+    setMark(element, "data-rv-link", hot && !isHidden && !hot.has(id) ? "faint" : null);
   }
   if (hot) {
     for (const element of root.querySelectorAll('[data-rv-link="hot"]')) {
@@ -142,9 +169,12 @@ function ReductionPane({
   frameIndex,
   hidden,
   hot,
+  gadgetColors,
   onPoint,
 }) {
   const ref = useRef(null);
+  // The renderer draws the marks (#239): the linked pieces while a link is shown.
+  const highlightIds = useMemo(() => (hot ? [...hot] : undefined), [hot]);
   const marks = useRef({ hidden, hot });
 
   // After every draw, and whenever a renderer adds elements of its own between draws.
@@ -256,10 +286,6 @@ function ReductionPane({
             "& [data-rv-link='faint']": {
               filter: `${FAINT_FILTER} !important`,
             },
-            // The outline goes on a linked piece's shapes, not its text, so its label stays sharp.
-            [`& [data-rv-link='hot']:is(${SHAPES}), & [data-rv-link='hot'] :is(${SHAPES})`]: {
-              filter: `${LINKED_FILTER} !important`,
-            },
           }}
         >
           <PictureCanvas
@@ -272,6 +298,9 @@ function ReductionPane({
             frameCount={frames.length}
             frames={frames}
             showCaption={false}
+            highlightIds={highlightIds}
+            gadgetColors={gadgetColors}
+            boxSoFar
           />
         </Box>
       )}
@@ -341,8 +370,99 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
   );
 }
 
+/**
+ * The gadgets a build step made (`frame.gadgets`, indexes into the view's gadgets), in plain
+ * words (#239), with the step's bound when it sets one (`frame.bound`: Clique's K). In Color mode
+ * each gadget carries its color.
+ */
+function StepGadgets({ id, frame, gadgets, describe, colors }) {
+  const made = (Array.isArray(frame.gadgets) ? frame.gadgets : [])
+    .map((index) => gadgets[index])
+    .filter(Boolean);
+  const hasBound =
+    (typeof frame.bound === "number" && Number.isFinite(frame.bound)) ||
+    (typeof frame.bound === "string" && frame.bound.trim() !== "");
+  if (frame.phase !== "build" || (made.length === 0 && !hasBound)) return null;
+  const shown = made.slice(0, STEP_GADGET_LIMIT);
+  const more = made.length - shown.length;
+  return (
+    <Box
+      id={id}
+      data-gadget-count={made.length}
+      sx={{
+        flexBasis: "100%",
+        display: "flex",
+        flexDirection: "column",
+        gap: 0.5,
+        fontSize: "0.8125rem",
+      }}
+    >
+      {hasBound && (
+        <Box id={`${id}-bound`} data-bound={String(frame.bound)}>
+          <Box component="span" sx={{ fontWeight: 700 }}>
+            Bound:
+          </Box>{" "}
+          {String(frame.bound)}
+        </Box>
+      )}
+      {made.length > 0 && (
+        <>
+          <Box component="span" id={`${id}-label`} sx={{ fontWeight: 700 }}>
+            {`This step made ${made.length === 1 ? "1 gadget" : `${made.length} gadgets`}:`}
+          </Box>
+          <Box
+            component="ul"
+            aria-labelledby={`${id}-label`}
+            sx={{ m: 0, pl: 2.5, display: "flex", flexDirection: "column", gap: 0.25 }}
+          >
+            {shown.map((gadget) => {
+              const color = colors?.get(gadget.index) ?? null;
+              return (
+                <Box
+                  component="li"
+                  key={gadget.index}
+                  data-gadget-index={gadget.index}
+                  data-gadget-color={color ?? undefined}
+                  sx={{ overflowWrap: "anywhere" }}
+                >
+                  {color && (
+                    <Box
+                      component="span"
+                      aria-hidden="true"
+                      sx={{
+                        display: "inline-block",
+                        width: 10,
+                        height: 10,
+                        mr: 0.75,
+                        borderRadius: "50%",
+                        border: `3px solid ${color}`,
+                        boxSizing: "border-box",
+                        verticalAlign: "-1px",
+                      }}
+                    />
+                  )}
+                  {`${capitalize(kindWord(gadget.kind))}: ${describe(gadget)}`}
+                </Box>
+              );
+            })}
+          </Box>
+          {more > 0 && (
+            <Box component="span" id={`${id}-more`} sx={{ color: "text.secondary" }}>
+              {`and ${more} more (the Result panel's Gadgets list has them all).`}
+            </Box>
+          )}
+        </>
+      )}
+    </Box>
+  );
+}
+
+function capitalize(text) {
+  return text ? `${text[0].toUpperCase()}${text.slice(1)}` : text;
+}
+
 /** The step's caption: its phase and place in it, what happened, and the verdict at the end. */
-function ReductionCaption({ id, frames, frameIndex }) {
+function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors }) {
   const frame = frames[frameIndex];
   if (!frame) return null;
   const phase = REDUCTION_PHASES.find((entry) => entry.key === frame.phase);
@@ -395,6 +515,13 @@ function ReductionCaption({ id, frames, frameIndex }) {
           {verdict}
         </Box>
       )}
+      <StepGadgets
+        id={`${id}-gadgets`}
+        frame={frame}
+        gadgets={gadgets}
+        describe={describe}
+        colors={colors}
+      />
     </Box>
   );
 }
@@ -417,6 +544,9 @@ function listNames(ids, nameOf, limit = 6) {
  *   Each side's Visualization Type dropdown, drawn at the pane's top right.
  * @param {string|null} [props.loading] Said in both panes, in place of the pictures, while
  *   another picture is being drawn (`view` is then the one before it, for the titles).
+ * @param {"plain"|"color"} [props.colorMode] How gadgets are marked (#239): Plain, in the gadget
+ *   gold while pointed at, or Color, each gadget in its own color all the time.
+ * @param {(mode: "plain"|"color") => void} [props.onColorMode] The Plain / Color switch.
  */
 export default function ReductionView({
   idPrefix,
@@ -426,6 +556,8 @@ export default function ReductionView({
   activeGadget = null,
   typeControls = {},
   loading = null,
+  colorMode = "plain",
+  onColorMode = null,
 }) {
   const { source, target, gadgets } = view;
   const sourceFrames = useMemo(
@@ -436,9 +568,35 @@ export default function ReductionView({
     () => view.frames.map((frame) => paneFrame(frame, "target", target.type)),
     [view, target.type],
   );
-  const names = useMemo(
-    () => ({ source: pieceNamer(source.payload), target: pieceNamer(target.payload) }),
-    [source.payload, target.payload],
+  const names = useMemo(() => {
+    const sourceName = pieceNamer(source.payload);
+    const targetName = pieceNamer(target.payload);
+    // A "Rule says no" pair (#239) is not in the payload: it reads by its two ends.
+    const pairs = new Map();
+    for (const viewFrame of view.frames) {
+      for (const pair of Array.isArray(viewFrame.target?.skipped) ? viewFrame.target.skipped : []) {
+        if (typeof pair?.id === "string") pairs.set(pair.id, pair);
+      }
+    }
+    return {
+      source: (id) => gadgetIdName(id, sourceName, null),
+      target: (id) => {
+        const pair = pairs.get(id);
+        if (pair) return `unjoined pair ${targetName(pair.a)}–${targetName(pair.b)}`;
+        return gadgetIdName(id, targetName, null);
+      },
+    };
+  }, [view, source.payload, target.payload]);
+  const describe = (gadget) => describeGadget(gadget, names, GADGET_EMPTY_SIDE).sentence;
+  // Color mode's colors (#239): by piece on each side, and by gadget for the lists.
+  const colors = useMemo(
+    () => (colorMode === "color" ? gadgetColorMap(gadgets, GADGET_PALETTE) : null),
+    [colorMode, gadgets],
+  );
+  // A side whose picture draws none of its gadgets' pieces (a Search Tree) can't show links.
+  const linkable = useMemo(
+    () => ({ source: sideLinkable(view, "source"), target: sideLinkable(view, "target") }),
+    [view],
   );
   const index = Math.min(Math.max(frameIndex, 0), view.frames.length - 1);
   const frame = view.frames[index];
@@ -452,6 +610,8 @@ export default function ReductionView({
         : "This picture can't show the target piece by piece, so it shows it whole while it is built.";
   }
   const noneHidden = useMemo(() => new Set(), []);
+  const linkNote = (which) => (gadgets.length > 0 && !linkable[which] ? LINKS_UNAVAILABLE : null);
+  const joinNotes = (...notes) => notes.filter(Boolean).join(" ") || null;
 
   // What is pointed at: hovered or focused (`hover`), or tapped (`pinned`, kept until tapped
   // again). The hover wins while there is one, as the renderers' own traces do.
@@ -502,6 +662,9 @@ export default function ReductionView({
           ? `${/^[aeiou]/.test(kinds) ? "an" : "a"} ${kinds} gadget`
           : `${count} gadgets (${kinds})`;
       readout = `${pointed}, linked by ${by}: ${source.problem} ${from} ${ARROW} ${target.problem} ${to}.`;
+      // One gadget with a reason of its own (an edge rule's, a bound's) says it too (#239).
+      const note = count === 1 ? gadgets[link.gadgets[0]].note.trim() : "";
+      if (note) readout += ` ${/[.!?]$/.test(note) ? note : `${note}.`}`;
     }
   } else if (link) {
     const from = link.source.size ? listNames(link.source, names.source) : "the whole instance";
@@ -547,8 +710,10 @@ export default function ReductionView({
           frame={sourceFrames[index]}
           frames={sourceFrames}
           frameIndex={index}
+          note={loading ? null : linkNote("source")}
           hidden={noneHidden}
           hot={link ? link.source : null}
+          gadgetColors={colors?.source}
           onPoint={point}
         />
         <Box
@@ -571,7 +736,7 @@ export default function ReductionView({
           title={`${target.problem} · built by the reduction`}
           typeControl={typeControls.target ?? null}
           loading={loading}
-          note={targetNote}
+          note={joinNotes(targetNote, linkNote("target"))}
           type={target.type}
           payload={target.payload}
           name={target.problem}
@@ -580,27 +745,61 @@ export default function ReductionView({
           frameIndex={index}
           hidden={hiddenTarget}
           hot={link ? link.target : null}
+          gadgetColors={colors?.target}
           onPoint={point}
         />
       </Box>
       {!loading && (
-        <Box
-          id={`${idPrefix}-link`}
-          aria-live="polite"
-          data-linked={link ? "true" : "false"}
-          sx={{
-            fontSize: "0.8125rem",
-            color: link ? "text.primary" : "text.secondary",
-            borderLeft: "3px solid",
-            borderColor: link ? GADGET_RING : "transparent",
-            pl: 1,
-          }}
-        >
-          {readout}
+        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px" }}>
+          {gadgets.length > 0 && onColorMode && (
+            <Box
+              id={`${idPrefix}-marks-row`}
+              data-gadget-marks={colorMode}
+              sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}
+            >
+              <Box
+                component="span"
+                id={`${idPrefix}-marks-label`}
+                sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
+              >
+                Gadgets
+              </Box>
+              <PictureToggle
+                id={`${idPrefix}-marks`}
+                label="Gadget marks: Plain marks one gadget while you point at it, Color gives every gadget its own color"
+                options={MARK_MODES}
+                value={colorMode}
+                onChange={onColorMode}
+              />
+            </Box>
+          )}
+          <Box
+            id={`${idPrefix}-link`}
+            aria-live="polite"
+            data-linked={link ? "true" : "false"}
+            sx={{
+              flex: "1 1 280px",
+              minWidth: 0,
+              fontSize: "0.8125rem",
+              color: link ? "text.primary" : "text.secondary",
+              borderLeft: "3px solid",
+              borderColor: link ? GADGET_RING : "transparent",
+              pl: 1,
+            }}
+          >
+            {readout}
+          </Box>
         </Box>
       )}
       {!loading && (
-        <ReductionCaption id={`${idPrefix}-caption`} frames={view.frames} frameIndex={index} />
+        <ReductionCaption
+          id={`${idPrefix}-caption`}
+          frames={view.frames}
+          frameIndex={index}
+          gadgets={gadgets}
+          describe={describe}
+          colors={colors?.byGadget ?? null}
+        />
       )}
     </Box>
   );

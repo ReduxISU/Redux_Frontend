@@ -328,7 +328,9 @@ function InfoButton({ id, card, align }) {
  * @param {string} [props.id] Prefixes every id rendered here. Falls back to React's useId.
  * @param {string} props.label The visible label ("Solver", "To", "Visualization Type").
  * @param {{value: string, label: string, tags: import("./infoCards").Tag[],
- *   card: import("./infoCards").Card}[]} props.options
+ *   card: import("./infoCards").Card, disabled?: boolean, reason?: string}[]} props.options
+ *   A `disabled` option (#239) is listed, greyed, with its `reason` under its name, and can't
+ *   be chosen.
  * @param {string} props.value The chosen option's value.
  * @param {(value: string) => void} [props.onChange] Leave out for a fixed choice: the box
  *   still shows its name, tags and (i) card but cannot open.
@@ -394,6 +396,8 @@ export default function TaggedSelect({
 
   function pick(index) {
     const option = options[index];
+    // A disabled option (#239) stays in the list to say why it can't be chosen.
+    if (option?.disabled) return;
     closeList();
     if (option && option.value !== value) onChange(option.value);
   }
@@ -638,15 +642,21 @@ export default function TaggedSelect({
             {options.map((option, index) => {
               const isSelected = index === selectedIndex;
               const isActive = index === activeIndex;
+              const describedBy = [
+                option.tags?.length ? `${optionId(index)}-tags` : null,
+                option.disabled && option.reason ? `${optionId(index)}-reason` : null,
+              ].filter(Boolean);
               return (
                 <Box
                   key={option.value}
                   id={optionId(index)}
                   role="option"
                   aria-selected={isSelected}
+                  aria-disabled={option.disabled ? "true" : undefined}
                   aria-labelledby={`${optionId(index)}-name`}
-                  aria-describedby={option.tags?.length ? `${optionId(index)}-tags` : undefined}
+                  aria-describedby={describedBy.length ? describedBy.join(" ") : undefined}
                   data-active={isActive || undefined}
+                  data-disabled={option.disabled ? "true" : undefined}
                   onClick={() => pick(index)}
                   onPointerEnter={(event) => {
                     if (event.pointerType !== "mouse") return;
@@ -676,12 +686,26 @@ export default function TaggedSelect({
                         : "transparent",
                     fontWeight: isSelected ? 700 : 400,
                     fontSize: "0.9375rem",
-                    color: "text.primary",
-                    cursor: "pointer",
+                    color: option.disabled ? "text.secondary" : "text.primary",
+                    cursor: option.disabled ? "not-allowed" : "pointer",
                   }}
                 >
-                  <Box component="span" id={`${optionId(index)}-name`} sx={{ minWidth: 0 }}>
-                    {option.label}
+                  <Box
+                    component="span"
+                    sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 0.25 }}
+                  >
+                    <Box component="span" id={`${optionId(index)}-name`}>
+                      {option.label}
+                    </Box>
+                    {option.disabled && option.reason && (
+                      <Box
+                        component="span"
+                        id={`${optionId(index)}-reason`}
+                        sx={{ fontSize: "0.75rem", fontWeight: 400 }}
+                      >
+                        {option.reason}
+                      </Box>
+                    )}
                   </Box>
                   <TagList
                     id={`${optionId(index)}-tags`}
