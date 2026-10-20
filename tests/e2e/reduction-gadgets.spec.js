@@ -22,6 +22,7 @@
 
 import { LDC_SMALL_CODE_TREE_FRAMES } from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
+import { SAT_TO_3SAT_FORMULA_VIEW, SAT3_FORMULA_FRAMES } from "./formula-payloads";
 import { openPanel } from "./helpers";
 import {
   CLIQUE_GRAPH_FRAMES,
@@ -170,6 +171,7 @@ function ringColors(page, side) {
 const PICTURES = {
   Graph: CLIQUE_GRAPH_FRAMES,
   GroupedGraph: SAT3_CLAUSE_GRAPH_FRAMES,
+  Formula: SAT3_FORMULA_FRAMES,
   BipartiteGraph: EXACT_COVER_BIPARTITE_FRAMES,
   TripartiteMatching: DM3_TRIPARTITE_FRAMES,
   LayeredGraph: TOPOLOGICAL_SORT_LAYERED_FRAMES,
@@ -613,4 +615,50 @@ test("Exact Cover to Subset Sum and 3SAT to 0-1 ILP: a Gadgets row marks a set's
       `[data-cell-id="${view.gadgets[literal].targetIds[0]}"] [data-gadget-ring]`,
     ),
   ).toHaveCount(1);
+});
+
+test("SAT to 3SAT drawn as formulas: Build hides each clause not built yet with its ∧ and ∨, and a source clause links the clauses it became", async ({
+  page,
+}) => {
+  // #270: the Formula on both sides (Redux#925, captured with sourceVisualization and
+  // targetVisualization set to the Formula visualizations).
+  const view = SAT_TO_3SAT_FORMULA_VIEW;
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openView(page, () => view);
+  for (const side of ["source", "target"]) {
+    await expect(pane(page, side)).toHaveAttribute("data-picture-type", "Formula");
+  }
+  await expect(page.locator(`${VIEW}-target-note`)).toHaveCount(0);
+  await toStep(page, 0);
+  // Step 1 builds C1's chain (C1, C4, C5); C2 and C3 are not built yet, nor their ∧ and ∨.
+  const target = pane(page, "target");
+  const built = (id) => target.locator(`[data-clause-id="${id}"]`);
+  for (const id of ["c0", "c3", "c4"]) await expect(built(id)).not.toHaveAttribute("data-rv-built");
+  for (const id of ["c1", "c2"]) {
+    await expect(built(id)).toHaveAttribute("data-rv-built", "no");
+    await expect(built(id)).toBeHidden();
+    for (const op of await target.locator(`[data-piece-for="${id}"]`).all()) {
+      await expect(op).toBeHidden();
+    }
+    for (const literal of view.target.picture.payload.groups.find((g) => g.id === id).members) {
+      await expect(target.locator(`[data-node-id="${literal}"]`)).toBeHidden();
+    }
+  }
+  await expect(target.locator('[data-piece-for="c3"][data-connective="and"]')).toBeVisible();
+  // Pointing at the source's C1 links the three clauses it became, and fades the rest by color.
+  await toStep(page, view.frames.length - 1);
+  await pane(page, "source")
+    .locator('[data-clause-id="c0"] [data-body]')
+    .hover({ position: { x: 4, y: 4 } });
+  for (const id of ["c0", "c3", "c4"]) {
+    await expect(built(id)).toHaveAttribute("data-rv-link", "hot");
+  }
+  await expect(built("c1")).toHaveAttribute("data-rv-link", "faint");
+  await expect(readout(page)).not.toBeEmpty();
+  // Every SAT variable keeps its id on the 3SAT side.
+  await page.mouse.move(1, 1);
+  await pane(page, "source").locator('[data-variable-id="v:x4"]').hover();
+  await expect(target.locator('[data-variable-id="v:x4"]')).toHaveAttribute("data-rv-link", "hot");
+  // The map back ends on the SAT answer, drawn green on the source.
+  await expect(pane(page, "source").locator('[data-state="Solution"]').first()).toBeVisible();
 });

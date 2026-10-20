@@ -50,6 +50,9 @@
 // and gate, each step's column, outcome bars by amplitude sign, the measured read, a classical
 // solver's oracle calls, Shor's note, the trace, texts that meet nothing, and on a phone a small
 // circuit at its own size.
+// #270: the Formula renderer (SAT and 3SAT) at the end: a box per clause with ∨ inside and ∧
+// between, the chips, every step's states and marks, subscripts and the False strike, wrapping,
+// the trace, and widths from a phone to a desktop in both themes.
 // #209: the Table renderer (Edit Distance's grid, 0-1 ILP's matrix, and the step tables of DFA,
 // NFA, SSSP and SPSP) after that: the blank before Run, every step's cells, states and arrows, a
 // layout that holds still, the edits the answer spells out, the chips, shaded coefficients, pills
@@ -62,6 +65,15 @@ import {
   LDC_SMALL_CODE_TREE_FRAMES,
 } from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
+import {
+  SAT_FORMULA_FRAMES,
+  SAT_LONG_FORMULA_FRAMES,
+  SAT_NAMES_FORMULA_FRAMES,
+  SAT_UNSAT_FORMULA_FRAMES,
+  SAT3_FORMULA_FRAMES,
+  SAT3_LONG_FORMULA_FRAMES,
+  SAT3_UNSAT_FORMULA_FRAMES,
+} from "./formula-payloads";
 import { drawnCollisions, gotoProblemDetail, openPanel } from "./helpers";
 import {
   ARC_SET_LAYERED_FRAMES,
@@ -8261,3 +8273,426 @@ test("Drag: a Tripartite name only moves up and down its own column, and its tri
   expect(await drawnCentre(austin)).toEqual(before);
   await expect(line).toHaveAttribute("d", d);
 });
+
+// --- #270: the Formula renderer (SAT and 3SAT written as a CNF formula) ------------------------
+
+const FORMULA = "#workbench-source-frames-formula";
+const formulaLiteral = (page, id) => page.locator(`${FORMULA}-formula [data-node-id="${id}"]`);
+const formulaClause = (page, id) => page.locator(`${FORMULA}-formula [data-clause-id="${id}"]`);
+const formulaChip = (page, id) => page.locator(`${FORMULA}-formula [data-variable-id="${id}"]`);
+
+/** Opens `problem` with every picture answered by the Formula `capture`. */
+async function openFormula(page, problem, capture) {
+  await openPicture(page, problem, capture);
+  await expect(page.locator(`${FORMULA}-formula`)).toBeVisible();
+}
+
+/** Frame `index`'s states, piece by piece: literals, clauses and chips (absent = Background). */
+async function expectFormulaStates(page, capture, index) {
+  const frame = capture.frames[index];
+  for (const node of capture.payload.nodes) {
+    await expect(formulaLiteral(page, node.id)).toHaveAttribute(
+      "data-state",
+      frame.nodes[node.id]?.state ?? "Background",
+    );
+  }
+  for (const group of capture.payload.groups) {
+    await expect(formulaClause(page, group.id)).toHaveAttribute(
+      "data-state",
+      frame.groups[group.id]?.state ?? "Background",
+    );
+  }
+  for (const variable of capture.payload.variables) {
+    await expect(formulaChip(page, variable.id)).toHaveAttribute(
+      "data-state",
+      frame.variables[variable.id]?.state ?? "Background",
+    );
+    const value = frame.assignment[variable.id];
+    await expect(formulaChip(page, variable.id)).toHaveAttribute(
+      "data-value",
+      typeof value === "boolean" ? String(value) : "unassigned",
+    );
+  }
+}
+
+/** Every clause box, literal pill and connective, in screen px. */
+function formulaBoxes(page) {
+  return page.locator(`${FORMULA}-formula`).evaluate((root) => {
+    const rect = (element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+    };
+    const clauses = Object.fromEntries(
+      [...root.querySelectorAll("[data-clause-id]")].map((g) => [
+        g.getAttribute("data-clause-id"),
+        rect(g.querySelector("[data-body]")),
+      ]),
+    );
+    const literals = [...root.querySelectorAll("[data-node-id]")].map((g) => ({
+      id: g.getAttribute("data-node-id"),
+      body: rect(g.querySelector("[data-body]")),
+    }));
+    const operators = [...root.querySelectorAll("[data-connective]")].map((t) => ({
+      kind: t.getAttribute("data-connective"),
+      clause: t.getAttribute("data-piece-for"),
+      box: rect(t),
+    }));
+    return { clauses, literals, operators };
+  });
+}
+
+for (const [problem, capture] of [
+  ["SAT", SAT_FORMULA_FRAMES],
+  ["3SAT", SAT3_FORMULA_FRAMES],
+]) {
+  test(`Formula: ${problem} draws a box per clause, ∨ inside it, ∧ between, and a chip per variable`, async ({
+    page,
+  }) => {
+    await openFormula(page, problem, capture);
+    const { payload } = capture;
+    const root = page.locator(`${FORMULA}-formula`);
+    await expect(root.locator("[data-clause-id]")).toHaveCount(payload.groups.length);
+    await expect(root.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
+    await expect(root.locator("[data-variable-id]")).toHaveCount(payload.variables.length);
+    // ∧ joins the clauses (one fewer than there are), ∨ the literals inside each clause.
+    await expect(root.locator('[data-connective="and"]')).toHaveCount(payload.groups.length - 1);
+    const ors = payload.groups.reduce((sum, group) => sum + group.members.length - 1, 0);
+    await expect(root.locator('[data-connective="or"]')).toHaveCount(ors);
+    for (const text of await root.locator('[data-connective="and"]').allTextContents()) {
+      expect(text).toBe("∧");
+    }
+    for (const text of await root.locator('[data-connective="or"]').allTextContents()) {
+      expect(text).toBe("∨");
+    }
+    const { clauses, operators } = await formulaBoxes(page);
+    for (const op of operators) {
+      const box = clauses[op.clause];
+      const middle = (op.box.left + op.box.right) / 2;
+      // Each ∨ sits inside its own clause's box; each ∧ outside every box, before its clause.
+      if (op.kind === "or") {
+        expect(middle > box.left && middle < box.right, `∨ of ${op.clause}`).toBe(true);
+      } else {
+        expect(middle).toBeLessThan(box.left);
+        for (const other of Object.values(clauses)) {
+          expect(middle > other.left && middle < other.right).toBe(false);
+        }
+      }
+    }
+    for (const piece of await root.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute(
+        "aria-label",
+        /^(Clause C\d+: \S+( or \S+)*|Literal ¬?\S+ in C\d+|Variable \S+: (true|false|not assigned yet))/,
+      );
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // Ids are the Grouped Graph's, and every DOM id in the picture is unique.
+    const ids = await page
+      .locator(PICTURE)
+      .evaluate((el) => [...el.querySelectorAll("[id]")].map((node) => node.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    const literalIds = await root
+      .locator("[data-node-id]")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-node-id")));
+    expect(literalIds).toEqual(payload.nodes.map((node) => node.id));
+  });
+}
+
+test("Formula: before Run the formula is plain, and step 1 keeps every pill in place", async ({
+  page,
+}) => {
+  const capture = SAT3_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  const root = page.locator(`${FORMULA}-formula`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(root.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(root.locator('[data-variable-id]:not([data-value="unassigned"])')).toHaveCount(0);
+  await expect(root.locator("[data-strike]")).toHaveCount(0);
+  await expect(root.locator("[data-clause-mark]")).toHaveCount(0);
+  await expect(formulaChip(page, "v:x1").locator("[data-value-text]")).toHaveText("–");
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("∧ joins the clauses (AND)");
+  await expect(legendBody(page)).not.toContainText("T / F");
+
+  const before = await nodeCentres(page, `${FORMULA}-formula`);
+  await runToFrame(page, capture, 0);
+  await expectFormulaStates(page, capture, 0);
+  expect(await nodeCentres(page, `${FORMULA}-formula`)).toEqual(before);
+});
+
+test("Formula: the steps show tried, kept, false and failed literals, clause marks and the answer", async ({
+  page,
+}) => {
+  const capture = SAT3_LONG_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  await runToFrame(page, capture, 0);
+  let sawCommitted = false;
+  let sawRejected = false;
+  for (let index = 0; index < capture.frames.length; index += 1) {
+    if (index > 0) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+    }
+    await expectFormulaStates(page, capture, index);
+    const frame = capture.frames[index];
+    for (const [id, { state }] of Object.entries(frame.groups)) {
+      const mark = formulaClause(page, id).locator("[data-clause-mark]");
+      if (state === "Covered") await expect(mark).toHaveText("✓");
+      if (state === "Rejected") {
+        await expect(mark).toHaveText("✗");
+        sawRejected = true;
+      }
+    }
+    for (const node of capture.payload.nodes) {
+      const state = frame.nodes[node.id]?.state ?? "Background";
+      // A False literal is struck through; nothing else is.
+      await expect(formulaLiteral(page, node.id).locator("[data-strike]")).toHaveCount(
+        state === "False" ? 1 : 0,
+      );
+      if (state === "Committed") {
+        sawCommitted = true;
+        // Committed is dashed, never the answer's solid outline.
+        const dash = await formulaLiteral(page, node.id)
+          .locator("[data-body]")
+          .getAttribute("stroke-dasharray");
+        expect(dash).toBeTruthy();
+      }
+    }
+  }
+  expect(sawCommitted).toBe(true);
+  expect(sawRejected).toBe(true);
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  const legend = legendBody(page);
+  await expect(legend).toContainText("Committed (kept so far)");
+  await expect(legend).toContainText("Struck through (false; the letters only");
+  await expect(legend).toContainText("✓ / ✗ by a clause's name");
+  await expect(legend).toContainText("T / F / – (the variable's value so far)");
+});
+
+for (const [problem, capture] of [
+  ["3SAT", SAT3_UNSAT_FORMULA_FRAMES],
+  ["SAT", SAT_UNSAT_FORMULA_FRAMES],
+]) {
+  test(`Formula: an unsatisfiable ${problem} formula fails clause by clause and ends blank on no`, async ({
+    page,
+  }) => {
+    await openFormula(page, problem, capture);
+    const failing = capture.frames.findIndex((frame) =>
+      Object.values(frame.groups).some((entry) => entry.state === "Rejected"),
+    );
+    await runToFrame(page, capture, failing);
+    await expectFormulaStates(page, capture, failing);
+    const [id] = Object.entries(capture.frames[failing].groups).find(
+      ([, entry]) => entry.state === "Rejected",
+    );
+    await expect(formulaClause(page, id)).toHaveAttribute("aria-label", /Rejected/);
+    await expect(formulaClause(page, id).locator("[data-clause-mark]")).toHaveText("✗");
+    await page.locator("#workbench-steps-slider input").focus();
+    await page.keyboard.press("End");
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+    // Redux's SAT solvers end an unsatisfiable run with no assignment: a blank Done, never green.
+    await expect(
+      page.locator(`${FORMULA}-formula [data-state]:not([data-state="Background"])`),
+    ).toHaveCount(0);
+  });
+}
+
+test("Formula: letters-then-digits names get a real subscript, other names are plain, and False strikes only the letters", async ({
+  page,
+}) => {
+  const capture = SAT_NAMES_FORMULA_FRAMES;
+  await openFormula(page, "SAT", capture);
+  const sizes = (locator) =>
+    locator.evaluate((g) => {
+      const text = g.querySelector("text");
+      return {
+        base: Number(text.getAttribute("font-size")),
+        sub: g.querySelector("[data-label-sub]")?.getAttribute("font-size") ?? null,
+        text: text.textContent,
+      };
+    });
+  for (const node of capture.payload.nodes) {
+    const name = node.label.replace(/^¬/, "");
+    const got = await sizes(formulaLiteral(page, node.id));
+    if (/^[A-Za-z]+\d+$/.test(name)) {
+      expect(got.sub, node.label).not.toBeNull();
+      expect(Number(got.sub) / got.base).toBeGreaterThanOrEqual(0.75);
+    } else {
+      expect(got.sub, node.label).toBeNull();
+    }
+    expect(got.text).toBe(node.label);
+  }
+  // The answer makes some literals false: each strike ends before its subscript starts.
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const falses = Object.entries(capture.frames.at(-1).nodes).filter(
+    ([, entry]) => entry.state === "False",
+  );
+  expect(falses.length).toBeGreaterThan(0);
+  let withSub = 0;
+  for (const [id] of falses) {
+    const ends = await formulaLiteral(page, id).evaluate((g) => {
+      const strike = g.querySelector("[data-strike]").getBoundingClientRect();
+      const base = g.querySelector("[data-label-base]").getBoundingClientRect();
+      const sub = g.querySelector("[data-label-sub]")?.getBoundingClientRect() ?? null;
+      return {
+        strikeLeft: strike.left,
+        strikeRight: strike.right,
+        baseLeft: base.left,
+        baseRight: base.right,
+        subLeft: sub ? sub.left : null,
+      };
+    });
+    expect(ends.strikeLeft).toBeLessThanOrEqual(ends.baseLeft + 1);
+    expect(ends.strikeRight).toBeGreaterThan((ends.baseLeft + ends.baseRight) / 2);
+    if (ends.subLeft !== null) {
+      withSub += 1;
+      expect(ends.strikeRight).toBeLessThanOrEqual(ends.subLeft + 0.5);
+    }
+  }
+  expect(withSub).toBeGreaterThan(0);
+});
+
+test("Formula: a long formula wraps between clauses, and a clause too long for a line wraps at its ∨s", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const capture = SAT_LONG_FORMULA_FRAMES;
+  await openFormula(page, "SAT", capture);
+  const { clauses, literals, operators } = await formulaBoxes(page);
+  // More than one line of clauses.
+  const tops = new Set(Object.values(clauses).map((box) => Math.round(box.top)));
+  expect(tops.size).toBeGreaterThan(1);
+  // C1's twelve literals take more than one row inside one taller box.
+  const firstClause = literals.filter((literal) => literal.id.startsWith("c0-"));
+  const rows = [...new Set(firstClause.map((literal) => Math.round(literal.body.top)))].sort(
+    (a, b) => a - b,
+  );
+  expect(rows.length).toBeGreaterThan(1);
+  for (const literal of literals) {
+    const box = clauses[literal.id.split("-")[0]];
+    expect(literal.body.left).toBeGreaterThanOrEqual(box.left);
+    expect(literal.body.right).toBeLessThanOrEqual(box.right);
+    expect(literal.body.top).toBeGreaterThanOrEqual(box.top);
+    expect(literal.body.bottom).toBeLessThanOrEqual(box.bottom);
+  }
+  // A wrapped row of C1 starts with its ∨.
+  const secondRowFirst = Math.min(
+    ...firstClause
+      .filter((literal) => Math.round(literal.body.top) === rows[1])
+      .map((literal) => literal.body.left),
+  );
+  expect(
+    operators.some(
+      (op) =>
+        op.clause === "c0" &&
+        op.kind === "or" &&
+        op.box.right <= secondRowFirst &&
+        op.box.top >= rows[1] - 2,
+    ),
+  ).toBe(true);
+  // Pills never overlap, and no text meets another piece's line or mark.
+  for (const [i, a] of literals.entries()) {
+    for (const b of literals.slice(i + 1)) {
+      const meet =
+        a.body.left < b.body.right &&
+        b.body.left < a.body.right &&
+        a.body.top < b.body.bottom &&
+        b.body.top < a.body.bottom;
+      expect(meet, `${a.id} and ${b.id}`).toBe(false);
+    }
+  }
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+});
+
+test("Formula: hovering a literal traces its variable, a clause its literals, and the rest fade by color", async ({
+  page,
+}) => {
+  await openFormula(page, "3SAT", SAT3_FORMULA_FRAMES);
+  await formulaLiteral(page, "c0-0").hover();
+  // x1 is in c0-0, c1-0, c1-2 and c2-2.
+  for (const id of ["c0-0", "c1-0", "c1-2", "c2-2"]) {
+    await expect(formulaLiteral(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(formulaChip(page, "v:x1")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "faint");
+  await expect(formulaChip(page, "v:x2")).toHaveAttribute("data-traced", "faint");
+  const faded = await formulaLiteral(page, "c0-1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+    dash: el.querySelector("[data-body]").getAttribute("stroke-dasharray"),
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  expect(faded.dash).toBeTruthy();
+
+  // Keyboard: focusing a clause traces its literals and their variables; Enter pins it.
+  await page.mouse.move(0, 0);
+  await formulaClause(page, "c2").focus();
+  for (const id of ["c2-0", "c2-1", "c2-2"]) {
+    await expect(formulaLiteral(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(formulaChip(page, "v:x3")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(formulaClause(page, "c2")).toHaveAttribute("aria-pressed", "true");
+  // A tap on a chip traces that variable instead.
+  await formulaChip(page, "v:x2").click();
+  await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaLiteral(page, "c2-0")).toHaveAttribute("data-traced", "trace");
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Formula: at ${width} px in the ${scheme} theme it wraps to its box, with readable text and no sideways scroll`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openFormula(page, "SAT", SAT_LONG_FORMULA_FRAMES);
+      if (width < 1200) await page.locator("#workbench-panel-close").click();
+      const svg = `${FORMULA}-svg`;
+      await expect(page.locator(svg)).toBeVisible();
+      await expectFits(page, svg);
+      await expect(page.locator(`${FORMULA}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // Laid out at its box's own width (320 to 800), so the text isn't shrunk to fit.
+      await expect
+        .poll(async () => {
+          const root = page.locator(`${FORMULA}-formula`);
+          const drawn = Number(await root.getAttribute("data-drawing-width"));
+          const box = await root.evaluate((el) => el.clientWidth);
+          return Math.abs(drawn - Math.max(320, Math.min(800, box)));
+        })
+        .toBeLessThanOrEqual(1);
+      const smallest = await page.locator(svg).evaluate((el) => {
+        const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+        const sizes = [...el.querySelectorAll("[data-node-id] text")].map(
+          (text) => Number(text.getAttribute("font-size")) * scale,
+        );
+        return Math.min(...sizes);
+      });
+      // (The long formula is taller than a phone's screen, so it may be fitted smaller; zoom reads it.)
+      expect(smallest).toBeGreaterThanOrEqual(width < 700 ? 9 : 11);
+      expect(await drawnCollisions(page, svg)).toEqual([]);
+      // A short formula is drawn at its own size on a phone too.
+      if (width < 700) {
+        await openFormula(page, "3SAT", SAT3_FORMULA_FRAMES);
+        await page.locator("#workbench-panel-close").click();
+        const own = await page.locator(svg).evaluate((el) => {
+          const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+          return Math.min(
+            ...[...el.querySelectorAll("[data-node-id] text")].map(
+              (text) => Number(text.getAttribute("font-size")) * scale,
+            ),
+          );
+        });
+        expect(own).toBeGreaterThanOrEqual(13);
+      }
+      // The ∧ follows the theme: no dark-on-dark, no light-on-white.
+      const ink = await page
+        .locator(`${FORMULA}-formula [data-connective="and"]`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
