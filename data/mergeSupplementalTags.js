@@ -25,15 +25,14 @@
 //                           half only; the classical half always comes from
 //                           the real backend field via
 //                           taxonomy.js's deriveComplexityClasses())
-//   - visualStyle          (visualization-keyed, SUPPLEMENTAL_VISUAL_STYLE)
 //
-// The first three are one problem-level merge (mergeSupplementalTags); the
-// fourth is keyed per visualization instance rather than per problem (a
-// problem can have several visualizations of different conceptual styles),
-// so it gets its own function (mergeVisualStyle) with its own key space.
-// Same three-step precedence, same file, because both are the same seam.
+// All three are one problem-level merge (mergeSupplementalTags). A fourth,
+// visualization-keyed field (`visualStyle`, merged by a mergeVisualStyle()
+// that used to live here) fed the Visualization Type facet until that facet
+// switched to the backend's own picture types (`pictureType`,
+// ReduxISU/Redux#841); see data/taxonomy.js's derivePictureTypeOption().
 
-import { SUPPLEMENTAL_TAGS, SUPPLEMENTAL_VISUAL_STYLE } from "./supplementalTags";
+import { SUPPLEMENTAL_TAGS } from "./supplementalTags";
 import { deriveComplexityClasses, UNCLASSIFIED } from "./taxonomy";
 
 function firstNonEmptyArray(...arrays) {
@@ -87,24 +86,4 @@ export function mergeSupplementalTags(problemName, realTags = {}) {
     derivedComplexityClass.length > 0 ? derivedComplexityClass : [UNCLASSIFIED];
 
   return { problemType, computationalModel, complexityClass };
-}
-
-/**
- * Resolves the conceptual visual style for one visualization instance: real
- * backend value (if the backend ever grows one) -> data/supplementalTags.js's
- * SUPPLEMENTAL_VISUAL_STYLE overlay (keyed by the exact instance name
- * Navigation/Batch/allVisualizations returns, e.g. "ArcSetDefaultVisualization")
- * -> UNCLASSIFIED.
- *
- * Pure and side-effect-free. An unknown `visualizationName` resolves to
- * UNCLASSIFIED rather than throwing.
- *
- * @param {string} visualizationName Exact real visualization instance name.
- * @param {string} [realVisualStyle] A real backend value for this field, if one ever exists.
- * @returns {string}
- */
-export function mergeVisualStyle(visualizationName, realVisualStyle) {
-  return (
-    firstDefined(realVisualStyle, SUPPLEMENTAL_VISUAL_STYLE[visualizationName]) ?? UNCLASSIFIED
-  );
 }
