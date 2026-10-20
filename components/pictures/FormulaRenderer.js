@@ -174,7 +174,15 @@ function LabelText({ x, y, negated, name, size, color, bold, after }) {
     >
       <tspan data-label-base="">{`${negated ? "¬" : ""}${parts.base}`}</tspan>
       {parts.sub && (
-        <tspan data-label-sub="" fontSize={Math.round(SUB_SCALE * size * 10) / 10} dy={shift}>
+        // Placed where the layout counts the letters ending, not where the font ends them, so the
+        // False strike (strikeWidth, short of that point) never reaches the subscript on a
+        // narrower monospace font.
+        <tspan
+          data-label-sub=""
+          x={x + labelWidth(negated, parts.base, size)}
+          fontSize={Math.round(SUB_SCALE * size * 10) / 10}
+          dy={shift}
+        >
           {parts.sub}
         </tspan>
       )}
