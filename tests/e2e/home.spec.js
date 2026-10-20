@@ -138,12 +138,16 @@ test("a visualization type the site has no label for still shows, as Unclassifie
   page,
 }) => {
   // One handwritten stand-in visualization on every problem, with a picture type and a legacy
-  // type neither of data/taxonomy.js's maps knows.
+  // type neither of data/taxonomy.js's maps knows. Every problem comes from allProblems, not
+  // allVisualizations' own keys: a backend can leave a problem with no visualization out of
+  // allVisualizations altogether (CSharpAPI does).
   const HANDWRITTEN_VIZ = "E2eHandwrittenVisualization";
   await page.route(/\/api\/redux\/Navigation\/Batch\/allVisualizations$/, async (route) => {
     const response = await route.fetch();
     const body = await response.json();
-    for (const problemCode of Object.keys(body)) {
+    const allProblemsUrl = route.request().url().replace(/allVisualizations$/, "allProblems");
+    const problemCodes = await (await page.request.get(allProblemsUrl)).json();
+    for (const problemCode of problemCodes) {
       body[problemCode] = [...(body[problemCode] ?? []), HANDWRITTEN_VIZ];
     }
     await route.fulfill({ response, json: body });
