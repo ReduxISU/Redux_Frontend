@@ -553,6 +553,7 @@ export const PICTURE_TYPE_LABELS = {
   Graph: "Graph",
   GroupedGraph: "Grouped Graph",
   LayeredGraph: "Layered Graph",
+  NestedSet: "Nested Set",
   Packing: "Packing",
   QuantumCircuit: "Quantum Circuit",
   Schedule: "Schedule",
