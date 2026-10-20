@@ -647,7 +647,11 @@ export default function ReductionView({
   if (link?.pointer) {
     const { which, id } = link.pointer;
     const problem = which === "source" ? source.problem : target.problem;
-    const pointed = `${names[which](id)} (${problem})`;
+    const name = names[which](id);
+    // "a and b (not joined)" takes the problem inside its own brackets, not a second pair.
+    const pointed = name.endsWith(")")
+      ? `${name.slice(0, -1)}, ${problem})`
+      : `${name} (${problem})`;
     if (link.gadgets.length === 0) {
       readout = `${pointed}: no gadget names this piece.`;
     } else {
@@ -661,10 +665,18 @@ export default function ReductionView({
         count === 1
           ? `${/^[aeiou]/.test(kinds) ? "an" : "a"} ${kinds} gadget`
           : `${count} gadgets (${kinds})`;
-      readout = `${pointed}, linked by ${by}: ${source.problem} ${from} ${ARROW} ${target.problem} ${to}.`;
-      // One gadget with a reason of its own (an edge rule's, a bound's) says it too (#239).
+      // One gadget with a reason of its own (an edge rule's, a bound's) says the reason instead of
+      // listing the pointed side again: the reason already names those pieces (#239).
       const note = count === 1 ? gadgets[link.gadgets[0]].note.trim() : "";
-      if (note) readout += ` ${/[.!?]$/.test(note) ? note : `${note}.`}`;
+      if (note) {
+        const other = which === "source" ? link.target : link.source;
+        const otherProblem = which === "source" ? target.problem : source.problem;
+        const otherNames = which === "source" ? names.target : names.source;
+        const to = other.size ? ` to ${otherProblem} ${listNames(other, otherNames)}` : "";
+        readout = `${pointed}, linked by ${by}${to}: ${/[.!?]$/.test(note) ? note : `${note}.`}`;
+      } else {
+        readout = `${pointed}, linked by ${by}: ${source.problem} ${from} ${ARROW} ${target.problem} ${to}.`;
+      }
     }
   } else if (link) {
     const from = link.source.size ? listNames(link.source, names.source) : "the whole instance";

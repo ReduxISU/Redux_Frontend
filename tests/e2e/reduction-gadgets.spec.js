@@ -413,6 +413,8 @@ test("a dashed Rule says no line names the edge rule that left the pair unjoined
   await expect(readout(page)).toHaveAttribute("data-linked", "true");
   await expect(readout(page)).toContainText("linked by an edge rule gadget");
   await expect(readout(page)).toContainText(rule.note);
+  // The rule's reason names the pair, so the line doesn't list both sides again after it.
+  await expect(readout(page)).not.toContainText("↦");
   await expect(line).toHaveAttribute("data-rv-link", "hot");
   await expect(line.locator(`[data-gadget-ring="${pair.id}"]`)).toHaveCount(1);
   for (const id of rule.sourceIds) {
