@@ -386,7 +386,7 @@ export default function FormulaRenderer({
                 />
                 <text
                   x={clause.x + 2}
-                  y={clause.y - 9}
+                  y={clause.y - 15}
                   dominantBaseline="central"
                   fill={look.name}
                   fontFamily={MONO}
