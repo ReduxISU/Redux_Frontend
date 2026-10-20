@@ -145,7 +145,10 @@ test("a visualization type the site has no label for still shows, as Unclassifie
   await page.route(/\/api\/redux\/Navigation\/Batch\/allVisualizations$/, async (route) => {
     const response = await route.fetch();
     const body = await response.json();
-    const allProblemsUrl = route.request().url().replace(/allVisualizations$/, "allProblems");
+    const allProblemsUrl = route
+      .request()
+      .url()
+      .replace(/allVisualizations$/, "allProblems");
     const problemCodes = await (await page.request.get(allProblemsUrl)).json();
     for (const problemCode of problemCodes) {
       body[problemCode] = [...(body[problemCode] ?? []), HANDWRITTEN_VIZ];
