@@ -61,6 +61,7 @@ import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRe
 import BoardRenderer, { boardAnnotations } from "./BoardRenderer";
 import CodeTreeRenderer, { codeTreeAnnotations } from "./CodeTreeRenderer";
 import FlowNetworkRenderer, { flowAnnotations } from "./FlowNetworkRenderer";
+import FormulaRenderer, { formulaAnnotations } from "./FormulaRenderer";
 import GeometryRenderer, { geometryAnnotations } from "./GeometryRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
@@ -79,6 +80,7 @@ export const PICTURE_RENDERERS = {
   Board: BoardRenderer,
   CodeTree: CodeTreeRenderer,
   FlowNetwork: FlowNetworkRenderer,
+  Formula: FormulaRenderer,
   Geometry: GeometryRenderer,
   Graph: GraphRenderer,
   GroupedGraph: GroupedGraphRenderer,
@@ -98,6 +100,7 @@ const PICTURE_ANNOTATIONS = {
   Board: boardAnnotations,
   CodeTree: codeTreeAnnotations,
   FlowNetwork: flowAnnotations,
+  Formula: formulaAnnotations,
   Geometry: geometryAnnotations,
   Graph: graphAnnotations,
   GroupedGraph: groupedGraphAnnotations,
