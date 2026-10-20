@@ -505,6 +505,7 @@ test("on SAT's Factor Graph target the gadgets' ids are the picture's own, so a 
   const view = SAT_TO_3SAT_FACTOR_GRAPH_VIEW;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, () => view);
+  await toStep(page, 0);
   await expect(pane(page, "target")).toHaveAttribute("data-picture-type", "BipartiteGraph");
   await expect(page.locator(`${VIEW}-target-note`)).not.toContainText("can't be shown");
   await page.locator("#workbench-phases-solve").click();
@@ -536,6 +537,7 @@ test("a Search Tree pane says gadget links can't be shown there, and fits the tr
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, () => view);
   await page.locator("#workbench-panel-close").click();
+  await toStep(page, 0);
   await expect(page.locator(`${VIEW}-target-note`)).toContainText(
     "Gadget links can't be shown on this picture",
   );
