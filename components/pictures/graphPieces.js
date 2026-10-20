@@ -8,6 +8,7 @@
 
 import Box from "@mui/material/Box";
 import { paletteVars } from "../theme";
+import { GadgetCircle, GadgetRect } from "./gadgetRings";
 import { NODE_RADIUS, outlineDistance } from "./graphLayout";
 import { pictureStateStyle } from "./pictureStates";
 
@@ -139,6 +140,29 @@ export function Ring({ x, y, width, gap, color, dash, strokeWidth = 1.8 }) {
       pointerEvents="none"
     />
   );
+}
+
+/**
+ * #239: a gadget's ring around a node body (a circle, or a pill for a long label), `gap` units
+ * outside it, in the gadget's color (gadgetRings.js). Nothing when `color` is null.
+ */
+export function GadgetNodeRing({ id, color, x, y, width, gap = 5 }) {
+  if (!color) return null;
+  if (width > NODE_RADIUS * 2) {
+    return (
+      <GadgetRect
+        id={id}
+        color={color}
+        x={x - width / 2}
+        y={y - NODE_RADIUS}
+        width={width}
+        height={NODE_RADIUS * 2}
+        rx={NODE_RADIUS}
+        gap={gap}
+      />
+    );
+  }
+  return <GadgetCircle id={id} color={color} cx={x} cy={y} r={NODE_RADIUS} gap={gap} />;
 }
 
 /** A label centred on (x, y). */

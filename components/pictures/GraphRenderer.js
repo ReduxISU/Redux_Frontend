@@ -26,6 +26,11 @@
 // #250: the reader can move any node and bend any edge (diagramEdits.js), freely; the changes
 // stay while the steps play and after Run, and go back to the layout on a new instance or
 // visualization, on a Force / Circle switch, or on Reset layout.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring around
+// their node and a band under their edge. A "missing" line (a phantom) with an `id` (the
+// Reduction View's "Rule says no" pairs) carries it as `data-phantom-id`, can be focused, and
+// is marked like an edge.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
@@ -38,6 +43,7 @@ import {
   offsetAlongNormal,
   useDiagramEdits,
 } from "./diagramEdits";
+import { GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import { layoutGraph, NODE_RADIUS, nodeWidth } from "./graphLayout";
 import {
   autoBow,
@@ -46,6 +52,7 @@ import {
   edgeLook,
   FAINT_EDGE,
   FAINT_FILTER,
+  GadgetNodeRing,
   groupColors,
   NodeBody,
   NodeLabel,
@@ -131,9 +138,20 @@ function tourPositions(order) {
  * @param {Object} props.payload The Graph payload.
  * @param {Object} props.frame The frame to draw.
  * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-export default function GraphRenderer({ idPrefix, name, payload, frame, layoutKey = null }) {
+export default function GraphRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  layoutKey = null,
+  highlightIds,
+  gadgetColors,
+}) {
   const graph = useMemo(() => readGraph(payload), [payload]);
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const defaultLayout = payload?.layout === "circle" ? "circle" : "force";
   const [layoutChoice, setLayoutChoice] = useState(null);
   const layoutMode = layoutChoice ?? defaultLayout;
@@ -236,6 +254,12 @@ export default function GraphRenderer({ idPrefix, name, payload, frame, layoutKe
                 data-state={state}
                 data-traced={traced ? (faint ? "faint" : "trace") : undefined}
               >
+                <GadgetUnderlay
+                  id={edge.id}
+                  color={gadgetOf(edge.id)}
+                  d={geometry.path}
+                  width={look.width}
+                />
                 <path
                   d={geometry.path}
                   fill="none"
@@ -265,6 +289,10 @@ export default function GraphRenderer({ idPrefix, name, payload, frame, layoutKe
                 { directed: graph.directed },
               );
               const line = pictureStateStyle(state).line;
+              // A phantom with an id (a Reduction View's "Rule says no" pair, #239) is a piece:
+              // it can be focused, and a gadget can name it.
+              const phantomId = typeof phantom.id === "string" && phantom.id ? phantom.id : null;
+              const ends = `${graph.labels.get(phantom.a) ?? phantom.a} and ${graph.labels.get(phantom.b) ?? phantom.b}`;
               return (
                 <g
                   // Phantoms have no id of their own; their ends and place in the list do.
@@ -272,8 +300,27 @@ export default function GraphRenderer({ idPrefix, name, payload, frame, layoutKe
                   key={`${phantom.a}|${phantom.b}|${index}`}
                   id={`${idPrefix}-phantom-${index}`}
                   data-phantom={`${phantom.a}|${phantom.b}`}
+                  data-phantom-id={phantomId ?? undefined}
                   data-state={state}
+                  {...(phantomId
+                    ? {
+                        "data-focusable": "",
+                        tabIndex: 0,
+                        role: "button",
+                        "aria-label": `${phantom.label ?? "Not joined"}: ${ends}`,
+                      }
+                    : {})}
                 >
+                  {phantomId && (
+                    // A wide clear stroke to point at: the dashed line alone is a thin target.
+                    <path d={geometry.path} fill="none" stroke="transparent" strokeWidth={14} />
+                  )}
+                  <GadgetUnderlay
+                    id={phantomId}
+                    color={phantomId ? gadgetOf(phantomId) : null}
+                    d={geometry.path}
+                    width={2.4}
+                  />
                   <path
                     d={geometry.path}
                     fill="none"
@@ -377,6 +424,14 @@ export default function GraphRenderer({ idPrefix, name, payload, frame, layoutKe
                   }
                 }}
               >
+                <GadgetNodeRing
+                  id={node.id}
+                  color={gadgetOf(node.id)}
+                  x={p.x}
+                  y={p.y}
+                  width={width}
+                  gap={terminal ? 10 : 5}
+                />
                 <NodeBody
                   x={p.x}
                   y={p.y}

@@ -33,11 +33,17 @@
 // #250: nothing here can be dragged. A row's place is its step (or the instance's order), and a
 // column's is the payload's; a cell of the grid is a pair of prefixes. Moving any of them would
 // only misstate the table.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are ringed just inside
+// their own box, so the ring covers no neighbour and no text: a cell (`data-cell-id`) inside the
+// cell, a row (`data-row-id`) inside its whole band, and a column (`data-column-id`) inside its
+// header cell.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
+import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import {
@@ -191,8 +197,20 @@ function focusIds(frame) {
  *   changed?: string[], arrows?: Array<{from: string, to: string, best: boolean}>,
  *   focus?: string[], widest?: string[]}} props.frame
  * @param {Object[]} [props.frames] Every frame of the run (one layout for all of them).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-export default function TableRenderer({ idPrefix, name, payload, frame, frameIndex, frames = [] }) {
+export default function TableRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  frameIndex,
+  frames = [],
+  highlightIds,
+  gadgetColors,
+}) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
   const plain = frameIndex === null || frameIndex === undefined;
@@ -212,8 +230,18 @@ export default function TableRenderer({ idPrefix, name, payload, frame, frameInd
   const step = plain ? { values } : (frame ?? {});
   const drawing =
     layout.kind === "grid"
-      ? gridDrawing({ layout, step, traced, traceProps, idPrefix, name })
-      : rowsDrawing({ layout, payload, step, traced, traceProps, idPrefix, name, plain });
+      ? gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetOf })
+      : rowsDrawing({
+          layout,
+          payload,
+          step,
+          traced,
+          traceProps,
+          idPrefix,
+          name,
+          plain,
+          gadgetOf,
+        });
 
   // Zoomed in, a step keeps the row or cell it is about in view.
   const focusBoxes = focusIds(step)
@@ -315,7 +343,7 @@ function andList(items) {
   return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 }
 
-function gridDrawing({ layout, step, traced, traceProps, idPrefix, name }) {
+function gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetOf }) {
   const { rows, columns, cell } = layout;
   const values = Array.isArray(step.values) ? step.values : [];
   const valueAt = (i, j) => {
@@ -611,6 +639,16 @@ function gridDrawing({ layout, step, traced, traceProps, idPrefix, name }) {
                   strokeWidth={width}
                   strokeDasharray={dash}
                 />
+                <GadgetRect
+                  id={id}
+                  color={gadgetOf(id)}
+                  x={column.x + 1}
+                  y={row.y + 1}
+                  width={cell - 2}
+                  height={cell - 2}
+                  rx={5}
+                  gap={-3}
+                />
                 {changed.has(id) && state === "Background" && (
                   <rect
                     x={column.x + cell * 0.25}
@@ -850,7 +888,17 @@ function pillTone(key, text) {
   return { ink: paletteVars.text.secondary, line: paletteVars.viz.dim };
 }
 
-function rowsDrawing({ layout, payload, step, traced, traceProps, idPrefix, name, plain }) {
+function rowsDrawing({
+  layout,
+  payload,
+  step,
+  traced,
+  traceProps,
+  idPrefix,
+  name,
+  plain,
+  gadgetOf,
+}) {
   const { columns, rows } = layout;
   const values = Array.isArray(step.values) ? step.values : [];
   const valueAt = (r, c) => {
@@ -1028,6 +1076,19 @@ function rowsDrawing({ layout, payload, step, traced, traceProps, idPrefix, name
           anchor="middle"
         />
       )}
+      {columns.map((column) => (
+        <GadgetRect
+          key={`gadget-${column.id}`}
+          id={column.id}
+          color={gadgetOf(column.id)}
+          x={column.x}
+          y={layout.top}
+          width={column.width}
+          height={HEAD_ROW}
+          rx={3}
+          gap={-3}
+        />
+      ))}
       {columns.map((column) => (
         <Head
           key={column.id}
@@ -1303,6 +1364,16 @@ function rowsDrawing({ layout, payload, step, traced, traceProps, idPrefix, name
                         ownState !== "Background" && !chip ? ownStyle.dash : undefined
                       }
                     />
+                    <GadgetRect
+                      id={id}
+                      color={gadgetOf(id)}
+                      x={column.x}
+                      y={row.y}
+                      width={column.width}
+                      height={ROW}
+                      rx={4}
+                      gap={-3}
+                    />
                     {body}
                     {isChanged && (
                       <rect
@@ -1329,6 +1400,17 @@ function rowsDrawing({ layout, payload, step, traced, traceProps, idPrefix, name
                   </g>
                 );
               })}
+              {/* Last, so the row's cells don't cover it. */}
+              <GadgetRect
+                id={row.id}
+                color={gadgetOf(row.id)}
+                x={layout.left}
+                y={row.y}
+                width={width}
+                height={ROW}
+                rx={3}
+                gap={-2}
+              />
             </g>
           );
         })}

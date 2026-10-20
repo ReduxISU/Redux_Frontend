@@ -22,12 +22,16 @@
 // apart lines that cross, as a Bipartite Graph's nodes can; its triples' lines follow. It stays
 // in its column, between the first and the last row: which set a name is in is the instance.
 // The list does not move. Reset layout puts the names back.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are marked: a name gets
+// a ring outside its pill, and a triple a ring around its list row and a band under its line.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
 import { makeEditor, nodeDragProps, useDiagramEdits } from "./diagramEdits";
+import { GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import { edgeLook, FAINT_EDGE, FAINT_FILTER, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import {
@@ -63,8 +67,19 @@ function plural(count, word) {
  * @param {Object} props.payload The Tripartite Matching payload.
  * @param {Object} props.frame The frame to draw.
  * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-export default function TripartiteRenderer({ idPrefix, name, payload, frame, layoutKey = null }) {
+export default function TripartiteRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  layoutKey = null,
+  highlightIds,
+  gadgetColors,
+}) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
   const layout = useMemo(
@@ -219,7 +234,13 @@ export default function TripartiteRenderer({ idPrefix, name, payload, frame, lay
               triple.lane,
             );
             return (
-              <g key={triple.id}>
+              <g key={triple.id} style={faint ? { filter: FAINT_FILTER } : undefined}>
+                <GadgetUnderlay
+                  id={triple.id}
+                  color={gadgetOf(triple.id)}
+                  d={d}
+                  width={look.width}
+                />
                 <path
                   d={d}
                   data-triple-line={triple.id}
@@ -282,6 +303,15 @@ export default function TripartiteRenderer({ idPrefix, name, payload, frame, lay
                   stroke={isTraced ? TRACE_COLOR : look.line}
                   strokeWidth={isTraced ? 3 : look.strokeWidth}
                   strokeDasharray={isTraced ? undefined : look.dash}
+                />
+                <GadgetRect
+                  id={element.id}
+                  color={gadgetOf(element.id)}
+                  x={element.x - element.width / 2}
+                  y={element.y - PILL_HEIGHT / 2}
+                  width={element.width}
+                  height={PILL_HEIGHT}
+                  rx={PILL_HEIGHT / 2}
                 />
                 <text
                   x={element.x}
@@ -366,6 +396,16 @@ export default function TripartiteRenderer({ idPrefix, name, payload, frame, lay
                   }
                   strokeWidth={isTraced ? 2.4 : 1.4}
                   strokeDasharray={isTraced ? undefined : style.dash}
+                />
+                <GadgetRect
+                  id={triple.id}
+                  color={gadgetOf(triple.id)}
+                  x={triple.row.x}
+                  y={triple.row.y - (LIST_ROW - 4) / 2}
+                  width={triple.row.width}
+                  height={LIST_ROW - 4}
+                  rx={5}
+                  gap={2}
                 />
                 <text
                   x={triple.row.idX}

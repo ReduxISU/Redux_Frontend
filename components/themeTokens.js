@@ -245,8 +245,14 @@ export const THEME_TOKENS = {
       dim: "#6B6B6B",
       // #229 stage 4: the ring (nodes, literals, clauses) and underlay (edges) a gadget row
       // draws on the pictures while it is hovered or focused. Reduce mode's gold, which no
-      // color key uses, so it reads as "this gadget" and not as an answer or a step.
+      // color key uses, so it reads as "this gadget" and not as an answer or a step. #239: it
+      // must also stay clearly apart from the orange hover trace (brand.line);
+      // scripts/check-contrast.mjs measures the distance between them.
       gadget: ISU_GOLD,
+      // #239: the Reduction View's Color mode gives each gadget one of these, cycling: gold,
+      // pink, cyan and violet, none of them a picture state's hue, each at least 3:1 on the
+      // canvas, and far enough apart to tell by eye (check-contrast.mjs measures both).
+      gadgetPalette: { c0: ISU_GOLD, c1: "#F472B6", c2: "#22D3EE", c3: "#C084FC" },
       state: DARK_PICTURE_STATES,
       group: groupFamilies(GROUP_FILLS),
       label: WHITE,
@@ -319,7 +325,10 @@ export const THEME_TOKENS = {
       nodeBorder: "#525252",
       edge: "#8A8A8A",
       dim: "#8A8A8A",
-      gadget: "#B45309",
+      // #239: a dark olive gold, not the amber #B45309 it was, which sat right on top of the
+      // orange hover trace (#B84A0E) here.
+      gadget: "#7A6300",
+      gadgetPalette: { c0: "#7A6300", c1: "#BE185D", c2: "#0E7490", c3: "#7E22CE" },
       state: LIGHT_PICTURE_STATES,
       group: groupFamilies(LIGHT_GROUP_LINES),
       label: BLACK,
