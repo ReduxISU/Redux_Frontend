@@ -5,6 +5,10 @@
 // Execute, Verify), and Details and Instance each have their own Show all / Show less. Reset
 // layout shows everything again and collapses Details and Instance.
 //
+// #279 stage 3: it also keeps whether the viewer opened or closed Algorithm Steps (`stepsOpen`).
+// Until they do it is null, and Algorithm Steps opens by itself once a run gives it steps; once
+// they do, their choice holds until Reset layout, which makes it null again.
+//
 // The layout is the viewer's own, so it is kept in this browser (localStorage) for the next
 // visit, for every problem alike. Every read and write is wrapped: with storage blocked (private
 // windows, previews) the layout lasts for the page and starts from the defaults.
@@ -30,6 +34,7 @@ function defaultLayout() {
   return {
     shown: Object.fromEntries(LAYOUT_KEYS.map((key) => [key, true])),
     expanded: Object.fromEntries(EXPANDABLE_PANES.map((key) => [key, false])),
+    stepsOpen: null,
   };
 }
 
@@ -43,6 +48,7 @@ function readLayout() {
         if (typeof stored?.[group]?.[key] === "boolean") layout[group][key] = stored[group][key];
       }
     }
+    if (typeof stored?.stepsOpen === "boolean") layout.stepsOpen = stored.stepsOpen;
   } catch {
     // Storage blocked or unreadable: the defaults.
   }
@@ -64,6 +70,8 @@ function writeLayout(layout) {
  *   toggle: (key: string) => void,
  *   show: (key: string) => void,
  *   setExpanded: (key: string, expanded: boolean) => void,
+ *   stepsOpen: boolean|null,
+ *   setStepsOpen: (open: boolean) => void,
  *   reset: () => void,
  * }}
  */
@@ -98,7 +106,20 @@ export default function useWorkbenchLayout() {
       update((current) => ({ ...current, expanded: { ...current.expanded, [key]: expanded } })),
     [update],
   );
+  const setStepsOpen = useCallback(
+    (open) => update((current) => ({ ...current, stepsOpen: open })),
+    [update],
+  );
   const reset = useCallback(() => update(() => defaultLayout()), [update]);
 
-  return { shown: layout.shown, expanded: layout.expanded, toggle, show, setExpanded, reset };
+  return {
+    shown: layout.shown,
+    expanded: layout.expanded,
+    toggle,
+    show,
+    setExpanded,
+    stepsOpen: layout.stepsOpen,
+    setStepsOpen,
+    reset,
+  };
 }
