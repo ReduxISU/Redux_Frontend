@@ -42,6 +42,12 @@
 // the gadgets the step made, in plain words, and the step's bound when it sets one. A dashed
 // "Rule says no" line is a piece too (lib/reductionView.js gives it to its edge rule). A picture
 // that draws none of the pieces a side's gadgets name (a Search Tree) says links can't be shown.
+//
+// #279 stage 3 (board F): each side is a picture frame (components/workbench/PictureFrame.js):
+// "Source · <problem>" and "Target · <problem>" with the Visualization Type, the zoom buttons
+// and Full screen in its caption, then the side's "Problem:" and "Algorithm:" lines, then the
+// picture at the frames' shared height, so the two pictures share their top and bottom lines.
+// The phase bar is the Algorithm Steps timeline, Build ── Solve ── Map back.
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -62,12 +68,13 @@ import {
   unbuiltIds,
 } from "../../lib/reductionView";
 import { paletteVars } from "../theme";
-import { COMPACT_MEDIA, WORKSPACE_NARROW } from "../workbench/layout";
+import PictureFrame, { pictureGridSx } from "../workbench/PictureFrame";
 import { GADGET_PALETTE } from "./gadgetRings";
 import { FAINT_FILTER, PictureToggle } from "./graphPieces";
 import PictureCanvas from "./PictureCanvas";
 
 const ARROW = "↦";
+const TIMELINE_RULE = "──";
 const GADGET_RING = paletteVars.viz.gadget;
 
 /** The Plain / Color switch's choices (#239). */
@@ -172,6 +179,9 @@ function ReductionPane({
   hot,
   gadgetColors,
   onPoint,
+  showing,
+  fullScreenTitle,
+  timeline,
 }) {
   const ref = useRef(null);
   // The renderer draws the marks (#239): the linked pieces while a link is shown.
@@ -201,41 +211,19 @@ function ReductionPane({
   };
 
   return (
-    <Box
-      component="section"
-      aria-labelledby={`${idPrefix}-title`}
-      sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
+    <PictureFrame
+      id={`${idPrefix}-frame`}
+      title={title}
+      titleId={`${idPrefix}-title`}
+      typeControl={typeControl}
+      showing={showing}
+      fullScreenTitle={fullScreenTitle}
+      note={note && !loading ? note : null}
+      noteId={`${idPrefix}-note`}
+      inGrid
+      timeline={timeline}
+      align={loading ? "center" : "stretch"}
     >
-      {/* The title wraps beside the dropdown rather than pushing it to a line of its own, so
-          both panes' headers are the dropdown's height and the pictures line up side by side. */}
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "nowrap",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          gap: 1,
-          [COMPACT_MEDIA]: { flexWrap: "wrap" },
-        }}
-      >
-        <Box
-          component="h3"
-          id={`${idPrefix}-title`}
-          sx={{
-            m: 0,
-            minWidth: 0,
-            pb: typeControl ? 1.25 : 0,
-            fontSize: "0.75rem",
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "text.secondary",
-          }}
-        >
-          {title}
-        </Box>
-        {typeControl}
-      </Box>
       {loading ? (
         <Box
           id={idPrefix}
@@ -243,16 +231,11 @@ function ReductionPane({
           data-loading="true"
           role="status"
           sx={{
-            minHeight: 320,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: 1.5,
             color: "text.secondary",
-            backgroundColor: "surface.input",
-            borderRadius: "10px",
-            p: 2,
-            boxSizing: "border-box",
           }}
         >
           <CircularProgress size={18} aria-hidden="true" />
@@ -278,11 +261,8 @@ function ReductionPane({
           }}
           sx={{
             minWidth: 0,
-            backgroundColor: "surface.input",
-            borderRadius: "10px",
-            p: 2,
-            boxSizing: "border-box",
-            [COMPACT_MEDIA]: { p: 1 },
+            display: "flex",
+            flexDirection: "column",
             "& [data-rv-built='no']": { visibility: "hidden" },
             "& [data-rv-link='faint']": {
               filter: `${FAINT_FILTER} !important`,
@@ -305,65 +285,75 @@ function ReductionPane({
           />
         </Box>
       )}
-      {note && !loading && (
-        <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
-          {note}
-        </Box>
-      )}
-    </Box>
+    </PictureFrame>
   );
 }
 
 /**
- * The phase bar: "1 · Build", "2 · Solve", "3 · Map back", the current one marked. Each jumps to
- * its phase's first step. Sits with the step controls, as the mockup's stepper has it.
+ * The Algorithm Steps timeline of a reduction run (#279 stage 3): Build ── Solve ── Map back.
+ * The current step's phase is marked; each label jumps to its phase's first step; a phase with no
+ * steps yet is greyed (dashed) and can't be pressed, its `hints` entry saying why.
  * @param {Object} props
  * @param {string} props.idPrefix
  * @param {Object[]} props.frames The view's frames.
  * @param {number} props.frameIndex The step on screen.
  * @param {(index: number) => void} props.onStepChange
+ * @param {{[phase: string]: string}} [props.hints] Why a phase has no steps yet.
  */
-export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }) {
+export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange, hints = {} }) {
   const starts = phaseStarts(frames);
   const current = frames[frameIndex]?.phase ?? null;
   return (
     <Box
       id={idPrefix}
       role="group"
-      aria-label="Reduction phases"
+      aria-label="Phases of the reduction run"
       sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}
     >
       {REDUCTION_PHASES.map((phase, index) => {
         const start = starts[phase.key];
         const here = phase.key === current;
+        const off = start === undefined;
         return (
-          <Box
-            key={phase.key}
-            component="button"
-            type="button"
-            id={`${idPrefix}-${phase.key}`}
-            data-phase={phase.key}
-            aria-current={here ? "step" : undefined}
-            disabled={start === undefined}
-            title={phase.about}
-            onClick={() => onStepChange(start)}
-            sx={{
-              minHeight: 36,
-              px: 1.5,
-              borderRadius: "999px",
-              border: "1px solid",
-              borderColor: here ? "brand.line" : "border.main",
-              boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.line}` : "none",
-              backgroundColor: here ? "surface.raised" : "surface.main",
-              color: here ? "text.primary" : "text.secondary",
-              fontFamily: "inherit",
-              fontSize: "0.8125rem",
-              fontWeight: here ? 700 : 500,
-              cursor: "pointer",
-              "&:disabled": { cursor: "not-allowed", color: "text.disabled" },
-            }}
-          >
-            {`${index + 1} · ${phase.label}`}
+          <Box key={phase.key} component="span" sx={{ display: "contents" }}>
+            {index > 0 && (
+              <Box component="span" aria-hidden="true" sx={{ color: "text.secondary" }}>
+                {TIMELINE_RULE}
+              </Box>
+            )}
+            <Box
+              component="button"
+              type="button"
+              id={`${idPrefix}-${phase.key}`}
+              data-phase={phase.key}
+              aria-current={here ? "step" : undefined}
+              disabled={off}
+              title={
+                off ? (hints[phase.key] ?? phase.about) : `Go to the first ${phase.label} step`
+              }
+              onClick={() => onStepChange(start)}
+              sx={{
+                minHeight: 36,
+                px: 1.5,
+                borderRadius: "999px",
+                border: "1px solid",
+                borderColor: here ? "brand.line" : "border.main",
+                boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.line}` : "none",
+                backgroundColor: here ? "surface.raised" : "surface.main",
+                color: here ? "text.primary" : "text.secondary",
+                fontFamily: "inherit",
+                fontSize: "0.8125rem",
+                fontWeight: here ? 700 : 500,
+                cursor: "pointer",
+                "&:disabled": {
+                  cursor: "not-allowed",
+                  borderStyle: "dashed",
+                  color: "text.secondary",
+                },
+              }}
+            >
+              {phase.label}
+            </Box>
           </Box>
         );
       })}
@@ -557,6 +547,8 @@ export default function ReductionView({
   loading = null,
   colorMode = "plain",
   onColorMode = null,
+  sides = {},
+  timeline = null,
 }) {
   const { source, target, gadgets } = view;
   const sourceFrames = useMemo(
@@ -700,20 +692,14 @@ export default function ReductionView({
       data-build-reveal={target.buildReveal}
       sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
     >
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)",
-          alignItems: "stretch",
-          gap: "10px",
-          // #279: stacked by the Workspace's own width, not the window's.
-          [WORKSPACE_NARROW]: { gridTemplateColumns: "minmax(0, 1fr)" },
-        }}
-      >
+      <Box sx={pictureGridSx}>
         <ReductionPane
           idPrefix={`${idPrefix}-source`}
           which="source"
-          title={`${source.problem} · the instance you gave`}
+          title={sides.source?.title ?? `Source · ${source.problem}`}
+          showing={sides.source?.showing ?? null}
+          fullScreenTitle={sides.source?.fullScreenTitle ?? null}
+          timeline={timeline}
           typeControl={typeControls.source ?? null}
           loading={loading}
           type={source.type}
@@ -728,24 +714,13 @@ export default function ReductionView({
           gadgetColors={colors?.source}
           onPoint={point}
         />
-        <Box
-          aria-hidden="true"
-          sx={{
-            alignSelf: "center",
-            justifySelf: "center",
-            fontSize: "1.5rem",
-            lineHeight: 1,
-            color: "text.secondary",
-            transform: "none",
-            [WORKSPACE_NARROW]: { transform: "rotate(90deg)" },
-          }}
-        >
-          {ARROW}
-        </Box>
         <ReductionPane
           idPrefix={`${idPrefix}-target`}
           which="target"
-          title={`${target.problem} · built by the reduction`}
+          title={sides.target?.title ?? `Target · ${target.problem}`}
+          showing={sides.target?.showing ?? null}
+          fullScreenTitle={sides.target?.fullScreenTitle ?? null}
+          timeline={timeline}
           typeControl={typeControls.target ?? null}
           loading={loading}
           note={joinNotes(targetNote, linkNote("target"))}

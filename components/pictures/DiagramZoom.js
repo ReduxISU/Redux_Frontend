@@ -48,10 +48,18 @@
 // view. At fit everything is in view, so it does nothing there: every picture opens at fit.
 // With `readableScale` too, zooming in goes on past MAX_ZOOM times fit when that is not enough
 // to reach the scale the picture's text reads at (a wide search tree on a phone).
+//
+// #279 stage 3: inside the problem page's picture frame (components/workbench/PictureFrame.js,
+// found through PictureToolsContext) the zoom buttons are drawn into the frame's caption, beside
+// Full screen, and the picture area fills the frame's height (its `data-zoom-area` mark lets the
+// frame grow every box between them) rather than following the drawing's shape. Outside a frame
+// nothing changes.
 
 import Box from "@mui/material/Box";
-import { useEffect, useRef, useState } from "react";
-import { COMPACT_MEDIA } from "../workbench/layout";
+import { useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { COMPACT_MEDIA, WORKSPACE_NARROW } from "../workbench/layout";
+import { PictureToolsContext } from "../workbench/PictureFrame";
 import DiagramSvg from "./DiagramSvg";
 import { visuallyHiddenSx } from "./pictureSx";
 
@@ -336,6 +344,8 @@ export default function DiagramZoom({
   children,
 }) {
   const svgRef = useRef(null);
+  // #279 stage 3: the picture frame this diagram sits in, if any.
+  const frame = useContext(PictureToolsContext);
   // The picture area's size in CSS px, measured (null until it is).
   const areaRef = useRef(null);
   const [area, setArea] = useState(null);
@@ -343,8 +353,11 @@ export default function DiagramZoom({
     const element = areaRef.current;
     if (!element) return undefined;
     const measure = () => {
-      const width = element.clientWidth;
-      const height = element.clientHeight;
+      // The exact size, fractions included, so a drawing laid out to the box's whole pixels
+      // (useBoxWidth.js) fits at its own size.
+      const rect = element.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
       setArea((current) =>
         current && current.width === width && current.height === height
           ? current
@@ -686,96 +699,116 @@ export default function DiagramZoom({
   const h = box.height / view.k;
   const percent = Math.round(view.k * 100);
 
+  const zoomGroup = (
+    <Box
+      role="group"
+      aria-label="Zoom"
+      sx={{
+        display: "inline-flex",
+        border: "1px solid",
+        borderColor: "border.main",
+        borderRadius: "8px",
+        overflow: "hidden",
+      }}
+    >
+      <Box
+        component="button"
+        type="button"
+        id={`${idPrefix}-zoom-out`}
+        aria-label="Zoom out"
+        disabled={!zoomed}
+        onClick={() => zoomBy(1 / BUTTON_STEP)}
+        sx={zoomButtonSx}
+      >
+        −
+      </Box>
+      <Box
+        component="button"
+        type="button"
+        id={`${idPrefix}-zoom-in`}
+        aria-label="Zoom in"
+        disabled={view.k >= box.maxZoom - 0.001}
+        onClick={() => zoomBy(BUTTON_STEP)}
+        sx={zoomButtonSx}
+      >
+        +
+      </Box>
+      <Box
+        component="button"
+        type="button"
+        id={`${idPrefix}-zoom-reset`}
+        aria-label={`Fit the whole diagram (now ${percent}%)`}
+        disabled={!zoomed}
+        onClick={() => setStored(FIT)}
+        sx={zoomButtonSx}
+      >
+        Fit
+      </Box>
+      {editor && (
+        <Box
+          component="button"
+          type="button"
+          id={`${idPrefix}-layout-reset`}
+          aria-label="Reset layout: put every moved node and bent edge back"
+          disabled={!editor.edited}
+          onClick={() => {
+            editor.reset();
+            setAnnouncement("Layout reset.");
+          }}
+          sx={zoomButtonSx}
+        >
+          Reset layout
+        </Box>
+      )}
+    </Box>
+  );
+
   return (
     <Box
       id={`${idPrefix}-zoom`}
       data-zoom={view.k.toFixed(2)}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1.5 }}
     >
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 1,
-        }}
-      >
+      {frame?.slot && createPortal(zoomGroup, frame.slot)}
+      {(!frame || toolbar) && (
         <Box
-          role="group"
-          aria-label="Zoom"
           sx={{
-            display: "inline-flex",
-            border: "1px solid",
-            borderColor: "border.main",
-            borderRadius: "8px",
-            overflow: "hidden",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
           }}
         >
-          <Box
-            component="button"
-            type="button"
-            id={`${idPrefix}-zoom-out`}
-            aria-label="Zoom out"
-            disabled={!zoomed}
-            onClick={() => zoomBy(1 / BUTTON_STEP)}
-            sx={zoomButtonSx}
-          >
-            −
-          </Box>
-          <Box
-            component="button"
-            type="button"
-            id={`${idPrefix}-zoom-in`}
-            aria-label="Zoom in"
-            disabled={view.k >= box.maxZoom - 0.001}
-            onClick={() => zoomBy(BUTTON_STEP)}
-            sx={zoomButtonSx}
-          >
-            +
-          </Box>
-          <Box
-            component="button"
-            type="button"
-            id={`${idPrefix}-zoom-reset`}
-            aria-label={`Fit the whole diagram (now ${percent}%)`}
-            disabled={!zoomed}
-            onClick={() => setStored(FIT)}
-            sx={zoomButtonSx}
-          >
-            Fit
-          </Box>
-          {editor && (
-            <Box
-              component="button"
-              type="button"
-              id={`${idPrefix}-layout-reset`}
-              aria-label="Reset layout: put every moved node and bent edge back"
-              disabled={!editor.edited}
-              onClick={() => {
-                editor.reset();
-                setAnnouncement("Layout reset.");
-              }}
-              sx={zoomButtonSx}
-            >
-              Reset layout
-            </Box>
-          )}
+          {!frame && zoomGroup}
+          {toolbar}
         </Box>
-        {toolbar}
-      </Box>
+      )}
       <Box
         ref={areaRef}
         id={`${idPrefix}-area`}
+        data-zoom-area=""
         sx={{
           width: "100%",
           // Measured: the drawing's shape at this width. Before that, the same by CSS.
           height: naturalHeight ?? undefined,
           aspectRatio: naturalHeight ? undefined : `${drawing.width} / ${drawing.height}`,
           minHeight: MIN_AREA_HEIGHT,
-          maxHeight: AREA_MAX_HEIGHT,
-          [COMPACT_MEDIA]: { maxHeight: AREA_MAX_HEIGHT_COMPACT },
           overflow: "hidden",
+          // In a picture frame the area fills the frame's height, whatever the drawing's shape.
+          ...(frame
+            ? {
+                flex: "1 1 auto",
+                maxHeight: "none",
+                // Stacked frames take the drawing's own shape, up to the screen, as outside a
+                // frame (PictureFrame.js), so a step's caption never changes the picture's size.
+                [WORKSPACE_NARROW]: { flex: "none", maxHeight: AREA_MAX_HEIGHT },
+                [COMPACT_MEDIA]: { maxHeight: AREA_MAX_HEIGHT_COMPACT },
+              }
+            : {
+                maxHeight: AREA_MAX_HEIGHT,
+                [COMPACT_MEDIA]: { maxHeight: AREA_MAX_HEIGHT_COMPACT },
+              }),
         }}
       >
         <DiagramSvg
