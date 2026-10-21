@@ -252,7 +252,7 @@ export const THEME_TOKENS = {
       warn: "#FBBF24",
       // #279 stage 2: a run that timed out (amber, apart from a server error's red).
       warnText: "#FBBF24",
-      warnBg: "rgba(251, 191, 36, 0.12)",
+      warnBg: "#2B2410",
       onStatus: BLACK,
     },
     facet: DARK_FACET_FAMILIES,
