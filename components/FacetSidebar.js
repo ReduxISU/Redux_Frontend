@@ -228,6 +228,8 @@ function FacetFilterGroup({ facet, options, selected, onChange, loading }) {
  * @param {string[]} [props.problemNames] T59 (#134). Forwarded unchanged to
  *   ReductionReachabilityFilter's own `problemNames` prop — every real
  *   problem name currently in the catalog index.
+ * @param {Map<string, string>} [props.codeToName] #279. Forwarded to
+ *   ReductionReachabilityFilter so its picker finds a problem by its key too.
  * @param {string|null} [props.reachabilitySource] T59 (#134).
  * @param {"oneHop"|"anyHops"} [props.reachabilityMode] T59 (#134).
  * @param {(next: string|null) => void} [props.onReachabilitySourceChange]
@@ -242,6 +244,7 @@ export default function FacetSidebar({
   onClearFilters,
   loading = false,
   problemNames = [],
+  codeToName,
   reachabilitySource = null,
   reachabilityMode = "oneHop",
   onReachabilitySourceChange,
@@ -284,6 +287,7 @@ export default function FacetSidebar({
           "reset everything" gesture that button already represents. */}
       <ReductionReachabilityFilter
         problemNames={problemNames}
+        codeToName={codeToName}
         source={reachabilitySource}
         mode={reachabilityMode}
         onSourceChange={onReachabilitySourceChange}
