@@ -66,7 +66,8 @@ function isAbort(error) {
  *   "certificate".
  * @returns {{headline: string, detail: string, expected?: string, code?: string}} `code` is
  *   set to "instance_parse_error" when Redux could not read the instance, so the workbench
- *   (#229) can mark the instance itself as the problem.
+ *   (#229) can mark the instance itself as the problem, and to "timeout" when the run hit the
+ *   proxy's time limit (#279 stage 2).
  */
 export function describeComputeFailure(error, subject = "instance") {
   if (!(error instanceof ReduxRequestError)) {
@@ -95,6 +96,8 @@ export function describeComputeFailure(error, subject = "instance") {
       };
     case 504:
       return {
+        // #279 stage 2: a timed-out run is told apart from a failed one (amber, not red).
+        code: "timeout",
         headline: "This took too long",
         detail: `Redux did not finish within ${PROXY_COMPUTE_TIMEOUT_SECONDS} seconds, so the request was given up on. A smaller instance, or a faster solver if this problem declares one, will usually come back in time.`,
       };
@@ -168,6 +171,8 @@ export function describeComputeFailure(error, subject = "instance") {
  *   result: unknown,
  *   failure: {headline: string, detail: string, expected?: string}|null,
  *   elapsedMs: number,
+ *   startedAt: number,
+ *   kept: {result: unknown, elapsedMs: number}|null,
  *   isRunning: boolean,
  *   start: (perform: (signal: AbortSignal) => Promise<unknown>) => Promise<void>,
  *   cancel: () => void,
@@ -179,6 +184,11 @@ export function useComputeRequest({ subject = "instance" } = {}) {
   const [result, setResult] = useState(null);
   const [failure, setFailure] = useState(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  // #279 stage 2: when the request in flight started (for a running clock), and the last
+  // result that came back with its time, kept through a later start, Cancel or failure
+  // ("Cancelled keeps the last result") and cleared only by reset.
+  const [startedAt, setStartedAt] = useState(0);
+  const [kept, setKept] = useState(null);
 
   // Bumped on every start, cancel and reset. A settled request compares the
   // number it was given against this one and stays quiet if they differ,
@@ -206,11 +216,14 @@ export function useComputeRequest({ subject = "instance" } = {}) {
       setElapsedMs(0);
 
       const startedAt = Date.now();
+      setStartedAt(startedAt);
       try {
         const value = await perform(controller.signal);
         if (requestIdRef.current !== requestId) return;
-        setElapsedMs(Date.now() - startedAt);
+        const took = Date.now() - startedAt;
+        setElapsedMs(took);
         setResult(value);
+        setKept({ result: value, elapsedMs: took });
         setStatus(COMPUTE_DONE);
       } catch (error) {
         if (requestIdRef.current !== requestId) return;
@@ -245,6 +258,7 @@ export function useComputeRequest({ subject = "instance" } = {}) {
     setResult(null);
     setFailure(null);
     setElapsedMs(0);
+    setKept(null);
   }, [abortInFlight]);
 
   return {
@@ -252,6 +266,8 @@ export function useComputeRequest({ subject = "instance" } = {}) {
     result,
     failure,
     elapsedMs,
+    startedAt,
+    kept,
     isRunning: status === COMPUTE_RUNNING,
     start,
     cancel,
