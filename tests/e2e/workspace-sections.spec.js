@@ -6,7 +6,8 @@
 // the algorithm and the latest run's chip, Verify each side's latest verdict. What a section holds
 // survives collapsing, the layout remembers it through a reload until Reset layout, Check it opens
 // a collapsed Verify, and Algorithm Steps opening by itself after a run never opens a collapsed
-// Visualization.
+// Visualization. Collapsed, every pane's and section's one line starts at one x, Instance's field on
+// its title's line.
 //
 // The catalog comes from the real backend, like the rest of the suite; every compute request is
 // answered here (see workbench.spec.js for why).
@@ -247,4 +248,53 @@ test("at phone width a collapsed section's summary wraps and nothing scrolls sid
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("collapsed, Instance's field sits on its title's line, and it and every summary start at Details' x", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await answerCompute(page);
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  const field = page.locator("#workbench-instance-full-instance");
+  const leftEdges = async () => {
+    const lines = [
+      page.locator("#workbench-details-summary"),
+      field,
+      ...SECTIONS.map((key) => summary(page, key)),
+    ];
+    return Promise.all(lines.map(async (line) => (await line.boundingBox()).x));
+  };
+
+  for (const mode of ["solve", "reduce"]) {
+    if (mode === "reduce") {
+      // The mode switch is in Execute, collapsed by the Solve round.
+      await setExpanded(page, "execute", true);
+      await page.locator("#workbench-mode-reduce").click();
+      await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
+    }
+    for (const key of SECTIONS) await setExpanded(page, key, false);
+
+    // Instance's one-line field: on the title's line, to the right of the title, still editable.
+    const heading = await page.locator("#workbench-instance-pane-heading").boundingBox();
+    const box = await field.boundingBox();
+    expect(box.x).toBeGreaterThan(heading.x + heading.width);
+    expect(box.y).toBeLessThan(heading.y + heading.height);
+    expect(box.y + box.height).toBeGreaterThan(heading.y);
+    await expect(field).toBeEditable();
+
+    // One tab stop: Details' summary, Instance's field and the three sections' summaries.
+    const [details, ...rest] = await leftEdges();
+    for (const x of rest) expect(Math.abs(x - details)).toBeLessThanOrEqual(1);
+  }
+
+  // Typed text survives Show all and Show less: it is the same field throughout.
+  const edited = "(x1 | x2 | !x3)";
+  await field.fill(edited);
+  await page.locator("#workbench-instance-expand").click();
+  await expect(field).toHaveAttribute("rows", "3");
+  await expect(field).toHaveValue(edited);
+  await page.locator("#workbench-instance-expand").click();
+  await expect(field).toHaveAttribute("rows", "1");
+  await expect(field).toHaveValue(edited);
 });
