@@ -2918,6 +2918,8 @@ test("Grouped Graph: one cluster per clause, its literals, complement edges and 
   await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="complement"]`)).toHaveCount(
     payload.edges.length,
   );
+  // #279: the chips come with a run (plain until answered).
+  await runToFrame(page, capture, 0);
   await expect(page.locator(`${CLAUSES}-graph [data-variable-id]`)).toHaveCount(
     payload.variables.length,
   );
@@ -2948,13 +2950,23 @@ test("Grouped Graph: before Run the clause graph is the plain formula, and step 
   await expect(graph.locator("[data-node-id]")).toHaveCount(capture.payload.nodes.length);
   await expect(graph.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
   await expect(graph.locator("[data-tried]")).toHaveCount(0);
-  await expect(graph.locator('[data-variable-id]:not([data-value="unassigned"])')).toHaveCount(0);
+  // #279: plain until answered, so no variable chips (no "-" values) before Run.
+  await expect(graph.locator('[data-layer="variables"]')).toHaveCount(0);
+  await expect(graph.locator("[data-variable-id]")).toHaveCount(0);
   await expect(page.locator(CAPTION)).toHaveCount(0);
   await expect(legendBody(page)).not.toContainText("Ring (the variable being tried)");
 
+  // The chips' room stays: the drawing keeps its height (the viewBox's width follows the pane's
+  // shape), and every node is in the same place at step 1.
+  const svg = page.locator(`${CLAUSES}-svg`);
+  const vertical = async () =>
+    (await svg.getAttribute("viewBox")).split(" ").filter((_, i) => i % 2);
+  const height = await vertical();
   const before = await nodeCentres(page, `${CLAUSES}-graph`);
   await runToFrame(page, capture, 0);
   await expect(variableChip(page, "v:x1")).toHaveAttribute("data-tried", "true");
+  await expect(graph.locator("[data-variable-id]")).toHaveCount(capture.payload.variables.length);
+  expect(await vertical()).toEqual(height);
   expect(await nodeCentres(page, `${CLAUSES}-graph`)).toEqual(before);
 });
 
@@ -3033,7 +3045,10 @@ test("Grouped Graph: hovering a literal or focusing a variable traces that varia
     "trace",
   );
 
+  // The chips come with a run (#279); the last step's trace works the same way.
   await page.mouse.move(0, 0);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
   await variableChip(page, "v:x2").focus();
   await expect(literal(page, "c0-1")).toHaveAttribute("data-traced", "trace");
   await expect(literal(page, "c0-0")).toHaveAttribute("data-traced", "faint");
@@ -3056,7 +3071,10 @@ for (const scheme of ["light", "dark"]) {
       // The whole formula fits the width it has, at every width: nothing scrolls sideways.
       await expectFits(page, `${CLAUSES}-svg`);
       await expect(page.locator(`${CLAUSES}-zoom`)).toHaveAttribute("data-zoom", "1.00");
-      // An unassigned variable's chip text follows the theme.
+      // An unassigned variable's chip text follows the theme. The chips come with a run (#279);
+      // on its first step x3 is not assigned yet.
+      await runToFrame(page, SAT3_CLAUSE_GRAPH_FRAMES, 0);
+      await expectFits(page, `${CLAUSES}-svg`);
       const ink = await variableChip(page, "v:x3")
         .locator("text")
         .evaluate((el) => getComputedStyle(el).fill);
