@@ -35,7 +35,7 @@
 
 import Box from "@mui/material/Box";
 import { createContext, useEffect, useState } from "react";
-import { WORKSPACE_NARROW } from "./layout";
+import { COMPACT_MEDIA, WORKSPACE_NARROW } from "./layout";
 
 /** A picture's height: about 62% of the window's, never under 360 px or over 680 px. */
 export const PICTURE_HEIGHT = "clamp(360px, 62vh, 680px)";
@@ -151,7 +151,9 @@ export default function PictureFrame({
     border: "1px solid",
     borderColor: "border.soft",
     borderRadius: "12px",
-    p: 1.5,
+    p: 2,
+    // Phones and tablets keep the room for the picture.
+    [COMPACT_MEDIA]: { p: 1 },
     boxSizing: "border-box",
   };
   const gridSx = inGrid
