@@ -52,7 +52,9 @@
 // circuit at its own size.
 // #270: the Formula renderer (SAT and 3SAT) at the end: a box per clause with ∨ inside and ∧
 // between, the chips, every step's states and marks, subscripts and the False strike, wrapping,
-// the trace, and widths from a phone to a desktop in both themes.
+// the trace, and widths from a phone to a desktop in both themes. #278: the operators and the
+// Legend's line follow the payload's layout (cnf, dnf, or none named), and every text in the
+// drawing belongs to a piece.
 // #271: the Nested Set renderer (Set Cover, Exact Cover, Hitting Set) after it: the dots on a
 // circle and a region per set, names clear of everything, every step's states and ×2 hits, each
 // fallback to the set list and the Layout switch, the trace, and widths in both themes.
@@ -8379,6 +8381,12 @@ for (const [problem, capture] of [
     for (const text of await root.locator('[data-connective="or"]').allTextContents()) {
       expect(text).toBe("∨");
     }
+    // CNF (#278): ∧ is the operator between the boxes, ∨ the one inside them.
+    await expect(root.locator('[data-join="outer"]:not([data-connective="and"])')).toHaveCount(0);
+    await expect(root.locator('[data-join="inner"]:not([data-connective="or"])')).toHaveCount(0);
+    await expect(legendBody(page)).toContainText(
+      "Boxes are clauses, joined by ∧; the literals inside are joined by ∨ (CNF).",
+    );
     const { clauses, operators } = await formulaBoxes(page);
     for (const op of operators) {
       const box = clauses[op.clause];
@@ -8425,7 +8433,9 @@ test("Formula: before Run the formula is plain, and step 1 keeps every pill in p
   await expect(root.locator("[data-clause-mark]")).toHaveCount(0);
   await expect(formulaChip(page, "v:x1").locator("[data-value-text]")).toHaveText("–");
   await expect(page.locator(CAPTION)).toHaveCount(0);
-  await expect(legendBody(page)).toContainText("∧ joins the clauses (AND)");
+  await expect(legendBody(page)).toContainText(
+    "Boxes are clauses, joined by ∧; the literals inside are joined by ∨ (CNF).",
+  );
   await expect(legendBody(page)).not.toContainText("T / F");
 
   const before = await nodeCentres(page, `${FORMULA}-formula`);
@@ -8653,6 +8663,162 @@ test("Formula: hovering a literal traces its variable, a clause its literals, an
   await formulaChip(page, "v:x2").click();
   await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "trace");
   await expect(formulaLiteral(page, "c2-0")).toHaveAttribute("data-traced", "trace");
+});
+
+/** `capture` with its payload's `layout` set to `layout` (`undefined` drops the field). */
+function withFormulaLayout(capture, layout) {
+  const payload = { ...capture.payload };
+  if (layout === undefined) delete payload.layout;
+  else payload.layout = layout;
+  return { ...capture, payload };
+}
+
+/** Each piece's place in the drawing's own units, and each connective's: what a layout decides. */
+function formulaPlaces(page) {
+  return page.locator(`${FORMULA}-svg`).evaluate((svg) => {
+    const box = (element) => {
+      const b = element.getBBox();
+      return [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",");
+    };
+    const pieces = [...svg.querySelectorAll("[data-node-id], [data-clause-id], [data-variable-id]")]
+      .map((g) => [
+        g.getAttribute("data-node-id") ??
+          g.getAttribute("data-clause-id") ??
+          g.getAttribute("data-variable-id"),
+        box(g.querySelector("[data-body]")),
+      ])
+      .sort();
+    const joins = [...svg.querySelectorAll("[data-connective]")]
+      .map((t) => `${t.getAttribute("data-join")}:${t.getAttribute("x")},${t.getAttribute("y")}`)
+      .sort();
+    return { viewBox: svg.getAttribute("viewBox"), pieces, joins };
+  });
+}
+
+test("Formula: a DNF formula swaps the operators, ∧ inside a box and ∨ between, in the same places, and its Legend says DNF", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const cnf = SAT_LONG_FORMULA_FRAMES;
+  await openFormula(page, "SAT", cnf);
+  const cnfPlaces = await formulaPlaces(page);
+
+  const dnf = withFormulaLayout(cnf, "dnf");
+  await openFormula(page, "SAT", dnf);
+  const root = page.locator(`${FORMULA}-formula`);
+  const { payload } = dnf;
+  const inner = payload.groups.reduce((sum, group) => sum + group.members.length - 1, 0);
+  // ∨ joins the boxes (one fewer than there are), ∧ the literals inside each box.
+  await expect(root.locator('[data-join="outer"]')).toHaveCount(payload.groups.length - 1);
+  await expect(root.locator('[data-join="inner"]')).toHaveCount(inner);
+  await expect(root.locator('[data-join="outer"][data-connective="or"]')).toHaveCount(
+    payload.groups.length - 1,
+  );
+  await expect(root.locator('[data-join="inner"][data-connective="and"]')).toHaveCount(inner);
+  for (const text of await root.locator('[data-join="outer"]').allTextContents()) {
+    expect(text).toBe("∨");
+  }
+  for (const text of await root.locator('[data-join="inner"]').allTextContents()) {
+    expect(text).toBe("∧");
+  }
+  // The room an operator takes belongs to its place, not its symbol: the swap moves nothing,
+  // and on this formula (several lines, a box wrapped inside) nothing meets anything.
+  expect(await formulaPlaces(page)).toEqual(cnfPlaces);
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+  const { clauses, operators } = await formulaBoxes(page);
+  for (const op of operators) {
+    const middle = (op.box.left + op.box.right) / 2;
+    const own = clauses[op.clause];
+    const inside = middle > own.left && middle < own.right;
+    expect(inside, `${op.kind} of ${op.clause}`).toBe(op.kind === "and");
+  }
+  // Said outside the drawing: the Legend, the picture's label and each box's label.
+  const legend = legendBody(page);
+  await expect(legend).toContainText(
+    "Boxes are terms, joined by ∨; the literals inside are joined by ∧ (DNF).",
+  );
+  await expect(legend).not.toContainText("CNF");
+  await expect(formulaClause(page, "c1")).toHaveAttribute("aria-label", /^Term C2: \S+( and \S+)+/);
+  await expect(page.locator(`${FORMULA}-svg`)).toHaveAttribute(
+    "aria-label",
+    /terms joined by OR and the literals in each term by AND/,
+  );
+});
+
+for (const [kind, layout] of [
+  ["an unknown", "rows"],
+  ["a missing", undefined],
+]) {
+  test(`Formula: ${kind} layout still draws its groups, and claims no form`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    const capture = withFormulaLayout(SAT3_FORMULA_FRAMES, layout);
+    await openFormula(page, "3SAT", capture);
+    const root = page.locator(`${FORMULA}-formula`);
+    const { payload } = capture;
+    await expect(root.locator("[data-clause-id]")).toHaveCount(payload.groups.length);
+    await expect(root.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
+    await expect(root.locator("[data-variable-id]")).toHaveCount(payload.variables.length);
+    // The groups are drawn as CNF's are, symbols and all...
+    await expect(root.locator('[data-join="outer"][data-connective="and"]')).toHaveCount(
+      payload.groups.length - 1,
+    );
+    await expect(root.locator('[data-join="inner"][data-connective="or"]')).toHaveCount(
+      payload.groups.reduce((sum, group) => sum + group.members.length - 1, 0),
+    );
+    // ...but nothing outside it names a form or says what the operators mean.
+    const legend = legendBody(page);
+    await expect(legend).toContainText("Boxes are groups of literals.");
+    for (const claim of ["CNF", "DNF", "clause", "term", "joined by"]) {
+      await expect(legend).not.toContainText(claim);
+    }
+    const label = await page.locator(`${FORMULA}-svg`).getAttribute("aria-label");
+    expect(label).toMatch(/a formula of 3 groups of literals and 3 variables\.$/);
+    expect(label).not.toMatch(/CNF|DNF|clause|AND|OR/);
+    await expect(formulaClause(page, "c0")).toHaveAttribute("aria-label", /^Group C1: \S+(, \S+)+/);
+    expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+  });
+}
+
+test("Formula: every text in the drawing belongs to a piece; no heading, and ASSIGNMENT is the strip's own", async ({
+  page,
+}) => {
+  const capture = SAT3_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  const svg = page.locator(`${FORMULA}-svg`);
+  const stray = await svg.evaluate((el) =>
+    [...el.querySelectorAll("text")]
+      .filter(
+        (text) =>
+          !text.closest(
+            "[data-clause-id], [data-node-id], [data-variable-id], [data-strip], [data-connective]",
+          ),
+      )
+      .map((text) => text.textContent),
+  );
+  expect(stray).toEqual([]);
+  await expect(svg).not.toContainText("FORMULA");
+  await expect(svg).not.toContainText("CNF");
+  // ASSIGNMENT is drawn once, in the strip's group with every chip, above them.
+  const strip = svg.locator('[data-strip="assignment"]');
+  await expect(strip).toHaveCount(1);
+  await expect(strip.locator("[data-strip-head]")).toHaveText("ASSIGNMENT");
+  await expect(svg.locator("text", { hasText: "ASSIGNMENT" })).toHaveCount(1);
+  await expect(strip.locator("[data-variable-id]")).toHaveCount(capture.payload.variables.length);
+  const { headBottom, chipTop } = await strip.evaluate((g) => ({
+    headBottom: (({ y, height }) => y + height)(g.querySelector("[data-strip-head]").getBBox()),
+    chipTop: Math.min(
+      ...[...g.querySelectorAll("[data-variable-id] [data-body]")].map((r) => r.getBBox().y),
+    ),
+  }));
+  expect(headBottom).toBeLessThanOrEqual(chipTop);
+
+  // A formula with no variables has no strip head.
+  await openFormula(page, "3SAT", {
+    ...capture,
+    payload: { ...capture.payload, variables: [] },
+  });
+  await expect(svg.locator("text", { hasText: "ASSIGNMENT" })).toHaveCount(0);
+  await expect(svg.locator("[data-clause-id]")).toHaveCount(capture.payload.groups.length);
 });
 
 for (const scheme of ["light", "dark"]) {
