@@ -12,7 +12,7 @@
 //   - the Details pane: collapsed, its Input -> Output line; Show all for the rest;
 //   - the Instance pane: collapsed, the instance as one editable line; Show all for the rest;
 //   - the one Workspace pane (./Workspace.js) with three sections: Visualization (the pictures,
-//     steps, Legend, and Gadgets), Execute (Mode, the dropdowns and Run, the run's status, and
+//     steps, Legend, and Gadgets), Execute (Mode, the dropdowns and the run buttons, each run's status, and
 //     the result that was the Result panel's) and Verify (./panels/VerifyBox.js). Hiding all
 //     three hides the Workspace. Hidden parts stay on the page, so nothing typed is lost.
 //
@@ -44,12 +44,12 @@
 //     asked for through lib/pictureRequest.js, so a picture type with a format=frames renderer
 //     (components/pictures/registry.js) is drawn by it, with the step controls walking its
 //     frames and each step's caption under it, and every other type keeps its old renderer.
-//   - One run, every picture (#252): Run asks ProblemProvider/visualizeRun for the solver's run
+//   - One run, every picture (#252): Solve asks ProblemProvider/visualizeRun for the solver's run
 //     and every picture of it (lib/pictureRequest.js), so switching the Visualization Type after
-//     Run asks for nothing and stays on the same moment of the run (lib/runSteps.js). A picture
+//     Solve asks for nothing and stays on the same moment of the run (lib/runSteps.js). A picture
 //     the run can't draw shows the instance with a note saying why. On a backend without
-//     visualizeRun, and for a visualization only the old flat list draws, Run asks for the one
-//     chosen picture as before, and switching shows the instance until the next Run.
+//     visualizeRun, and for a visualization only the old flat list draws, Solve asks for the one
+//     chosen picture as before, and switching shows the instance until the next Solve.
 //   - The Reduction View (#215): Reduce first asks ProblemProvider/reductionView
 //     (lib/reductionView.js) for the whole reduction in one answer: the target built step by
 //     step, solved, and its answer mapped back, with both pictures and the gadgets that link
@@ -64,7 +64,7 @@
 //     pictures the view can draw for that side (lib/reductionView.js viewPictureWorkable).
 //     Choosing one asks Redux for the view again with that picture, on the same phase and step;
 //     the choice is kept for the page's life (the source's is the Visualization Type the Solve
-//     panes use), and a source picture picked before Run is used when the view can draw it. The
+//     panes use), and a source picture picked before Reduce is used when the view can draw it. The
 //     dropdown shows what Redux says it drew, so a backend that ignores the choice (older than
 //     #912) gets a fixed dropdown naming the default.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
@@ -347,8 +347,8 @@ const ANOTHER_RUN = "Another run is going";
 // A live region's text is spoken, not shown: what it says is on screen already.
 const visuallyHiddenSx = {
   position: "absolute",
-  width: 1,
-  height: 1,
+  width: "1px",
+  height: "1px",
   p: 0,
   m: "-1px",
   overflow: "hidden",
@@ -1225,6 +1225,8 @@ export default function Workbench({ problem }) {
             onClick: targetPicture.retry,
           },
         };
+      } else if (targetPicture.status === "done") {
+        content = { kind: "message", text: "Redux returned no picture for this instance." };
       } else {
         content = { kind: "loading", text: `Drawing the ${builtTarget} instance.` };
       }
@@ -1242,8 +1244,8 @@ export default function Workbench({ problem }) {
         text: `Press Reduce to build the ${targetLabel} instance from this one.`,
       };
     }
-    // #912: before a Run that draws a Reduction View, the target's picture can be picked
-    // here too, from the ones the view can draw; the Run draws the target with it.
+    // #912: before a Reduce that draws a Reduction View, the target's picture can be picked
+    // here too, from the ones the view can draw; Reduce draws the target with it.
     const viewTargets =
       !reduceCurrent && reductionViewWorth(selectedReduction?.className)
         ? (selectedReduction.targetVisualizations ?? []).filter((visualization) =>
@@ -1370,7 +1372,7 @@ export default function Workbench({ problem }) {
       tone: "warning",
     };
   } else if (instanceError) {
-    // The error itself is shown under the instance field (or under Run while the Instance pane
+    // The error itself is shown under the instance field (or under the run buttons while the Instance pane
     // is hidden).
     note = null;
   } else if (verdictLine && !pictureRan && checked.valid !== null && selectedViz) {
