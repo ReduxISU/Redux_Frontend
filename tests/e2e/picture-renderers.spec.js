@@ -960,6 +960,11 @@ test("Graph: Ctrl + wheel zooms the diagram, and a plain wheel still scrolls the
 }) => {
   await page.setViewportSize({ width: 1280, height: 700 });
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
+  // #279: the picture starts lower on the page (under the Details and Instance panes), so bring
+  // its middle into the window before pointing at it.
+  await page
+    .locator(`${GRAPH}-svg`)
+    .evaluate((element) => element.scrollIntoView({ block: "center" }));
   const box = await page.locator(`${GRAPH}-svg`).boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 
@@ -4280,14 +4285,23 @@ test("Search Tree: Ctrl + wheel also zooms a wide tree on a phone in to readable
   await expect.poll(() => treeReadable(page)).toBe(true);
 });
 
-test("Search Tree: on a desktop a wide tree opens at fit, and + zooms it in to readable text", async ({
+test("Search Tree: a wide tree opens at fit, readable on a desktop, and on a tablet + zooms it in to readable text", async ({
   page,
 }) => {
+  // #279: on a 1280 px desktop the picture now spans the whole Workspace, so even this wide
+  // tree is readable at fit.
   await page.setViewportSize({ width: 1280, height: 900 });
   const capture = TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES;
   await openTree(page, capture);
   await page.locator("#workbench-run").click();
   await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  expect(await treeReadable(page)).toBe(true);
+
+  // On a tablet (a picture about as wide as #229's beside its open panel) it is too small at
+  // fit, and + zooms it to readable text.
+  await page.setViewportSize({ width: 860, height: 900 });
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  await expect.poll(() => treeReadable(page)).toBe(false);
   await zoomTreeToReadable(page);
   const smallest = await treeSmallestText(page);
   expect(smallest.label.px).toBeGreaterThanOrEqual(TREE_LABEL_PX);
