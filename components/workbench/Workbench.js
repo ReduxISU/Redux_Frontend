@@ -1807,7 +1807,6 @@ export default function Workbench({ problem }) {
     if (!check.info.instance?.trim()) {
       return "There is no instance to check against. Write one in the Instance pane.";
     }
-    if (check.certificate.trim() === "") return "Type a certificate to check it.";
     return "";
   }
   const noAnswerToUse = "The solver found no answer, so there is none to use.";

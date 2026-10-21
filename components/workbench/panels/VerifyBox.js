@@ -27,6 +27,7 @@
 // survives collapsing a strip and hiding the section. This file only draws it.
 
 import Box from "@mui/material/Box";
+import { useState } from "react";
 import {
   COMPUTE_CANCELLED,
   COMPUTE_FAILED,
@@ -188,6 +189,10 @@ function Strip({ id, strip }) {
   const result = resultOf(check, problemName);
   const running = check.request.isRunning;
   const checkDisabled = Boolean(strip.checkHint) || running;
+  // Check stays enabled with an empty field, so it never looks like Verify needs a run first;
+  // pressing it then asks for a certificate instead.
+  const [askedEmpty, setAskedEmpty] = useState(false);
+  const empty = check.certificate.trim() === "";
   const shownFailure =
     check.request.status === COMPUTE_FAILED && !check.unreadable && !check.stale
       ? check.request.failure
@@ -281,7 +286,15 @@ function Strip({ id, strip }) {
                 type="button"
                 disabled={checkDisabled}
                 aria-describedby={strip.checkHint ? `${id}-check-hint` : undefined}
-                onClick={() => check.check()}
+                onClick={() => {
+                  if (empty) {
+                    setAskedEmpty(true);
+                    document.getElementById(certificateId)?.focus();
+                    return;
+                  }
+                  setAskedEmpty(false);
+                  check.check();
+                }}
                 sx={checkButtonSx}
               >
                 Check
@@ -298,6 +311,11 @@ function Strip({ id, strip }) {
                 {"Use the solver's answer"}
               </Box>
             </Box>
+            {askedEmpty && empty && !strip.checkHint && (
+              <Box id={`${id}-empty`} role="status" sx={quietSx}>
+                Type a certificate first.
+              </Box>
+            )}
             {strip.checkHint && (
               <Box id={`${id}-check-hint`} sx={quietSx}>
                 {strip.checkHint}
