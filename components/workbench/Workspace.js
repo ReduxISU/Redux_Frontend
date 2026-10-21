@@ -13,7 +13,7 @@
 // first, when the Workspace itself is 960px wide or less, whatever the window's width.
 
 import Box from "@mui/material/Box";
-import { cardSx, sectionHeadingSx, WORKSPACE_CONTAINER } from "./layout";
+import { COMPACT_MEDIA, cardSx, sectionHeadingSx, WORKSPACE_CONTAINER } from "./layout";
 
 /**
  * One section of the Workspace: a region named by its small heading.
@@ -71,6 +71,8 @@ export default function Workspace({ id, hidden, children }) {
         flexDirection: "column",
         gap: 1.5,
         p: 2,
+        // On phones and tablets the pictures keep the room #229's picture pane gave them.
+        [COMPACT_MEDIA]: { p: 1.5 },
         boxSizing: "border-box",
         minWidth: 0,
         containerType: "inline-size",
