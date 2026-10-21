@@ -94,6 +94,9 @@ function pairsFor(t) {
   add("success text on success tint", t.status.okText, over(t.status.okBg, s.main), TEXT);
   add("success border on surface", t.status.ok, s.main, UI);
   add("warning text on surface", t.status.warn, s.main, TEXT);
+  // #279 stage 2: a timed-out run's box and chip, amber text and border on the amber tint.
+  add("timed-out text on warning tint", t.status.warnText, over(t.status.warnBg, s.main), TEXT);
+  add("timed-out border on surface", t.status.warn, s.main, UI);
 
   for (const [name, f] of Object.entries(t.facet)) {
     const tagBg = over(f.bg, s.main);

@@ -250,6 +250,9 @@ export const THEME_TOKENS = {
       errText: "#F87171",
       errBg: "rgba(248, 113, 113, 0.12)",
       warn: "#FBBF24",
+      // #279 stage 2: a run that timed out (amber, apart from a server error's red).
+      warnText: "#FBBF24",
+      warnBg: "rgba(251, 191, 36, 0.12)",
       onStatus: BLACK,
     },
     facet: DARK_FACET_FAMILIES,
@@ -339,6 +342,9 @@ export const THEME_TOKENS = {
       errText: "#991B1B",
       errBg: "#FDECEC",
       warn: "#B45309",
+      // #279 stage 2: a run that timed out (amber, apart from a server error's red).
+      warnText: "#92400E",
+      warnBg: "#FFF7E6",
       onStatus: WHITE,
     },
     facet: LIGHT_FACET_FAMILIES,
