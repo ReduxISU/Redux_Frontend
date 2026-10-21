@@ -19,7 +19,7 @@
 // draw a certificate.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, showPane } from "./helpers";
+import { chooseReduceTarget, gotoProblemDetail, showPane } from "./helpers";
 
 const PROBLEM = "3SAT";
 const NOT_RUN = "Not run yet. Showing the default picture of the instance.";
@@ -262,7 +262,7 @@ test("in Reduce mode the target side of Check against unlocks once the reduction
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   await page.locator("#workbench-mode-reduce").click();
-  const target = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
+  const target = await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
   await showPane(page, "verify", { expect });
 
   const sourceSide = page.locator("#workbench-verify-check-on-source");
@@ -335,7 +335,7 @@ test("Solve <source> in Reduce mode carries its answer into the target, and Chec
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   await page.locator("#workbench-mode-reduce").click();
-  const target = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
+  const target = await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
   await page.locator("#workbench-run").click();
   await showPane(page, "execute", { expect });
   await expect(page.locator("#workbench-result-reduce")).toBeVisible();
