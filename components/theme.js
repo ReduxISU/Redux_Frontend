@@ -48,8 +48,8 @@ function buildPalette(tokens, mode) {
   return {
     mode,
     // primary is the orange accent as it may appear as text or a thin line: ISU orange in the
-    // dark theme, the darker #B84A0E in the light theme (orange text fails on white). Filled
-    // orange buttons use `brand.fill` with black labels instead; see MuiButton below.
+    // dark theme, the darker #B84A0E in the light theme (orange text fails on white). Primary
+    // (contained) buttons use the soft `brand.soft` style instead (#280); see MuiButton below.
     primary: {
       main: tokens.brand.line,
       light: tokens.brand.lineLight,
@@ -76,7 +76,7 @@ function buildPalette(tokens, mode) {
     },
     warning: {
       main: tokens.status.warn,
-      light: tokens.status.warn,
+      light: tokens.status.warnText,
       dark: tokens.status.warn,
       contrastText: tokens.status.onStatus,
     },
@@ -85,6 +85,8 @@ function buildPalette(tokens, mode) {
       light: tokens.viz.blue,
       dark: tokens.viz.blue,
       contrastText: tokens.status.onStatus,
+      // #280: the pale blue behind an info note.
+      bg: tokens.info.bg,
     },
     background: { default: tokens.page, paper: tokens.surface.main },
     divider: tokens.border.soft,
@@ -248,13 +250,16 @@ const theme = createTheme({
       },
       variants: [
         {
-          // #156: a filled primary button is ISU orange with a BLACK label in both themes
-          // (white on orange is 2.9:1 and fails).
+          // #280: a primary button is the soft style, a pale ISU-orange fill with an orange
+          // outline and a dark label (light text in the dark theme), instead of the solid orange
+          // fill that glared. The solid orange stays for outlines, links, focus and sliders.
           props: { variant: "contained", color: "primary" },
           style: ({ theme: themeParam }) => ({
-            backgroundColor: themeParam.vars.palette.brand.fill,
-            color: themeParam.vars.palette.brand.onFill,
-            "&:hover": { backgroundColor: themeParam.vars.palette.brand.fillHover },
+            backgroundColor: themeParam.vars.palette.brand.soft,
+            color: themeParam.vars.palette.brand.onSoft,
+            border: `1px solid ${themeParam.vars.palette.brand.softLine}`,
+            "&:hover": { backgroundColor: themeParam.vars.palette.brand.softHover },
+            "&.Mui-disabled": { borderColor: "transparent" },
           }),
         },
       ],
