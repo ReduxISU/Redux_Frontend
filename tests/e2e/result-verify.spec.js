@@ -22,7 +22,7 @@ import { expect, test } from "./fixtures";
 import { gotoProblemDetail, showPane } from "./helpers";
 
 const PROBLEM = "3SAT";
-const NOT_RUN = "Not run yet. Showing the default picture of the instance.";
+const NOT_RUN = "Not run yet (default picture)";
 const ANSWER = "(x1:True,x2:False,x3:True)";
 const WRONG = "(x1:False,x2:True,x3:False)";
 const UNREADABLE = "x1 maybe";
@@ -123,7 +123,7 @@ test("Verify works before any Run and leaves the default picture as it is", asyn
 
   // Nothing ran, so the Showing text is unchanged, and the picture says why the certificate
   // is not drawn on it. A verdict before a Run never offers the overlay button.
-  await expect(page.locator("#workbench-showing")).toHaveText(NOT_RUN);
+  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(NOT_RUN);
   await expect(page.locator("#workbench-note")).toContainText(DRAWING_REASON);
   await expect(page.locator("#workbench-source-picture")).toHaveAttribute(
     "data-picture-kind",
@@ -151,7 +151,7 @@ test("Check it fills the box with the run's answer and checks it in one click", 
   const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
 
   await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-showing")).toHaveText(solverName);
+  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(solverName);
   await showPane(page, "execute", { expect });
   await expect(page.locator("#workbench-result-answer")).toHaveText(ANSWER);
 
@@ -165,7 +165,7 @@ test("Check it fills the box with the run's answer and checks it in one click", 
   // A valid certificate after a Run gets the verdict only: the picture already shows a
   // correct answer.
   await expect(overlayButton(page)).toHaveCount(0);
-  await expect(page.locator("#workbench-showing")).toHaveText(solverName);
+  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(solverName);
 });
 
 test("Check keeps the solved picture and its current step, and a new Run retires the verdict", async ({
@@ -188,7 +188,7 @@ test("Check keeps the solved picture and its current step, and a new Run retires
     `Verifier: your certificate on the ${PROBLEM} instance is not valid`,
   );
   // The solved picture is untouched: same Showing text, same step, still a run picture.
-  await expect(page.locator("#workbench-showing")).toHaveText(solverName);
+  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(solverName);
   await expect(position).toContainText("Step 2 of 3");
   await expect(page.locator("#workbench-source-picture")).toHaveAttribute(
     "data-picture-kind",
@@ -247,7 +247,7 @@ test("a certificate Redux cannot read shows only its error under the box", async
   await expect(verdict(page)).toHaveCount(0);
   await expect(page.locator("#workbench-verify-verdict")).toHaveCount(0);
   await expect(page.locator("#workbench-verify-check-failure")).toHaveCount(0);
-  await expect(page.locator("#workbench-showing")).toHaveText(NOT_RUN);
+  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(NOT_RUN);
 
   // A readable certificate clears it.
   await check(page, ANSWER);
@@ -306,7 +306,10 @@ test("in Reduce mode the target side of Check against unlocks once the reduction
   expect(targetCall.problemInstance).toBe(TARGET_INSTANCE);
   expect(targetCall.verifier).not.toBe(verifyCalls[0].verifier);
   // The reduced picture stays, and the overlay button says it can't draw yet.
-  await expect(page.locator("#workbench-showing")).toContainText(`${PROBLEM} → ${target}`);
+  await expect(page.locator("#workbench-target-frame-showing-problem")).toHaveText(target);
+  await expect(page.locator("#workbench-target-frame-showing-algorithm")).toHaveText(
+    "Built, not solved",
+  );
   await expect(overlayButton(page)).toHaveText("Show where it fails");
   await expect(overlayButton(page)).toBeDisabled();
 

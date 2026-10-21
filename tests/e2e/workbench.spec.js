@@ -21,7 +21,7 @@ import { expect, test } from "./fixtures";
 import { expandPane, gotoProblemDetail, showPane } from "./helpers";
 
 const PROBLEM = "3SAT";
-const NOT_RUN = "Not run yet. Showing the default picture of the instance.";
+const NOT_RUN = "Not run yet (default picture)";
 const ANSWER = "(x1:True,x2:False,x3:True)";
 
 // `visualize?` (with the `?`) so it never also catches `visualizeReduction`.
@@ -210,7 +210,7 @@ test("after Solve, the answer shows in Execute under Solve, and the layout stays
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
-  const showing = page.locator("#workbench-showing");
+  const showing = page.locator("#workbench-showing-algorithm");
   await expect(showing).toHaveText(NOT_RUN);
   await expect(page.locator("#workbench-result-answer")).toHaveCount(0);
 
@@ -236,7 +236,7 @@ test("editing the instance after a run resets the picture to the base instance",
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
-  const showing = page.locator("#workbench-showing");
+  const showing = page.locator("#workbench-showing-algorithm");
 
   await page.locator("#workbench-run").click();
   await expect(showing).toHaveText(solverName);
@@ -288,7 +288,9 @@ test("an instance Redux cannot read gets a red dot on Instance and an error unde
   await expect(dot).toBeVisible();
   await expect(dot).toHaveAttribute("aria-label", "The instance has errors");
   await expect(page.locator("#workbench-run")).toBeDisabled();
-  await expect(page.locator("#workbench-showing")).toContainText("The instance has errors.");
+  await expect(page.locator("#workbench-showing-algorithm")).toContainText(
+    "The instance has errors.",
+  );
   await expect(page.locator("#workbench-source-picture")).toContainText(
     "The instance has a problem, so it can't be drawn.",
   );
@@ -330,14 +332,20 @@ test("Reduce mode shows Target and Reduction, and Reduce builds the target pictu
   expect(Math.abs(toBox.y - usingBox.y)).toBeLessThan(2);
   expect(toBox.x).toBeLessThan(usingBox.x);
 
+  // #279 stage 3: before a build the target is a placeholder frame, "Not built yet".
+  await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
+    "data-picture-kind",
+    "placeholder",
+  );
   await expect(page.locator("#workbench-target-picture")).toContainText(
-    `Press Reduce to build the ${target} instance from this one.`,
+    `Not built yet. Press Reduce to build the ${target} instance from this one.`,
   );
   await expect(page.locator("#workbench-run")).toHaveText("Reduce");
 
   await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-showing")).toHaveText(
-    `${PROBLEM} → ${target} (${reduction}), built`,
+  await expect(page.locator("#workbench-showing-reduction")).toHaveText(reduction);
+  await expect(page.locator("#workbench-target-frame-showing-algorithm")).toHaveText(
+    "Built, not solved",
   );
   await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
     "data-picture-kind",
@@ -352,13 +360,13 @@ test("the source and target sit side by side, and stack by the Workspace's own w
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
   await page.locator("#workbench-mode-reduce").click();
-  const source = page.locator("#workbench-source-picture");
-  const target = page.locator("#workbench-target-picture");
+  // The pictures' frames (#279 stage 3), not what is drawn inside them.
+  const source = page.locator("#workbench-source-frame-view");
+  const target = page.locator("#workbench-target-frame-view");
   await expect(target).toBeVisible();
 
   // 1100 px: the Workspace is over 960 px wide, so the two sides share a row: the target to the
-  // right of the source, starting before the source's picture ends. (Their tops line up exactly
-  // in stage 3, when the frames share their top and bottom lines.)
+  // right of the source, the two frames sharing their top and bottom lines.
   await page.setViewportSize({ width: 1100, height: 900 });
   await expect
     .poll(async () => (await target.boundingBox()).x - (await source.boundingBox()).x)
@@ -366,7 +374,8 @@ test("the source and target sit side by side, and stack by the Workspace's own w
   const sourceWide = await source.boundingBox();
   const targetWide = await target.boundingBox();
   expect(targetWide.x).toBeGreaterThan(sourceWide.x + sourceWide.width);
-  expect(targetWide.y).toBeLessThan(sourceWide.y + sourceWide.height);
+  expect(Math.abs(targetWide.y - sourceWide.y)).toBeLessThan(1);
+  expect(Math.abs(targetWide.height - sourceWide.height)).toBeLessThan(1);
 
   // 990 px: the window is still wider than 960 px, but the Workspace inside the page's margins
   // isn't, so the sides stack, source first.
@@ -419,7 +428,7 @@ test("a problem with nothing this site can draw falls back cleanly", async ({ pa
   await expect(page.locator("#workbench-source-picture")).toContainText(
     "This problem has no visualization this site can draw yet.",
   );
-  await expect(page.locator("#workbench-showing")).toHaveText("Not run yet.");
+  await expect(page.locator("#workbench-showing-algorithm")).toHaveText("Not run yet");
   await expect(page.locator("#workbench-source-type-button")).toHaveCount(0);
   await expect(page.locator("#workbench-legend-toggle")).toHaveCount(0);
 
