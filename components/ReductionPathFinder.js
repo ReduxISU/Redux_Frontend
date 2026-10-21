@@ -45,6 +45,7 @@ import {
   COMPUTE_RUNNING,
   useComputeRequest,
 } from "../hooks/useComputeRequest";
+import { problemOptionFilter } from "../lib/problemNames";
 import { REDUX_API_BASE_URL, requestReductionPath } from "../lib/redux";
 import ComputeStatus from "./detail/ComputeStatus";
 import { getFacetTagColors, thinScrollbarSx } from "./theme";
@@ -117,6 +118,8 @@ export default function ReductionPathFinder({
     for (const [code, name] of codeToName) reversed.set(name, code);
     return reversed;
   }, [codeToName]);
+  // #279: the pickers find a problem by its key too ("SAT3" -> 3SAT).
+  const filterProblems = useMemo(() => problemOptionFilter(codeToName), [codeToName]);
 
   const samePick = Boolean(source) && Boolean(target) && source === target;
 
@@ -179,6 +182,7 @@ export default function ReductionPathFinder({
         <Autocomplete
           id={SOURCE_INPUT_ID}
           options={problemNames}
+          filterOptions={filterProblems}
           value={source}
           onChange={(_event, next) => onSourceChange(next)}
           disabled={loading}
@@ -192,6 +196,7 @@ export default function ReductionPathFinder({
         <Autocomplete
           id={TARGET_INPUT_ID}
           options={problemNames}
+          filterOptions={filterProblems}
           value={target}
           onChange={(_event, next) => onTargetChange(next)}
           disabled={loading}
