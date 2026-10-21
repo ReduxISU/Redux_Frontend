@@ -3,8 +3,11 @@
 // #239: gadget marks on every picture type, and the Reduction View's gadget follow-ups.
 //   - Every renderer draws a gadget's pieces itself (components/pictures/gadgetRings.js): a ring
 //     around a node or a box, a band under an edge, in the gadget gold, never by opacity.
-//   - The Plain / Color switch: Plain marks a gadget while it is pointed at; Color gives every
-//     gadget its own color on both sides all the time, kept for the viewer, listed in the Legend.
+//   - The Highlight Gadgets switch (#279: it was a Plain / Color switch under the pictures), at
+//     the bottom of Algorithm Steps: off (the default) marks a gadget only while it is pointed
+//     at; on gives every gadget its own color on both sides all the time, kept with the layout
+//     until Reset layout, listed in the Legend. Disabled, saying why, until a Reduction View
+//     with gadgets is on screen; not there at all in Solve mode.
 //   - During Build the caption lists the gadgets the step made, in plain words, and the bound a
 //     step sets (Clique's K).
 //   - A dashed "Rule says no" line is a piece: pointing at it (or tapping, or focusing it) names
@@ -58,7 +61,7 @@ const VIEW = "#workbench-reduction";
 const pane = (page, side) => page.locator(`${VIEW}-${side}`);
 const rings = (page, side) => pane(page, side).locator("[data-gadget-ring]");
 const readout = (page) => page.locator(`${VIEW}-link`);
-const marksButton = (page, mode) => page.locator(`${VIEW}-marks-${mode}`);
+const highlight = (page) => page.locator("#workbench-algorithm-steps-highlight-gadgets");
 const gadgetRow = (page, index) => page.locator(`#workbench-gadgets-row-${index}`);
 
 // The pieces' id attributes, as lib/reductionView.js PIECE_ID_ATTRIBUTES lists them.
@@ -254,7 +257,7 @@ for (const [type, capture] of Object.entries(PICTURES)) {
     ids = await drawnPieceIds(page, "source");
     expect(ids.length, `${type} draws pieces with ids`).toBeGreaterThan(0);
     await page.locator("#workbench-run").click();
-    await expect(page.locator(`${VIEW}-marks-row`)).toBeVisible();
+    await expect(highlight(page)).toBeEnabled();
     await page.mouse.move(1, 1);
     await toStep(page, 2);
 
@@ -291,9 +294,10 @@ for (const [type, capture] of Object.entries(PICTURES)) {
     expect(Math.min(...opacities)).toBe(1);
     await page.mouse.move(1, 1);
 
-    // Color: every drawn piece has a mark of its own id, on both sides, in a palette color.
-    await marksButton(page, "color").click();
-    await expect(marksButton(page, "color")).toHaveAttribute("aria-pressed", "true");
+    // Highlight Gadgets on: every drawn piece has a mark of its own id, on both sides, in a
+    // palette color.
+    await highlight(page).click();
+    await expect(highlight(page)).toHaveAttribute("aria-checked", "true");
     for (const side of ["source", "target"]) {
       const marked = new Set(
         await rings(page, side).evaluateAll((marks) =>
@@ -306,21 +310,36 @@ for (const [type, capture] of Object.entries(PICTURES)) {
   });
 }
 
-// --- Plain and Color ----------------------------------------------------------------------------
+// --- Highlight Gadgets ---------------------------------------------------------------------------
 
 for (const scheme of ["light", "dark"]) {
-  test(`Plain and Color in the ${scheme} theme: Color marks every gadget on both sides in matching colors, and is remembered`, async ({
+  test(`Highlight Gadgets in the ${scheme} theme: a switch at the bottom of Algorithm Steps, off by default; on colors every gadget on both sides in matching colors, remembered until Reset layout`, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, () => SAT_TO_3SAT_VIEW);
-    await page.locator(`${VIEW}-marks-row`).scrollIntoViewIfNeeded();
-    await expect(marksButton(page, "plain")).toHaveAttribute("aria-pressed", "true");
+    // The old Plain / Color switch under the pictures is gone.
+    await expect(page.locator(`${VIEW}-marks-row`)).toHaveCount(0);
+    // One switch, named, at the bottom of Algorithm Steps: after the step controls.
+    const body = page.locator("#workbench-algorithm-steps-body");
+    await expect(body.locator('[role="switch"]')).toHaveCount(1);
+    await expect(body.getByRole("switch", { name: "Highlight Gadgets" })).toBeVisible();
+    await expect(highlight(page)).toHaveText("Highlight Gadgets");
+    const steps = await page.locator("#workbench-steps-position").boundingBox();
+    const switchBox = await highlight(page).boundingBox();
+    expect(switchBox.y).toBeGreaterThan(steps.y + steps.height - 1);
+    await highlight(page).scrollIntoViewIfNeeded();
+    // Off: plain.
+    await expect(highlight(page)).toHaveAttribute("aria-checked", "false");
     await expect(rings(page, "source")).toHaveCount(0);
 
-    await marksButton(page, "color").click();
-    await expect(page.locator(`${VIEW}-marks-row`)).toHaveAttribute("data-gadget-marks", "color");
+    await highlight(page).click();
+    await expect(highlight(page)).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#workbench-algorithm-steps-highlight-gadgets-row")).toHaveAttribute(
+      "data-highlight-gadgets",
+      "on",
+    );
     // A literal of C1 and the literal it became share a color, on both sides.
     const literal = (side, id) =>
       pane(page, side).locator(`[data-node-id="${id}"] [data-gadget-ring="${id}"]`);
@@ -352,13 +371,57 @@ for (const scheme of ["light", "dark"]) {
     await page.locator("#workbench-mode-reduce").click();
     await page.locator("#workbench-run").click();
     await expect(page.locator(VIEW)).toBeVisible();
-    await expect(page.locator(`${VIEW}-marks-row`)).toHaveAttribute("data-gadget-marks", "color");
+    await expect(highlight(page)).toHaveAttribute("aria-checked", "true");
     await expect(rings(page, "target").first()).toBeVisible();
 
-    await marksButton(page, "plain").click();
+    // Off: plain again.
+    await highlight(page).click();
+    await expect(highlight(page)).toHaveAttribute("aria-checked", "false");
+    await expect(rings(page, "target")).toHaveCount(0);
+
+    // Reset layout turns it off after it was turned on.
+    await highlight(page).click();
+    await expect(rings(page, "target").first()).toBeVisible();
+    await page.locator("#workbench-layout-reset").click();
+    await expect(highlight(page)).toHaveAttribute("aria-checked", "false");
     await expect(rings(page, "target")).toHaveCount(0);
   });
 }
+
+test("Highlight Gadgets is disabled, saying why, until a Reduction View with gadgets is on screen, and is not in Solve mode", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  let answer = SAT_TO_3SAT_VIEW;
+  await page.route(REDUCTION_VIEW_REQUEST, (route) => route.fulfill({ json: answer }));
+  await openReduce(page);
+  // Before Reduce: Algorithm Steps is closed; opened, the switch says to Reduce first.
+  await page.locator("#workbench-algorithm-steps-toggle").click();
+  await expect(highlight(page)).toBeDisabled();
+  await expect(highlight(page)).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("#workbench-algorithm-steps-highlight-gadgets-reason")).toHaveText(
+    /^Reduce first/,
+  );
+
+  // A view whose reduction lists no gadgets: nothing to highlight.
+  answer = { ...SAT_TO_3SAT_VIEW, gadgets: [] };
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(VIEW)).toBeVisible();
+  await expect(highlight(page)).toBeDisabled();
+  await expect(page.locator("#workbench-algorithm-steps-highlight-gadgets-reason")).toHaveText(
+    "This reduction lists no gadgets, so there is nothing to highlight.",
+  );
+
+  // With gadgets it can be pressed.
+  answer = SAT_TO_3SAT_VIEW;
+  await page.locator("#workbench-run").click();
+  await expect(highlight(page)).toBeEnabled();
+  await expect(page.locator("#workbench-algorithm-steps-highlight-gadgets-reason")).toHaveCount(0);
+
+  // Solve mode has no gadgets, so no switch.
+  await page.locator("#workbench-mode-solve").click();
+  await expect(highlight(page)).toHaveCount(0);
+});
 
 // --- Per-step gadgets and the bound -------------------------------------------------------------
 
