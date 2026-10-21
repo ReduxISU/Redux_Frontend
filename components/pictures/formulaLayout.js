@@ -5,11 +5,14 @@
 // place, before Run and at every step. Ported from Redux's design mockup
 // (Documentation/Visualizations/mockups/formula.js, `layout`), not from its parser or solvers.
 //
-// The formula as it is written: one box per clause, its literals as pills joined by ∨, the
-// boxes joined by ∧. Clauses pack left to right; a clause that doesn't fit the line starts the
-// next one, with the ∧ leading it, and a single clause wider than the line wraps at its ∨s
-// inside a taller box (the next row of pills starts with its ∨). The clause name sits above its
-// box. Under the formula, a strip with a chip per variable wraps the same way.
+// The formula as it is written: one box per group, its literals as pills joined by the inner
+// operator, the boxes joined by the outer one. The payload's `layout` names the form (#278): "cnf"
+// (clauses: ∨ inside, ∧ between), "dnf" (terms: ∧ inside, ∨ between); any other value draws the
+// same boxes with CNF's symbols but claims no form (formulaForm). Groups pack left to right; a
+// group that doesn't fit the line starts the next one, with the outer operator leading it, and a
+// single group wider than the line wraps at its inner operators inside a taller box (the next row
+// of pills starts with one). The group's name sits above its box. Under the formula, a strip with
+// a chip per variable wraps the same way.
 //
 // A name of letters then digits (x10, Bar7) is drawn as its letters with the digits as a real
 // subscript at SUB_SCALE of the label size; any other name (a, foo_2) is drawn plain. The labels
@@ -29,14 +32,20 @@ export const SUB_SHIFT = 0.32;
 const PILL_HEIGHT = 30;
 const PAD = 9;
 const BOX_HEIGHT = PILL_HEIGHT + 2 * PAD;
-const OR_WIDTH = 24;
-const AND_WIDTH = 34;
+// The room an operator takes: an inner one (inside a box, drawn at 14 px) and an outer one
+// (between boxes, drawn at 17 px and bold). The room belongs to the place, not the symbol: ∧ and ∨
+// are drawn the same width at a size, so a DNF formula (∧ inside, ∨ between) reserves exactly the
+// room a CNF one does, and its pills and boxes land in the same places (#278).
+const INNER_WIDTH = 24;
+const OUTER_WIDTH = 34;
 // Room for a clause name above its box, clear of a gadget ring round the box (#270).
 const LABEL_HEIGHT = 22;
 const ROW_GAP = 16;
 const CHIP_WIDTH = 66;
 const CHIP_HEIGHT = 30;
 const MARGIN = 12;
+// The room above the first row: kept from when a heading sat there (#278 took it out of the
+// drawing), so a formula draws exactly where it did.
 const TOP = 34;
 
 /** The widest the formula is laid out, and the narrowest (a phone's box). */
@@ -70,6 +79,18 @@ function pillWidth(negated, name) {
   return Math.max(34, labelWidth(negated, name) + 18);
 }
 
+/**
+ * The form the payload's `layout` names, and the operator it puts inside a box and between boxes:
+ * "cnf" is ∨ inside and ∧ between, "dnf" the reverse. Any other or missing value has no form
+ * (`form: null`) and is drawn with CNF's operators, without the picture claiming CNF (#278).
+ * @returns {{form: "cnf"|"dnf"|null, inner: "and"|"or", outer: "and"|"or"}}
+ */
+export function formulaForm(payload) {
+  const named = typeof payload?.layout === "string" ? payload.layout.toLowerCase() : null;
+  if (named === "dnf") return { form: "dnf", inner: "and", outer: "or" };
+  return { form: named === "cnf" ? "cnf" : null, inner: "or", outer: "and" };
+}
+
 /** A literal's variable name, from its label ("¬x2" -> "x2"). */
 function literalName(node) {
   const label = String(node.label ?? "");
@@ -79,17 +100,17 @@ function literalName(node) {
 /**
  * The Formula's layout.
  *
- * @param {Object} payload The Formula payload (`groups`, `nodes`, `variables`).
+ * @param {Object} payload The Formula payload (`layout`, `groups`, `nodes`, `variables`).
  * @param {number} [width] The width to lay out at (the picture's box), clamped to
  *   MIN_WIDTH..MAX_WIDTH.
- * @returns {{minX: number, minY: number, width: number, height: number, headY: number,
- *   stripY: number,
+ * @returns {{minX: number, minY: number, width: number, height: number, stripY: number,
+ *   form: "cnf"|"dnf"|null, innerOp: "and"|"or", outerOp: "and"|"or",
  *   clauses: Array<{id: string, label: string, x: number, y: number, w: number, h: number,
  *     members: string[]}>,
  *   literals: Map<string, {id: string, label: string, variable: string, group: string,
  *     negated: boolean, name: string, x: number, y: number, w: number, h: number}>,
- *   ands: Array<{x: number, y: number, after: string}>,
- *   ors: Array<{x: number, y: number, clause: string}>,
+ *   outers: Array<{x: number, y: number, after: string}>,
+ *   inners: Array<{x: number, y: number, clause: string}>,
  *   variables: Array<{id: string, label: string, x: number, y: number, w: number, h: number}>}}
  */
 export function layoutFormula(payload, width = MAX_WIDTH) {
@@ -125,9 +146,10 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
     (group) => typeof group?.id === "string",
   );
 
+  const { form, inner: innerOp, outer: outerOp } = formulaForm(payload);
   const clauses = [];
-  const ands = [];
-  const ors = [];
+  const outers = [];
+  const inners = [];
   let x = left;
   let y = TOP;
   let rowHeight = 0;
@@ -136,25 +158,26 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
     const members = (Array.isArray(group.members) ? group.members : [])
       .map((id) => literals.get(id))
       .filter(Boolean);
-    // Pack the clause's literals into rows no wider than the line: a long clause wraps at its ∨s.
-    const maxInner = right - left - 2 * PAD - AND_WIDTH;
+    // Pack the group's literals into rows no wider than the line: a long group wraps at its inner
+    // operators.
+    const maxInner = right - left - 2 * PAD - OUTER_WIDTH;
     const rows = [[]];
     let used = 0;
     for (const member of members) {
-      const need = (rows.at(-1).length ? OR_WIDTH : 0) + member.pillWidth;
+      const need = (rows.at(-1).length ? INNER_WIDTH : 0) + member.pillWidth;
       if (rows.at(-1).length && used + need > maxInner) {
         rows.push([]);
         used = 0;
       }
-      used += (rows.at(-1).length ? OR_WIDTH : 0) + member.pillWidth;
+      used += (rows.at(-1).length ? INNER_WIDTH : 0) + member.pillWidth;
       rows.at(-1).push(member);
     }
     const rowWidths = rows.map((row, k) =>
-      row.reduce((sum, member, q) => sum + member.pillWidth + (q || k ? OR_WIDTH : 0), 0),
+      row.reduce((sum, member, q) => sum + member.pillWidth + (q || k ? INNER_WIDTH : 0), 0),
     );
     const boxWidth = 2 * PAD + Math.max(0, ...rowWidths);
     const boxHeight = BOX_HEIGHT + (rows.length - 1) * (PILL_HEIGHT + 8);
-    const need = (index ? AND_WIDTH : 0) + boxWidth;
+    const need = (index ? OUTER_WIDTH : 0) + boxWidth;
     if (!rowStart && x + need > right) {
       y += rowHeight + ROW_GAP;
       x = left;
@@ -162,8 +185,12 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
       rowStart = true;
     }
     if (index) {
-      ands.push({ x: x + AND_WIDTH / 2, y: y + LABEL_HEIGHT + BOX_HEIGHT / 2, after: group.id });
-      x += AND_WIDTH;
+      outers.push({
+        x: x + OUTER_WIDTH / 2,
+        y: y + LABEL_HEIGHT + BOX_HEIGHT / 2,
+        after: group.id,
+      });
+      x += OUTER_WIDTH;
     }
     const box = {
       id: group.id,
@@ -175,13 +202,14 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
       members: members.map((member) => member.id),
     };
     rows.forEach((row, k) => {
-      let px = x + PAD + (k ? OR_WIDTH : 0);
+      let px = x + PAD + (k ? INNER_WIDTH : 0);
       const py = box.y + PAD + k * (PILL_HEIGHT + 8);
-      if (k) ors.push({ x: x + PAD + OR_WIDTH / 2, y: py + PILL_HEIGHT / 2, clause: group.id });
+      if (k)
+        inners.push({ x: x + PAD + INNER_WIDTH / 2, y: py + PILL_HEIGHT / 2, clause: group.id });
       row.forEach((member, q) => {
         if (q) {
-          ors.push({ x: px + OR_WIDTH / 2, y: py + PILL_HEIGHT / 2, clause: group.id });
-          px += OR_WIDTH;
+          inners.push({ x: px + INNER_WIDTH / 2, y: py + PILL_HEIGHT / 2, clause: group.id });
+          px += INNER_WIDTH;
         }
         Object.assign(member, { x: px, y: py, w: member.pillWidth, h: PILL_HEIGHT });
         px += member.pillWidth;
@@ -223,12 +251,14 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
     minY: 0,
     width: drawingWidth,
     height: vy + CHIP_HEIGHT + 14,
-    headY: TOP - 12,
     stripY: y + rowHeight + 22,
+    form,
+    innerOp,
+    outerOp,
     clauses,
     literals,
-    ands,
-    ors,
+    outers,
+    inners,
     variables,
   };
 }
