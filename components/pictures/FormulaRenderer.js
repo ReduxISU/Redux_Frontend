@@ -28,12 +28,20 @@
 // #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring around
 // their box: a clause, a literal's pill, a variable's chip. The ∧ and ∨ name the clause they
 // belong to (`data-piece-for`), so the Reduction View hides them with a clause not built yet.
+//
+// #278: the operators follow the payload's `layout` (formulaLayout.js's formulaForm): "cnf" is
+// the drawing above, "dnf" swaps them (∧ inside a box, ∨ between), and any other value draws
+// CNF's symbols without claiming a form. Each connective says its operator (`data-connective`,
+// "and" or "or") and its place (`data-join`, "inner" or "outer"). The form is said outside the
+// drawing, in the Legend (formulaAnnotations) and the picture's label; every text inside the
+// drawing belongs to a piece and moves with it, so ASSIGNMENT is part of the variable strip.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
 import {
+  formulaForm,
   formulaTrace,
   LITERAL_SIZE,
   labelWidth,
@@ -53,6 +61,20 @@ import { useBoxWidth } from "./useBoxWidth";
 const FAINT_DASH = "3 3";
 /** A False literal's dotted outline. */
 const FALSE_DASH = "2 3";
+
+/** The symbol each operator is drawn with. */
+const SYMBOLS = { and: "∧", or: "∨" };
+
+/**
+ * How a form names its boxes and its operators, for the picture's label and a box's aria-label:
+ * a CNF formula's boxes are clauses (literals joined by "or"), a DNF one's terms (joined by
+ * "and"), and a formula of no named form has groups of literals, listed without an operator.
+ */
+const FORM_WORDS = {
+  cnf: { box: "Clause", boxes: "clause", inner: " or ", outer: "AND", innerWord: "OR" },
+  dnf: { box: "Term", boxes: "term", inner: " and ", outer: "OR", innerWord: "AND" },
+  none: { box: "Group", boxes: "group", inner: ", " },
+};
 
 /** What a clause's state says beside its name. */
 const CLAUSE_MARKS = { Covered: "✓", Solution: "✓", Rejected: "✗" };
@@ -247,6 +269,7 @@ export default function FormulaRenderer({
   const hasChipStates = frame?.variables && typeof frame.variables === "object";
   const clauseLabel = new Map(layout.clauses.map((clause) => [clause.id, clause.label]));
   const variableLabel = new Map(layout.variables.map((variable) => [variable.id, variable.label]));
+  const words = FORM_WORDS[layout.form ?? "none"];
   const shownLiteral = (literal) => `${literal.negated ? "¬" : ""}${literal.name}`;
 
   const toggle = (id) => setPinned((current) => (current === id ? null : id));
@@ -274,7 +297,10 @@ export default function FormulaRenderer({
   // A piece's place in the trace: "trace" (lit), "faint" (faded), or undefined (nothing traced).
   const traceOf = (id) => (hot ? (hot.has(id) ? "trace" : "faint") : undefined);
 
-  const label = `${name}: a formula of ${plural(layout.clauses.length, "clause")} and ${plural(layout.variables.length, "variable")}, the clauses joined by AND and the literals in each clause by OR.`;
+  const counts = `${plural(layout.clauses.length, words.boxes)}${layout.form ? "" : " of literals"} and ${plural(layout.variables.length, "variable")}`;
+  const label = layout.form
+    ? `${name}: a formula of ${counts}, the ${words.boxes}s joined by ${words.outer} and the literals in each ${words.boxes} by ${words.innerWord}.`
+    : `${name}: a formula of ${counts}.`;
   const headStyle = {
     fill: paletteVars.text.secondary,
     fontFamily: MONO,
@@ -297,16 +323,6 @@ export default function FormulaRenderer({
         drawing={layout}
         resetOn={[payload, layout.width]}
       >
-        <g data-layer="heads">
-          <text x={12} y={layout.headY} {...headStyle}>
-            FORMULA · CNF
-          </text>
-          {layout.variables.length > 0 && (
-            <text x={12} y={layout.stripY} {...headStyle}>
-              ASSIGNMENT
-            </text>
-          )}
-        </g>
         {/* The tints behind the clauses' literals: behind everything, so no outline is hidden. */}
         <g data-layer="shade">
           {layout.clauses.map((clause) => {
@@ -338,7 +354,9 @@ export default function FormulaRenderer({
             const traced = hover === clause.id || pinned === clause.id;
             const mark = CLAUSE_MARKS[state] ?? "";
             const literalTexts = clause.members.map((id) => shownLiteral(layout.literals.get(id)));
-            const parts = [`Clause ${clause.label}: ${literalTexts.join(" or ") || "empty"}`];
+            const parts = [
+              `${words.box} ${clause.label}: ${literalTexts.join(words.inner) || "empty"}`,
+            ];
             if (state !== "Background") parts.push(pictureStateStyle(state).legend);
             let line = look.line;
             let width = look.width;
@@ -413,13 +431,14 @@ export default function FormulaRenderer({
           })}
         </g>
         <g data-layer="operators">
-          {layout.ands.map((and) => (
+          {layout.outers.map((outer) => (
             <text
-              key={`and-${and.after}`}
-              data-connective="and"
-              data-piece-for={and.after}
-              x={and.x}
-              y={and.y}
+              key={`outer-${outer.after}`}
+              data-connective={layout.outerOp}
+              data-join="outer"
+              data-piece-for={outer.after}
+              x={outer.x}
+              y={outer.y}
               textAnchor="middle"
               dominantBaseline="central"
               fill={paletteVars.text.primary}
@@ -428,18 +447,19 @@ export default function FormulaRenderer({
               fontWeight={600}
               pointerEvents="none"
               aria-hidden="true"
-              style={traceOf(and.after) === "faint" ? { filter: FAINT_FILTER } : undefined}
+              style={traceOf(outer.after) === "faint" ? { filter: FAINT_FILTER } : undefined}
             >
-              ∧
+              {SYMBOLS[layout.outerOp]}
             </text>
           ))}
-          {layout.ors.map((or) => (
+          {layout.inners.map((inner) => (
             <text
-              key={`or-${or.clause}-${or.x}-${or.y}`}
-              data-connective="or"
-              data-piece-for={or.clause}
-              x={or.x}
-              y={or.y}
+              key={`inner-${inner.clause}-${inner.x}-${inner.y}`}
+              data-connective={layout.innerOp}
+              data-join="inner"
+              data-piece-for={inner.clause}
+              x={inner.x}
+              y={inner.y}
               textAnchor="middle"
               dominantBaseline="central"
               fill={paletteVars.text.secondary}
@@ -448,7 +468,7 @@ export default function FormulaRenderer({
               pointerEvents="none"
               aria-hidden="true"
             >
-              ∨
+              {SYMBOLS[layout.innerOp]}
             </text>
           ))}
         </g>
@@ -524,7 +544,13 @@ export default function FormulaRenderer({
             );
           })}
         </g>
-        <g data-layer="variables">
+        {/* The variable strip: its ASSIGNMENT head is part of it, so it moves with the chips. */}
+        <g data-layer="variables" data-strip="assignment">
+          {layout.variables.length > 0 && (
+            <text x={12} y={layout.stripY} data-strip-head="" {...headStyle}>
+              ASSIGNMENT
+            </text>
+          )}
           {layout.variables.map((variable, index) => {
             const state = hasChipStates
               ? stateOf(frame.variables, variable.id)
@@ -590,20 +616,35 @@ export default function FormulaRenderer({
   );
 }
 
+/** The Legend's line for the boxes and operators, worded from the payload's `layout` (#278). */
+const FORM_LEGEND = {
+  cnf: {
+    text: "Boxes are clauses, joined by ∧; the literals inside are joined by ∨ (CNF).",
+    swatch: "∧∨",
+  },
+  dnf: {
+    text: "Boxes are terms, joined by ∨; the literals inside are joined by ∧ (DNF).",
+    swatch: "∨∧",
+  },
+  // No named form: say only what a box is, never what its operators mean.
+  none: { text: "Boxes are groups of literals.", swatch: "▢" },
+};
+
 /**
- * The Legend's entries for what a formula draws besides states: the two connectives, a False
- * literal's strike, a clause's ✓ / ✗, and the chips' values, each only when the run (or, for the
- * connectives, the formula) has it.
+ * The Legend's entries for what a formula draws besides states: the boxes and their operators
+ * (worded from the form the payload names), a False literal's strike, a clause's ✓ / ✗, and the
+ * chips' values, each only when the run (or, for the boxes, the formula) has it.
  * @returns {Array<{key: string, text: string, swatch: Object}>}
  */
 export function formulaAnnotations(payload, frames) {
   const entries = [];
   const list = Array.isArray(frames) ? frames.filter(Boolean) : [];
   if ((payload?.groups ?? []).length > 0) {
+    const line = FORM_LEGEND[formulaForm(payload).form ?? "none"];
     entries.push({
       key: "connectives",
-      text: "∧ joins the clauses (AND), ∨ the literals in a clause (OR)",
-      swatch: { kind: "text", text: "∧∨" },
+      text: line.text,
+      swatch: { kind: "text", text: line.swatch },
     });
   }
   const anyState = (map, wanted) =>
