@@ -96,6 +96,20 @@ const checkButtonSx = {
   },
 };
 
+// Read by screen readers, not shown: the disabled Use the solver's answer button's reason.
+const visuallyHiddenSx = {
+  position: "absolute",
+  // Pixels, not sx's 0-1 fractions (width: 1 would be 100%).
+  width: "1px",
+  height: "1px",
+  p: 0,
+  m: "-1px",
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
+
 const useButtonSx = {
   ...secondaryButtonSx,
   minHeight: 40,
@@ -299,16 +313,25 @@ function Strip({ id, strip }) {
               >
                 Check
               </Box>
+              {/* Why it's disabled is a tooltip, not a line on the page, so it doesn't read as a
+                  step Verify needs. A disabled button gets no hover, so the wrapper carries it. */}
               <Box
-                id={`${id}-use-answer`}
-                component="button"
-                type="button"
-                disabled={!strip.answer || !check.info?.instance || running}
-                aria-describedby={!strip.answer ? `${id}-use-answer-hint` : undefined}
-                onClick={() => strip.answer && check.check(strip.answer)}
-                sx={useButtonSx}
+                component="span"
+                id={`${id}-use-answer-wrap`}
+                title={!strip.answer ? strip.answerHint : undefined}
+                sx={{ display: "inline-flex" }}
               >
-                {"Use the solver's answer"}
+                <Box
+                  id={`${id}-use-answer`}
+                  component="button"
+                  type="button"
+                  disabled={!strip.answer || !check.info?.instance || running}
+                  aria-describedby={!strip.answer ? `${id}-use-answer-hint` : undefined}
+                  onClick={() => strip.answer && check.check(strip.answer)}
+                  sx={useButtonSx}
+                >
+                  {"Use the solver's answer"}
+                </Box>
               </Box>
             </Box>
             {askedEmpty && empty && !strip.checkHint && (
@@ -322,7 +345,7 @@ function Strip({ id, strip }) {
               </Box>
             )}
             {!strip.answer && (
-              <Box id={`${id}-use-answer-hint`} sx={quietSx}>
+              <Box id={`${id}-use-answer-hint`} sx={visuallyHiddenSx}>
                 {strip.answerHint}
               </Box>
             )}
