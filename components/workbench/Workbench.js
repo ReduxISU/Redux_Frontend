@@ -2095,6 +2095,7 @@ export default function Workbench({ problem }) {
         hidden={!layout.shown.instance}
         expanded={layout.expanded.instance}
         onExpandedChange={(expanded) => layout.setExpanded("instance", expanded)}
+        inlineCollapsed
       >
         <InstancePanel
           idPrefix={`${ID}-instance`}

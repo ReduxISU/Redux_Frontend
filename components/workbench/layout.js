@@ -32,6 +32,42 @@ export const sideGridSx = {
   [WORKSPACE_NARROW]: { gridTemplateColumns: "minmax(0, 1fr)" },
 };
 
+/**
+ * #279 (Workspace tweaks): the "tab stop" a collapsed pane's or section's one line starts at.
+ * Every pane's title (Details, Instance) is at least PANE_TITLE_WIDTH wide, and what follows it
+ * sits PANE_TITLE_GAP further on, so Details' summary and Instance's field start at one x. The
+ * Workspace's sections sit inside the Workspace card's padding instead of their own, so their
+ * headings make up the difference (workspaceHeadingTabSx) and their summaries start there too.
+ */
+export const PANE_TITLE_WIDTH = 120;
+
+/** The gap between a pane's title and what follows it on the title's line. */
+export const PANE_TITLE_GAP = 12;
+
+/** The Details and Instance panes' padding. */
+export const PANE_PADDING = 16;
+
+/** The Workspace card's padding: the panes' on a desktop, less on phones and tablets. */
+export const WORKSPACE_PADDING = 16;
+export const WORKSPACE_COMPACT_PADDING = 12;
+
+/** The title line of a pane or a Workspace section: wraps what follows under it when narrow. */
+export const titleLineSx = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: `8px ${PANE_TITLE_GAP}px`,
+};
+
+/**
+ * A Workspace section's heading width, so its collapsed summary starts at the panes' tab stop:
+ * the panes' title width plus however much less the Workspace pads than a pane does.
+ */
+export const workspaceHeadingTabSx = {
+  minWidth: PANE_TITLE_WIDTH + PANE_PADDING - WORKSPACE_PADDING,
+  [COMPACT_MEDIA]: { minWidth: PANE_TITLE_WIDTH + PANE_PADDING - WORKSPACE_COMPACT_PADDING },
+};
+
 /** A Workspace section's small heading (Visualization, Execute, Verify). */
 export const sectionHeadingSx = {
   m: 0,

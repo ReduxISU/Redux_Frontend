@@ -8,7 +8,9 @@
 // #279 (Workspace tweaks): each section has the Details and Instance panes' Show all / Show less
 // (./CollapsiblePane.js ExpandButton) at the right of its heading. Collapsed, the section keeps
 // only a one-line summary beside its heading (`summary`); what it holds stays on the page,
-// hidden, like a section hidden from the rail.
+// hidden, like a section hidden from the rail. The summary starts at the same x as Details'
+// summary and Instance's field (layout.js workspaceHeadingTabSx), dropping under the heading
+// when there isn't room.
 //
 // Every section stays on the page while hidden (the `hidden` attribute), so a typed certificate,
 // an open list or a chosen step survives hiding and showing it again.
@@ -19,7 +21,16 @@
 
 import Box from "@mui/material/Box";
 import { ExpandButton } from "./CollapsiblePane";
-import { COMPACT_MEDIA, cardSx, sectionHeadingSx, WORKSPACE_CONTAINER } from "./layout";
+import {
+  COMPACT_MEDIA,
+  cardSx,
+  sectionHeadingSx,
+  titleLineSx,
+  WORKSPACE_COMPACT_PADDING,
+  WORKSPACE_CONTAINER,
+  WORKSPACE_PADDING,
+  workspaceHeadingTabSx,
+} from "./layout";
 
 /**
  * One section of the Workspace: a region named by its small heading.
@@ -63,10 +74,12 @@ export function WorkspaceSection({
         borderColor: "border.soft",
       }}
     >
-      <Box
-        sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", my: -0.5 }}
-      >
-        <Box component="h3" id={headingId} sx={{ ...sectionHeadingSx, flex: "0 0 auto" }}>
+      <Box sx={{ ...titleLineSx, my: -0.5 }}>
+        <Box
+          component="h3"
+          id={headingId}
+          sx={{ ...sectionHeadingSx, flex: "0 0 auto", ...workspaceHeadingTabSx }}
+        >
           {title}
         </Box>
         {!expanded && (
@@ -126,9 +139,9 @@ export default function Workspace({ id, hidden, children }) {
         display: hidden ? "none" : "flex",
         flexDirection: "column",
         gap: 1.5,
-        p: 2,
+        p: `${WORKSPACE_PADDING}px`,
         // On phones and tablets the pictures keep the room #229's picture pane gave them.
-        [COMPACT_MEDIA]: { p: 1.5 },
+        [COMPACT_MEDIA]: { p: `${WORKSPACE_COMPACT_PADDING}px` },
         boxSizing: "border-box",
         minWidth: 0,
         containerType: "inline-size",
