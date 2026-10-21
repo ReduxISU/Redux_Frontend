@@ -5,9 +5,9 @@
 // compute requests itself, tests/e2e/workbench.spec.js); this is the only
 // file that makes the real backend compute something.
 //
-// #229 moved both controls onto the workbench: Run is in the command bar and
-// its answer is in the Result panel, and Verify is the Verify box at the
-// bottom of that panel. The tests below are the same checks pointed at the
+// #229 moved both controls onto the workbench, and #279 into the Workspace: Run
+// and its answer are in the Execute section, and Verify is the Verify section's
+// box. The tests below are the same checks pointed at the
 // new places.
 //
 // -----------------------------------------------------------------------
@@ -66,7 +66,7 @@
 // exactly what this reproduces.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, openPanel, selectSolverByName } from "./helpers";
+import { gotoProblemDetail, selectSolverByName, showPane } from "./helpers";
 
 const PINNED_PROBLEM = "Topological Sort";
 const PINNED_SOLVER = "Kahn's Algorithm";
@@ -81,19 +81,19 @@ const PINNED_INSTANCE = "({1,2,3,4,5,6},{(1,2),(1,3),(2,4),(3,4),(4,5),(3,6)})";
 // and reliably wrong, so the verdict is False rather than True.
 const WRONG_CERTIFICATE = "{6,5,4,3,2,1}";
 
-// The workbench's own ids (components/workbench/*): the command bar's Run and
-// its status region, the Result panel's answer, and its Verify box.
+// The workbench's own ids (components/workbench/*): Execute's Run and its
+// status region, the result's answer, and the Verify section's box.
 const RUN_BUTTON = "#workbench-run";
 const RUN_STATUS = "#workbench-solve-status";
 const RUN_CANCEL = "#workbench-solve-cancel-button";
 const RUN_FAILURE = "#workbench-solve-failure";
 const RUN_OUTPUT = "#workbench-result-answer";
 const INSTANCE_INPUT = "#workbench-instance-full-instance";
-const CERTIFICATE_INPUT = "#workbench-result-verify-certificate";
-const VERIFY_BUTTON = "#workbench-result-verify-check";
-const VERIFY_STATUS = "#workbench-result-verify-check-status";
-const VERIFY_FAILURE = "#workbench-result-verify-check-failure";
-const VERDICT_BANNER = "#workbench-result-verify-verdict";
+const CERTIFICATE_INPUT = "#workbench-verify-certificate";
+const VERIFY_BUTTON = "#workbench-verify-check";
+const VERIFY_STATUS = "#workbench-verify-check-status";
+const VERIFY_FAILURE = "#workbench-verify-check-failure";
+const VERDICT_BANNER = "#workbench-verify-verdict";
 
 // Regexes rather than Playwright glob strings: both compute requests carry
 // a query string (`?solver=...`, `?verifier=...`) and a glob's `*` does not
@@ -133,7 +133,7 @@ test("Run sends the declared instance to the pinned solver and renders Redux's r
   await gotoProblemDetail(page, PINNED_PROBLEM, { expect });
   await selectSolverByName(page, PINNED_SOLVER, { expect });
 
-  await expect(page.locator("#workbench-instance-text")).toHaveText(PINNED_INSTANCE);
+  await expect(page.locator(INSTANCE_INPUT)).toHaveValue(PINNED_INSTANCE);
 
   // The live region is mounted and empty before anything runs, which is the
   // reliable way to have a screen reader announce the change that follows
@@ -153,8 +153,8 @@ test("Run sends the declared instance to the pinned solver and renders Redux's r
   await expect(status).toContainText(`${PINNED_SOLVER} finished in`, { timeout: 30_000 });
   await expect(page.locator(RUN_CANCEL)).toHaveCount(0);
 
-  // #229: the answer lands in the Result panel, which Run does not open by itself.
-  await openPanel(page, "result", { expect });
+  // #279: the answer lands in the Execute section, under Run.
+  await showPane(page, "execute", { expect });
   const output = page.locator(RUN_OUTPUT);
   await expect(output).toBeVisible();
   await expect(output).not.toHaveText("");
@@ -171,7 +171,7 @@ test("a certificate produced by a live Run verifies against the instance it was 
   await expect(page.locator(RUN_STATUS)).toContainText(`${PINNED_SOLVER} finished in`, {
     timeout: 30_000,
   });
-  await openPanel(page, "result", { expect });
+  await showPane(page, "execute", { expect });
   const output = page.locator(RUN_OUTPUT);
   await expect(output).toBeVisible();
   const solved = ((await output.textContent()) ?? "").trim();
@@ -199,10 +199,10 @@ test("Verify reports Redux's rejection of a wrong certificate rather than decidi
   // its instance, and WRONG_CERTIFICATE above needs to be re-derived from
   // the new one. Asserting it here means that shows up as a clear failure
   // instead of the verdict below quietly meaning something different.
-  await openPanel(page, "instance", { expect });
+  await showPane(page, "instance", { expect });
   await expect(page.locator(INSTANCE_INPUT)).toHaveValue(PINNED_INSTANCE);
 
-  await openPanel(page, "result", { expect });
+  await showPane(page, "verify", { expect });
   await page.locator(CERTIFICATE_INPUT).fill(WRONG_CERTIFICATE);
 
   // T37 (#95) deleted the ported `isCertificateValid` regex that used to
@@ -235,10 +235,9 @@ test("Run explains an unreachable backend instead of failing silently", async ({
   await expect(failure).toContainText("Couldn't reach the Redux backend");
   await expect(page.locator(RUN_STATUS)).toContainText(`${PINNED_SOLVER} did not run.`);
 
-  // No half-state left behind: no answer, no Result dot, and Run is offered again.
-  await expect(page.locator("#workbench-rail-result-dot")).toHaveCount(0);
+  // No half-state left behind: no answer, and Run is offered again.
   await expect(failure).not.toContainText(/undefined|NaN|\[object Object\]/);
-  await openPanel(page, "result", { expect });
+  await showPane(page, "execute", { expect });
   await expect(page.locator(RUN_OUTPUT)).toHaveCount(0);
   await expect(page.locator(RUN_BUTTON)).toBeEnabled();
 });
@@ -262,7 +261,7 @@ test("Run explains the proxy's compute timeout instead of waiting forever", asyn
   await expect(failure).toContainText("This took too long");
   // The copy names the real limit, so a wrong number here is a real bug.
   await expect(failure).toContainText("60 seconds");
-  await openPanel(page, "result", { expect });
+  await showPane(page, "execute", { expect });
   await expect(page.locator(RUN_OUTPUT)).toHaveCount(0);
 });
 
@@ -273,7 +272,7 @@ test("Verify explains an unreachable backend too", async ({ page }) => {
   });
 
   await gotoProblemDetail(page, PINNED_PROBLEM, { expect });
-  await openPanel(page, "result", { expect });
+  await showPane(page, "verify", { expect });
   await page.locator(CERTIFICATE_INPUT).fill(WRONG_CERTIFICATE);
   await page.locator(VERIFY_BUTTON).click();
 
@@ -310,9 +309,12 @@ test("a problem with no declared instance keeps Run and Verify unavailable", asy
   await gotoProblemDetail(page, PINNED_PROBLEM, { expect });
   await selectSolverByName(page, PINNED_SOLVER, { expect });
 
-  await expect(page.locator("#workbench-instance-text")).toContainText("No instance yet.");
-  await openPanel(page, "instance", { expect });
+  await showPane(page, "instance", { expect });
   await expect(page.locator(INSTANCE_INPUT)).toHaveValue("");
+  await expect(page.locator(INSTANCE_INPUT)).toHaveAttribute(
+    "placeholder",
+    "No default instance declared for this problem yet.",
+  );
 
   // Ground rule 5's "disabled and out of the tab order": the `disabled`
   // attribute is what removes a button from the tab order, so asserting it
@@ -325,7 +327,7 @@ test("a problem with no declared instance keeps Run and Verify unavailable", asy
   // Filled certificate, still no instance: this isolates the missing
   // instance as the reason Verify is unavailable rather than the empty
   // certificate box Topological Sort starts with.
-  await openPanel(page, "result", { expect });
+  await showPane(page, "verify", { expect });
   await page.locator(CERTIFICATE_INPUT).fill(WRONG_CERTIFICATE);
   await expect(page.locator(VERIFY_BUTTON)).toBeDisabled();
   await expect(

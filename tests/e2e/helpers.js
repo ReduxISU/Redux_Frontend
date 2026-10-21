@@ -190,11 +190,25 @@ export async function gotoProblemDetail(page, problemName, { expect }) {
 }
 
 /**
- * #229: opens one workbench panel ("details", "instance" or "result") from the rail, if it
- * isn't already open, and confirms the rail button reports it open.
+ * #279: shows one part of the problem page from the bar of toggles, if it isn't shown already,
+ * and confirms its toggle reports it shown: the "details" or "instance" pane, or the
+ * Workspace's "visualization", "execute" or "verify" section.
  */
-export async function openPanel(page, panelKey, { expect }) {
-  const button = page.locator(`#workbench-rail-${panelKey}`);
+export async function showPane(page, key, { expect }) {
+  const button = page.locator(`#workbench-toggle-${key}`);
+  if ((await button.getAttribute("aria-expanded")) !== "true") {
+    await button.click();
+  }
+  await expect(button).toHaveAttribute("aria-expanded", "true");
+}
+
+/**
+ * #279: shows the "details" or "instance" pane and presses its Show all, if it isn't expanded
+ * already.
+ */
+export async function expandPane(page, key, { expect }) {
+  await showPane(page, key, { expect });
+  const button = page.locator(`#workbench-${key}-expand`);
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
   }

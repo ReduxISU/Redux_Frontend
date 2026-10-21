@@ -23,15 +23,20 @@ test("clicking a card reaches its detail page", async ({ page }) => {
   await expect(page.locator("#workbench")).toBeVisible();
 });
 
-test("the workbench opens on Details, with the instance in the command bar", async ({ page }) => {
+test("the page opens with every pane shown, and the instance in the Instance pane", async ({
+  page,
+}) => {
   await gotoFirstProblemDetail(page, { expect });
 
-  await expect(page.locator("#workbench-rail-details")).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#workbench-panel-heading")).toHaveText("Details");
+  // #279: Details, Instance and the Workspace's three sections are all shown at first.
+  for (const key of ["details", "instance", "visualization", "execute", "verify"]) {
+    await expect(page.locator(`#workbench-toggle-${key}`)).toHaveAttribute("aria-expanded", "true");
+  }
+  await expect(page.locator("#workbench-details-pane")).toBeVisible();
 
-  // Every problem declares a runnable default instance today, and the command bar shows it.
-  const instanceText = (await page.locator("#workbench-instance-text").textContent()) ?? "";
+  // Every problem declares a runnable default instance today, and the Instance pane shows it.
+  const instanceText = await page.locator("#workbench-instance-full-instance").inputValue();
   expect(instanceText.trim()).not.toBe("");
   await expect(page.locator("#workbench-run")).toBeVisible();
-  await expect(page.locator("#workbench-pane")).toBeVisible();
+  await expect(page.locator("#workbench-section-visualization")).toBeVisible();
 });

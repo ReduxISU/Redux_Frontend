@@ -79,7 +79,7 @@ import {
   SAT3_LONG_FORMULA_FRAMES,
   SAT3_UNSAT_FORMULA_FRAMES,
 } from "./formula-payloads";
-import { drawnCollisions, gotoProblemDetail, openPanel } from "./helpers";
+import { drawnCollisions, gotoProblemDetail, showPane } from "./helpers";
 import {
   EXACT_COVER_CROWDED_NESTED_FRAMES,
   EXACT_COVER_DEEP_NESTED_FRAMES,
@@ -1034,8 +1034,6 @@ test("Graph: on a phone a tap still traces a node after zooming, and focus bring
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openPicture(page, "Clique", LARGE_GRAPH_FRAMES);
-  // (A phone opens the Details panel as a sheet over the picture; close it first.)
-  await page.locator("#workbench-panel-close").click();
   for (let press = 0; press < 3; press += 1) await page.locator(`${GRAPH}-zoom-in`).click();
   await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "3.38");
 
@@ -1071,7 +1069,6 @@ test("Graph: on a phone a tap still traces a node after zooming, and focus bring
 test("Graph: a two-finger pinch zooms on a touch screen", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
-  await page.locator("#workbench-panel-close").click();
   await page.locator(`${GRAPH}-svg`).scrollIntoViewIfNeeded();
   const box = await page.locator(`${GRAPH}-svg`).boundingBox();
   const cx = box.x + box.width / 2;
@@ -1456,7 +1453,6 @@ test("Bipartite Graph: hovering, focusing or tapping a node traces its edges and
 test("Bipartite Graph: on a phone a tap traces a node, also after zooming in", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openBipartite(page, BIPARTITE_CASES[3]);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${BIPARTITE}-svg`);
   await page.locator(`${BIPARTITE}-zoom-in`).click();
   await expect(page.locator(`${BIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -1844,7 +1840,6 @@ test("Layered Graph: hovering, focusing or tapping a node traces its edges and f
 test("Layered Graph: on a phone a tap traces a node, also after zooming in", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openLayered(page, LAYERED_CASES.sssp);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${LAYERED}-svg`);
   await page.locator(`${LAYERED}-zoom-in`).click();
   await expect(page.locator(`${LAYERED}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -2387,7 +2382,6 @@ test("Automaton: hovering, focusing or tapping a state traces its moves and fade
 test("Automaton: on a phone a tap traces a state, also after zooming in", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openAutomaton(page, AUTOMATON_CASES.nfaDefault);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${AUTOMATON}-svg`);
   await page.locator(`${AUTOMATON}-zoom-in`).click();
   await expect(page.locator(`${AUTOMATON}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -2732,7 +2726,6 @@ test("Flow Network: hovering, focusing or tapping a node traces its edges and fa
 test("Flow Network: on a phone a tap traces a node, also after zooming in", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openFlow(page, MIN_CUT_BACKWARD_FLOW_FRAMES);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${FLOW}-svg`);
   await page.locator(`${FLOW}-zoom-in`).click();
   await expect(page.locator(`${FLOW}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -3073,7 +3066,6 @@ test("Grouped Graph: the clause graph zooms like a graph, and a tap still traces
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
-  await page.locator("#workbench-panel-close").click();
   const zoom = page.locator(`${CLAUSES}-zoom`);
   await page.locator(`${CLAUSES}-zoom-in`).click();
   await expect(zoom).toHaveAttribute("data-zoom", "1.50");
@@ -3518,7 +3510,6 @@ test("Packing: hovering, focusing or tapping an item traces it, and a container 
 test("Packing: on a phone a tap traces an item, also after zooming in", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openPacking(page, KNAPSACK_PACKING_FRAMES);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${PACKING}-svg`);
   await page.locator(`${PACKING}-zoom-in`).click();
   await expect(page.locator(`${PACKING}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -3598,8 +3589,6 @@ for (const [key, capture] of Object.entries(PACKING_CASES)) {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       await openPacking(page, capture);
-      // On a phone the problem's panel covers the steps until it is closed.
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       expect(await packingTextCollisions(page)).toEqual([]);
       await runToFrame(page, capture, 0);
       expect(await packingTextCollisions(page)).toEqual([]);
@@ -3639,7 +3628,6 @@ for (const key of ["partition", "knapsack", "binPacking"]) {
     const capture = PACKING_CASES[key];
     await page.setViewportSize({ width: 390, height: 900 });
     await openPacking(page, capture);
-    await page.locator("#workbench-panel-close").click();
     // The drawing takes the box's width (narrower than its 480), so fit draws it 1:1, whole.
     const drawn = await page.locator(`${PACKING}-packing`).getAttribute("data-drawing-width");
     expect(Number(drawn)).toBeLessThan(480);
@@ -4206,7 +4194,6 @@ for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     for (const capture of Object.values(TREE_CASES)) {
       await openTree(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       await page.locator("#workbench-run").click();
       const count = capture.frames.length;
       await expect(page.locator("#workbench-steps-position")).toHaveText(
@@ -4227,7 +4214,6 @@ for (const key of ["sat3", "tsp", "queens"]) {
     const capture = TREE_CASES[key];
     await page.setViewportSize({ width: 390, height: 844 });
     await openTree(page, capture);
-    await page.locator("#workbench-panel-close").click();
     await runToFrame(page, capture, capture.frames.length - 1);
     await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
     // + reaches the text's full size, however wide the tree.
@@ -4280,7 +4266,6 @@ test("Search Tree: Ctrl + wheel also zooms a wide tree on a phone in to readable
   const capture = TSP_SEARCH_TREE_FRAMES;
   await page.setViewportSize({ width: 390, height: 844 });
   await openTree(page, capture);
-  await page.locator("#workbench-panel-close").click();
   await runToFrame(page, capture, capture.frames.length - 1);
   const svg = page.locator(`${TREE}-svg`);
   await svg.scrollIntoViewIfNeeded();
@@ -4333,7 +4318,6 @@ for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     for (const capture of Object.values(TREE_CASES)) {
       await openTree(page, capture);
-      await page.locator("#workbench-panel-close").click();
       await runToFrame(page, capture, capture.frames.length - 1);
       expect(await treeCollisions(page)).toEqual([]);
       await expectFits(page, `${TREE}-svg`);
@@ -4621,7 +4605,6 @@ test("Board: tracing a chessboard square draws a queen's lines of attack from it
 test("Board: on a phone a tap traces a square, also after zooming in", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openBoard(page, SUDOKU_BOARD_FRAMES);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${BOARD}-svg`);
   await page.locator(`${BOARD}-zoom-in`).click();
   await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -4723,7 +4706,6 @@ for (const [key, capture] of Object.entries(BOARD_CASES)) {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       await openBoard(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       const clear = () => svgTextCollisions(page, `${BOARD}-svg`, "[data-square-id]");
       expect(await clear()).toEqual([]);
       await runToFrame(page, capture, 0);
@@ -4744,7 +4726,6 @@ for (const key of ["sudoku", "queensConstructive"]) {
     const capture = BOARD_CASES[key];
     await page.setViewportSize({ width: 390, height: 900 });
     await openBoard(page, capture);
-    await page.locator("#workbench-panel-close").click();
     await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "1.00");
     await expectFits(page, `${BOARD}-svg`);
     const before = await smallestText(page, `${BOARD}-svg`);
@@ -5112,7 +5093,6 @@ test("Geometry: on a phone a tap traces a point, also after zooming in", async (
   await page.setViewportSize({ width: 390, height: 900 });
   const capture = CONVEX_HULL_GEOMETRY_FRAMES;
   await openGeometry(page, capture);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${GEOMETRY}-svg`);
   await page.locator(`${GEOMETRY}-zoom-in`).click();
   await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -5159,7 +5139,6 @@ for (const [key, capture] of Object.entries(GEOMETRY_CASES)) {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       await openGeometry(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       const clear = async () => [
         ...(await svgTextCollisions(page, `${GEOMETRY}-svg`, null)),
         ...(await geometryLineCollisions(page)),
@@ -5183,7 +5162,6 @@ for (const key of ["hull", "wide"]) {
     const capture = GEOMETRY_CASES[key];
     await page.setViewportSize({ width: 390, height: 900 });
     await openGeometry(page, capture);
-    await page.locator("#workbench-panel-close").click();
     const drawn = await page.locator(`${GEOMETRY}-geometry`).getAttribute("data-drawing-width");
     expect(Number(drawn)).toBeLessThan(680);
     await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "1.00");
@@ -5706,7 +5684,6 @@ test("Schedule: on a phone a tap traces an hour, also after zooming in", async (
   await page.setViewportSize({ width: 390, height: 900 });
   const capture = PUMP_EM_SCHEDULE_FRAMES;
   await openSchedule(page, capture);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${SCHEDULE}-svg`);
   await page.locator(`${SCHEDULE}-zoom-in`).click();
   await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -5754,7 +5731,6 @@ for (const [key, capture] of Object.entries(SCHEDULE_CASES)) {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       await openSchedule(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       const clear = async () => [
         ...(await svgTextCollisions(page, `${SCHEDULE}-svg`, null)),
         ...(await drawnCollisions(page, `${SCHEDULE}-svg`)),
@@ -5792,7 +5768,6 @@ for (const key of ["jobs", "pumpCm", "pumpEm", "pumpFractional"]) {
     const capture = SCHEDULE_CASES[key];
     await page.setViewportSize({ width: 390, height: 900 });
     await openSchedule(page, capture);
-    await page.locator("#workbench-panel-close").click();
     const drawn = await page.locator(`${SCHEDULE}-schedule`).getAttribute("data-drawing-width");
     expect(Number(drawn)).toBeLessThan(760);
     await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
@@ -6049,7 +6024,6 @@ test("Tripartite Matching: on a phone the list goes under the columns, and a tap
   await page.setViewportSize({ width: 390, height: 900 });
   const capture = DM3_WIDE_TRIPARTITE_FRAMES;
   await openTripartite(page, capture);
-  await page.locator("#workbench-panel-close").click();
   await expect(page.locator(`${TRIPARTITE}-tripartite`)).toHaveAttribute("data-wide", "false");
   await expectFits(page, `${TRIPARTITE}-svg`);
   await page.locator(`${TRIPARTITE}-zoom-in`).click();
@@ -6096,7 +6070,6 @@ for (const [key, capture] of Object.entries(TRIPARTITE_CASES)) {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       await openTripartite(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       const clear = async () => [
         ...(await svgTextCollisions(page, `${TRIPARTITE}-svg`, null)),
         ...(await drawnCollisions(page, `${TRIPARTITE}-svg`)),
@@ -6120,7 +6093,6 @@ for (const key of ["bruteForce", "wide"]) {
     const capture = TRIPARTITE_CASES[key];
     await page.setViewportSize({ width: 390, height: 900 });
     await openTripartite(page, capture);
-    await page.locator("#workbench-panel-close").click();
     const drawn = await page.locator(`${TRIPARTITE}-tripartite`).getAttribute("data-drawing-width");
     expect(Number(drawn)).toBeLessThan(790);
     await expect(page.locator(`${TRIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
@@ -6417,7 +6389,6 @@ test("Code Tree: on a phone the tree lies on its side, and a tap traces a node a
   await page.setViewportSize({ width: 390, height: 900 });
   const capture = LDC_CODE_TREE_FRAMES;
   await openCodeTree(page, capture);
-  await page.locator("#workbench-panel-close").click();
   await runToFrame(page, capture, capture.frames.length - 1);
   const picture = page.locator(`${CODE_TREE}-codetree`);
   await expect(picture).toHaveAttribute("data-orientation", "side");
@@ -6448,7 +6419,6 @@ for (const scheme of ["light", "dark"]) {
       await page.setViewportSize({ width, height: 900 });
       const capture = LDC_CODE_TREE_FRAMES;
       await openCodeTree(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       await runToFrame(page, capture, capture.frames.length - 1);
       const svg = page.locator(`${CODE_TREE}-svg`);
       await expect(svg).toBeVisible();
@@ -6483,7 +6453,6 @@ for (const [key, capture] of Object.entries(CODE_TREE_CASES)) {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       await openCodeTree(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       const clear = async () => [
         ...(await svgTextCollisions(page, `${CODE_TREE}-svg`, null)),
         ...(await drawnCollisions(page, `${CODE_TREE}-svg`)),
@@ -6507,7 +6476,6 @@ for (const key of ["default", "small"]) {
     const capture = CODE_TREE_CASES[key];
     await page.setViewportSize({ width: 390, height: 900 });
     await openCodeTree(page, capture);
-    await page.locator("#workbench-panel-close").click();
     const drawn = await page.locator(`${CODE_TREE}-codetree`).getAttribute("data-drawing-width");
     expect(Number(drawn)).toBeLessThan(400);
     await expect(page.locator(`${CODE_TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
@@ -6979,7 +6947,6 @@ test("Quantum Circuit: on a phone a tap traces a gate after zooming in, and Shor
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openQuantum(page, BV_QUANTUM_FRAMES);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${QUANTUM}-svg`);
   await page.locator(`${QUANTUM}-zoom-in`).click();
   await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -6992,7 +6959,6 @@ test("Quantum Circuit: on a phone a tap traces a gate after zooming in, and Shor
   await expectFits(page, `${QUANTUM}-svg`);
 
   await openQuantum(page, SHOR_QUANTUM_FRAMES);
-  await page.locator("#workbench-panel-close").click();
   await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.00");
   await expectFits(page, `${QUANTUM}-svg`);
   const atFit = await smallestText(page, `${QUANTUM}-svg`);
@@ -7014,7 +6980,6 @@ for (const scheme of ["light", "dark"]) {
       await page.setViewportSize({ width, height: 900 });
       const capture = BV_QUANTUM_FRAMES;
       await openQuantum(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       await runToFrame(page, capture, 2);
       const svg = page.locator(`${QUANTUM}-svg`);
       await expect(svg).toBeVisible();
@@ -7054,7 +7019,6 @@ for (const key of QUANTUM_COLLISION_CASES) {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       await openQuantum(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       const clear = async () => [
         ...(await svgTextCollisions(page, `${QUANTUM}-svg`, null)),
         ...(await drawnCollisions(page, `${QUANTUM}-svg`)),
@@ -7078,7 +7042,6 @@ for (const key of ["bernsteinVazirani", "deutsch", "simon", "grover"]) {
     const capture = QUANTUM_CASES[key];
     await page.setViewportSize({ width: 390, height: 900 });
     await openQuantum(page, capture);
-    await page.locator("#workbench-panel-close").click();
     const drawn = await page.locator(`${QUANTUM}-quantum`).getAttribute("data-drawing-width");
     expect(Number(drawn)).toBeLessThan(400);
     await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.00");
@@ -7534,7 +7497,6 @@ test("Table: hovering an ILP row traces the x's that are 1 and the coefficients 
 test("Table: on a phone a tap traces a row, also after zooming in", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openTable(page, SSSP_TABLE_FRAMES);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${TABLE}-svg`);
   await page.locator(`${TABLE}-zoom-in`).click();
   await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
@@ -7582,7 +7544,6 @@ for (const [key, capture] of Object.entries(TABLE_CASES)) {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       await openTable(page, capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       const clear = async () => [
         ...(await svgTextCollisions(page, `${TABLE}-svg`, "[data-cell-id]")),
         ...(await drawnCollisions(page, `${TABLE}-svg`)),
@@ -7640,7 +7601,6 @@ for (const width of [390, 320]) {
     }) => {
       await page.setViewportSize({ width, height: 900 });
       await openTable(page, capture);
-      await page.locator("#workbench-panel-close").click();
       await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
       await expectFits(page, `${TABLE}-svg`);
       await page.locator("#workbench-run").click();
@@ -7655,7 +7615,6 @@ for (const width of [390, 320]) {
         // Before Run too.
         await page.reload();
         await expect(page.locator(`${TABLE}-svg`)).toBeVisible({ timeout: 20_000 });
-        await page.locator("#workbench-panel-close").click();
         const before = await smallestText(page, `${TABLE}-svg`);
         expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(
           PHONE_TEXT_PX,
@@ -7706,7 +7665,6 @@ for (const width of [390, 1280]) {
     for (const [type, capture] of Object.entries(FIT_CASES)) {
       await setEveryPictureType(page, type);
       await openPicture(page, "3SAT", capture);
-      if (width < 600) await page.locator("#workbench-panel-close").click();
       const prefix = `#workbench-source-frames-${type.toLowerCase()}`;
       const atFit = async (when) => {
         // The Search Tree has nothing to draw before Run.
@@ -7915,7 +7873,7 @@ test("Drag: the Force / Circle switch and a new instance put the automatic layou
   // A new instance (here the same graph, written with a trailing space) starts afresh.
   await mouseDrag(page, graphNode(page, "4"), -80, -40);
   await expect(page.locator(`${GRAPH}-layout-reset`)).toBeEnabled();
-  await openPanel(page, "instance", { expect });
+  await showPane(page, "instance", { expect });
   const input = page.locator("#workbench-instance-full-instance");
   await input.fill(`${await input.inputValue()} `);
   await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
@@ -7989,7 +7947,6 @@ test("Drag: on a touch screen a swipe at fit scrolls the page, and a long press 
 }) => {
   await page.setViewportSize({ width: 390, height: 700 });
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
-  await page.locator("#workbench-panel-close").click();
   await expectFits(page, `${GRAPH}-svg`);
   const node = graphNode(page, "2");
   const before = await centresOf(page, `${GRAPH}-graph`);
@@ -8829,7 +8786,6 @@ for (const scheme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.setViewportSize({ width, height: 900 });
       await openFormula(page, "SAT", SAT_LONG_FORMULA_FRAMES);
-      if (width < 1200) await page.locator("#workbench-panel-close").click();
       const svg = `${FORMULA}-svg`;
       await expect(page.locator(svg)).toBeVisible();
       await expectFits(page, svg);
@@ -8856,7 +8812,6 @@ for (const scheme of ["light", "dark"]) {
       // A short formula is drawn at its own size on a phone too.
       if (width < 700) {
         await openFormula(page, "3SAT", SAT3_FORMULA_FRAMES);
-        await page.locator("#workbench-panel-close").click();
         const own = await page.locator(svg).evaluate((el) => {
           const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
           return Math.min(
@@ -9244,7 +9199,6 @@ for (const scheme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.setViewportSize({ width, height: 900 });
       await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
-      if (width < 1200) await page.locator("#workbench-panel-close").click();
       const svg = `${NESTED}-svg`;
       await expect(page.locator(svg)).toBeVisible();
       await expectFits(page, svg);

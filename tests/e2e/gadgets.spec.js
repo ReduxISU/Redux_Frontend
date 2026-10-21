@@ -1,6 +1,7 @@
 // tests/e2e/gadgets.spec.js
 //
-// #229 stage 4: the Gadgets section at the bottom of the Result panel in Reduce mode. Hidden
+// #229 stage 4: the Gadgets section, under the pictures in the Workspace's Visualization section
+// since #279 (it was at the bottom of the Result panel), in Reduce mode. Hidden
 // when the reduction lists no gadgets (or the backend sends none, or only legacy entries),
 // closed by default, grouped by kind with counts, "Show all n" past ten rows, and hovering or
 // focusing a row highlighting that gadget's pieces on the source and target pictures.
@@ -14,7 +15,7 @@
 import { GADGET_KINDS, GADGETS_INTRO } from "../../data/gadgetKinds";
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { openPanel } from "./helpers";
+import { showPane } from "./helpers";
 
 const VISUALIZE_REQUEST = /\/api\/redux\/ProblemProvider\/visualize\?/;
 const VISUALIZE_REDUCTION_REQUEST = /\/api\/redux\/ProblemProvider\/visualizeReduction/;
@@ -67,9 +68,9 @@ async function runReduction(page) {
   );
 }
 
-const section = (page) => page.locator("#workbench-result-gadgets");
-const toggle = (page) => page.locator("#workbench-result-gadgets-toggle");
-const row = (page, index) => page.locator(`#workbench-result-gadgets-row-${index}`);
+const section = (page) => page.locator("#workbench-gadgets");
+const toggle = (page) => page.locator("#workbench-gadgets-toggle");
+const row = (page, index) => page.locator(`#workbench-gadgets-row-${index}`);
 const sourcePicture = (page) => page.locator("#workbench-source-picture");
 const targetPicture = (page) => page.locator("#workbench-target-picture");
 
@@ -85,7 +86,7 @@ test("the Gadgets section is hidden when the reduction sends no gadgets", async 
   await answerCompute(page, SAT3, () => reduceBody);
   await openReduce(page, "3SAT", SAT3.instance, /clique/i);
   await runReduction(page);
-  await openPanel(page, "result", { expect });
+  await showPane(page, "visualization", { expect });
   await expect(section(page)).toBeVisible();
 
   // Each case runs after a run that showed the section, so "hidden" is a real change, not
@@ -125,32 +126,30 @@ test("Gadgets is closed by default and groups the gadgets by kind with counts", 
   await answerCompute(page, CLIQUE);
   await openReduce(page, "Clique", CLIQUE.instance, /vertex cover/i);
   await runReduction(page);
-  await openPanel(page, "result", { expect });
+  await showPane(page, "visualization", { expect });
 
   const total = CLIQUE.reduce.gadgets.length;
   await expect(toggle(page)).toHaveText(`Gadgets (${total})`);
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator("#workbench-result-gadgets-body")).toBeHidden();
+  await expect(page.locator("#workbench-gadgets-body")).toBeHidden();
 
   await toggle(page).click();
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#workbench-result-gadgets-intro")).toHaveText(GADGETS_INTRO);
+  await expect(page.locator("#workbench-gadgets-intro")).toHaveText(GADGETS_INTRO);
 
   // Bounds, Edge rules, Elements, in that order, each with its count and explanation.
-  const groups = page.locator("#workbench-result-gadgets-body [data-gadget-kind]");
+  const groups = page.locator("#workbench-gadgets-body [data-gadget-kind]");
   await expect(groups).toHaveCount(3);
   const expected = ["bound", "edgeRule", "element"];
   for (const [position, kind] of expected.entries()) {
     const count = CLIQUE.reduce.gadgets.filter((gadget) => gadget.gadgetKind === kind).length;
     const group = groups.nth(position);
     await expect(group).toHaveAttribute("data-gadget-kind", kind);
-    await expect(group.locator(`#workbench-result-gadgets-group-${kind}-label`)).toHaveText(
-      labelOf(kind),
-    );
-    await expect(group.locator(`#workbench-result-gadgets-group-${kind}-count`)).toHaveText(
+    await expect(group.locator(`#workbench-gadgets-group-${kind}-label`)).toHaveText(labelOf(kind));
+    await expect(group.locator(`#workbench-gadgets-group-${kind}-count`)).toHaveText(
       `${count} ${count === 1 ? "gadget" : "gadgets"}`,
     );
-    await expect(group.locator(`#workbench-result-gadgets-group-${kind}-about`)).toHaveText(
+    await expect(group.locator(`#workbench-gadgets-group-${kind}-about`)).toHaveText(
       GADGET_KINDS.find((entry) => entry.kind === kind).about,
     );
     await expect(group.locator("li")).toHaveCount(count);
@@ -162,7 +161,7 @@ test("Gadgets is closed by default and groups the gadgets by kind with counts", 
   const bound = CLIQUE.reduce.gadgets[boundIndex];
   await expect(row(page, boundIndex)).toHaveAttribute("aria-label", bound.note);
   await expect(row(page, boundIndex)).toHaveText(bound.note);
-  await expect(page.locator(`#workbench-result-gadgets-row-${boundIndex}-note`)).toHaveCount(0);
+  await expect(page.locator(`#workbench-gadgets-row-${boundIndex}-note`)).toHaveCount(0);
   const ruleIndex = gadgetIndex(CLIQUE, "edgeRule", "1");
   const rule = CLIQUE.reduce.gadgets[ruleIndex];
   await expect(row(page, ruleIndex)).toHaveAttribute("aria-label", rule.note);
@@ -180,7 +179,7 @@ test("a group past ten rows shows ten and a Show all button", async ({ page }) =
   await answerCompute(page, SAT3);
   await openReduce(page, "3SAT", SAT3.instance, /clique/i);
   await runReduction(page);
-  await openPanel(page, "result", { expect });
+  await showPane(page, "visualization", { expect });
   await toggle(page).click();
 
   const elements = SAT3.reduce.gadgets.filter((gadget) => gadget.gadgetKind === "element");
@@ -188,17 +187,17 @@ test("a group past ten rows shows ten and a Show all button", async ({ page }) =
   expect(elements.length).toBeGreaterThan(10);
   await expect(toggle(page)).toHaveText(`Gadgets (${SAT3.reduce.gadgets.length})`);
 
-  const groupRows = page.locator("#workbench-result-gadgets-group-group li");
+  const groupRows = page.locator("#workbench-gadgets-group-group li");
   await expect(groupRows).toHaveCount(groupsCount.length);
-  await expect(page.locator("#workbench-result-gadgets-group-group-more")).toHaveCount(0);
+  await expect(page.locator("#workbench-gadgets-group-group-more")).toHaveCount(0);
   // The first clause's group reads with the clause's name and its three nodes.
   await expect(groupRows.first()).toHaveAttribute(
     "aria-label",
     `C1 is built as ${groupsCount[0].targetIds.join(", ")}.`,
   );
 
-  const elementRows = page.locator("#workbench-result-gadgets-group-element li");
-  const more = page.locator("#workbench-result-gadgets-group-element-more");
+  const elementRows = page.locator("#workbench-gadgets-group-element li");
+  const more = page.locator("#workbench-gadgets-group-element-more");
   await expect(elementRows).toHaveCount(10);
   await expect(more).toHaveText(`Show all ${elements.length}`);
   await expect(more).toHaveAttribute("aria-expanded", "false");
@@ -213,7 +212,7 @@ test("hovering or focusing a row highlights its pieces on both pictures", async 
   await answerCompute(page, SAT3);
   await openReduce(page, "3SAT", SAT3.instance, /clique/i);
   await runReduction(page);
-  await openPanel(page, "result", { expect });
+  await showPane(page, "visualization", { expect });
   await toggle(page).click();
 
   const highlighted = (picture) => picture.locator('[data-gadget-highlighted="true"]');
@@ -276,7 +275,7 @@ test("an edge rule highlights its node on the source and its edges on the target
   await answerCompute(page, CLIQUE);
   await openReduce(page, "Clique", CLIQUE.instance, /vertex cover/i);
   await runReduction(page);
-  await openPanel(page, "result", { expect });
+  await showPane(page, "visualization", { expect });
   await toggle(page).click();
 
   const index = gadgetIndex(CLIQUE, "edgeRule", "1");
