@@ -1,28 +1,21 @@
 // components/workbench/CommandBar.js
 //
-// #229: the bar above the picture with everything needed to run: the instance (with Edit,
-// which opens the Instance panel), the Solve | Reduce switch, the Solver dropdown or the To
-// and Using dropdowns, and Run on the right. Instance errors and the run's own status show
-// under it.
+// #229: everything needed to run: the Solve | Reduce switch, the Solver dropdown or the To and
+// Using dropdowns, and Run on the right. Instance errors and the run's own status show under it.
+// The dropdowns are the tagged listboxes of stage 2 (./TaggedSelect.js), each with its tags and
+// info card.
 //
-// Stage 1 of #229 kept the instance simple on purpose: it shows as one line of text,
-// truncated. Labeled pieces per part are stage 5. The dropdowns are the tagged listboxes of
-// stage 2 (./TaggedSelect.js), each with its tags and info card.
+// #279 (board F): this is the top of the Workspace's Execute section, so it has no card of its
+// own, and the instance line and its Edit button are gone: the Instance pane above the
+// Workspace holds the instance, one editable line when collapsed. Stage 2 of #279 redesigns
+// these controls; stage 1 only moved them.
 //
-// On phones and tablets (COMPACT_MEDIA) the bar is not sticky (it never is: it scrolls with
-// the page so the picture gets the screen), and Edit and Run drop to their own lines on the
-// left.
+// On phones and tablets (COMPACT_MEDIA) Run drops to its own line on the left. Nothing here is
+// sticky: it scrolls with the page so the picture gets the screen.
 
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import Box from "@mui/material/Box";
-import {
-  COMPACT_MEDIA,
-  cardSx,
-  DROPDOWN_WIDTH,
-  MONO_FONT,
-  SHARED_CONTROL_WIDTH,
-  secondaryButtonSx,
-} from "./layout";
+import { COMPACT_MEDIA, DROPDOWN_WIDTH, SHARED_CONTROL_WIDTH } from "./layout";
 import TaggedSelect from "./TaggedSelect";
 
 // Forces the next item onto its own line, only on phones and tablets.
@@ -66,9 +59,6 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
- * @param {string} props.instance The instance text.
- * @param {boolean} props.instanceHasError Draws the instance box's border red.
- * @param {() => void} props.onEdit Opens the Instance panel.
  * @param {"solve"|"reduce"} props.mode
  * @param {(mode: "solve"|"reduce") => void} props.onModeChange
  * @param {{value: string, options: {value: string, label: string, tags: Array, card: Object}[],
@@ -87,9 +77,6 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
  */
 export default function CommandBar({
   idPrefix,
-  instance,
-  instanceHasError,
-  onEdit,
   mode,
   onModeChange,
   solver,
@@ -101,93 +88,16 @@ export default function CommandBar({
   runFill,
   status,
 }) {
-  const instanceLabelId = `${idPrefix}-instance-label`;
-
   return (
     <Box
-      component="section"
-      aria-label="Run"
-      id={`${idPrefix}-command-bar`}
+      id={`${idPrefix}-controls`}
       sx={{
-        ...cardSx,
-        p: 1.5,
         display: "flex",
         flexDirection: "column",
         gap: "10px",
         [COMPACT_MEDIA]: { gap: 1.5 },
       }}
     >
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: "10px",
-          [COMPACT_MEDIA]: { flexWrap: "wrap", rowGap: 1.5 },
-        }}
-      >
-        <Box
-          component="span"
-          id={instanceLabelId}
-          sx={{
-            flex: "none",
-            pt: 1.5,
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "text.secondary",
-          }}
-        >
-          Instance
-        </Box>
-        <Box
-          id={`${idPrefix}-instance-text`}
-          role="group"
-          aria-labelledby={instanceLabelId}
-          title={instance}
-          sx={{
-            flex: "1 1 auto",
-            minWidth: 0,
-            minHeight: 44,
-            boxSizing: "border-box",
-            display: "flex",
-            alignItems: "center",
-            px: 1.5,
-            borderRadius: "8px",
-            backgroundColor: "surface.input",
-            border: "1px solid",
-            borderColor: instanceHasError ? "status.err" : "border.main",
-          }}
-        >
-          <Box
-            component="span"
-            sx={{
-              fontFamily: MONO_FONT,
-              fontSize: "0.8125rem",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              color: instance ? "text.primary" : "text.secondary",
-            }}
-          >
-            {instance || "No instance yet. Press Edit to write one."}
-          </Box>
-        </Box>
-        <CompactLineBreak />
-        <Box
-          id={`${idPrefix}-edit-instance`}
-          component="button"
-          type="button"
-          onClick={onEdit}
-          sx={{
-            ...secondaryButtonSx,
-            width: SHARED_CONTROL_WIDTH,
-            flex: "none",
-            alignSelf: "stretch",
-          }}
-        >
-          Edit
-        </Box>
-      </Box>
-
       <Box
         sx={{
           display: "flex",

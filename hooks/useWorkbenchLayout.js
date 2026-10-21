@@ -1,0 +1,104 @@
+// hooks/useWorkbenchLayout.js
+//
+// #279 (stage 1): which parts of the problem page are shown. The rail's five toggles show and
+// hide the Details and Instance panes and the Workspace's three sections (Visualization,
+// Execute, Verify), and Details and Instance each have their own Show all / Show less. Reset
+// layout shows everything again and collapses Details and Instance.
+//
+// The layout is the viewer's own, so it is kept in this browser (localStorage) for the next
+// visit, for every problem alike. Every read and write is wrapped: with storage blocked (private
+// windows, previews) the layout lasts for the page and starts from the defaults.
+//
+// The Workbench only renders in the browser (the page shows just its chrome until the router is
+// ready and the problem has loaded), so reading storage in the initial state can't make the
+// first render differ from a server render.
+
+import { useCallback, useState } from "react";
+
+const STORAGE_KEY = "redux-frontend.workbenchLayout";
+
+/** The rail's keys, in order: two panes, then the Workspace's three sections. */
+export const LAYOUT_KEYS = ["details", "instance", "visualization", "execute", "verify"];
+
+/** The keys that are sections of the one Workspace pane. */
+export const WORKSPACE_SECTIONS = ["visualization", "execute", "verify"];
+
+/** The panes with a Show all / Show less of their own. */
+export const EXPANDABLE_PANES = ["details", "instance"];
+
+function defaultLayout() {
+  return {
+    shown: Object.fromEntries(LAYOUT_KEYS.map((key) => [key, true])),
+    expanded: Object.fromEntries(EXPANDABLE_PANES.map((key) => [key, false])),
+  };
+}
+
+/** The stored layout, keeping only known keys with boolean values; the defaults otherwise. */
+function readLayout() {
+  const layout = defaultLayout();
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null");
+    for (const group of ["shown", "expanded"]) {
+      for (const key of Object.keys(layout[group])) {
+        if (typeof stored?.[group]?.[key] === "boolean") layout[group][key] = stored[group][key];
+      }
+    }
+  } catch {
+    // Storage blocked or unreadable: the defaults.
+  }
+  return layout;
+}
+
+function writeLayout(layout) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
+  } catch {
+    // Storage blocked: the layout lasts for this page.
+  }
+}
+
+/**
+ * @returns {{
+ *   shown: {[key: string]: boolean},
+ *   expanded: {[key: string]: boolean},
+ *   toggle: (key: string) => void,
+ *   show: (key: string) => void,
+ *   setExpanded: (key: string, expanded: boolean) => void,
+ *   reset: () => void,
+ * }}
+ */
+export default function useWorkbenchLayout() {
+  const [layout, setLayout] = useState(readLayout);
+
+  const update = useCallback((change) => {
+    setLayout((current) => {
+      const next = change(current);
+      writeLayout(next);
+      return next;
+    });
+  }, []);
+
+  const toggle = useCallback(
+    (key) =>
+      update((current) => ({
+        ...current,
+        shown: { ...current.shown, [key]: !current.shown[key] },
+      })),
+    [update],
+  );
+  const show = useCallback(
+    (key) =>
+      update((current) =>
+        current.shown[key] ? current : { ...current, shown: { ...current.shown, [key]: true } },
+      ),
+    [update],
+  );
+  const setExpanded = useCallback(
+    (key, expanded) =>
+      update((current) => ({ ...current, expanded: { ...current.expanded, [key]: expanded } })),
+    [update],
+  );
+  const reset = useCallback(() => update(() => defaultLayout()), [update]);
+
+  return { shown: layout.shown, expanded: layout.expanded, toggle, show, setExpanded, reset };
+}

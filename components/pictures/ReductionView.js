@@ -1,8 +1,9 @@
 // components/pictures/ReductionView.js
 //
 // #215: the Reduction View. The instance you gave on the left, the instance the reduction builds
-// on the right (stacked on a phone, or while a panel is open), each drawn by the renderer its
-// picture type already has (./registry.js), so every picture type works on either side. One
+// on the right (stacked, source first, when the Workspace is 960px wide or less: #279), each
+// drawn by the renderer its picture type already has (./registry.js), so every picture type
+// works on either side. One
 // list of frames walks three phases, Build, Solve and Map back (the design mockup's Reduction
 // tab and ReduxISU/Redux's PICTURE-TYPES.md, "Reduction"); the shared step controls under the
 // picture walk it, and ReductionPhaseBar above them names the phase and jumps to one.
@@ -61,7 +62,7 @@ import {
   unbuiltIds,
 } from "../../lib/reductionView";
 import { paletteVars } from "../theme";
-import { COMPACT_MEDIA } from "../workbench/layout";
+import { COMPACT_MEDIA, WORKSPACE_NARROW } from "../workbench/layout";
 import { GADGET_PALETTE } from "./gadgetRings";
 import { FAINT_FILTER, PictureToggle } from "./graphPieces";
 import PictureCanvas from "./PictureCanvas";
@@ -537,7 +538,6 @@ function listNames(ids, nameOf, limit = 6) {
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {ReturnType<typeof import("../../lib/reductionView").normalizeReductionView>} props.view
  * @param {number} props.frameIndex The step on screen.
- * @param {boolean} props.stack Stack the two pictures (a panel is open beside the pane).
  * @param {{sourceIds: string[], targetIds: string[]}|null} [props.activeGadget] The gadget a
  *   Gadgets row in the Result panel is pointing at, drawn when no piece is.
  * @param {{source?: import("react").ReactNode, target?: import("react").ReactNode}} [props.typeControls]
@@ -552,7 +552,6 @@ export default function ReductionView({
   idPrefix,
   view,
   frameIndex,
-  stack,
   activeGadget = null,
   typeControls = {},
   loading = null,
@@ -704,10 +703,11 @@ export default function ReductionView({
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: stack ? "minmax(0, 1fr)" : "minmax(0, 1fr) auto minmax(0, 1fr)",
+          gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)",
           alignItems: "stretch",
           gap: "10px",
-          [COMPACT_MEDIA]: { gridTemplateColumns: "minmax(0, 1fr)" },
+          // #279: stacked by the Workspace's own width, not the window's.
+          [WORKSPACE_NARROW]: { gridTemplateColumns: "minmax(0, 1fr)" },
         }}
       >
         <ReductionPane
@@ -736,8 +736,8 @@ export default function ReductionView({
             fontSize: "1.5rem",
             lineHeight: 1,
             color: "text.secondary",
-            transform: stack ? "rotate(90deg)" : "none",
-            [COMPACT_MEDIA]: { transform: "rotate(90deg)" },
+            transform: "none",
+            [WORKSPACE_NARROW]: { transform: "rotate(90deg)" },
           }}
         >
           {ARROW}

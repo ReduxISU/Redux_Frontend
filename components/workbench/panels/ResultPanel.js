@@ -8,9 +8,10 @@
 //     ProblemProvider/reduce), and "Map a solution across": pick a solver for the source
 //     problem's answer and map that answer onto the target (ProblemProvider/mapSolution). The
 //     mapped certificate gets its own Verify This Answer, checked against the target.
-//   - Verify at the bottom (./VerifyBox.js), which works before anything has run.
-//   - Gadgets (Reduce mode, stage 4, ./GadgetsSection.js): what the reduction built for each
-//     piece of the source, at the bottom of the reduction's result; hidden when it lists none.
+//
+// #279 (board F): this is now the result part of the Workspace's Execute section, under the
+// run controls. Verify (./VerifyBox.js) moved to the Workspace's Verify section and Gadgets
+// (./GadgetsSection.js) to its Visualization section.
 //
 // Time is the round trip this browser measured, network included, and is labelled that way:
 // Redux reports no running time of its own for a solve (#95).
@@ -21,8 +22,6 @@ import { COMPUTE_FAILED } from "../../../hooks/useComputeRequest";
 import ComputeStatus from "../../detail/ComputeStatus";
 import { MONO_FONT, secondaryButtonSx } from "../layout";
 import TaggedSelect from "../TaggedSelect";
-import GadgetsSection from "./GadgetsSection";
-import VerifyBox from "./VerifyBox";
 
 function formatSeconds(milliseconds) {
   return `${(milliseconds / 1000).toFixed(2)} s`;
@@ -94,14 +93,10 @@ function CodeBlock({ id, label, children, maxHeight }) {
  *   solverName, certificate, elapsedMs, instance, targetInstance, mappedBack}` (`targetInstance`
  *   null when Redux did not send it; `mappedBack`, `{text, ok}`, only for a Reduction View
  *   (#215), whose solver ran on the target, so it has no source certificate).
- * @param {() => void} props.onVerifyAnswer Verify This Answer for the solve.
+ * @param {() => void} props.onVerifyAnswer Verify This Answer for the solve (it fills and
+ *   checks the Verify section's box).
  * @param {Object|null} props.map "Map a solution across" (Reduce mode): `{select, onMap,
  *   disabled, hint, request, mapped: {certificate, solverName, reused}|null, onVerifyMapped}`.
- * @param {Object} props.verifyProps Everything ./VerifyBox.js takes, except its idPrefix.
- * @param {Object|null} [props.gadgets] The Gadgets section (Reduce mode): `{runId, gadgets,
- *   sourceFrame, targetFrame, namers?, colors?, activeIndex, onHighlight}`, everything
- *   ./GadgetsSection.js takes
- *   except its idPrefix. `runId` remounts the section per run, so a new run starts it closed.
  */
 export default function ResultPanel({
   idPrefix,
@@ -112,8 +107,6 @@ export default function ResultPanel({
   reduceResult,
   onVerifyAnswer,
   map,
-  verifyProps,
-  gadgets,
 }) {
   const result = mode === "solve" ? solveResult : reduceResult;
   const changed = Boolean(result) && result.instance !== instance;
@@ -289,24 +282,8 @@ export default function ResultPanel({
               )}
             </Box>
           )}
-
-          {gadgets && (
-            <GadgetsSection
-              key={gadgets.runId}
-              idPrefix={`${idPrefix}-gadgets`}
-              gadgets={gadgets.gadgets}
-              sourceFrame={gadgets.sourceFrame}
-              targetFrame={gadgets.targetFrame}
-              namers={gadgets.namers ?? null}
-              colors={gadgets.colors ?? null}
-              activeIndex={gadgets.activeIndex}
-              onHighlight={gadgets.onHighlight}
-            />
-          )}
         </Box>
       )}
-
-      <VerifyBox idPrefix={`${idPrefix}-verify`} mode={mode} {...verifyProps} />
     </Box>
   );
 }

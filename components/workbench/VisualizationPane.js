@@ -1,11 +1,12 @@
 // components/workbench/VisualizationPane.js
 //
-// #229: the picture pane. From top to bottom:
+// #229: the picture pane. #279 (board F): now the Workspace's Visualization section (the
+// section draws the card and heading; Gadgets follow this, see Workbench.js). From top to bottom:
 //   - a Showing line naming what drew the picture ("3SAT Backtracking", "3SAT -> CLIQUE
 //     (...)", or "Not run yet. Showing the default picture of the instance.");
 //   - the picture, with its Visualization Type label and dropdown at its top right. In Reduce
-//     mode the source and target pictures sit side by side, and stack when a panel is open
-//     (or when the screen is too narrow for both);
+//     mode the source and target pictures sit side by side on the Workspace's shared grid
+//     (layout.js sideGridSx), and stack, source first, when the Workspace is 960px or narrower;
 //   - step controls under the picture (components/detail/StepScrubber.js) when the run
 //     recorded steps, otherwise one line saying what the picture is;
 //   - the Legend, open by default.
@@ -25,7 +26,7 @@ import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import PictureCanvas from "../pictures/PictureCanvas";
 import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
 import Legend from "./Legend";
-import { COMPACT_MEDIA, cardSx, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
+import { COMPACT_MEDIA, SHARED_CONTROL_WIDTH, secondaryButtonSx, sideGridSx } from "./layout";
 import TaggedSelect from "./TaggedSelect";
 
 const PICTURE_MIN_HEIGHT = 440;
@@ -175,16 +176,14 @@ function PictureBox({ idPrefix, content }) {
   );
 }
 
-function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
+function PictureColumn({ idPrefix, title, typeControl, content }) {
   return (
     <Box
       sx={{
-        flex: `1 1 ${basis}`,
         minWidth: 0,
         display: "flex",
         flexDirection: "column",
         gap: 1,
-        [COMPACT_MEDIA]: { flexBasis: "380px" },
       }}
     >
       <Box
@@ -213,7 +212,6 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  *   pressed: boolean, disabled: boolean, reason: string, onClick: Function}|null}|null}
  *   [props.verdict] Verify's verdict, at the right of the Showing line (#229 stage 3), with
  *   the "Show where it fails" / "Back to ..." button when it has one.
- * @param {boolean} props.stack Stack the source and target pictures (a panel is open).
  * @param {{title: string, type: {options: Array, value: string, onChange?: Function}|null,
  *   content: PictureContent}} props.source The (only, in Solve mode) picture.
  * @param {{title: string, type: {options: Array, value: string}|null,
@@ -237,7 +235,6 @@ export default function VisualizationPane({
   showing,
   showingIsError,
   verdict,
-  stack,
   source,
   target,
   steps,
@@ -247,7 +244,6 @@ export default function VisualizationPane({
   legendAnnotations,
   reduction = null,
 }) {
-  const basis = target && stack ? "100%" : "380px";
   const noteColor =
     note?.tone === "error"
       ? "error.light"
@@ -256,12 +252,7 @@ export default function VisualizationPane({
         : "text.secondary";
 
   return (
-    <Box
-      component="section"
-      aria-label="Visualization"
-      id={`${idPrefix}-pane`}
-      sx={{ ...cardSx, p: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}
-    >
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
       <Box
         sx={{
           display: "flex",
@@ -357,7 +348,6 @@ export default function VisualizationPane({
           idPrefix={`${idPrefix}-reduction`}
           view={reduction.view}
           frameIndex={steps?.currentStep ?? 0}
-          stack={stack}
           activeGadget={reduction.activeGadget}
           loading={reduction.loading ?? null}
           colorMode={reduction.colorMode ?? "plain"}
@@ -378,11 +368,10 @@ export default function VisualizationPane({
           }}
         />
       ) : (
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
+        <Box sx={target ? sideGridSx : { display: "flex", flexDirection: "column" }}>
           <PictureColumn
             idPrefix={`${idPrefix}-source`}
             title={source.title}
-            basis={basis}
             content={source.content}
             typeControl={
               source.type && (
@@ -394,7 +383,6 @@ export default function VisualizationPane({
             <PictureColumn
               idPrefix={`${idPrefix}-target`}
               title={target.title}
-              basis={basis}
               content={target.content}
               typeControl={
                 target.type && (
