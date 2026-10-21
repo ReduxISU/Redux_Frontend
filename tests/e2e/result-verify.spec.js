@@ -267,7 +267,16 @@ test("Use the solver's answer is disabled until a solve gives one, then fills an
   await openVerify(page);
   const source = strip(page, "source");
   await expect(source.use).toBeDisabled();
+  // The reason is a tooltip and the button's description, not a line on the page.
   await expect(source.useHint).toHaveText("No answer yet. Press Solve in Execute first.");
+  await expect(page.locator("#workbench-verify-source-use-answer-wrap")).toHaveAttribute(
+    "title",
+    "No answer yet. Press Solve in Execute first.",
+  );
+  await expect(page.getByText("No answer yet. Press Solve in Execute first.")).toHaveCSS(
+    "position",
+    "absolute",
+  );
   await expect(source.use).toHaveAttribute(
     "aria-describedby",
     "workbench-verify-source-use-answer-hint",
