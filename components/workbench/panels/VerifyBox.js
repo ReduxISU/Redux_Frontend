@@ -165,6 +165,21 @@ function resultOf(check, problemName) {
 }
 
 /**
+ * One side's latest verdict in a word or two, for the collapsed Verify section's summary (#279):
+ * "Valid", "Not valid", "Checking", or "Not checked" before any check.
+ */
+export function verdictWord(check) {
+  if (check.request.status === COMPUTE_RUNNING) return "Checking";
+  if (check.unreadable) return "Can't check this";
+  const verdict = check.verdict;
+  if (verdict?.valid === true) return "Valid";
+  if (verdict?.valid === false) return "Not valid";
+  if (verdict) return "Unexpected answer";
+  if (check.stale) return "Changed, check again";
+  return "Not checked";
+}
+
+/**
  * What the strip's status line says while there is no verdict. A verdict is its own live region
  * (the box below), so it is not said twice on screen.
  */

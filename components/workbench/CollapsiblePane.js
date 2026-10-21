@@ -12,6 +12,43 @@ import Box from "@mui/material/Box";
 import { cardSx } from "./layout";
 
 /**
+ * The Show all / Show less button at the right of a pane's title line. The Workspace's sections
+ * (./Workspace.js) use it too, so every collapse on the page looks and behaves the same.
+ * @param {{id: string, controls: string, expanded: boolean,
+ *   onExpandedChange: (expanded: boolean) => void}} props
+ */
+export function ExpandButton({ id, controls, expanded, onExpandedChange }) {
+  return (
+    <Box
+      id={id}
+      component="button"
+      type="button"
+      aria-expanded={expanded}
+      aria-controls={controls}
+      onClick={() => onExpandedChange(!expanded)}
+      sx={{
+        order: 2,
+        ml: "auto",
+        minHeight: 40,
+        px: 1.5,
+        borderRadius: "8px",
+        border: "1px solid",
+        borderColor: "border.main",
+        backgroundColor: "surface.input",
+        color: "brand.text",
+        fontFamily: "inherit",
+        fontSize: "0.8125rem",
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        cursor: "pointer",
+      }}
+    >
+      {expanded ? "Show less" : "Show all"}
+    </Box>
+  );
+}
+
+/**
  * @param {Object} props
  * @param {string} props.id The pane's id; the heading and the button are `${id}-heading` and
  *   `${expandId}`.
@@ -65,32 +102,12 @@ export default function CollapsiblePane({
         {!expanded && summary && (
           <Box sx={{ order: 1, flex: "1 1 320px", minWidth: 0 }}>{summary}</Box>
         )}
-        <Box
+        <ExpandButton
           id={expandId}
-          component="button"
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={bodyId}
-          onClick={() => onExpandedChange(!expanded)}
-          sx={{
-            order: 2,
-            ml: "auto",
-            minHeight: 40,
-            px: 1.5,
-            borderRadius: "8px",
-            border: "1px solid",
-            borderColor: "border.main",
-            backgroundColor: "surface.input",
-            color: "brand.text",
-            fontFamily: "inherit",
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            whiteSpace: "nowrap",
-            cursor: "pointer",
-          }}
-        >
-          {expanded ? "Show less" : "Show all"}
-        </Box>
+          controls={bodyId}
+          expanded={expanded}
+          onExpandedChange={onExpandedChange}
+        />
       </Box>
       {/* Always on the page, so the button's aria-controls names something even when the
           collapsed pane has nothing under its title. */}

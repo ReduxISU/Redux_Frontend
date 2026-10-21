@@ -5,6 +5,11 @@
 // status and its result) and Verify (the certificate check). The rail shows and hides each
 // section; the Workspace has no collapse of its own, and hiding all three hides it.
 //
+// #279 (Workspace tweaks): each section has the Details and Instance panes' Show all / Show less
+// (./CollapsiblePane.js ExpandButton) at the right of its heading. Collapsed, the section keeps
+// only a one-line summary beside its heading (`summary`); what it holds stays on the page,
+// hidden, like a section hidden from the rail.
+//
 // Every section stays on the page while hidden (the `hidden` attribute), so a typed certificate,
 // an open list or a chosen step survives hiding and showing it again.
 //
@@ -13,6 +18,7 @@
 // first, when the Workspace itself is 960px wide or less, whatever the window's width.
 
 import Box from "@mui/material/Box";
+import { ExpandButton } from "./CollapsiblePane";
 import { COMPACT_MEDIA, cardSx, sectionHeadingSx, WORKSPACE_CONTAINER } from "./layout";
 
 /**
@@ -23,16 +29,30 @@ import { COMPACT_MEDIA, cardSx, sectionHeadingSx, WORKSPACE_CONTAINER } from "./
  * @param {boolean} props.hidden
  * @param {boolean} props.first The first shown section sits right under the pane's title, with
  *   no rule above it.
+ * @param {boolean} props.expanded Open, or collapsed to its heading and `summary`.
+ * @param {(expanded: boolean) => void} props.onExpandedChange
+ * @param {import("react").ReactNode} props.summary The one line shown while collapsed.
  * @param {import("react").ReactNode} props.children
  */
-export function WorkspaceSection({ id, title, hidden, first, children }) {
+export function WorkspaceSection({
+  id,
+  title,
+  hidden,
+  first,
+  expanded,
+  onExpandedChange,
+  summary,
+  children,
+}) {
   const headingId = `${id}-heading`;
+  const bodyId = `${id}-body`;
   return (
     <Box
       id={id}
       role="region"
       aria-labelledby={headingId}
       hidden={hidden}
+      data-expanded={expanded ? "true" : "false"}
       sx={{
         display: hidden ? "none" : "flex",
         flexDirection: "column",
@@ -43,10 +63,46 @@ export function WorkspaceSection({ id, title, hidden, first, children }) {
         borderColor: "border.soft",
       }}
     >
-      <Box component="h3" id={headingId} sx={sectionHeadingSx}>
-        {title}
+      <Box
+        sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", my: -0.5 }}
+      >
+        <Box component="h3" id={headingId} sx={{ ...sectionHeadingSx, flex: "0 0 auto" }}>
+          {title}
+        </Box>
+        {!expanded && (
+          <Box
+            id={`${id}-summary`}
+            sx={{
+              order: 1,
+              flex: "1 1 280px",
+              minWidth: 0,
+              fontSize: "0.875rem",
+              color: "text.primary",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {summary}
+          </Box>
+        )}
+        <ExpandButton
+          id={`${id}-expand`}
+          controls={bodyId}
+          expanded={expanded}
+          onExpandedChange={onExpandedChange}
+        />
       </Box>
-      {children}
+      <Box
+        id={bodyId}
+        hidden={!expanded}
+        sx={{
+          display: expanded ? "flex" : "none",
+          flexDirection: "column",
+          gap: 1.5,
+          minWidth: 0,
+        }}
+      >
+        {children}
+      </Box>
     </Box>
   );
 }

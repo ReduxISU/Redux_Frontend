@@ -9,6 +9,11 @@
 // Until they do it is null, and Algorithm Steps opens by itself once a run gives it steps; once
 // they do, their choice holds until Reset layout, which makes it null again.
 //
+// #279 (Workspace tweaks): the Workspace's three sections have a Show all / Show less of their
+// own too (open by default, unlike Details and Instance), and the layout keeps whether the
+// pictures highlight the reduction's gadgets in color (`highlightGadgets`, off by default: the
+// pictures are plain until asked). Reset layout opens the sections and turns the highlight off.
+//
 // The layout is the viewer's own, so it is kept in this browser (localStorage) for the next
 // visit, for every problem alike. Every read and write is wrapped: with storage blocked (private
 // windows, previews) the layout lasts for the page and starts from the defaults.
@@ -27,14 +32,18 @@ export const LAYOUT_KEYS = ["details", "instance", "visualization", "execute", "
 /** The keys that are sections of the one Workspace pane. */
 export const WORKSPACE_SECTIONS = ["visualization", "execute", "verify"];
 
-/** The panes with a Show all / Show less of their own. */
-export const EXPANDABLE_PANES = ["details", "instance"];
+/** The panes and sections with a Show all / Show less of their own. */
+export const EXPANDABLE_PANES = ["details", "instance", ...WORKSPACE_SECTIONS];
 
 function defaultLayout() {
   return {
     shown: Object.fromEntries(LAYOUT_KEYS.map((key) => [key, true])),
-    expanded: Object.fromEntries(EXPANDABLE_PANES.map((key) => [key, false])),
+    // Details and Instance start collapsed; the Workspace's sections start open.
+    expanded: Object.fromEntries(
+      EXPANDABLE_PANES.map((key) => [key, WORKSPACE_SECTIONS.includes(key)]),
+    ),
     stepsOpen: null,
+    highlightGadgets: false,
   };
 }
 
@@ -49,6 +58,9 @@ function readLayout() {
       }
     }
     if (typeof stored?.stepsOpen === "boolean") layout.stepsOpen = stored.stepsOpen;
+    if (typeof stored?.highlightGadgets === "boolean") {
+      layout.highlightGadgets = stored.highlightGadgets;
+    }
   } catch {
     // Storage blocked or unreadable: the defaults.
   }
@@ -72,6 +84,8 @@ function writeLayout(layout) {
  *   setExpanded: (key: string, expanded: boolean) => void,
  *   stepsOpen: boolean|null,
  *   setStepsOpen: (open: boolean) => void,
+ *   highlightGadgets: boolean,
+ *   setHighlightGadgets: (on: boolean) => void,
  *   reset: () => void,
  * }}
  */
@@ -110,6 +124,10 @@ export default function useWorkbenchLayout() {
     (open) => update((current) => ({ ...current, stepsOpen: open })),
     [update],
   );
+  const setHighlightGadgets = useCallback(
+    (on) => update((current) => ({ ...current, highlightGadgets: on })),
+    [update],
+  );
   const reset = useCallback(() => update(() => defaultLayout()), [update]);
 
   return {
@@ -120,6 +138,8 @@ export default function useWorkbenchLayout() {
     setExpanded,
     stepsOpen: layout.stepsOpen,
     setStepsOpen,
+    highlightGadgets: layout.highlightGadgets,
+    setHighlightGadgets,
     reset,
   };
 }
