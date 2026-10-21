@@ -1,24 +1,30 @@
 // components/workbench/VisualizationPane.js
 //
 // #229: the picture pane. #279 (board F): now the Workspace's Visualization section (the
-// section draws the card and heading; Gadgets follow this, see Workbench.js). From top to bottom:
-//   - a Showing line naming what drew the picture ("3SAT Backtracking", "3SAT -> CLIQUE
-//     (...)", or "Not run yet. Showing the default picture of the instance.");
-//   - the picture, with its Visualization Type label and dropdown at its top right. In Reduce
-//     mode the source and target pictures sit side by side on the Workspace's shared grid
-//     (layout.js sideGridSx), and stack, source first, when the Workspace is 960px or narrower;
-//   - step controls under the picture (components/detail/StepScrubber.js) when the run
-//     recorded steps, otherwise one line saying what the picture is;
-//   - the Legend, open by default.
+// section draws the card and heading; Gadgets follow this, see Workbench.js). #279 stage 3, from
+// top to bottom:
+//   - the Showing lines. Solve mode: "Problem:" and "Algorithm:" (the solver that drew the
+//     picture, or "Not run yet (default picture)"). Reduce mode: one line, "Reduction:", and each
+//     picture says its own Problem and Algorithm under its caption;
+//   - the pictures, each in a picture frame (./PictureFrame.js) with its Visualization Type
+//     dropdown, the zoom buttons and Full screen in its caption. In Reduce mode the source and
+//     target sit side by side, the same height, and stack, source first, when the Workspace is
+//     960px or narrower. Before a build the target is a placeholder frame, "Not built yet";
+//   - a line saying what the picture is, when there is something to say;
+//   - the Legend, open by default;
+//   - Algorithm Steps: the step controls, closed until a run gives them steps (then they open
+//     by themselves, unless the viewer closed them; hooks/useWorkbenchLayout.js remembers that
+//     until Reset layout). In Reduce mode its timeline reads Build ── Solve ── Map back.
 //
 // #215: in Reduce mode, once Redux has sent a Reduction View, the two pictures are that view
-// (components/pictures/ReductionView.js) instead, and its phase bar sits above the step controls.
-// Each of its pictures keeps its Visualization Type dropdown at its top right (#912).
+// (components/pictures/ReductionView.js) instead. Each of its pictures keeps its Visualization
+// Type dropdown in its caption (#912).
 //
 // The pictures themselves come from the renderers: a format=frames picture through
 // components/pictures/PictureCanvas.js (#199), every other one through the older
 // VisualizationCanvas. This file only lays them out.
 
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import StepScrubber from "../detail/StepScrubber";
@@ -26,15 +32,15 @@ import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import PictureCanvas from "../pictures/PictureCanvas";
 import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
 import Legend from "./Legend";
-import { COMPACT_MEDIA, SHARED_CONTROL_WIDTH, secondaryButtonSx, sideGridSx } from "./layout";
+import { COMPACT_MEDIA, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
+import PictureFrame, { pictureGridSx } from "./PictureFrame";
 import TaggedSelect from "./TaggedSelect";
 
-const PICTURE_MIN_HEIGHT = 440;
-
 /**
- * The Visualization Type label and dropdown at a picture's top right, its list opening
- * aligned to the right edge. With a single choice it still shows (so every picture says what
- * type it is, with its tags and info card) but cannot be opened.
+ * The Visualization Type label and dropdown in a picture's caption, after the picture's name
+ * (#279 stage 3), so its list opens aligned to its left edge. With a single choice it still
+ * shows (so every picture says what type it is, with its tags and info card) but cannot be
+ * opened.
  */
 function VisualizationTypeControl({ id, options, value, onChange }) {
   return (
@@ -42,7 +48,7 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
       id={id}
       label="Visualization Type"
       hue="cyan"
-      align="right"
+      align="left"
       options={options}
       value={value}
       onChange={options.length > 1 ? onChange : undefined}
@@ -52,7 +58,7 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
 }
 
 /**
- * What goes inside one picture box.
+ * What goes inside one picture frame.
  * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object,
  *     highlightIds?: string[]}
  *   | {kind: "picture", type: string, payload: Object|null, layoutKey?: string, frame: Object,
@@ -60,22 +66,22 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
  *      showCaption: boolean, highlightIds?: string[], runs?: {options: Array<{id: string, label: string, accepted?: boolean}>,
  *        value: string|null, onChange: Function}|null}
  *   | {kind: "loading", text: string}
- *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
+ *   | {kind: "placeholder", text: string}
+ *   | {kind: "message", text: string, tone?: "error"|"muted",
  *      action?: {id: string, label: string, onClick: Function}}} PictureContent
- *   `compact` draws a short box (no picture is coming, so no room is held for one).
  *   `highlightIds` are the pieces the hovered or focused gadget row names (#229 stage 4).
  *   `frames` are the run's frames the steps walk (#217: a picture whose layout spans the run),
  *   none before Run.
  *   "picture" is a format=frames picture (#199), drawn by the renderer for its `type`;
  *   `frameIndex` is null for the default picture before Run (the plain frame). `runs` are the
  *   other runs the steps can follow instead of the solver's (#204: an NFA's paths), with the
- *   one chosen (null: the solver's own).
+ *   one chosen (null: the solver's own). "placeholder" is the target before a build (#279
+ *   stage 3): a dashed frame with no picture tools.
  */
-function PictureBox({ idPrefix, content }) {
-  let inner;
+function PictureContentView({ idPrefix, content }) {
   if (content.kind === "frame") {
     const edit = content.edit;
-    inner = (
+    return (
       <Box sx={{ width: "100%", minWidth: 0 }}>
         <VisualizationCanvas
           idPrefix={`${idPrefix}-canvas`}
@@ -89,8 +95,9 @@ function PictureBox({ idPrefix, content }) {
         />
       </Box>
     );
-  } else if (content.kind === "picture") {
-    inner = (
+  }
+  if (content.kind === "picture") {
+    return (
       <PictureCanvas
         idPrefix={`${idPrefix}-frames`}
         name={content.name}
@@ -106,8 +113,9 @@ function PictureBox({ idPrefix, content }) {
         runs={content.runs ?? null}
       />
     );
-  } else if (content.kind === "loading") {
-    inner = (
+  }
+  if (content.kind === "loading") {
+    return (
       <Box
         sx={{ display: "flex", alignItems: "center", gap: 1.5, color: "text.secondary" }}
         role="status"
@@ -116,109 +124,217 @@ function PictureBox({ idPrefix, content }) {
         {content.text}
       </Box>
     );
-  } else {
-    inner = (
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 1.5,
-          maxWidth: 360,
-          textAlign: "center",
-          color: content.tone === "error" ? "error.light" : "text.secondary",
-        }}
-      >
-        <Box component="p" sx={{ m: 0 }}>
-          {content.text}
-        </Box>
-        {content.action && (
-          <Box
-            id={content.action.id}
-            component="button"
-            type="button"
-            onClick={content.action.onClick}
-            sx={secondaryButtonSx}
-          >
-            {content.action.label}
-          </Box>
-        )}
-      </Box>
-    );
   }
-
   return (
     <Box
-      id={`${idPrefix}-picture`}
-      data-picture-kind={content.kind}
-      data-picture-type={content.kind === "picture" ? content.type : undefined}
-      data-gadget-highlight-count={
-        (content.kind === "frame" || content.kind === "picture") && content.highlightIds
-          ? content.highlightIds.length
-          : undefined
-      }
+      role={content.kind === "placeholder" ? "note" : undefined}
       sx={{
-        minHeight: content.compact ? 160 : PICTURE_MIN_HEIGHT,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
-        overflowX: "auto",
-        backgroundColor: "surface.input",
-        borderRadius: "10px",
-        p: 2,
-        boxSizing: "border-box",
-        [COMPACT_MEDIA]: { minHeight: content.compact ? 160 : 320 },
+        gap: 1.5,
+        maxWidth: 360,
+        textAlign: "center",
+        color: content.tone === "error" ? "error.light" : "text.secondary",
       }}
     >
-      {inner}
+      <Box component="p" sx={{ m: 0 }}>
+        {content.text}
+      </Box>
+      {content.action && (
+        <Box
+          id={content.action.id}
+          component="button"
+          type="button"
+          onClick={content.action.onClick}
+          sx={secondaryButtonSx}
+        >
+          {content.action.label}
+        </Box>
+      )}
     </Box>
   );
 }
 
-function PictureColumn({ idPrefix, title, typeControl, content }) {
+/** One picture in its frame: `side` is `source` or `target` as VisualizationPane takes them. */
+function SidePicture({ idPrefix, side, typeId, inGrid, timeline }) {
+  const { content } = side;
+  const drawn = content.kind === "frame" || content.kind === "picture";
+  const placeholder = content.kind === "placeholder";
+  return (
+    <PictureFrame
+      id={`${idPrefix}-frame`}
+      title={side.title}
+      typeControl={side.type && <VisualizationTypeControl id={typeId} {...side.type} />}
+      showing={side.showing ?? null}
+      fullScreenTitle={side.fullScreenTitle ?? null}
+      inGrid={inGrid}
+      tools={!placeholder}
+      timeline={timeline}
+      align={drawn ? "stretch" : "center"}
+    >
+      <Box
+        id={`${idPrefix}-picture`}
+        data-picture-kind={content.kind}
+        data-picture-type={content.kind === "picture" ? content.type : undefined}
+        data-gadget-highlight-count={
+          drawn && content.highlightIds ? content.highlightIds.length : undefined
+        }
+        sx={{
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: drawn ? "stretch" : "center",
+          justifyContent: "center",
+        }}
+      >
+        <PictureContentView idPrefix={idPrefix} content={content} />
+      </Box>
+    </PictureFrame>
+  );
+}
+
+/**
+ * Algorithm Steps (#279 stage 3): a box that opens and closes like the Legend, holding the
+ * reduction's phase timeline (Reduce mode) and the step controls.
+ */
+function AlgorithmSteps({ idPrefix, open, onToggle, children }) {
+  const bodyId = `${idPrefix}-body`;
   return (
     <Box
+      id={idPrefix}
+      data-open={open ? "true" : "false"}
       sx={{
-        minWidth: 0,
+        borderTop: "1px solid",
+        borderColor: "border.soft",
+        pt: 0.5,
         display: "flex",
         flexDirection: "column",
         gap: 1,
       }}
     >
       <Box
+        id={`${idPrefix}-toggle`}
+        component="button"
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={onToggle}
         sx={{
+          alignSelf: "flex-start",
+          minHeight: 44,
           display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          gap: 1,
+          alignItems: "center",
+          gap: 1.25,
+          background: "none",
+          border: "none",
+          color: "text.primary",
+          p: 0,
+          fontFamily: "inherit",
+          fontSize: "0.9375rem",
+          fontWeight: 600,
+          cursor: "pointer",
         }}
       >
-        <Box sx={{ fontWeight: 600, pb: 1.25 }}>{title}</Box>
-        {typeControl}
+        <ExpandMoreIcon
+          aria-hidden="true"
+          sx={{ fontSize: 18, transform: open ? "none" : "rotate(-90deg)" }}
+        />
+        Algorithm Steps
       </Box>
-      <PictureBox idPrefix={idPrefix} content={content} />
+      <Box
+        id={bodyId}
+        hidden={!open}
+        sx={{ display: open ? "flex" : "none", flexDirection: "column", gap: 1, pb: 0.5 }}
+      >
+        {children}
+      </Box>
     </Box>
+  );
+}
+
+/**
+ * The step controls: the reduction's timeline (Reduce mode) and the scrubber, or a line saying
+ * there are no steps yet. `prefix` keeps the full-screen copy's ids apart from the section's.
+ */
+function StepControls({ prefix, steps, reduction, phaseHints, emptyText }) {
+  if (!steps) {
+    return (
+      <Box
+        component="p"
+        id={`${prefix}-steps-empty`}
+        sx={{ m: 0, fontSize: "0.875rem", color: "text.secondary" }}
+      >
+        {emptyText}
+      </Box>
+    );
+  }
+  return (
+    <>
+      {reduction && (
+        <ReductionPhaseBar
+          idPrefix={`${prefix}-phases`}
+          frames={reduction.view.frames}
+          frameIndex={steps.currentStep}
+          onStepChange={steps.onStepChange}
+          hints={phaseHints}
+        />
+      )}
+      {steps.frameCount > 1 && (
+        <StepScrubber
+          idPrefix={`${prefix}-steps`}
+          frameCount={steps.frameCount}
+          currentStep={steps.currentStep}
+          onStepChange={steps.onStepChange}
+        />
+      )}
+    </>
+  );
+}
+
+function ShowingLine({ id, label, value, error = false }) {
+  return (
+    <>
+      <Box component="dt" sx={{ color: "text.secondary" }}>
+        {label}
+      </Box>
+      <Box
+        component="dd"
+        id={id}
+        sx={{
+          m: 0,
+          fontWeight: 600,
+          color: error ? "error.light" : "text.primary",
+          overflowWrap: "anywhere",
+        }}
+      >
+        {value}
+      </Box>
+    </>
   );
 }
 
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
- * @param {string} props.showing The Showing line's text.
- * @param {boolean} [props.showingIsError] Draws the Showing text in the error color.
+ * @param {{problem: string, algorithm: string}|{reduction: string}} props.showing The Showing
+ *   lines: Problem and Algorithm in Solve mode, Reduction in Reduce mode.
+ * @param {boolean} [props.showingIsError] Draws the Algorithm in the error color.
  * @param {{id: string, text: string, valid: boolean|null, button: {id: string, label: string,
  *   pressed: boolean, disabled: boolean, reason: string, onClick: Function}|null}|null}
- *   [props.verdict] Verify's verdict, at the right of the Showing line (#229 stage 3), with
+ *   [props.verdict] Verify's verdict, at the right of the Showing lines (#229 stage 3), with
  *   the "Show where it fails" / "Back to ..." button when it has one.
  * @param {{title: string, type: {options: Array, value: string, onChange?: Function}|null,
- *   content: PictureContent}} props.source The (only, in Solve mode) picture.
- * @param {{title: string, type: {options: Array, value: string}|null,
- *   content: PictureContent}|null} props.target The reduction's target picture, Reduce mode only.
+ *   content: PictureContent, showing?: {problem: string, algorithm: string}|null,
+ *   fullScreenTitle?: string}} props.source The (only, in Solve mode) picture.
+ * @param {{title: string, type: {options: Array, value: string}|null, content: PictureContent,
+ *   showing?: {problem: string, algorithm: string}|null, fullScreenTitle?: string}|null}
+ *   props.target The reduction's target picture, Reduce mode only.
  * @param {{frameCount: number, currentStep: number, onStepChange: Function}|null} props.steps
- * @param {{text: string, tone: "muted"|"warning"|"error"}|null} props.note The line shown in
- *   place of the step controls.
+ * @param {{open: boolean, onToggle: Function, emptyText: string,
+ *   phaseHints?: {[phase: string]: string}}} props.algorithmSteps Algorithm Steps' state.
+ * @param {{text: string, tone: "muted"|"warning"|"error"}|null} props.note The line under the
+ *   pictures.
  * @param {Object[]} props.legendFrames Every frame on screen, for the Legend.
  * @param {Set<string>|null} [props.legendStates] The picture states a format=frames picture
  *   uses (#199), for the Legend.
@@ -238,6 +354,7 @@ export default function VisualizationPane({
   source,
   target,
   steps,
+  algorithmSteps,
   note,
   legendFrames,
   legendStates,
@@ -251,42 +368,81 @@ export default function VisualizationPane({
         ? "viz.orange"
         : "text.secondary";
 
+  // The step controls again at the bottom of a picture in full screen.
+  const timeline = (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      <StepControls
+        prefix={`${idPrefix}-full-screen`}
+        steps={steps}
+        reduction={reduction}
+        phaseHints={algorithmSteps.phaseHints}
+        emptyText={algorithmSteps.emptyText}
+      />
+    </Box>
+  );
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
       <Box
         sx={{
           display: "flex",
           flexWrap: "wrap",
-          alignItems: "baseline",
-          gap: "4px 10px",
+          alignItems: "flex-start",
+          gap: "4px 16px",
           fontSize: "0.875rem",
         }}
       >
-        <Box
-          component="span"
-          sx={{
-            fontSize: "0.75rem",
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "text.secondary",
-          }}
-        >
-          Showing
-        </Box>
-        <Box
-          component="span"
-          id={`${idPrefix}-showing`}
-          aria-live="polite"
-          sx={{ fontWeight: 600, color: showingIsError ? "error.light" : "text.primary" }}
-        >
-          {showing}
+        <Box id={`${idPrefix}-showing`} aria-live="polite" sx={{ minWidth: 0 }}>
+          <Box
+            sx={{
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "text.secondary",
+            }}
+          >
+            Showing
+          </Box>
+          <Box
+            component="dl"
+            sx={{
+              m: 0,
+              display: "grid",
+              gridTemplateColumns: "auto minmax(0, 1fr)",
+              columnGap: 3,
+              rowGap: 0.25,
+            }}
+          >
+            {"reduction" in showing ? (
+              <ShowingLine
+                id={`${idPrefix}-showing-reduction`}
+                label="Reduction:"
+                value={showing.reduction}
+              />
+            ) : (
+              <>
+                <ShowingLine
+                  id={`${idPrefix}-showing-problem`}
+                  label="Problem:"
+                  value={showing.problem}
+                />
+                <ShowingLine
+                  id={`${idPrefix}-showing-algorithm`}
+                  label="Algorithm:"
+                  value={showing.algorithm}
+                  error={showingIsError}
+                />
+              </>
+            )}
+          </Box>
         </Box>
         {verdict && (
           <Box
             component="span"
             sx={{
               ml: "auto",
+              alignSelf: "center",
               display: "inline-flex",
               flexWrap: "wrap",
               alignItems: "center",
@@ -352,6 +508,21 @@ export default function VisualizationPane({
           loading={reduction.loading ?? null}
           colorMode={reduction.colorMode ?? "plain"}
           onColorMode={reduction.onColorMode ?? null}
+          timeline={timeline}
+          sides={{
+            source: {
+              title: source.title,
+              showing: source.showing ?? null,
+              fullScreenTitle: source.fullScreenTitle ?? null,
+            },
+            target: target
+              ? {
+                  title: target.title,
+                  showing: target.showing ?? null,
+                  fullScreenTitle: target.fullScreenTitle ?? null,
+                }
+              : undefined,
+          }}
           typeControls={{
             source: reduction.types?.source && (
               <VisualizationTypeControl
@@ -368,48 +539,26 @@ export default function VisualizationPane({
           }}
         />
       ) : (
-        <Box sx={target ? sideGridSx : { display: "flex", flexDirection: "column" }}>
-          <PictureColumn
+        <Box sx={target ? pictureGridSx : { display: "flex", flexDirection: "column" }}>
+          <SidePicture
             idPrefix={`${idPrefix}-source`}
-            title={source.title}
-            content={source.content}
-            typeControl={
-              source.type && (
-                <VisualizationTypeControl id={`${idPrefix}-source-type`} {...source.type} />
-              )
-            }
+            typeId={`${idPrefix}-source-type`}
+            side={source}
+            inGrid={Boolean(target)}
+            timeline={timeline}
           />
           {target && (
-            <PictureColumn
+            <SidePicture
               idPrefix={`${idPrefix}-target`}
-              title={target.title}
-              content={target.content}
-              typeControl={
-                target.type && (
-                  <VisualizationTypeControl id={`${idPrefix}-target-type`} {...target.type} />
-                )
-              }
+              typeId={`${idPrefix}-target-type`}
+              side={target}
+              inGrid
+              timeline={timeline}
             />
           )}
         </Box>
       )}
 
-      {reduction && steps && (
-        <ReductionPhaseBar
-          idPrefix={`${idPrefix}-phases`}
-          frames={reduction.view.frames}
-          frameIndex={steps.currentStep}
-          onStepChange={steps.onStepChange}
-        />
-      )}
-      {steps && steps.frameCount > 1 && (
-        <StepScrubber
-          idPrefix={`${idPrefix}-steps`}
-          frameCount={steps.frameCount}
-          currentStep={steps.currentStep}
-          onStepChange={steps.onStepChange}
-        />
-      )}
       {note && (
         <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.875rem", color: noteColor }}>
           {note.text}
@@ -424,6 +573,20 @@ export default function VisualizationPane({
           annotations={legendAnnotations}
         />
       )}
+
+      <AlgorithmSteps
+        idPrefix={`${idPrefix}-algorithm-steps`}
+        open={algorithmSteps.open}
+        onToggle={algorithmSteps.onToggle}
+      >
+        <StepControls
+          prefix={idPrefix}
+          steps={steps}
+          reduction={reduction}
+          phaseHints={algorithmSteps.phaseHints}
+          emptyText={algorithmSteps.emptyText}
+        />
+      </AlgorithmSteps>
     </Box>
   );
 }

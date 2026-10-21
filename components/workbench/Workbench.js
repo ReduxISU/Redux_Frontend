@@ -67,6 +67,12 @@
 //     panes use), and a source picture picked before Reduce is used when the view can draw it. The
 //     dropdown shows what Redux says it drew, so a backend that ignores the choice (older than
 //     #912) gets a fixed dropdown naming the default.
+//   - What the Visualization section says and draws (#279 stage 3): the Showing lines (Problem
+//     and Algorithm in Solve mode; the Reduction, and each picture's own Problem and Algorithm, in
+//     Reduce mode, where a side's own solver wins over an answer carried across), the placeholder
+//     target before a build, Algorithm Steps opening by itself once a run gives it steps (unless
+//     the viewer closed it, hooks/useWorkbenchLayout.js), and a solved source showing its answer
+//     in Reduce mode while no Reduction View is on screen.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -150,7 +156,7 @@ const LAYOUT_REGIONS = {
   verify: `${ID}-section-verify`,
 };
 const INSTANCE_URL_DEBOUNCE_MS = 400;
-const NOT_RUN_TEXT = "Not run yet. Showing the default picture of the instance.";
+const NOT_RUN_TEXT = "Not run yet (default picture)";
 const ARROW = "→";
 
 // #229 stage 3: drawing a certificate on the picture. Before any Run, Check is meant to draw
@@ -1042,35 +1048,41 @@ export default function Workbench({ problem }) {
     modeNote = `Reduce builds the ${selectedReduction?.target ?? "target"} instance from this one and solves nothing. Solve each side in its cell below.`;
   }
 
+  // #279 stage 3: the Showing lines. Solve mode says the problem and what drew the picture;
+  // Reduce mode says the reduction, and each picture says its own Problem and Algorithm.
   let showing;
-  if (!selectedViz && !reduceRun.isRunning && !(mode === "reduce" && reduceCurrent)) {
-    // Nothing to draw: say what ran, without claiming a picture.
-    if (solveRun.isRunning) showing = `Running ${selectedSolver?.name ?? "the solver"}.`;
-    else if (mode === "solve" && solveCurrent) showing = solveResult.solverName;
-    else showing = "Not run yet.";
-  } else if (mode === "solve") {
-    if (solving)
-      showing = `Running ${selectedSolver?.name ?? "the solver"}. The picture updates when it finishes.`;
-    else if (showingRunPicture) showing = pictureResult.solverName;
-    else if (solveCurrent)
-      showing = `${solveResult.solverName}. The picture shows the instance before solving.`;
-    else showing = NOT_RUN_TEXT;
-  } else if (reduceRun.isRunning) {
-    showing = `Building the ${selectedReduction?.target ?? "target"} instance. The picture updates when it finishes.`;
-  } else if (reduceCurrent) {
-    showing = `${problem.name} ${ARROW} ${reduceResult.targetName} (${reduceResult.reductionName})`;
-    if (targetSolved?.view && reduceView?.solverName)
-      showing += `, solved by ${reduceView.solverName}`;
-    else showing += ", built";
-    if (targetRun.isRunning)
-      showing += `. Solving ${reduceResult.targetName}; the picture updates when it finishes.`;
+  let showingIsError = false;
+  if (mode === "solve") {
+    let algorithm;
+    if (solving) {
+      algorithm = `Running ${selectedSolver?.name ?? "the solver"}. The picture updates when it finishes.`;
+    } else if (showingRunPicture) {
+      algorithm = pictureResult.solverName;
+    } else if (solveCurrent) {
+      algorithm = selectedViz
+        ? `${solveResult.solverName} (the picture shows the instance before solving)`
+        : solveResult.solverName;
+    } else {
+      algorithm = selectedViz ? NOT_RUN_TEXT : "Not run yet";
+    }
+    if (instanceError) {
+      // Nothing can be drawn from an unreadable instance, so don't claim a default picture.
+      algorithm = `The instance has errors. ${algorithm === NOT_RUN_TEXT ? "Not run yet." : algorithm}`;
+      showingIsError = true;
+    }
+    showing = { problem: problem.name, algorithm };
   } else {
-    showing = NOT_RUN_TEXT;
+    showing = {
+      reduction: reduceCurrent
+        ? reduceResult.reductionName
+        : (selectedReduction?.name ?? `No reductions from ${problem.name} are declared yet`),
+    };
   }
-  if (instanceError) {
-    // Nothing can be drawn from an unreadable instance, so don't claim a default picture.
-    showing = `The instance has errors. ${showing === NOT_RUN_TEXT ? "Not run yet." : showing}`;
-  }
+
+  // #279 stage 3: in Reduce mode with no Reduction View on screen, a solved source shows its
+  // answer: the run's last step, with no steps to walk (Algorithm Steps walks the reduction).
+  const answeredSource = mode === "reduce" && !reduceView && runPictureCurrent;
+  const answeredFrames = answeredSource ? runPicture.frames : [];
 
   // The source (or only) picture.
   let sourceContent;
@@ -1113,6 +1125,28 @@ export default function Workbench({ problem }) {
         name: selectedViz.name,
       };
     }
+  } else if (answeredSource && answeredFrames.length > 0) {
+    const last = answeredFrames.length - 1;
+    sourceContent =
+      runPicture.format === "frames"
+        ? {
+            kind: "picture",
+            type: runPicture.type,
+            payload: runPicture.payload,
+            layoutKey: `${instance} ${selectedViz.className}`,
+            frame: answeredFrames[last],
+            frameIndex: last,
+            frameCount: answeredFrames.length,
+            frames: answeredFrames,
+            name: selectedViz.name,
+            showCaption: false,
+          }
+        : {
+            kind: "frame",
+            frame: answeredFrames[last],
+            backendType: selectedViz.backendType,
+            name: selectedViz.name,
+          };
   } else if (defaultPicture.picture) {
     sourceContent = {
       kind: "picture",
@@ -1239,9 +1273,10 @@ export default function Workbench({ problem }) {
         text: "The reduction did not build. The reason is shown under Reduce, in Execute.",
       };
     } else {
+      // #279 stage 3: a placeholder frame the source picture's size, until Reduce builds it.
       content = {
-        kind: "message",
-        text: `Press Reduce to build the ${targetLabel} instance from this one.`,
+        kind: "placeholder",
+        text: `Not built yet. Press Reduce to build the ${targetLabel} instance from this one.`,
       };
     }
     // #912: before a Reduce that draws a Reduction View, the target's picture can be picked
@@ -1270,7 +1305,7 @@ export default function Workbench({ problem }) {
       targetType = { options: [targetOption(targetViz)], value: targetViz.className };
     }
     target = {
-      title: `Target: ${targetLabel}`,
+      title: `Target · ${reduceCurrent ? reduceResult.targetName : targetLabel}`,
       type: targetType,
       content,
     };
@@ -1410,6 +1445,11 @@ export default function Workbench({ problem }) {
       text: `The target picture is the ${reduceResult.targetName} instance the reduction built.`,
       tone: "muted",
     };
+  } else if (answeredSource) {
+    note = {
+      text: `The ${problem.name} picture shows ${pictureResult.solverName}'s answer. Press Reduce to build the target.`,
+      tone: "muted",
+    };
   } else if (selectedViz && runForMode && runForMode.instance !== instance) {
     note = {
       text: `The instance changed, so the picture is back to the base instance. Press ${runLabel} to animate it again.`,
@@ -1486,14 +1526,15 @@ export default function Workbench({ problem }) {
     }
     legendAnnotations = entries;
   } else if (sourceContent.kind === "picture") {
+    const ran = showingRunPicture || answeredSource;
     const frames = pictureLegendFrames(
       sourceContent.type,
       sourceContent.frame,
-      showingRunPicture ? runFrames : null,
+      showingRunPicture ? runFrames : answeredSource ? answeredFrames : null,
     );
     legendStates = statesInFrames(frames);
     legendAnnotations = pictureAnnotations(sourceContent.type, sourceContent.payload, frames, {
-      plain: !showingRunPicture,
+      plain: !ran,
     });
   }
 
@@ -1887,6 +1928,67 @@ export default function Workbench({ problem }) {
     };
   }
 
+  // --- The pictures' own Showing lines and Algorithm Steps (#279 stage 3) -------------------
+  // Reduce mode: each picture names what produced the answer it shows. Its own solver wins over
+  // an answer carried across from the other side.
+  let sourceShowing = null;
+  let targetShowing = null;
+  if (mode === "reduce") {
+    const builtTargetName = reduceCurrent ? reduceResult.targetName : cellTargetName;
+    let sourceAlgorithm = "Not run yet";
+    if (solveCurrent) sourceAlgorithm = solveResult.solverName;
+    else if (reduceCurrent && backMap.value?.certificate)
+      sourceAlgorithm = `Mapped back from ${reduceResult.targetName}`;
+    let targetAlgorithm = "Not built yet";
+    if (reduceCurrent) {
+      if (targetResult) targetAlgorithm = targetResult.solverName;
+      else if (forwardMap.value?.certificate) targetAlgorithm = `Carried from ${problem.name}`;
+      else targetAlgorithm = "Built, not solved";
+    }
+    sourceShowing = { problem: problem.name, algorithm: sourceAlgorithm };
+    targetShowing = { problem: builtTargetName || "the target", algorithm: targetAlgorithm };
+  }
+
+  const steps = showingRunPicture
+    ? { frameCount: runFrames.length, currentStep, onStepChange: setCurrentStep }
+    : reduceView && !switching
+      ? {
+          frameCount: reduceView.frames.length,
+          currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
+          onStepChange: setReduceStep,
+        }
+      : null;
+  // Algorithm Steps is closed until a run gives it steps, then opens by itself, unless the viewer
+  // opened or closed it (kept until Reset layout).
+  const hasSteps = Boolean(steps) && (Boolean(reduceView) || steps.frameCount > 1);
+  const stepsOpen = layout.stepsOpen ?? hasSteps;
+  let stepsEmpty;
+  if (mode === "solve") {
+    stepsEmpty =
+      showingRunPicture && runFrames.length <= 1
+        ? "This run recorded no steps."
+        : "No steps yet. Press Solve to step through the solver's run.";
+  } else if (reduceCurrent && !reduceView) {
+    stepsEmpty = "Redux sent no steps for this reduction, so there is nothing to step through.";
+  } else {
+    stepsEmpty = `No steps yet. Press Reduce to build the ${cellTargetName || "target"} instance step by step.`;
+  }
+  const solveTargetHint = `Press Solve ${cellTargetName || "the target"} to reach this phase.`;
+  const algorithmSteps = {
+    open: stepsOpen,
+    onToggle: () => layout.setStepsOpen(!stepsOpen),
+    emptyText: steps && hasSteps ? "" : stepsEmpty,
+    phaseHints: {
+      solve: solveTargetHint,
+      map:
+        targetSolved && !answerFound(targetSolved.output)
+          ? `${targetSolved.solverName} found no answer, so there is none to map back.`
+          : targetSolved
+            ? "Not available for this reduction."
+            : solveTargetHint,
+    },
+  };
+
   const gadgetsProps =
     reduceGadgets.length > 0
       ? {
@@ -1971,29 +2073,27 @@ export default function Workbench({ problem }) {
           <VisualizationPane
             idPrefix={ID}
             showing={showing}
-            showingIsError={Boolean(instanceError)}
+            showingIsError={showingIsError}
             verdict={verdictLine}
             source={{
-              title: mode === "solve" ? `${problem.name} instance` : `Source: ${problem.name}`,
+              title: mode === "solve" ? problem.name : `Source · ${problem.name}`,
               type: vizTypeControl,
               content: sourceContent,
+              showing: sourceShowing,
+              fullScreenTitle:
+                mode === "solve"
+                  ? showing.algorithm
+                  : `${problem.name} · ${sourceShowing.algorithm}`,
             }}
-            target={target}
-            steps={
-              showingRunPicture
-                ? {
-                    frameCount: runFrames.length,
-                    currentStep,
-                    onStepChange: setCurrentStep,
-                  }
-                : reduceView && !switching
-                  ? {
-                      frameCount: reduceView.frames.length,
-                      currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
-                      onStepChange: setReduceStep,
-                    }
-                  : null
+            target={
+              target && {
+                ...target,
+                showing: targetShowing,
+                fullScreenTitle: `${targetShowing.problem} · ${targetShowing.algorithm}`,
+              }
             }
+            steps={steps}
+            algorithmSteps={algorithmSteps}
             reduction={reductionPane}
             note={note}
             legendFrames={legendFrames}
