@@ -179,9 +179,9 @@ test("a certificate produced by a live Run verifies against the instance it was 
   expect(solved).not.toBe("");
 
   // The Verify box checks against the same one instance the solver ran on.
-  // Topological Sort declares no example certificate, so the box starts empty
-  // and Check starts disabled.
-  await expect(page.locator(VERIFY_BUTTON)).toBeDisabled();
+  // Topological Sort declares no example certificate, so the box starts empty;
+  // Check is still enabled, since checking needs no run.
+  await expect(page.locator(VERIFY_BUTTON)).toBeEnabled();
   await page.locator(CERTIFICATE_INPUT).fill(solved);
   await page.locator(VERIFY_BUTTON).click();
 

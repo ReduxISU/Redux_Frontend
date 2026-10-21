@@ -198,10 +198,17 @@ test("Check needs no run: valid, not valid with Show where it fails, unreadable,
   await openVerify(page);
   const source = strip(page, "source");
 
-  await expect(source.check).toBeDisabled();
-  await expect(source.checkHint).toHaveText("Type a certificate to check it.");
-  await source.field.fill(ANSWER);
+  // Check is enabled before anything is typed or run; pressing it empty asks for a certificate.
+  await expect(source.check).toBeEnabled();
   await expect(source.checkHint).toHaveCount(0);
+  await source.check.click();
+  await expect(page.locator("#workbench-verify-source-empty")).toHaveText(
+    "Type a certificate first.",
+  );
+  await expect(source.field).toBeFocused();
+  expect(verifyCalls).toHaveLength(0);
+  await source.field.fill(ANSWER);
+  await expect(page.locator("#workbench-verify-source-empty")).toHaveCount(0);
   await source.check.click();
   await expect(source.verdict).toHaveText(
     `Valid. Redux checked it against this ${PROBLEM} instance and accepted it.`,
