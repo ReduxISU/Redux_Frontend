@@ -91,7 +91,8 @@ test("the problem page names its problem by display name: heading, tab title and
   await gotoProblemDetail(page, "Vertex Cover", { expect });
 
   await expect(page).toHaveTitle("Vertex Cover · Redux");
-  await expect(page.locator("#workbench-showing-problem")).toHaveText("Vertex Cover");
+  // #279: the picture's heading names the problem (the Problem line is gone).
+  await expect(page.locator("#workbench-source-frame-title")).toHaveText("Vertex Cover");
   await showPane(page, "verify", { expect });
   const strip = page.locator("#workbench-verify-source-toggle");
   await expect(strip).toBeVisible();
@@ -110,7 +111,7 @@ test("a route that names the problem by its key opens the same page, titled by d
   await expect(page).toHaveTitle("Vertex Cover · Redux");
 });
 
-test("Reduce mode's target menu and its Showing lines and captions use display names", async ({
+test("Reduce mode's target menu and its picture headings use display names", async ({
   page,
   request,
 }) => {
@@ -134,10 +135,8 @@ test("Reduce mode's target menu and its Showing lines and captions use display n
 
   const target = await chooseReduceTarget(page, /^Clique$/, { expect });
   expect(target).toBe("Clique");
-  await expect(page.locator("#workbench-source-frame-showing-problem")).toHaveText("3SAT");
-  await expect(page.locator("#workbench-target-frame-showing-problem")).toHaveText("Clique");
-  await expect(page.locator("#workbench-source-frame-caption")).toContainText("Source · 3SAT");
-  await expect(page.locator("#workbench-target-frame-caption")).toContainText("Target · Clique");
+  await expect(page.locator("#workbench-source-frame-title")).toHaveText("Source: 3SAT");
+  await expect(page.locator("#workbench-target-frame-title")).toHaveText("Target: Clique");
 });
 
 test("Compare names its columns by display name, even when its URL uses keys", async ({ page }) => {

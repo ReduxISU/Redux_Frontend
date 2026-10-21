@@ -139,7 +139,10 @@ test("Run asks once for every picture, and switching keeps the step without aski
     "data-state",
     "ElementHighlight",
   );
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(DFA_ONE_RUN.solverName);
+  // #279: the picture's heading says whose steps it plays.
+  await expect(page.locator("#workbench-source-frame-status")).toHaveText(
+    `${DFA_ONE_RUN.solverName} steps`,
+  );
 
   // Back to the Table, one step earlier: still the same run, still no request.
   await previousStep(page);

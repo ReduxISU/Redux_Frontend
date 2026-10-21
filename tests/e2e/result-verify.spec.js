@@ -216,10 +216,8 @@ test("Check needs no run: valid, not valid with Show where it fails, unreadable,
   await expect(source.verdict).toHaveAttribute("data-valid", "true");
   await expect(source.fail).toHaveCount(0);
   expect(verifyCalls.at(-1).certificate).toBe(ANSWER);
-  // A check doesn't touch the picture.
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(
-    "Not run yet (default picture)",
-  );
+  // A check doesn't touch the picture: it stays plain, its heading saying nothing after the name.
+  await expect(page.locator("#workbench-source-frame-status")).toHaveCount(0);
 
   await source.field.fill(WRONG);
   // The verdict was for the certificate before.

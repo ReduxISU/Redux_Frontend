@@ -21,7 +21,9 @@ import { expect, test } from "./fixtures";
 import { chooseReduceTarget, expandPane, gotoProblemDetail, showPane } from "./helpers";
 
 const PROBLEM = "3SAT";
-const NOT_RUN = "Not run yet (default picture)";
+// #279: the picture's heading says whose steps it plays, after its name; a plain picture's says
+// nothing more.
+const STATUS = "#workbench-source-frame-status";
 const ANSWER = "(x1:True,x2:False,x3:True)";
 
 // `visualize?` (with the `?`) so it never also catches `visualizeReduction`.
@@ -210,13 +212,13 @@ test("after Solve, the answer shows in Execute under Solve, and the layout stays
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
-  const showing = page.locator("#workbench-showing-algorithm");
-  await expect(showing).toHaveText(NOT_RUN);
+  const showing = page.locator(STATUS);
+  await expect(showing).toHaveCount(0);
   await expect(page.locator("#workbench-result-answer")).toHaveCount(0);
 
   await page.locator("#workbench-run").click();
 
-  await expect(showing).toHaveText(solverName);
+  await expect(showing).toHaveText(`${solverName} steps`);
   await expect(page.locator(REGIONS.execute).locator("#workbench-result-answer")).toHaveText(
     ANSWER,
   );
@@ -236,10 +238,10 @@ test("editing the instance after a run resets the picture to the base instance",
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
-  const showing = page.locator("#workbench-showing-algorithm");
+  const showing = page.locator(STATUS);
 
   await page.locator("#workbench-run").click();
-  await expect(showing).toHaveText(solverName);
+  await expect(showing).toHaveText(`${solverName} steps`);
   // The run's picture has steps to play, and opens on its last; the base picture has none.
   await expect(page.locator("#workbench-steps-position")).toContainText("Step 3 of 3");
 
@@ -247,7 +249,7 @@ test("editing the instance after a run resets the picture to the base instance",
   const edited = "(x1 | x2 | !x3)";
   await page.locator("#workbench-instance-full-instance").fill(edited);
 
-  await expect(showing).toHaveText(NOT_RUN);
+  await expect(showing).toHaveCount(0);
   await expect(page.locator("#workbench-steps-position")).toHaveCount(0);
   await expect(page.locator("#workbench-instance-full-instance")).toHaveValue(edited);
   await expect(page.locator("#workbench-note")).toContainText(
@@ -288,9 +290,8 @@ test("an instance Redux cannot read gets a red dot on Instance and an error unde
   await expect(dot).toBeVisible();
   await expect(dot).toHaveAttribute("aria-label", "The instance has errors");
   await expect(page.locator("#workbench-run")).toBeDisabled();
-  await expect(page.locator("#workbench-showing-algorithm")).toContainText(
-    "The instance has errors.",
-  );
+  // #279: there is no Algorithm line to say so any more; the picture and the field do.
+  await expect(page.locator(STATUS)).toHaveCount(0);
   await expect(page.locator("#workbench-source-picture")).toContainText(
     "The instance has a problem, so it can't be drawn.",
   );
@@ -344,9 +345,8 @@ test("Reduce mode shows Target and Reduction, and Reduce builds the target pictu
 
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-showing-reduction")).toHaveText(reduction);
-  await expect(page.locator("#workbench-target-frame-showing-algorithm")).toHaveText(
-    "Built, not solved",
-  );
+  // Built, not solved: the target's heading names it and says nothing more.
+  await expect(page.locator("#workbench-target-frame-status")).toHaveCount(0);
   await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
     "data-picture-kind",
     "frame",
@@ -428,7 +428,7 @@ test("a problem with nothing this site can draw falls back cleanly", async ({ pa
   await expect(page.locator("#workbench-source-picture")).toContainText(
     "This problem has no visualization this site can draw yet.",
   );
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText("Not run yet");
+  await expect(page.locator(STATUS)).toHaveCount(0);
   await expect(page.locator("#workbench-source-type-button")).toHaveCount(0);
   await expect(page.locator("#workbench-legend-toggle")).toHaveCount(0);
 
