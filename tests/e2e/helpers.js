@@ -376,3 +376,18 @@ export function drawnCollisions(page, svgSelector) {
     return found;
   });
 }
+
+/**
+ * #279 stage 2: Reduce only builds, so a Reduction View shows its Build phase alone until the
+ * target is solved. This presses Solve <target> in Execute, answering the solve itself with no
+ * answer (so nothing is mapped back), and waits for it to finish: the view the solve asked for
+ * is on screen by then.
+ */
+export async function solveReductionTarget(page, { expect }) {
+  await page.route(/\/api\/redux\/ProblemProvider\/solve\?/, (route) =>
+    route.fulfill({ json: "{}" }),
+  );
+  await showPane(page, "execute", { expect });
+  await page.locator("#workbench-target-cell-run").click();
+  await expect(page.locator("#workbench-target-cell-run-chip")).toHaveText(/^No answer found/);
+}

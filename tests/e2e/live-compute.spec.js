@@ -85,8 +85,8 @@ const WRONG_CERTIFICATE = "{6,5,4,3,2,1}";
 // status region, the result's answer, and the Verify section's box.
 const RUN_BUTTON = "#workbench-run";
 const RUN_STATUS = "#workbench-solve-status";
-const RUN_CANCEL = "#workbench-solve-cancel-button";
-const RUN_FAILURE = "#workbench-solve-failure";
+const RUN_CANCEL = "#workbench-run-cancel";
+const RUN_FAILURE = "#workbench-run-failure";
 const RUN_OUTPUT = "#workbench-result-answer";
 const INSTANCE_INPUT = "#workbench-instance-full-instance";
 const CERTIFICATE_INPUT = "#workbench-verify-certificate";
@@ -147,10 +147,11 @@ test("Run sends the declared instance to the pinned solver and renders Redux's r
   // drawn: this is the first feedback either control has ever given a
   // screen-reader user.
   await expect(status).toHaveText(`Running ${PINNED_SOLVER}. This can take up to a minute.`);
+  // #279 stage 2: Cancel takes Solve's place while it runs.
   await expect(page.locator(RUN_CANCEL)).toBeVisible();
-  await expect(page.locator(RUN_BUTTON)).toBeDisabled();
+  await expect(page.locator(RUN_BUTTON)).toHaveCount(0);
 
-  await expect(status).toContainText(`${PINNED_SOLVER} finished in`, { timeout: 30_000 });
+  await expect(status).toContainText(`${PINNED_SOLVER} finished. Took`, { timeout: 30_000 });
   await expect(page.locator(RUN_CANCEL)).toHaveCount(0);
 
   // #279: the answer lands in the Execute section, under Run.
@@ -168,7 +169,7 @@ test("a certificate produced by a live Run verifies against the instance it was 
   await selectSolverByName(page, PINNED_SOLVER, { expect });
 
   await page.locator(RUN_BUTTON).click();
-  await expect(page.locator(RUN_STATUS)).toContainText(`${PINNED_SOLVER} finished in`, {
+  await expect(page.locator(RUN_STATUS)).toContainText(`${PINNED_SOLVER} finished. Took`, {
     timeout: 30_000,
   });
   await showPane(page, "execute", { expect });
@@ -258,9 +259,11 @@ test("Run explains the proxy's compute timeout instead of waiting forever", asyn
 
   const failure = page.locator(RUN_FAILURE);
   await expect(failure).toBeVisible();
-  await expect(failure).toContainText("This took too long");
+  // #279 stage 2: a timed-out run is amber, apart from a failed one, and says what to try.
+  await expect(failure).toHaveAttribute("data-kind", "timeout");
+  await expect(page.locator("#workbench-run-chip")).toHaveText("Timed out");
   // The copy names the real limit, so a wrong number here is a real bug.
-  await expect(failure).toContainText("60 seconds");
+  await expect(failure).toContainText("Stopped after 60 seconds");
   await showPane(page, "execute", { expect });
   await expect(page.locator(RUN_OUTPUT)).toHaveCount(0);
 });

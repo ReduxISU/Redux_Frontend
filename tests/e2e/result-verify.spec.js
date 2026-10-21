@@ -4,7 +4,8 @@
 // keeping the solved picture and its current step, the "Show where it fails" button after a
 // Run (and its absence for a valid certificate), an unreadable certificate showing only its
 // error, Reduce mode's Check-against lock (target locked until the reduction has built the
-// target instance), the target instance in the result (Execute), and Map a solution across.
+// target instance), the target instance in the result (Execute), and (#279 stage 2) a solved
+// source answer carried into the target by itself.
 //
 // The catalog comes from the real backend, like the rest of the suite. Every compute request
 // (solve, visualize, visualizeReduction, reduce, mapSolution, verify) is answered here, for the
@@ -107,9 +108,7 @@ test("Verify works before any Run and leaves the default picture as it is", asyn
   await gotoProblemDetail(page, PROBLEM, { expect });
   await showPane(page, "execute", { expect });
 
-  await expect(page.locator("#workbench-result-empty")).toHaveText(
-    "No run yet: press Run for an answer.",
-  );
+  await expect(page.locator("#workbench-result-answer")).toHaveCount(0);
   await expect(page.locator("#workbench-verify-verifier-name")).not.toBeEmpty();
   await expect(page.locator("#workbench-verify-format")).not.toBeEmpty();
   // Solve mode has no Check-against switch.
@@ -144,7 +143,7 @@ test("Verify works before any Run and leaves the default picture as it is", asyn
   await expect(verdict(page)).toHaveCount(0);
 });
 
-test("Verify This Answer fills the box with the run's answer and checks it in one click", async ({
+test("Check it fills the box with the run's answer and checks it in one click", async ({
   page,
 }) => {
   const verifyCalls = await answerCompute(page);
@@ -273,11 +272,9 @@ test("in Reduce mode the target side of Check against unlocks once the reduction
   await expect(targetSide).toHaveText(target);
   await expect(targetSide).toBeDisabled();
   await expect(page.locator("#workbench-verify-check-on-hint")).toHaveText(
-    `Run the reduction first: checking against ${target} needs the target instance it builds.`,
+    `Reduce first: checking against ${target} needs the target instance it builds.`,
   );
-  await expect(page.locator("#workbench-result-empty")).toHaveText(
-    "No run yet: press Run for the target instance.",
-  );
+  await expect(page.locator("#workbench-result-target-instance")).toHaveCount(0);
 
   // The source side works before the Run, like in Solve mode.
   await check(page, ANSWER);
@@ -327,7 +324,7 @@ test("in Reduce mode the target side of Check against unlocks once the reduction
   await expect(sourceSide).toHaveAttribute("aria-pressed", "true");
 });
 
-test("Map a solution across maps an answer onto the target, and its Verify This Answer checks it there", async ({
+test("Solve <source> in Reduce mode carries its answer into the target, and Check it checks it there", async ({
   page,
 }) => {
   const verifyCalls = await answerCompute(page);
@@ -337,46 +334,24 @@ test("Map a solution across maps an answer onto the target, and its Verify This 
   });
   await gotoProblemDetail(page, PROBLEM, { expect });
 
-  // Reduce mode runs the Solve mode's solver first, so read its name before switching.
-  const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
   await page.locator("#workbench-mode-reduce").click();
   const target = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
   await page.locator("#workbench-run").click();
   await showPane(page, "execute", { expect });
   await expect(page.locator("#workbench-result-reduce")).toBeVisible();
+  // #279 stage 2: Reduce only builds, so nothing is mapped yet.
+  expect(mapCalls).toHaveLength(0);
 
-  await expect(page.locator("#workbench-result-map-solver-value")).toHaveText(solverName);
-  await expect(page.locator("#workbench-result-map-hint")).toHaveText(
-    `Uses ${solverName}'s answer from this run. Nothing new runs.`,
-  );
-  await page.locator("#workbench-result-map-button").click();
-  await expect(page.locator("#workbench-result-mapped")).toHaveText(MAPPED);
+  await page.locator("#workbench-source-cell-run").click();
+  // Mapping runs in polynomial time, so it needs no button.
+  await expect(page.locator("#workbench-forward-answer")).toHaveText(MAPPED);
   expect(mapCalls).toHaveLength(1);
   expect(mapCalls[0].searchParams.get("solution")).toBe(ANSWER);
 
-  await page.locator("#workbench-result-verify-mapped").click();
+  await page.locator("#workbench-forward-check").click();
   await expect(certificateBox(page)).toHaveValue(MAPPED);
   await expect(verdict(page)).toHaveText(
     `Verifier: your certificate on the ${target} target is valid`,
   );
   expect(verifyCalls.at(-1).problemInstance).toBe(TARGET_INSTANCE);
-
-  // Another solver has no answer from this run, so mapping solves first.
-  let solves = 0;
-  page.on("request", (request) => {
-    if (SOLVE_REQUEST.test(request.url())) solves += 1;
-  });
-  await page.locator("#workbench-result-map-solver-button").click();
-  await page
-    .locator("#workbench-result-map-solver-listbox")
-    .getByRole("option", { selected: false })
-    .first()
-    .click();
-  await expect(page.locator("#workbench-result-map-hint")).toContainText(
-    `so this solves the ${PROBLEM} instance first.`,
-  );
-  await page.locator("#workbench-result-map-button").click();
-  await expect(page.locator("#workbench-result-map")).toContainText("solved just now");
-  expect(solves).toBe(1);
-  expect(mapCalls).toHaveLength(2);
 });

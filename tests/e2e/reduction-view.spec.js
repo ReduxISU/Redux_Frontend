@@ -1,11 +1,15 @@
 // tests/e2e/reduction-view.spec.js
 //
-// #215: the Reduction View in Reduce mode. Run asks ProblemProvider/reductionView
+// #215: the Reduction View in Reduce mode. Reduce asks ProblemProvider/reductionView
 // (ReduxISU/Redux#660) and draws the source and the target side by side (stacked on a phone),
 // each with its picture type's own renderer, through three phases (Build, Solve, Map back)
 // driven by the shared step controls; pointing at a piece on either side marks what it is linked
 // to through the gadget list, on both sides. A backend without the endpoint (or a reduction it
 // can't show) gets Reduce as it was before.
+//
+// #279 stage 2: Reduce only builds, so its view shows the Build phase alone; Solve <target>
+// asks for the view again with the target's solver and brings Solve and Map back. openView does
+// both (helpers.js solveReductionTarget).
 //
 // The catalog comes from the real backend, like the rest of the suite. CI's backend has no
 // Reduction View, so its answers are captures from a local build (./reduction-payloads.js);
@@ -13,7 +17,7 @@
 
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { drawnCollisions, showPane } from "./helpers";
+import { drawnCollisions, showPane, solveReductionTarget } from "./helpers";
 import {
   COLORING_TO_CLIQUE_COVER_VIEW,
   SAT_TO_3SAT_VIEW,
@@ -94,6 +98,7 @@ async function openView(page, key) {
   await openReduce(page, problem, instance ?? view.source.instance, target);
   await page.locator("#workbench-run").click();
   await expect(page.locator(VIEW)).toBeVisible();
+  await solveReductionTarget(page, { expect });
   return asked;
 }
 
@@ -198,6 +203,30 @@ for (const key of Object.keys(CASES)) {
   });
 }
 
+test("Reduce alone shows only the Build phase; Solve <target> brings Solve and Map back", async ({
+  page,
+}) => {
+  const { view, problem, target } = CASES.sat3ToClique;
+  const asked = [];
+  await page.route(REDUCTION_VIEW_REQUEST, (route) => {
+    asked.push(new URL(route.request().url()));
+    return route.fulfill({ json: view });
+  });
+  await openReduce(page, problem, view.source.instance, target);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "build");
+  await expect(phaseButton(page, "build")).toHaveAttribute("aria-current", "step");
+  await expect(phaseButton(page, "solve")).toBeDisabled();
+  await expect(phaseButton(page, "map")).toBeDisabled();
+  await expect(page.locator("#workbench-showing")).toContainText(", built");
+
+  await solveReductionTarget(page, { expect });
+  await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "map");
+  expect(asked).toHaveLength(2);
+  expect(asked[0].searchParams.get("solver")).toBeNull();
+  expect(asked[1].searchParams.get("solver")).not.toBeNull();
+});
+
 test("the phase bar jumps to each phase, and stepping across a phase's end moves the bar", async ({
   page,
 }) => {
@@ -227,14 +256,9 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(page.locator(`${VIEW}-caption-verdict`)).toHaveText("Verdict: yes");
   await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames.at(-1).caption);
 
-  // The result in Execute says the answer was mapped back, and by which solver.
-  await showPane(page, "execute", { expect });
-  await expect(page.locator("#workbench-result-mapped-back")).toContainText(
-    view.frames.at(-1).caption,
-  );
-  await expect(page.locator("#workbench-result-reduce")).toContainText(
-    `${view.solver}, on the 3SAT target`,
-  );
+  // The Showing line names the target solver whose run the view shows (#279 stage 2: the
+  // answers themselves are in Execute's cells).
+  await expect(page.locator("#workbench-showing")).toContainText(`, solved by ${view.solver}`);
 });
 
 test("Build shows only what the target has built so far, and the finished target after it", async ({
@@ -521,7 +545,6 @@ for (const [status, body] of [
       return route.fulfill(body ? { status, json: body } : { status });
     });
     await openReduce(page, "3SAT", SAT3.instance, /^Clique(?!\s*Cover)/);
-    await expect(page.locator("#workbench-mode-note")).toContainText("step by step");
     for (let run = 0; run < 2; run += 1) {
       await page.locator("#workbench-run").click();
       await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
@@ -533,9 +556,8 @@ for (const [status, body] of [
       await expect(page.locator("#workbench-run")).toBeEnabled();
     }
     expect(asked).toBe(1);
-    await expect(page.locator("#workbench-mode-note")).toContainText("carries the answer across");
     await showPane(page, "execute", { expect });
-    await expect(page.locator("#workbench-result-carried")).toBeVisible();
+    await expect(page.locator("#workbench-result-target-instance")).toBeVisible();
   });
 }
 

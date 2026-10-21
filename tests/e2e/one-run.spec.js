@@ -197,7 +197,7 @@ for (const { reason, note } of [
   },
   {
     reason: "no_frames",
-    note: `${AUTOMATON_NAME} isn't drawn from this run, so it shows the instance. The answer: ${DFA_ONE_RUN.answer}. Press Run solve again to draw a run in it.`,
+    note: `${AUTOMATON_NAME} isn't drawn from this run, so it shows the instance. The answer: ${DFA_ONE_RUN.answer}. Press Solve to draw a run in it.`,
   },
 ]) {
   test(`a picture the run can't draw (${reason}) shows the instance and why, and keeps the step`, async ({

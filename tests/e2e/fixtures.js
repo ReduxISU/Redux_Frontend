@@ -62,6 +62,17 @@ function isReductionViewDeclined(response) {
   return REDUCTION_VIEW_REQUEST.test(response.url()) && [400, 404, 405].includes(response.status());
 }
 
+// #279 stage 2: ProblemProvider/mapSolutionBack (ReduxISU/Redux#690).
+const MAP_BACK_REQUEST = /\/api\/redux\/ProblemProvider\/mapSolutionBack\?/;
+
+/**
+ * Likewise for mapSolutionBack: 404 or 405 is a backend without it, and 400 `no_backward_map` a
+ * reduction that can't map answers back yet. The results row says "Not available" then.
+ */
+function isMapBackDeclined(response) {
+  return MAP_BACK_REQUEST.test(response.url()) && [400, 404, 405].includes(response.status());
+}
+
 export const test = base.extend({
   // Playwright's own fixture convention names this second callback
   // parameter "use" -- renamed to `provideFixture` here purely to dodge a
@@ -91,7 +102,8 @@ export const test = base.extend({
         isApiRequest(response.url()) &&
         !response.ok() &&
         !isRunRouteMissing(response) &&
-        !isReductionViewDeclined(response)
+        !isReductionViewDeclined(response) &&
+        !isMapBackDeclined(response)
       ) {
         failures.push(
           `${response.request().method()} ${response.url()} -- responded ${response.status()}`,
