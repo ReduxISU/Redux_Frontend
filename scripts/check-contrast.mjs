@@ -195,6 +195,11 @@ function pairsFor(t) {
     add(`group ${name}: line on surface`, group.line, s.main, UI);
   }
   add("table header text on raised", t.text.primary, s.raised, TEXT);
+  // #279: the pale orange tint behind a shown pane's rail toggle (the pairs #280 checks).
+  add("text on tint", t.text.primary, t.brand.tint, TEXT);
+  add("secondary text (muted) on tint", t.text.muted, t.brand.tint, TEXT);
+  add("link / orange text on tint", t.brand.text, t.brand.tint, TEXT);
+  add("orange line on tint", t.brand.line, t.brand.tint, UI);
   // #270, #271: the tints behind a box or a region that holds other pieces (a Formula clause, a
   // Nested Set region). What sits on them: every state's outline, the hover trace, the gadget
   // marks, the muted ∨ and clause names, the ∧ (primary text), and each state's own text.
