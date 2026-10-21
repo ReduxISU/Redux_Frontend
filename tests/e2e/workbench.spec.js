@@ -18,7 +18,7 @@
 // (booleanSatisfiability: clauses of literals) and it has reductions for Reduce mode.
 
 import { expect, test } from "./fixtures";
-import { expandPane, gotoProblemDetail, showPane } from "./helpers";
+import { chooseReduceTarget, expandPane, gotoProblemDetail, showPane } from "./helpers";
 
 const PROBLEM = "3SAT";
 const NOT_RUN = "Not run yet (default picture)";
@@ -321,7 +321,7 @@ test("Reduce mode shows Target and Reduction, and Reduce builds the target pictu
   await page.locator("#workbench-mode-reduce").click();
   await expect(page.locator("#workbench-mode-reduce")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#workbench-solver-button")).toHaveCount(0);
-  const target = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
+  const target = await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
   const reduction = ((await page.locator("#workbench-reduction-value").textContent()) ?? "").trim();
   expect(target).not.toBe("");
   expect(reduction).not.toBe("");
