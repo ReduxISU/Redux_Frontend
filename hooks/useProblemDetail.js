@@ -56,6 +56,7 @@ import {
   SOLVER_COMPLEXITY_MAP,
   SOLVER_TYPE_MAP,
 } from "../data/taxonomy";
+import { buildKeyToName, findProblemKey, problemDisplayName } from "../lib/problemNames";
 import {
   requestAllInfo,
   requestAllProblems,
@@ -228,7 +229,7 @@ function buildReductions(
           );
           const [targetVisualization] = targetVisualizations;
           to.push({
-            target: codeToName.get(toCode) ?? toCode,
+            target: codeToName.get(toCode) ?? problemDisplayName(info, toCode),
             cost: REDUCTION_COST_MAP[edge.cost],
             type: REDUCTION_TYPE_MAP[edge.reductionType],
             className: edge.className,
@@ -261,7 +262,7 @@ function buildReductions(
         }
         if (toCode === problemCode) {
           from.push({
-            source: codeToName.get(fromCode) ?? fromCode,
+            source: codeToName.get(fromCode) ?? problemDisplayName(info, fromCode),
             cost: REDUCTION_COST_MAP[edge.cost],
             type: REDUCTION_TYPE_MAP[edge.reductionType],
           });
@@ -281,7 +282,7 @@ function buildReductions(
  */
 function buildTargetProblem(problemCode, info, codeToName) {
   const problemInfo = info[problemCode] ?? {};
-  const name = codeToName.get(problemCode) ?? problemCode;
+  const name = codeToName.get(problemCode) ?? problemDisplayName(info, problemCode);
   const tags = mergeSupplementalTags(name, { complexityClass: problemInfo.complexityClass });
   return {
     name,
@@ -309,13 +310,14 @@ function buildProblem(problemCode, info, batches, codeToName) {
   // whole catalog, called here with just this one problem's own
   // complexityClass so the detail page's badges can never disagree with the
   // card grid's for the same problem.
-  const tags = mergeSupplementalTags(problemInfo.problemName ?? problemCode, {
+  const name = codeToName.get(problemCode) ?? problemDisplayName(info, problemCode);
+  const tags = mergeSupplementalTags(name, {
     complexityClass: problemInfo.complexityClass,
   });
 
   return {
-    name: problemInfo.problemName ?? problemCode,
-    slug: slugify(problemInfo.problemName ?? problemCode),
+    name,
+    slug: slugify(name),
     oneLiner: problemInfo.problemDefinition ?? "",
     tags,
     overview: {
@@ -372,7 +374,8 @@ function buildProblem(problemCode, info, batches, codeToName) {
  *
  * @param {string} url Base API URL, e.g. `/api/redux/`.
  * @param {string|null} problemName Exact real problem display name (e.g.
- *   "Clique"), or null/undefined while the route param isn't known yet.
+ *   "Clique") or its key ("CLIQUE", any case; #279), or null/undefined while the route
+ *   param isn't known yet. `problem.name` is always the display name.
  * @returns {{problem: Object|null, loading: boolean, error: Error|null}}
  */
 export function useProblemDetail(url, problemName) {
@@ -422,14 +425,10 @@ export function useProblemDetail(url, problemName) {
         if (cancelled) return;
 
         const safeInfo = info ?? {};
-        const codeToName = new Map();
-        for (const code of problemCodes ?? []) {
-          codeToName.set(code, safeInfo[code]?.problemName ?? code);
-        }
+        const codeToName = buildKeyToName(problemCodes, safeInfo);
 
-        const problemCode = (problemCodes ?? []).find(
-          (code) => codeToName.get(code) === problemName,
-        );
+        // #279: a route names the problem by display name; its key ("VERTEXCOVER") finds it too.
+        const problemCode = findProblemKey(codeToName, problemName);
 
         if (!problemCode) {
           setProblem(null);
