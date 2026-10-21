@@ -64,6 +64,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
+import PageTitle from "../components/PageTitle";
 import PlaylistRail from "../components/PlaylistRail";
 import { isProblemComplete } from "../components/StatusIcon";
 import { COMPACT_MEDIA } from "../components/workbench/layout";
@@ -141,9 +142,11 @@ function optionLabel(facetKey, optionKey) {
 // choice (see the ProblemDetail component below) already avoids showing any
 // wrong content while a fetch is in flight; this only adds a quiet signal
 // that something's happening, without changing what that choice guesses.
-function PageShell({ children, loading = false }) {
+function PageShell({ children, loading = false, title = null }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      {/* #279: the tab names the problem by its display name. */}
+      {title && <PageTitle title={title} />}
       <NavBar />
       {loading && <LinearProgress aria-label="Loading problem" />}
       {children}
@@ -254,7 +257,7 @@ export default function ProblemDetail() {
     : -1;
 
   return (
-    <PageShell>
+    <PageShell title={problem.name}>
       <Box
         component="main"
         sx={{
