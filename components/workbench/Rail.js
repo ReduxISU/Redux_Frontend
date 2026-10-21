@@ -42,7 +42,7 @@ const RAIL_ITEMS = {
  * @param {{[key: string]: {label: string, color: string}|null}} props.dots An optional
  *   notification dot per panel key (`label` is read by screen readers).
  * @param {string} props.accentLine The active button's border color (orange in Solve mode,
- *   gold in Reduce mode, matching the Run button).
+ *   gold in Reduce mode, matching the mode toggle).
  */
 export default function Rail({ idPrefix, openPanel, onToggle, panelId, dots, accentLine }) {
   return (
