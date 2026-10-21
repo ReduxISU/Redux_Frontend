@@ -1,15 +1,19 @@
 // components/workbench/PictureFrame.js
 //
 // #279 stage 3 (board F): the frame every picture on the problem page sits in, Solve mode's one
-// picture and Reduce mode's two alike. Top to bottom:
-//   - the caption: the picture's name ("3SAT", "Source · 3SAT", "Target · Clique"), its
-//     Visualization Type dropdown, the zoom buttons (−, + and Fit) and Full screen;
-//   - in Reduce mode, what the picture shows: "Problem:" and "Algorithm:" (who produced the
-//     answer it shows, or that nothing has yet);
+// picture and Reduce mode's two alike. #279 (Workspace tweaks) made each frame its own outlined
+// section. Top to bottom:
+//   - its heading: the picture's problem ("3SAT" in Solve mode, "Source: 3SAT" and
+//     "Target: Clique" in Reduce mode), then, quieter and after a dot, what the picture shows
+//     when that adds something ("3SAT Backtracking steps", "answer mapped back from Clique");
+//     a plain picture says nothing more. The heading sits outside the picture;
+//   - one row of controls: the Visualization Type dropdown, the zoom buttons (−, + and Fit, and
+//     Reset layout where the picture has one) and Full screen;
 //   - the picture itself, about 62% of the window's height (clamped 360 to 680 px), so a tall
 //     picture no longer runs down the page on a wide screen and two frames side by side share
 //     their top and bottom lines;
 //   - a note under the picture, when the picture has one.
+// The old "Problem:" and "Algorithm:" lines are gone: Execute names the algorithm.
 // Stacked, in a Workspace 960px wide or less, that height is a minimum: a tall picture on a phone
 // grows to its own shape (up to the screen's height), as before, so its text stays readable.
 //
@@ -25,8 +29,8 @@
 // highlight.
 //
 // Two frames side by side (`inGrid`) sit on pictureGridSx, each spanning its four rows as a
-// subgrid, so their captions, Problem / Algorithm lines, pictures and notes line up row by row
-// whatever each one's caption holds. When the Workspace is 960px wide or less they stack, source
+// subgrid, so their headings, control rows, pictures and notes line up row by row whatever each
+// one's row holds. When the Workspace is 960px wide or less they stack, source
 // first (#279 stage 1).
 
 import Box from "@mui/material/Box";
@@ -49,12 +53,6 @@ export const pictureGridSx = {
   columnGap: "16px",
   rowGap: 0,
   [WORKSPACE_NARROW]: { display: "flex", flexDirection: "column", gap: 2 },
-};
-
-const captionLabelSx = {
-  fontSize: "0.8125rem",
-  fontWeight: 600,
-  color: "text.secondary",
 };
 
 const toolButtonSx = {
@@ -95,44 +93,14 @@ function FullScreenIcon({ exit }) {
 }
 
 /**
- * "Problem:" and "Algorithm:" under a frame's caption (Reduce mode).
- * @param {{id: string, problem: string, algorithm: string}} props
- */
-export function ShowingPair({ id, problem, algorithm }) {
-  return (
-    <Box
-      component="dl"
-      id={id}
-      sx={{
-        m: 0,
-        display: "grid",
-        gridTemplateColumns: "auto minmax(0, 1fr)",
-        columnGap: 2,
-        rowGap: 0.25,
-        fontSize: "0.875rem",
-        "& dt": { color: "text.secondary" },
-        "& dd": { m: 0, fontWeight: 600, color: "text.primary", overflowWrap: "anywhere" },
-      }}
-    >
-      <dt>Problem:</dt>
-      <dd id={`${id}-problem`}>{problem}</dd>
-      <dt>Algorithm:</dt>
-      <dd id={`${id}-algorithm`}>{algorithm}</dd>
-    </Box>
-  );
-}
-
-/**
  * @param {Object} props
- * @param {string} props.id The frame's id; its parts derive from it (`-caption`, `-view`,
- *   `-fullscreen`, `-showing`, `-note`).
- * @param {string} props.title The picture's name, at the caption's left.
- * @param {string} [props.titleId] An id for the title (a heading another element points at).
+ * @param {string} props.id The frame's id; its parts derive from it (`-heading`, `-status`,
+ *   `-caption` (the controls row), `-view`, `-fullscreen`, `-note`).
+ * @param {string} props.title The picture's problem ("Source: 3SAT"), the heading.
+ * @param {string} [props.titleId] An id for the title's text.
+ * @param {string|null} [props.status] What the picture shows, after the title, when that adds
+ *   something ("3SAT Backtracking steps").
  * @param {import("react").ReactNode} [props.typeControl] The Visualization Type dropdown.
- * @param {{problem: string, algorithm: string}|null} [props.showing] What the picture shows, under
- *   the caption (Reduce mode).
- * @param {string|null} [props.fullScreenTitle] Said in the caption while in full screen, where the
- *   Showing line above the pictures is out of sight.
  * @param {import("react").ReactNode} [props.note] A line under the picture.
  * @param {string} [props.noteId] The note's id, when not `${id}-note`.
  * @param {boolean} [props.inGrid] One of two frames on pictureGridSx.
@@ -148,9 +116,8 @@ export default function PictureFrame({
   id,
   title,
   titleId,
+  status = null,
   typeControl = null,
-  showing = null,
-  fullScreenTitle = null,
   note = null,
   noteId,
   inGrid = false,
@@ -179,21 +146,32 @@ export default function PictureFrame({
     };
   }, [on]);
 
+  // Each frame is its own outlined section, so two side by side read as two.
+  const sectionSx = {
+    border: "1px solid",
+    borderColor: "border.soft",
+    borderRadius: "12px",
+    p: 1.5,
+    boxSizing: "border-box",
+  };
   const gridSx = inGrid
     ? {
+        ...sectionSx,
         display: "grid",
         gridTemplateRows: "subgrid",
         gridRow: "span 4",
         rowGap: 1,
         [WORKSPACE_NARROW]: { display: "flex", flexDirection: "column", gap: 1 },
       }
-    : { display: "flex", flexDirection: "column", gap: 1 };
+    : { ...sectionSx, display: "flex", flexDirection: "column", gap: 1 };
+  const headingId = `${id}-heading`;
 
   return (
     <Box
       component="figure"
       id={id}
       data-full-screen={on ? "true" : "false"}
+      aria-labelledby={on ? undefined : headingId}
       aria-label={on ? `${title}, full screen` : undefined}
       sx={{
         m: 0,
@@ -215,7 +193,31 @@ export default function PictureFrame({
       }}
     >
       <Box
-        component="figcaption"
+        component="h4"
+        id={headingId}
+        data-status={status ?? ""}
+        sx={{
+          m: 0,
+          minWidth: 0,
+          fontSize: "0.9375rem",
+          fontWeight: 700,
+          color: "text.primary",
+          overflowWrap: "anywhere",
+        }}
+      >
+        <Box component="span" id={titleId ?? `${id}-title`}>
+          {title}
+        </Box>
+        {status && (
+          <Box component="span" sx={{ fontWeight: 500, color: "text.secondary" }}>
+            {" · "}
+            <Box component="span" id={`${id}-status`}>
+              {status}
+            </Box>
+          </Box>
+        )}
+      </Box>
+      <Box
         id={`${id}-caption`}
         sx={{
           display: "flex",
@@ -225,29 +227,6 @@ export default function PictureFrame({
           minWidth: 0,
         }}
       >
-        <Box
-          component="span"
-          id={titleId}
-          sx={{
-            ...captionLabelSx,
-            // The name has its own line, so the dropdown and the tools share the next one and
-            // two frames side by side wrap alike.
-            flexBasis: on && fullScreenTitle ? "auto" : "100%",
-            minWidth: 0,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {title}
-        </Box>
-        {on && fullScreenTitle && (
-          <Box
-            component="span"
-            id={`${id}-full-screen-title`}
-            sx={{ flex: "1 1 60%", fontWeight: 700, color: "text.primary" }}
-          >
-            {fullScreenTitle}
-          </Box>
-        )}
         {typeControl}
         <Box component="span" sx={{ flex: "1 1 0", minWidth: 0 }} />
         {tools && (
@@ -277,11 +256,6 @@ export default function PictureFrame({
           </>
         )}
       </Box>
-      {showing ? (
-        <ShowingPair id={`${id}-showing`} {...showing} />
-      ) : inGrid && !on ? (
-        <Box aria-hidden="true" />
-      ) : null}
       <Box
         id={`${id}-view`}
         data-picture-view=""

@@ -1,20 +1,23 @@
 // components/workbench/VisualizationPane.js
 //
 // #229: the picture pane. #279 (board F): now the Workspace's Visualization section (the
-// section draws the card and heading; Gadgets follow this, see Workbench.js). #279 stage 3, from
-// top to bottom:
-//   - the Showing lines. Solve mode: "Problem:" and "Algorithm:" (the solver that drew the
-//     picture, or "Not run yet (default picture)"). Reduce mode: one line, "Reduction:", and each
-//     picture says its own Problem and Algorithm under its caption;
-//   - the pictures, each in a picture frame (./PictureFrame.js) with its Visualization Type
-//     dropdown, the zoom buttons and Full screen in its caption. In Reduce mode the source and
+// section draws the card and heading; Gadgets follow this, see Workbench.js). #279 stage 3 and
+// the Workspace tweaks, from top to bottom:
+//   - Reduce mode only: the Showing line, "Reduction:" and the reduction's name;
+//   - the pictures, each its own outlined section (./PictureFrame.js): a heading naming its
+//     problem ("3SAT" in Solve mode; "Source: 3SAT", "Target: Clique" in Reduce mode) with what
+//     it shows after it when that adds something ("3SAT Backtracking steps"), a row with its
+//     Visualization Type dropdown, the zoom buttons and Full screen, then the picture. There is
+//     no "Algorithm:" line any more: Execute names the algorithm. In Reduce mode the source and
 //     target sit side by side, the same height, and stack, source first, when the Workspace is
 //     960px or narrower. Before a build the target is a placeholder frame, "Not built yet";
 //   - a line saying what the picture is, when there is something to say;
 //   - the Legend, open by default;
 //   - Algorithm Steps: the step controls, closed until a run gives them steps (then they open
 //     by themselves, unless the viewer closed them; hooks/useWorkbenchLayout.js remembers that
-//     until Reset layout). In Reduce mode its timeline reads Build ── Solve ── Map back.
+//     until Reset layout). In Reduce mode its timeline reads Build ── Solve ── Map back, and the
+//     Highlight Gadgets switch sits at its bottom: on, every gadget wears its own color on both
+//     pictures; off, the pictures are plain (a gadget is still marked while pointed at).
 //
 // #215: in Reduce mode, once Redux has sent a Reduction View, the two pictures are that view
 // (components/pictures/ReductionView.js) instead. Each of its pictures keeps its Visualization
@@ -166,8 +169,7 @@ function SidePicture({ idPrefix, side, typeId, inGrid, timeline }) {
       id={`${idPrefix}-frame`}
       title={side.title}
       typeControl={side.type && <VisualizationTypeControl id={typeId} {...side.type} />}
-      showing={side.showing ?? null}
-      fullScreenTitle={side.fullScreenTitle ?? null}
+      status={side.status ?? null}
       inGrid={inGrid}
       tools={!placeholder}
       timeline={timeline}
@@ -292,7 +294,110 @@ function StepControls({ prefix, steps, reduction, phaseHints, emptyText }) {
   );
 }
 
-function ShowingLine({ id, label, value, error = false }) {
+/**
+ * The Highlight Gadgets switch (#279), at the bottom of Algorithm Steps in Reduce mode. Disabled,
+ * it says why under it.
+ * @param {{id: string, checked: boolean, onChange: (on: boolean) => void,
+ *   disabledReason: string|null}} props
+ */
+function HighlightGadgetsSwitch({ id, checked, onChange, disabledReason }) {
+  const disabled = Boolean(disabledReason);
+  const on = checked && !disabled;
+  return (
+    <Box
+      id={`${id}-row`}
+      data-highlight-gadgets={on ? "on" : "off"}
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 0.5,
+        borderTop: "1px solid",
+        borderColor: "border.soft",
+        pt: 1,
+      }}
+    >
+      <Box
+        id={id}
+        component="button"
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={disabled ? `${id}-reason` : undefined}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        sx={{
+          alignSelf: "flex-start",
+          minHeight: 44,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 1.25,
+          p: 0,
+          background: "none",
+          border: "none",
+          color: "text.primary",
+          fontFamily: "inherit",
+          fontSize: "0.9375rem",
+          fontWeight: 600,
+          cursor: "pointer",
+          "&:disabled": { cursor: "not-allowed", color: "text.secondary" },
+          "&:focus-visible": { outline: "none" },
+          "&:focus-visible > [data-track]": {
+            outline: "2px solid",
+            outlineColor: "brand.line",
+            outlineOffset: "2px",
+          },
+        }}
+      >
+        <Box
+          component="span"
+          data-track=""
+          aria-hidden="true"
+          sx={{
+            position: "relative",
+            flex: "none",
+            width: 40,
+            height: 22,
+            borderRadius: "11px",
+            border: "1px solid",
+            borderStyle: disabled ? "dashed" : "solid",
+            borderColor: on ? "brand.line" : "border.main",
+            backgroundColor: on ? "brand.line" : "surface.input",
+            boxSizing: "border-box",
+          }}
+        >
+          <Box
+            component="span"
+            sx={{
+              position: "absolute",
+              top: 2,
+              left: on ? 20 : 2,
+              width: 16,
+              height: 16,
+              borderRadius: "50%",
+              backgroundColor: on ? "brand.onLine" : "text.secondary",
+              transition: "left 120ms ease",
+            }}
+          />
+        </Box>
+        <Box component="span" id={`${id}-label`}>
+          Highlight Gadgets
+        </Box>
+      </Box>
+      {disabled && (
+        <Box
+          component="p"
+          id={`${id}-reason`}
+          sx={{ m: 0, fontSize: "0.8125rem", color: "text.secondary" }}
+        >
+          {disabledReason}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function ShowingLine({ id, label, value }) {
   return (
     <>
       <Box component="dt" sx={{ color: "text.secondary" }}>
@@ -304,7 +409,7 @@ function ShowingLine({ id, label, value, error = false }) {
         sx={{
           m: 0,
           fontWeight: 600,
-          color: error ? "error.light" : "text.primary",
+          color: "text.primary",
           overflowWrap: "anywhere",
         }}
       >
@@ -317,18 +422,19 @@ function ShowingLine({ id, label, value, error = false }) {
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
- * @param {{problem: string, algorithm: string}|{reduction: string}} props.showing The Showing
- *   lines: Problem and Algorithm in Solve mode, Reduction in Reduce mode.
- * @param {boolean} [props.showingIsError] Draws the Algorithm in the error color.
- * @param {{title: string, type: {options: Array, value: string, onChange?: Function}|null,
- *   content: PictureContent, showing?: {problem: string, algorithm: string}|null,
- *   fullScreenTitle?: string}} props.source The (only, in Solve mode) picture.
- * @param {{title: string, type: {options: Array, value: string}|null, content: PictureContent,
- *   showing?: {problem: string, algorithm: string}|null, fullScreenTitle?: string}|null}
- *   props.target The reduction's target picture, Reduce mode only.
+ * @param {{reduction: string}|null} props.showing The Showing line: the reduction, in Reduce
+ *   mode; null in Solve mode.
+ * @param {{title: string, status?: string|null, type: {options: Array, value: string,
+ *   onChange?: Function}|null, content: PictureContent}} props.source The (only, in Solve mode)
+ *   picture: its heading, what it shows (`status`), its Visualization Type and its content.
+ * @param {{title: string, status?: string|null, type: {options: Array, value: string}|null,
+ *   content: PictureContent}|null} props.target The reduction's target picture, Reduce mode only.
  * @param {{frameCount: number, currentStep: number, onStepChange: Function}|null} props.steps
  * @param {{open: boolean, onToggle: Function, emptyText: string,
  *   phaseHints?: {[phase: string]: string}}} props.algorithmSteps Algorithm Steps' state.
+ * @param {{checked: boolean, onChange: (on: boolean) => void, disabledReason: string|null}|null}
+ *   [props.highlightGadgets] The Highlight Gadgets switch at the bottom of Algorithm Steps
+ *   (Reduce mode); null hides it.
  * @param {{text: string, tone: "muted"|"warning"|"error"}|null} props.note The line under the
  *   pictures.
  * @param {Object[]} props.legendFrames Every frame on screen, for the Legend.
@@ -345,7 +451,6 @@ function ShowingLine({ id, label, value, error = false }) {
 export default function VisualizationPane({
   idPrefix,
   showing,
-  showingIsError,
   source,
   target,
   steps,
@@ -355,6 +460,7 @@ export default function VisualizationPane({
   legendStates,
   legendAnnotations,
   reduction = null,
+  highlightGadgets = null,
 }) {
   const noteColor =
     note?.tone === "error"
@@ -378,61 +484,47 @@ export default function VisualizationPane({
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "flex-start",
-          gap: "4px 16px",
-          fontSize: "0.875rem",
-        }}
-      >
-        <Box id={`${idPrefix}-showing`} aria-live="polite" sx={{ minWidth: 0 }}>
-          <Box
-            sx={{
-              fontSize: "0.75rem",
-              fontWeight: 600,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "text.secondary",
-            }}
-          >
-            Showing
-          </Box>
-          <Box
-            component="dl"
-            sx={{
-              m: 0,
-              display: "grid",
-              gridTemplateColumns: "auto minmax(0, 1fr)",
-              columnGap: 3,
-              rowGap: 0.25,
-            }}
-          >
-            {"reduction" in showing ? (
+      {showing && (
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "flex-start",
+            gap: "4px 16px",
+            fontSize: "0.875rem",
+          }}
+        >
+          <Box id={`${idPrefix}-showing`} aria-live="polite" sx={{ minWidth: 0 }}>
+            <Box
+              sx={{
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "text.secondary",
+              }}
+            >
+              Showing
+            </Box>
+            <Box
+              component="dl"
+              sx={{
+                m: 0,
+                display: "grid",
+                gridTemplateColumns: "auto minmax(0, 1fr)",
+                columnGap: 3,
+                rowGap: 0.25,
+              }}
+            >
               <ShowingLine
                 id={`${idPrefix}-showing-reduction`}
                 label="Reduction:"
                 value={showing.reduction}
               />
-            ) : (
-              <>
-                <ShowingLine
-                  id={`${idPrefix}-showing-problem`}
-                  label="Problem:"
-                  value={showing.problem}
-                />
-                <ShowingLine
-                  id={`${idPrefix}-showing-algorithm`}
-                  label="Algorithm:"
-                  value={showing.algorithm}
-                  error={showingIsError}
-                />
-              </>
-            )}
+            </Box>
           </Box>
         </Box>
-      </Box>
+      )}
 
       {reduction ? (
         <ReductionView
@@ -444,21 +536,10 @@ export default function VisualizationPane({
           activeGadget={reduction.activeGadget}
           loading={reduction.loading ?? null}
           colorMode={reduction.colorMode ?? "plain"}
-          onColorMode={reduction.onColorMode ?? null}
           timeline={timeline}
           sides={{
-            source: {
-              title: source.title,
-              showing: source.showing ?? null,
-              fullScreenTitle: source.fullScreenTitle ?? null,
-            },
-            target: target
-              ? {
-                  title: target.title,
-                  showing: target.showing ?? null,
-                  fullScreenTitle: target.fullScreenTitle ?? null,
-                }
-              : undefined,
+            source: { title: source.title, status: source.status ?? null },
+            target: target ? { title: target.title, status: target.status ?? null } : undefined,
           }}
           typeControls={{
             source: reduction.types?.source && (
@@ -523,6 +604,14 @@ export default function VisualizationPane({
           phaseHints={algorithmSteps.phaseHints}
           emptyText={algorithmSteps.emptyText}
         />
+        {highlightGadgets && (
+          <HighlightGadgetsSwitch
+            id={`${idPrefix}-algorithm-steps-highlight-gadgets`}
+            checked={highlightGadgets.checked}
+            onChange={highlightGadgets.onChange}
+            disabledReason={highlightGadgets.disabledReason}
+          />
+        )}
       </AlgorithmSteps>
     </Box>
   );
