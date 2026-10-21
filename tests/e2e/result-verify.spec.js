@@ -1,49 +1,49 @@
 // tests/e2e/result-verify.spec.js
 //
-// #229 stage 3: the Result & Verify panel. Verify before any Run, Verify This Answer, Check
-// keeping the solved picture and its current step, the "Show where it fails" button after a
-// Run (and its absence for a valid certificate), an unreadable certificate showing only its
-// error, Reduce mode's Check-against lock (target locked until the reduction has built the
-// target instance), the target instance in the result (Execute), and (#279 stage 2) a solved
-// source answer carried into the target by itself.
+// #279 stage 4 (board F): the Workspace's Verify section, one strip per side. The source strip in
+// Solve mode, source and target in Reduce mode side by side; each strip's "Certificate" label,
+// field, hint and placeholder; Check before any run, valid, not valid and unreadable; Show where
+// it fails (disabled, saying why: Redux's verifier only answers True or False); Use the solver's
+// answer, disabled until there is an answer; each strip collapsing on its own; Check it in
+// Execute filling and checking the right strip, opening it and Verify if they were hidden; the
+// typed text surviving hiding; and the target strip waiting for Reduce to build its instance.
+// (It held #229 stage 3's single Verify box with its Check-against switch and the verdict on the
+// picture's Showing line; both are gone.)
 //
-// The catalog comes from the real backend, like the rest of the suite. Every compute request
-// (solve, visualize, visualizeReduction, reduce, mapSolution, verify) is answered here, for the
-// same two reasons workbench.spec.js gives: these tests are about the page's state, and the
-// proxy allows only 10 compute requests a minute.
-//
-// Drawing a certificate on the picture: no Redux endpoint does that yet, so the workbench
-// shows the verdict, keeps the picture as it is, and keeps "Show where it fails" disabled with
-// its reason (components/workbench/Workbench.js, CERTIFICATE_DRAWING_SUPPORTED). The tests
-// below pin that fallback; the Back half of the toggle can only be tested once the backend can
-// draw a certificate.
+// The catalog comes from the real backend, like the rest of the suite. Every compute request is
+// answered here, for the reasons workbench.spec.js gives (these tests are about the page's state,
+// and the proxy allows only 10 compute requests a minute). The fixture already answers
+// visualizeRun and reductionView 404, so Solve asks for one picture and Reduce builds with
+// ProblemProvider/reduce.
 
 import { expect, test } from "./fixtures";
 import { chooseReduceTarget, gotoProblemDetail, showPane } from "./helpers";
 
 const PROBLEM = "3SAT";
-const NOT_RUN = "Not run yet (default picture)";
 const ANSWER = "(x1:True,x2:False,x3:True)";
 const WRONG = "(x1:False,x2:True,x3:False)";
 const UNREADABLE = "x1 maybe";
 const TARGET_INSTANCE = "(({a,b,c},{{a,b},{b,c},{a,c}}),3)";
+const TARGET_ANSWER = "{a,b,c}";
 const MAPPED = "{a,b,c}";
-const DRAWING_REASON = "Redux can't draw a certificate on this picture yet.";
+const MAPPED_BACK = "(x1:True,x2:True,x3:True)";
+const FAILURE_REASON =
+  "Redux's verifier only answers valid or not valid, so it can't point at the part that fails yet.";
 
 const VISUALIZE_REQUEST = /\/api\/redux\/ProblemProvider\/visualize\?/;
-const VISUALIZE_REDUCTION_REQUEST = /\/api\/redux\/ProblemProvider\/visualizeReduction/;
-const SOLVE_REQUEST = /\/api\/redux\/ProblemProvider\/solve/;
+const SOLVE_REQUEST = /\/api\/redux\/ProblemProvider\/solve\?/;
 const REDUCE_REQUEST = /\/api\/redux\/ProblemProvider\/reduce\?/;
-const MAP_REQUEST = /\/api\/redux\/ProblemProvider\/mapSolution/;
-const VERIFY_REQUEST = /\/api\/redux\/ProblemProvider\/verify/;
+const MAP_REQUEST = /\/api\/redux\/ProblemProvider\/mapSolution\?/;
+const MAP_BACK_REQUEST = /\/api\/redux\/ProblemProvider\/mapSolutionBack\?/;
+const VERIFY_REQUEST = /\/api\/redux\/ProblemProvider\/verify\?/;
 
-function satFrame(firstColor) {
+function satFrame(color) {
   return {
     clauses: [
       {
         id: "0",
         literals: [
-          { id: "0-0", literal: "x1", color: firstColor },
+          { id: "0-0", literal: "x1", color },
           { id: "0-1", literal: "!x2", color: "Background" },
           { id: "0-2", literal: "x3", color: "Background" },
         ],
@@ -53,25 +53,30 @@ function satFrame(firstColor) {
 }
 
 /**
- * Answers every compute request. `verify` records each verify request's verifier and body;
- * the verdict is True for ANSWER and MAPPED, a 400 certificate_parse_error for UNREADABLE and
- * False for anything else.
+ * Answers every compute request. `verifyCalls` records each verify request's verifier and body;
+ * the verdict is True for ANSWER, MAPPED and MAPPED_BACK, a 400 certificate_parse_error for
+ * UNREADABLE and False for anything else.
  */
 async function answerCompute(page) {
   const verifyCalls = [];
-  await page.route(VISUALIZE_REQUEST, (route) =>
-    route.fulfill({
-      json: [satFrame("Background"), satFrame("ElementHighlight"), satFrame("Solution")],
-    }),
-  );
-  await page.route(SOLVE_REQUEST, (route) => route.fulfill({ json: ANSWER }));
-  await page.route(VISUALIZE_REDUCTION_REQUEST, (route) =>
-    route.fulfill({ json: [satFrame("Background"), satFrame("Solution")] }),
-  );
+  await page.route(VISUALIZE_REQUEST, (route) => {
+    const visualization = new URL(route.request().url()).searchParams.get("visualization") ?? "";
+    return route.fulfill({
+      json: /sat/i.test(visualization)
+        ? [satFrame("Background"), satFrame("ElementHighlight"), satFrame("Solution")]
+        : [],
+    });
+  });
+  await page.route(SOLVE_REQUEST, (route) => {
+    const solver = new URL(route.request().url()).searchParams.get("solver") ?? "";
+    const target = /clique|carraghan|chiba/i.test(solver);
+    return route.fulfill({ json: target ? TARGET_ANSWER : ANSWER });
+  });
   await page.route(REDUCE_REQUEST, (route) =>
     route.fulfill({ json: { reductionTo: { instance: TARGET_INSTANCE } } }),
   );
   await page.route(MAP_REQUEST, (route) => route.fulfill({ json: MAPPED }));
+  await page.route(MAP_BACK_REQUEST, (route) => route.fulfill({ json: MAPPED_BACK }));
   await page.route(VERIFY_REQUEST, (route) => {
     const url = new URL(route.request().url());
     const body = route.request().postDataJSON();
@@ -87,274 +92,334 @@ async function answerCompute(page) {
         },
       });
     }
-    const valid = body.certificate === ANSWER || body.certificate === MAPPED;
+    const valid = [ANSWER, MAPPED, MAPPED_BACK].includes(body.certificate);
     return route.fulfill({ json: valid ? "True" : "False" });
   });
   return verifyCalls;
 }
 
-const certificateBox = (page) => page.locator("#workbench-verify-certificate");
-const checkButton = (page) => page.locator("#workbench-verify-check");
-const verdict = (page) => page.locator("#workbench-verdict");
-const overlayButton = (page) => page.locator("#workbench-verdict-overlay");
-
-async function check(page, certificate) {
-  await certificateBox(page).fill(certificate);
-  await checkButton(page).click();
+/** One strip's parts, by side ("source" or "target"). */
+function strip(page, side) {
+  const id = `#workbench-verify-${side}`;
+  return {
+    root: page.locator(id),
+    toggle: page.locator(`${id}-toggle`),
+    body: page.locator(`${id}-body`),
+    label: page.locator(`label[for="workbench-verify-${side}-certificate"]`),
+    field: page.locator(`${id}-certificate`),
+    hint: page.locator(`${id}-certificate-hint`),
+    check: page.locator(`${id}-check`),
+    checkHint: page.locator(`${id}-check-hint`),
+    use: page.locator(`${id}-use-answer`),
+    useHint: page.locator(`${id}-use-answer-hint`),
+    verdict: page.locator(`${id}-verdict`),
+    fail: page.locator(`${id}-fail`),
+    failReason: page.locator(`${id}-fail-reason`),
+    stale: page.locator(`${id}-stale`),
+  };
 }
 
-test("Verify works before any Run and leaves the default picture as it is", async ({ page }) => {
-  const verifyCalls = await answerCompute(page);
+async function openVerify(page) {
   await gotoProblemDetail(page, PROBLEM, { expect });
+  await showPane(page, "verify", { expect });
+}
+
+async function openReduce(page) {
+  await openVerify(page);
+  await page.locator("#workbench-mode-reduce").click();
+  return chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
+}
+
+test("Solve mode has one strip, Reduce mode one per side, side by side under the pictures", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await answerCompute(page);
+  await openVerify(page);
+  const source = strip(page, "source");
+  await expect(source.root).toBeVisible();
+  await expect(source.toggle).toContainText(`Verify ${PROBLEM}`);
+  await expect(strip(page, "target").root).toHaveCount(0);
+
+  const target = await openReduce(page);
+  const targetStrip = strip(page, "target");
+  await expect(targetStrip.toggle).toContainText(`Verify ${target}`);
+  // Two columns of the shared grid: the target strip to the right of the source's, top-aligned.
+  const left = await source.root.boundingBox();
+  const right = await targetStrip.root.boundingBox();
+  expect(right.x).toBeGreaterThan(left.x + left.width - 1);
+  expect(Math.abs(right.y - left.y)).toBeLessThanOrEqual(1);
+  // On the same columns as Execute's solver cells, each under its own side.
   await showPane(page, "execute", { expect });
+  const sourceCell = await page.locator("#workbench-source-cell").boundingBox();
+  const targetCell = await page.locator("#workbench-target-cell").boundingBox();
+  expect(Math.abs(left.x - sourceCell.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(right.x - targetCell.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(right.width - targetCell.width)).toBeLessThanOrEqual(1);
 
-  await expect(page.locator("#workbench-result-answer")).toHaveCount(0);
-  await expect(page.locator("#workbench-verify-verifier-name")).not.toBeEmpty();
-  await expect(page.locator("#workbench-verify-format")).not.toBeEmpty();
-  // Solve mode has no Check-against switch.
-  await expect(page.locator("#workbench-verify-check-on-source")).toHaveCount(0);
+  await page.locator("#workbench-mode-solve").click();
+  await expect(targetStrip.root).toHaveCount(0);
+});
 
-  await check(page, ANSWER);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is valid`,
+test("each strip says Certificate above the field, and its hint and placeholder are the problem's", async ({
+  page,
+}) => {
+  await answerCompute(page);
+  const target = await openReduce(page);
+
+  const source = strip(page, "source");
+  await expect(source.label).toHaveText("Certificate");
+  const example = await source.field.getAttribute("placeholder");
+  expect(example).toBeTruthy();
+  // The words are this page's for 3SAT; the example is Redux's own, so Redux can read it.
+  await expect(source.hint).toHaveText(`A True/False value for each variable, e.g. ${example}`);
+  await expect(source.field).toHaveAttribute(
+    "aria-describedby",
+    "workbench-verify-source-certificate-hint",
   );
-  await expect(page.locator("#workbench-verify-verdict")).toContainText("Valid certificate");
+  await expect(source.field).toHaveAttribute("rows", "1");
+  await expect(source.field).toHaveValue("");
+
+  const targetStrip = strip(page, "target");
+  await expect(targetStrip.label).toHaveText("Certificate");
+  const targetExample = await targetStrip.field.getAttribute("placeholder");
+  expect(targetExample).toBeTruthy();
+  await expect(targetStrip.hint).toHaveText(
+    `The vertices of a clique of size k, e.g. ${targetExample}`,
+  );
+  expect(target).toMatch(/^Clique/);
+});
+
+test("Check needs no run: valid, not valid with Show where it fails, unreadable, and stale after an edit", async ({
+  page,
+}) => {
+  page.allowNetworkFailures();
+  const verifyCalls = await answerCompute(page);
+  await openVerify(page);
+  const source = strip(page, "source");
+
+  await expect(source.check).toBeDisabled();
+  await expect(source.checkHint).toHaveText("Type a certificate to check it.");
+  await source.field.fill(ANSWER);
+  await expect(source.checkHint).toHaveCount(0);
+  await source.check.click();
+  await expect(source.verdict).toHaveText(
+    `Valid. Redux checked it against this ${PROBLEM} instance and accepted it.`,
+  );
+  await expect(source.verdict).toHaveAttribute("data-valid", "true");
+  await expect(source.fail).toHaveCount(0);
   expect(verifyCalls.at(-1).certificate).toBe(ANSWER);
-
-  // Nothing ran, so the Showing text is unchanged, and the picture says why the certificate
-  // is not drawn on it. A verdict before a Run never offers the overlay button.
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(NOT_RUN);
-  await expect(page.locator("#workbench-note")).toContainText(DRAWING_REASON);
-  await expect(page.locator("#workbench-source-picture")).toHaveAttribute(
-    "data-picture-kind",
-    "frame",
+  // A check doesn't touch the picture.
+  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(
+    "Not run yet (default picture)",
   );
-  await expect(overlayButton(page)).toHaveCount(0);
 
-  await check(page, WRONG);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is not valid`,
+  await source.field.fill(WRONG);
+  // The verdict was for the certificate before.
+  await expect(source.verdict).toHaveCount(0);
+  await expect(source.stale).toHaveText(
+    "The certificate or the instance changed after the last check. Check again.",
   );
-  await expect(verdict(page)).toHaveAttribute("data-valid", "false");
+  await source.check.click();
+  await expect(source.verdict).toHaveText(
+    `Not valid. Redux checked it against this ${PROBLEM} instance and rejected it.`,
+  );
+  await expect(source.verdict).toHaveAttribute("data-valid", "false");
+  await expect(source.stale).toHaveCount(0);
+  // Show where it fails: Redux can't say where yet, so it is disabled and says why.
+  await expect(source.fail).toHaveText("Show where it fails");
+  await expect(source.fail).toBeDisabled();
+  await expect(source.fail).toHaveAttribute(
+    "aria-describedby",
+    "workbench-verify-source-fail-reason",
+  );
+  await expect(source.failReason).toHaveText(FAILURE_REASON);
 
-  // An instance edit retires the verdict.
+  await source.field.fill(UNREADABLE);
+  await source.check.click();
+  await expect(source.verdict).toHaveText("Can't check this. x1 has no True or False value.");
+  await expect(source.verdict).toHaveAttribute("data-tone", "unreadable");
+  await expect(source.field).toHaveAttribute("aria-invalid", "true");
+  await expect(source.fail).toHaveCount(0);
+  await expect(page.locator("#workbench-verify-source-check-failure")).toHaveCount(0);
+
+  // An instance edit makes the last check stale too.
+  await source.field.fill(ANSWER);
+  await source.check.click();
+  await expect(source.verdict).toHaveAttribute("data-valid", "true");
   await showPane(page, "instance", { expect });
   await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
-  await expect(verdict(page)).toHaveCount(0);
+  await expect(source.verdict).toHaveCount(0);
+  await expect(source.stale).toBeVisible();
 });
 
-test("Check it fills the box with the run's answer and checks it in one click", async ({
+test("Use the solver's answer is disabled until a solve gives one, then fills and checks it", async ({
   page,
 }) => {
   const verifyCalls = await answerCompute(page);
-  await gotoProblemDetail(page, PROBLEM, { expect });
-  const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
-
-  await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(solverName);
-  await showPane(page, "execute", { expect });
-  await expect(page.locator("#workbench-result-answer")).toHaveText(ANSWER);
-
-  await page.locator("#workbench-result-verify-answer").click();
-  await expect(certificateBox(page)).toHaveValue(ANSWER);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is valid`,
-  );
-  expect(verifyCalls).toHaveLength(1);
-  expect(verifyCalls[0].certificate).toBe(ANSWER);
-  // A valid certificate after a Run gets the verdict only: the picture already shows a
-  // correct answer.
-  await expect(overlayButton(page)).toHaveCount(0);
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(solverName);
-});
-
-test("Check keeps the solved picture and its current step, and a new Run retires the verdict", async ({
-  page,
-}) => {
-  await answerCompute(page);
-  await gotoProblemDetail(page, PROBLEM, { expect });
-  const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
-
-  await page.locator("#workbench-run").click();
-  const position = page.locator("#workbench-steps-position");
-  // A run opens on its last step, the finished result.
-  await expect(position).toContainText("Step 3 of 3");
-  await page.locator("#workbench-steps-previous").click();
-  await expect(position).toContainText("Step 2 of 3");
-
-  await showPane(page, "verify", { expect });
-  await check(page, WRONG);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is not valid`,
-  );
-  // The solved picture is untouched: same Showing text, same step, still a run picture.
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(solverName);
-  await expect(position).toContainText("Step 2 of 3");
-  await expect(page.locator("#workbench-source-picture")).toHaveAttribute(
-    "data-picture-kind",
-    "frame",
-  );
-
-  // A new Run takes the verdict off the picture.
-  await page.locator("#workbench-run").click();
-  await expect(position).toContainText("Step 3 of 3");
-  await expect(verdict(page)).toHaveCount(0);
-});
-
-test("after a Run, an invalid certificate offers Show where it fails (disabled with its reason) and a valid one does not", async ({
-  page,
-}) => {
-  await answerCompute(page);
-  await gotoProblemDetail(page, PROBLEM, { expect });
-
-  await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-steps-position")).toContainText("Step 3 of 3");
-  await showPane(page, "verify", { expect });
-
-  await check(page, WRONG);
-  const button = overlayButton(page);
-  await expect(button).toHaveText("Show where it fails");
-  await expect(button).toHaveAttribute("aria-pressed", "false");
-  // No Redux endpoint draws a certificate yet, so the button cannot be switched on, and says
-  // why. The picture stays the solver's answer.
-  await expect(button).toBeDisabled();
-  await expect(button).toHaveAttribute("aria-describedby", "workbench-verdict-overlay-reason");
-  await expect(page.locator("#workbench-verdict-overlay-reason")).toHaveText(DRAWING_REASON);
-
-  // A new Check starts over: a valid certificate has no button at all.
-  await check(page, ANSWER);
-  await expect(verdict(page)).toHaveAttribute("data-valid", "true");
-  await expect(button).toHaveCount(0);
-});
-
-test("a certificate Redux cannot read shows only its error under the box", async ({ page }) => {
-  // The 400 below is the behaviour under test, not a silent failure.
-  page.allowNetworkFailures();
-  await answerCompute(page);
-  await gotoProblemDetail(page, PROBLEM, { expect });
-  await showPane(page, "verify", { expect });
-
-  await check(page, UNREADABLE);
-  const error = page.locator("#workbench-verify-certificate-error");
-  await expect(error).toContainText("Redux could not read this certificate.");
-  await expect(error).toContainText("x1 has no True or False value.");
-  await expect(certificateBox(page)).toHaveAttribute("aria-invalid", "true");
-  await expect(certificateBox(page)).toHaveAttribute(
+  await openVerify(page);
+  const source = strip(page, "source");
+  await expect(source.use).toBeDisabled();
+  await expect(source.useHint).toHaveText("No answer yet. Press Solve in Execute first.");
+  await expect(source.use).toHaveAttribute(
     "aria-describedby",
-    "workbench-verify-certificate-error",
-  );
-  // Nothing else: no verdict on the picture, no banner, no second copy of the error.
-  await expect(verdict(page)).toHaveCount(0);
-  await expect(page.locator("#workbench-verify-verdict")).toHaveCount(0);
-  await expect(page.locator("#workbench-verify-check-failure")).toHaveCount(0);
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(NOT_RUN);
-
-  // A readable certificate clears it.
-  await check(page, ANSWER);
-  await expect(error).toHaveCount(0);
-  await expect(verdict(page)).toBeVisible();
-});
-
-test("in Reduce mode the target side of Check against unlocks once the reduction builds the target", async ({
-  page,
-}) => {
-  const verifyCalls = await answerCompute(page);
-  await gotoProblemDetail(page, PROBLEM, { expect });
-
-  await page.locator("#workbench-mode-reduce").click();
-  const target = await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
-  await showPane(page, "verify", { expect });
-
-  const sourceSide = page.locator("#workbench-verify-check-on-source");
-  const targetSide = page.locator("#workbench-verify-check-on-target");
-  await expect(sourceSide).toHaveText(PROBLEM);
-  await expect(sourceSide).toHaveAttribute("aria-pressed", "true");
-  await expect(targetSide).toHaveText(target);
-  await expect(targetSide).toBeDisabled();
-  await expect(page.locator("#workbench-verify-check-on-hint")).toHaveText(
-    `Reduce first: checking against ${target} needs the target instance it builds.`,
-  );
-  await expect(page.locator("#workbench-result-target-instance")).toHaveCount(0);
-
-  // The source side works before the Run, like in Solve mode.
-  await check(page, ANSWER);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is valid`,
+    "workbench-verify-source-use-answer-hint",
   );
 
   await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
-    "data-picture-kind",
-    "frame",
-  );
-  // The run retired the earlier verdict, unlocked the target side and switched to it.
-  await expect(verdict(page)).toHaveCount(0);
-  await expect(targetSide).toBeEnabled();
-  await expect(targetSide).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#workbench-verify-check-on-hint")).toHaveCount(0);
-  await expect(page.locator(`label[for="workbench-verify-certificate"]`)).toHaveText(
-    `Certificate for the ${target} target`,
-  );
-  await expect(page.locator("#workbench-result-target-instance")).toHaveText(TARGET_INSTANCE);
+  await expect(source.use).toBeEnabled();
+  await expect(source.useHint).toHaveCount(0);
+  await source.use.click();
+  await expect(source.field).toHaveValue(ANSWER);
+  await expect(source.verdict).toHaveAttribute("data-valid", "true");
+  expect(verifyCalls.at(-1).certificate).toBe(ANSWER);
+});
 
-  // Checking against the target uses the target problem's verifier and the built instance.
-  await check(page, WRONG);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${target} target is not valid`,
+test("each strip collapses on its own and keeps its text, and hiding Verify keeps both", async ({
+  page,
+}) => {
+  await answerCompute(page);
+  await openReduce(page);
+  const source = strip(page, "source");
+  const target = strip(page, "target");
+  await source.field.fill("x1 = T");
+  await target.field.fill("{a}");
+
+  await expect(source.toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(source.toggle).toContainText("Hide");
+  await source.toggle.click();
+  await expect(source.toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(source.toggle).toContainText("Show");
+  await expect(source.field).toBeHidden();
+  await expect(target.field).toBeVisible();
+
+  await target.toggle.click();
+  await expect(target.field).toBeHidden();
+  await source.toggle.click();
+  await expect(source.field).toHaveValue("x1 = T");
+  await expect(target.field).toBeHidden();
+
+  // Hiding the whole Verify section keeps what was typed on both sides.
+  await page.locator("#workbench-toggle-verify").click();
+  await expect(source.root).toBeHidden();
+  await showPane(page, "verify", { expect });
+  await expect(source.field).toHaveValue("x1 = T");
+  await target.toggle.click();
+  await expect(target.field).toHaveValue("{a}");
+});
+
+test("the target strip waits for Reduce, then checks with the target's verifier on the built instance", async ({
+  page,
+}) => {
+  const verifyCalls = await answerCompute(page);
+  const target = await openReduce(page);
+  const targetStrip = strip(page, "target");
+  await targetStrip.field.fill(WRONG);
+  await expect(targetStrip.check).toBeDisabled();
+  await expect(targetStrip.checkHint).toHaveText(
+    `Reduce first: a ${target} certificate is checked against the instance Reduce builds.`,
+  );
+  await expect(targetStrip.useHint).toHaveText(
+    `No answer yet. Reduce, then press Solve ${target} in Execute.`,
+  );
+
+  // The source strip works before the build, like in Solve mode.
+  const source = strip(page, "source");
+  await source.field.fill(ANSWER);
+  await source.check.click();
+  await expect(source.verdict).toHaveAttribute("data-valid", "true");
+
+  await page.locator("#workbench-run").click();
+  await expect(targetStrip.check).toBeEnabled();
+  await targetStrip.check.click();
+  await expect(targetStrip.verdict).toHaveText(
+    `Not valid. Redux checked it against this ${target} instance and rejected it.`,
   );
   const targetCall = verifyCalls.at(-1);
   expect(targetCall.problemInstance).toBe(TARGET_INSTANCE);
   expect(targetCall.verifier).not.toBe(verifyCalls[0].verifier);
-  // The reduced picture stays, and the overlay button says it can't draw yet.
-  await expect(page.locator("#workbench-target-frame-showing-problem")).toHaveText(target);
-  await expect(page.locator("#workbench-target-frame-showing-algorithm")).toHaveText(
-    "Built, not solved",
+  await expect(targetStrip.fail).toBeDisabled();
+  // The source's verdict is its own, untouched by the target's check.
+  await expect(source.verdict).toHaveAttribute("data-valid", "true");
+
+  // Use the solver's answer: the source's answer carried into the target counts.
+  await expect(targetStrip.useHint).toHaveText(
+    `No answer yet. Press Solve ${target} in Execute first.`,
   );
-  await expect(overlayButton(page)).toHaveText("Show where it fails");
-  await expect(overlayButton(page)).toBeDisabled();
-
-  // Back to the source side keeps each side's own certificate.
-  await sourceSide.click();
-  await expect(certificateBox(page)).toHaveValue(ANSWER);
-  await targetSide.click();
-  await expect(certificateBox(page)).toHaveValue(WRONG);
-
-  // An instance edit locks the target side again.
-  await showPane(page, "instance", { expect });
-  await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
-  await showPane(page, "verify", { expect });
-  await expect(targetSide).toBeDisabled();
-  await expect(sourceSide).toHaveAttribute("aria-pressed", "true");
+  await showPane(page, "execute", { expect });
+  await page.locator("#workbench-source-cell-run").click();
+  await expect(page.locator("#workbench-forward-answer")).toHaveText(MAPPED);
+  await expect(targetStrip.use).toBeEnabled();
+  await targetStrip.use.click();
+  await expect(targetStrip.field).toHaveValue(MAPPED);
+  await expect(targetStrip.verdict).toHaveAttribute("data-valid", "true");
 });
 
-test("Solve <source> in Reduce mode carries its answer into the target, and Check it checks it there", async ({
+test("Check it fills and checks the right strip, opening it and Verify if they were hidden", async ({
   page,
 }) => {
   const verifyCalls = await answerCompute(page);
-  const mapCalls = [];
-  page.on("request", (request) => {
-    if (MAP_REQUEST.test(request.url())) mapCalls.push(new URL(request.url()));
-  });
-  await gotoProblemDetail(page, PROBLEM, { expect });
+  await openVerify(page);
+  const source = strip(page, "source");
 
-  await page.locator("#workbench-mode-reduce").click();
-  const target = await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
+  // Solve mode: the answer's Check it goes to the source strip.
+  await source.toggle.click();
+  await page.locator("#workbench-toggle-verify").click();
+  await expect(source.root).toBeHidden();
   await page.locator("#workbench-run").click();
   await showPane(page, "execute", { expect });
-  await expect(page.locator("#workbench-result-reduce")).toBeVisible();
-  // #279 stage 2: Reduce only builds, so nothing is mapped yet.
-  expect(mapCalls).toHaveLength(0);
+  await page.locator("#workbench-result-verify-answer").click();
+  await expect(page.locator("#workbench-toggle-verify")).toHaveAttribute("aria-expanded", "true");
+  await expect(source.toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(source.field).toHaveValue(ANSWER);
+  await expect(source.verdict).toHaveAttribute("data-valid", "true");
+  expect(verifyCalls.at(-1).certificate).toBe(ANSWER);
 
+  // Reduce mode: the answer carried into the target goes to the target strip, and the one
+  // mapped back goes to the source strip.
+  await page.locator("#workbench-mode-reduce").click();
+  await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-run-chip")).toHaveText(/^Built/);
+  const target = strip(page, "target");
+  await target.toggle.click();
   await page.locator("#workbench-source-cell-run").click();
-  // Mapping runs in polynomial time, so it needs no button.
-  await expect(page.locator("#workbench-forward-answer")).toHaveText(MAPPED);
-  expect(mapCalls).toHaveLength(1);
-  expect(mapCalls[0].searchParams.get("solution")).toBe(ANSWER);
-
   await page.locator("#workbench-forward-check").click();
-  await expect(certificateBox(page)).toHaveValue(MAPPED);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${target} target is valid`,
-  );
+  await expect(target.toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(target.field).toHaveValue(MAPPED);
+  await expect(target.verdict).toHaveAttribute("data-valid", "true");
   expect(verifyCalls.at(-1).problemInstance).toBe(TARGET_INSTANCE);
+
+  await page.locator("#workbench-target-cell-run").click();
+  await expect(page.locator("#workbench-back-answer")).toHaveText(MAPPED_BACK);
+  await page.locator("#workbench-back-check").click();
+  await expect(source.field).toHaveValue(MAPPED_BACK);
+  await expect(source.verdict).toHaveAttribute("data-valid", "true");
+  // The target strip keeps its own certificate and verdict.
+  await expect(target.field).toHaveValue(MAPPED);
+});
+
+test("at phone width the strips stack, the field grows with its text, and nothing scrolls sideways", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await answerCompute(page);
+  await openReduce(page);
+  const source = strip(page, "source");
+  const target = strip(page, "target");
+  const top = await source.root.boundingBox();
+  const below = await target.root.boundingBox();
+  expect(below.y).toBeGreaterThan(top.y + top.height - 1);
+
+  const oneLine = (await source.field.boundingBox()).height;
+  expect(oneLine).toBeLessThan(48);
+  await source.field.fill(
+    "(x1:True,x2:False,x3:True,x4:False,x5:True,x6:False,x7:True,x8:False,x9:True,x10:False)",
+  );
+  await expect.poll(async () => (await source.field.boundingBox()).height).toBeGreaterThan(oneLine);
+  const widths = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  expect(widths.scroll).toBeLessThanOrEqual(widths.client);
 });
