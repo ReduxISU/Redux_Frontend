@@ -320,7 +320,7 @@ function viewTypeControl(which, all, side, pending, onPick) {
 
 /**
  * One picture in the collapsed Visualization pane's line: its problem, then its live
- * Visualization Type dropdown (the expanded pane's own state), one line (`oneLine`). The pair
+ * Visualization Type dropdown (the expanded pane's own state), compact. The pair
  * wraps as a whole (the target's → with it); only on a phone, where a pair can be wider than the
  * pane, may the dropdown drop under its problem.
  */
@@ -361,7 +361,7 @@ function PictureSummaryItem({ id, name, type, arrow = false }) {
       >
         {name}
       </Box>
-      {type && <VisualizationTypeControl id={`${id}-type`} {...type} oneLine />}
+      {type && <VisualizationTypeControl id={`${id}-type`} {...type} compact />}
     </Box>
   );
 }

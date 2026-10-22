@@ -3,15 +3,13 @@
 // #229 stage 2: the workbench's tagged dropdown, used for Solver, To, Using and every
 // Visualization Type. A custom listbox rather than a native <select> or MUI Select, so each
 // choice can carry its tags:
-//   - the closed box shows the chosen item's name on the left and its tags on the right. The
-//     name has priority (#279 Workspace tweaks): when both don't fit on one line, the tags wrap
-//     under the name, and the name truncates (with an ellipsis) only when it alone is wider than
-//     the box;
-//   - `oneLine` (#279 Workspace tweaks, the collapsed panes' rows): the name and the tags stay on
-//     one line; the name truncates with an ellipsis past ONE_LINE_NAME_MAX (or sooner, when the
-//     box is squeezed), the tags never wrap, and the closed box sizes to what it shows. The full
-//     name stays in the box's tooltip (`title`), its accessible name (the value text is whole,
-//     only clipped on screen) and the open list;
+//   - the closed box shows the chosen item's name on the left and its tags on the right, on one
+//     line (#279 Workspace tweaks, first for the collapsed panes' rows, then for every dropdown,
+//     collapsed or expanded): the name truncates with an ellipsis past ONE_LINE_NAME_MAX (or
+//     sooner, when the box is squeezed), and the tags never wrap. The full name stays in the
+//     box's tooltip (`title`), its accessible name (the value text is whole, only clipped on
+//     screen) and the open list. How wide the box is is up to its parent (`boxSx`, or the slot
+//     around it);
 //   - the open list shows every option with its tags right-aligned, 44px rows, the chosen one
 //     on a raised background with a 3px accent mark on its left;
 //   - hovering an option with a mouse shows that option's info card beside the list (left of
@@ -40,7 +38,7 @@ const LIST_MAX_WIDTH = "min(460px, calc(100vw - 32px))";
 const CARD_WIDTH = "min(300px, calc(100vw - 32px))";
 const VIEWPORT_MARGIN = 8;
 const TYPEAHEAD_RESET_MS = 600;
-/** How long a name may run on a `oneLine` box before it truncates: "Karp's 0-1 Integer Linear Progr…". */
+/** How long a name may run in the closed box before it truncates: "Karp's 0-1 Integer Linear Progr…". */
 export const ONE_LINE_NAME_MAX = "31ch";
 
 /** Keeps an absolutely placed popup inside the viewport by nudging it sideways. */
@@ -353,7 +351,6 @@ function InfoButton({ id, card, align }) {
  *   cell of a parent grid or flex row: the label and box are returned as siblings), "stack"
  *   puts it above.
  * @param {Object} [props.boxSx] Extra `sx` for the box's wrapper (its width).
- * @param {boolean} [props.oneLine] Name and tags on one line, the name truncated (see above).
  */
 export default function TaggedSelect({
   id: idProp,
@@ -365,7 +362,6 @@ export default function TaggedSelect({
   align = "left",
   labelPlacement = "stack",
   boxSx,
-  oneLine = false,
 }) {
   const autoId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const id = idProp ?? `tagged-select-${autoId}`;
@@ -551,8 +547,8 @@ export default function TaggedSelect({
         aria-describedby={selected?.tags?.length ? tagsId : undefined}
         disabled={fixed}
         data-fixed={fixed || undefined}
-        data-one-line={oneLine || undefined}
-        title={oneLine ? (selected?.label ?? undefined) : undefined}
+        data-one-line="true"
+        title={selected?.label ?? undefined}
         onClick={() => (open ? closeList() : openList())}
         onKeyDown={onButtonKeyDown}
         sx={{
@@ -577,15 +573,15 @@ export default function TaggedSelect({
           "&:disabled": { cursor: "default", color: "text.primary" },
         }}
       >
-        {/* The name and the tags wrap as a pair: an item wraps when its full width doesn't fit,
-            before anything shrinks, so the tags drop under the name before the name truncates. */}
+        {/* The name and its tags on one line: the name shrinks (to its ellipsis) and the tags
+            don't, so the tags stay level with the name, on the right. */}
         <Box
           component="span"
           sx={{
             flex: "1 1 0%",
             minWidth: 0,
             display: "flex",
-            flexWrap: oneLine ? "nowrap" : "wrap",
+            flexWrap: "nowrap",
             alignItems: "center",
             gap: "4px 8px",
           }}
@@ -594,9 +590,9 @@ export default function TaggedSelect({
             component="span"
             id={valueId}
             sx={{
-              flex: oneLine ? "0 1 auto" : "1 1 auto",
+              flex: "0 1 auto",
               minWidth: "3em",
-              ...(oneLine ? { maxWidth: ONE_LINE_NAME_MAX } : {}),
+              maxWidth: ONE_LINE_NAME_MAX,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -608,11 +604,7 @@ export default function TaggedSelect({
             id={tagsId}
             tags={selected?.tags}
             hue={hue}
-            sx={
-              oneLine
-                ? { flex: "none", flexWrap: "nowrap", ml: "auto" }
-                : { flex: "0 1 auto", flexWrap: "wrap", minWidth: 0, ml: "auto" }
-            }
+            sx={{ flex: "none", flexWrap: "nowrap", ml: "auto" }}
           />
         </Box>
         {!fixed && (

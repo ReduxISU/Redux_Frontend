@@ -335,7 +335,6 @@ function Strip({ id, strip, collapsed, shown }) {
                   id={`${id}-verifier`}
                   label="Verifier"
                   hue="green"
-                  oneLine={collapsed}
                   boxSx={{ width: "100%" }}
                   {...strip.verifierSelect}
                 />
