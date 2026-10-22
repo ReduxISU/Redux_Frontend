@@ -223,6 +223,10 @@ function InfoButton({ id, card, align }) {
   const wrapperRef = useRef(null);
   const cardRef = useRef(null);
   const open = (hovered || focused || pinned) && !dismissed;
+  // What a click toggles: the card shown by keyboard focus or an earlier click. Hover is left
+  // out, so a mouse click always pins the card first, however soon after the pointer arrived
+  // (the hover's update may or may not have rendered by the click).
+  const shownByChoice = (focused || pinned) && !dismissed;
   const shift = useKeepInViewport(cardRef, open, card.title);
   const cardId = `${id}-card`;
 
@@ -266,7 +270,7 @@ function InfoButton({ id, card, align }) {
           setDismissed(false);
         }}
         onClick={() => {
-          if (open) {
+          if (shownByChoice) {
             setPinned(false);
             setFocused(false);
             setDismissed(true);
