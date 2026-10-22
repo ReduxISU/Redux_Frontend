@@ -3,8 +3,10 @@
 // #229 stage 2: the workbench's tagged dropdown, used for Solver, To, Using and every
 // Visualization Type. A custom listbox rather than a native <select> or MUI Select, so each
 // choice can carry its tags:
-//   - the closed box shows the chosen item's name on the left and its tags on the right; the
-//     name truncates (with an ellipsis) before the tags give up any room;
+//   - the closed box shows the chosen item's name on the left and its tags on the right. The
+//     name has priority (#279 Workspace tweaks): when both don't fit on one line, the tags wrap
+//     under the name, and the name truncates (with an ellipsis) only when it alone is wider than
+//     the box;
 //   - the open list shows every option with its tags right-aligned, 44px rows, the chosen one
 //     on a raised background with a 3px accent mark on its left;
 //   - hovering an option with a mouse shows that option's info card beside the list (left of
@@ -560,25 +562,39 @@ export default function TaggedSelect({
           "&:disabled": { cursor: "default", color: "text.primary" },
         }}
       >
+        {/* The name and the tags wrap as a pair: an item wraps when its full width doesn't fit,
+            before anything shrinks, so the tags drop under the name before the name truncates. */}
         <Box
           component="span"
-          id={valueId}
           sx={{
             flex: "1 1 0%",
-            minWidth: "3em",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            minWidth: 0,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "4px 8px",
           }}
         >
-          {selected?.label ?? ""}
+          <Box
+            component="span"
+            id={valueId}
+            sx={{
+              flex: "1 1 auto",
+              minWidth: "3em",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {selected?.label ?? ""}
+          </Box>
+          <TagList
+            id={tagsId}
+            tags={selected?.tags}
+            hue={hue}
+            sx={{ flex: "0 1 auto", flexWrap: "wrap", minWidth: 0, ml: "auto" }}
+          />
         </Box>
-        <TagList
-          id={tagsId}
-          tags={selected?.tags}
-          hue={hue}
-          sx={{ flex: "0 1 auto", flexWrap: "wrap", minWidth: 0 }}
-        />
         {!fixed && (
           <Box
             component="svg"
