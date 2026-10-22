@@ -37,6 +37,15 @@ const MAP_REQUEST = /\/api\/redux\/ProblemProvider\/mapSolution\?/;
 const MAP_BACK_REQUEST = /\/api\/redux\/ProblemProvider\/mapSolutionBack\?/;
 const VERIFY_REQUEST = /\/api\/redux\/ProblemProvider\/verify\?/;
 
+/**
+ * A verdict's whole text: what it says, then (#279 Workspace tweaks) how long the check took,
+ * this browser's round trip, written as Execute writes a run's time.
+ */
+const timed = (text) =>
+  new RegExp(
+    `^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} Took \\d+\\.\\d\\d s \\(round trip\\)$`,
+  );
+
 function satFrame(color) {
   return {
     clauses: [
@@ -211,7 +220,7 @@ test("Check needs no run: valid, not valid with Show where it fails, unreadable,
   await expect(page.locator("#workbench-verify-source-empty")).toHaveCount(0);
   await source.check.click();
   await expect(source.verdict).toHaveText(
-    `Valid. Redux checked it against this ${PROBLEM} instance and accepted it.`,
+    timed(`Valid. Redux checked it against this ${PROBLEM} instance and accepted it.`),
   );
   await expect(source.verdict).toHaveAttribute("data-valid", "true");
   await expect(source.fail).toHaveCount(0);
@@ -227,7 +236,7 @@ test("Check needs no run: valid, not valid with Show where it fails, unreadable,
   );
   await source.check.click();
   await expect(source.verdict).toHaveText(
-    `Not valid. Redux checked it against this ${PROBLEM} instance and rejected it.`,
+    timed(`Not valid. Redux checked it against this ${PROBLEM} instance and rejected it.`),
   );
   await expect(source.verdict).toHaveAttribute("data-valid", "false");
   await expect(source.stale).toHaveCount(0);
@@ -242,7 +251,9 @@ test("Check needs no run: valid, not valid with Show where it fails, unreadable,
 
   await source.field.fill(UNREADABLE);
   await source.check.click();
-  await expect(source.verdict).toHaveText("Can't check this. x1 has no True or False value.");
+  await expect(source.verdict).toHaveText(
+    timed("Can't check this. x1 has no True or False value."),
+  );
   await expect(source.verdict).toHaveAttribute("data-tone", "unreadable");
   await expect(source.field).toHaveAttribute("aria-invalid", "true");
   await expect(source.fail).toHaveCount(0);
@@ -347,7 +358,7 @@ test("the target strip waits for Reduce, then checks with the target's verifier 
   await expect(targetStrip.check).toBeEnabled();
   await targetStrip.check.click();
   await expect(targetStrip.verdict).toHaveText(
-    `Not valid. Redux checked it against this ${target} instance and rejected it.`,
+    timed(`Not valid. Redux checked it against this ${target} instance and rejected it.`),
   );
   const targetCall = verifyCalls.at(-1);
   expect(targetCall.problemInstance).toBe(TARGET_INSTANCE);
