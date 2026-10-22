@@ -879,15 +879,21 @@ test("the collapsed Visualization pane's Visualization Type dropdowns are live, 
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await answerCompute(page);
-  await gotoProblemDetail(page, PROBLEM, { expect });
+  // Clique: Redux lists more than one Visualization Type for it (3SAT has one on CI's backend).
+  await gotoProblemDetail(page, "Clique", { expect });
   const expandedType = page.locator("#workbench-source-type-value");
   const collapsedId = "workbench-section-visualization-summary-source-type";
-  const types = await optionsOf(page, "workbench-source-type");
+  const type = await textOf(expandedType);
+  // A backend that lists one type for the problem gives a fixed box.
+  const fixed =
+    (await page.locator("#workbench-source-type-button").getAttribute("data-fixed")) === "true";
+  const types = fixed ? [type] : await optionsOf(page, "workbench-source-type");
   await setExpanded(page, "visualization", false);
   await expect(page.locator(`#${collapsedId}-label`)).toHaveText("Visualization Type");
+  await expect(page.locator(`#${collapsedId}-value`)).toHaveText(type);
   if (types.length < 2) {
-    // One type: the box still says it, and can't open.
-    await expect(page.locator(`#${collapsedId}-value`)).toHaveText(types[0]);
+    // One type: the box still says it, and can't open, like the expanded one.
+    await expect(page.locator(`#${collapsedId}-button`)).toHaveAttribute("data-fixed", "true");
     return;
   }
   // Picked collapsed, shown expanded; picked expanded, shown collapsed.
