@@ -428,6 +428,98 @@ test("collapsed Verify in Reduce mode: Problem to verify picks the side, its tar
   await expect(page.locator("#workbench-verify-source-certificate")).toBeVisible();
 });
 
+// A second 3SAT verifier, as Redux would list it once a contributor adds one (ReduxISU/Redux#877
+// discusses "valid" and "optimal" verifiers). allVerifiers sorts class names, so it comes first
+// there; the problem's defaultVerifier still leads the dropdown.
+const SECOND_VERIFIER = "SAT3OptimalVerifier";
+const SECOND_VERIFIER_NAME = "Optimal 3SAT Verifier";
+
+/** Adds SECOND_VERIFIER to the real catalog's allVerifiers and allInfo answers. */
+async function addSecondVerifier(page) {
+  await page.route(/\/api\/redux\/Navigation\/Batch\/allVerifiers/, async (route) => {
+    const json = await (await route.fetch()).json();
+    json.SAT3 = [SECOND_VERIFIER, ...(json.SAT3 ?? [])];
+    await route.fulfill({ json });
+  });
+  await page.route(/\/api\/redux\/Navigation\/Batch\/allInfo/, async (route) => {
+    const json = await (await route.fetch()).json();
+    json[SECOND_VERIFIER] = {
+      verifierName: SECOND_VERIFIER_NAME,
+      verifierDefinition: "Checks that the certificate is an optimal assignment.",
+      source: "",
+      sourceFile: "Problems/NPComplete/NPC_SAT3/Verifiers/SAT3OptimalVerifier.cs",
+      contributors: [],
+      certificate: "",
+    };
+    await route.fulfill({ json });
+  });
+}
+
+test("a second verifier from Redux appears in the dropdown, can be picked collapsed or expanded, and Check, Use the solver's answer and Check it send it", async ({
+  page,
+}) => {
+  await answerCompute(page);
+  await addSecondVerifier(page);
+  const verifiersSent = [];
+  page.on("request", (request) => {
+    if (VERIFY_REQUEST.test(request.url())) {
+      verifiersSent.push(new URL(request.url()).searchParams.get("verifier"));
+    }
+  });
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  const id = "workbench-verify-source-verifier";
+  const value = page.locator(`#${id}-value`);
+  const field = page.locator("#workbench-verify-source-certificate");
+
+  // Both are listed, the problem's default verifier first and chosen.
+  const names = await optionsOf(page, id);
+  expect(names).toHaveLength(2);
+  expect(names[1]).toBe(SECOND_VERIFIER_NAME);
+  const defaultName = names[0];
+  await expect(value).toHaveText(defaultName);
+
+  // Picked expanded, shown collapsed; Enter there checks with it.
+  await pick(page, id, new RegExp(`^${escapeRegExp(SECOND_VERIFIER_NAME)}$`));
+  await setExpanded(page, "verify", false);
+  await expect(value).toHaveText(SECOND_VERIFIER_NAME);
+  await field.fill(ANSWER);
+  await field.press("Enter");
+  await expect(page.locator("#workbench-verify-source-chip")).toHaveText(/^Valid/);
+  expect(verifiersSent.at(-1)).toBe(SECOND_VERIFIER);
+
+  // Picked collapsed, shown expanded; the last verdict was another verifier's, so it is stale.
+  await pick(page, id, new RegExp(`^${escapeRegExp(defaultName)}$`));
+  await expect(page.locator("#workbench-verify-source-chip")).toHaveText("Changed · check again");
+  await setExpanded(page, "verify", true);
+  await expect(value).toHaveText(defaultName);
+  await expect(page.locator("#workbench-verify-source-stale")).toBeVisible();
+  await page.locator("#workbench-verify-source-check").click();
+  await expect(page.locator("#workbench-verify-source-verdict")).toHaveAttribute(
+    "data-valid",
+    "true",
+  );
+  expect(verifiersSent.at(-1)).not.toBe(SECOND_VERIFIER);
+
+  // Use the solver's answer and Check it use the chosen verifier too.
+  await pick(page, id, new RegExp(`^${escapeRegExp(SECOND_VERIFIER_NAME)}$`));
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-run-chip")).toHaveText(/^Answer found/);
+  const sent = verifiersSent.length;
+  await page.locator("#workbench-verify-source-use-answer").click();
+  await expect(page.locator("#workbench-verify-source-verdict")).toHaveAttribute(
+    "data-valid",
+    "true",
+  );
+  expect(verifiersSent.length).toBe(sent + 1);
+  expect(verifiersSent.at(-1)).toBe(SECOND_VERIFIER);
+  await setExpanded(page, "verify", false);
+  await page.locator("#workbench-result-verify-answer").click();
+  await expect(expand(page, "verify")).toHaveAttribute("aria-expanded", "true");
+  await expect.poll(() => verifiersSent.length).toBe(sent + 2);
+  expect(verifiersSent.at(-1)).toBe(SECOND_VERIFIER);
+  await expect(value).toHaveText(SECOND_VERIFIER_NAME);
+});
+
 test("Check it opens a collapsed Verify, as it opens a hidden one", async ({ page }) => {
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
