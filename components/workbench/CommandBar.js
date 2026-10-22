@@ -61,6 +61,10 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
 // One dropdown's slot in the row: it grows to the shared dropdown width and shrinks to fit.
 const selectSlotSx = { flex: `0 1 ${DROPDOWN_WIDTH}px`, minWidth: 200, maxWidth: "100%" };
 
+// #279 (Workspace tweaks): collapsed, each dropdown is one line (TaggedSelect `oneLine`: its name
+// truncated, its tags beside it) and its slot takes only what that line needs.
+const collapsedSlotSx = { flex: "0 1 auto", minWidth: 160, maxWidth: "100%" };
+
 // #279 (Workspace tweaks): reduction names run long ("Karp's 0-1 Integer Linear Programming
 // Reduction") and carry two tags, so the Reduction dropdown also grows into free room on the
 // row, up to this width, to show its whole name and tags on one line. The Target dropdown grows
@@ -145,11 +149,12 @@ export default function CommandBar({
         </Box>
 
         {mode === "solve" && solver && (
-          <Box sx={selectSlotSx}>
+          <Box sx={collapsed ? collapsedSlotSx : selectSlotSx}>
             <TaggedSelect
               id={`${idPrefix}-solver`}
               label="Solver"
               hue="blue"
+              oneLine={collapsed}
               boxSx={{ width: "100%" }}
               {...solver}
             />
@@ -159,32 +164,42 @@ export default function CommandBar({
         {mode === "reduce" && target && reduction && (
           <>
             <Box
-              sx={{
-                ...selectSlotSx,
-                flexBasis: 240,
-                flexGrow: 1,
-                maxWidth: `min(100%, ${TARGET_MAX_WIDTH}px)`,
-              }}
+              sx={
+                collapsed
+                  ? collapsedSlotSx
+                  : {
+                      ...selectSlotSx,
+                      flexBasis: 240,
+                      flexGrow: 1,
+                      maxWidth: `min(100%, ${TARGET_MAX_WIDTH}px)`,
+                    }
+              }
             >
               <TaggedSelect
                 id={`${idPrefix}-target`}
                 label="Target"
                 hue="violet"
+                oneLine={collapsed}
                 boxSx={{ width: "100%" }}
                 {...target}
               />
             </Box>
             <Box
-              sx={{
-                ...selectSlotSx,
-                flexGrow: 1,
-                maxWidth: `min(100%, ${REDUCTION_MAX_WIDTH}px)`,
-              }}
+              sx={
+                collapsed
+                  ? collapsedSlotSx
+                  : {
+                      ...selectSlotSx,
+                      flexGrow: 1,
+                      maxWidth: `min(100%, ${REDUCTION_MAX_WIDTH}px)`,
+                    }
+              }
             >
               <TaggedSelect
                 id={`${idPrefix}-reduction`}
                 label="Reduction"
                 hue="violet"
+                oneLine={collapsed}
                 boxSx={{ width: "100%" }}
                 {...reduction}
               />
