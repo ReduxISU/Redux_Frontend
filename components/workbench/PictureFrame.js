@@ -40,6 +40,20 @@ import { COMPACT_MEDIA, WORKSPACE_NARROW } from "./layout";
 /** A picture's height: about 62% of the window's, never under 360 px or over 680 px. */
 export const PICTURE_HEIGHT = "clamp(360px, 62vh, 680px)";
 
+/** The picture's own inner padding, inside its filled box. */
+const VIEW_PADDING = 16;
+
+/** A frame's section padding on phones and tablets, inside its 1 px outline. */
+const SECTION_COMPACT_PADDING = 8;
+
+/**
+ * The picture's side padding on phones and tablets: its own less what the frame's section
+ * (outline and padding) takes, so the picture is exactly as wide as before frames were outlined
+ * and the pictures sized for a phone's width (Table, Quantum Circuit, Tripartite Matching,
+ * Packing) still draw their text at its own size.
+ */
+const VIEW_COMPACT_SIDE_PADDING = VIEW_PADDING - SECTION_COMPACT_PADDING - 1;
+
 /**
  * Set inside a frame's picture: `{slot}`, the caption's element the zoom buttons are drawn into
  * (null until it mounts). Null outside a frame, where DiagramZoom keeps its own toolbar.
@@ -152,8 +166,9 @@ export default function PictureFrame({
     borderColor: "border.soft",
     borderRadius: "12px",
     p: 2,
-    // Phones and tablets keep the room for the picture.
-    [COMPACT_MEDIA]: { p: 1 },
+    // Phones and tablets keep the room for the picture: the picture's own padding gives back
+    // what this takes (VIEW_COMPACT_SIDE_PADDING).
+    [COMPACT_MEDIA]: { p: `${SECTION_COMPACT_PADDING}px` },
     boxSizing: "border-box",
   };
   const gridSx = inGrid
@@ -278,7 +293,10 @@ export default function PictureFrame({
           border: tools ? "none" : "1px dashed",
           borderColor: "border.main",
           borderRadius: "10px",
-          p: 2,
+          p: `${VIEW_PADDING}px`,
+          // Inside a frame's outlined section on a phone or tablet (not in full screen, which has
+          // no section), the sides give back the section's outline and padding.
+          ...(on ? {} : { [COMPACT_MEDIA]: { px: `${VIEW_COMPACT_SIDE_PADDING}px` } }),
           // Stacked (a Workspace 960px wide or less, phones and tablets) no two frames need to
           // line up, so a tall picture grows past the height rather than shrinking its text
           // below reading size; every frame is still at least that high.
