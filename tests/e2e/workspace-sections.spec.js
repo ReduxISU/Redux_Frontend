@@ -905,9 +905,13 @@ for (const width of [1440, 390]) {
     }
 
     for (const key of SECTIONS) await setExpanded(page, key, false);
+    // The target's Visualization Type shows when Redux lists a picture for it (CI's backend may
+    // not, for Clique, until a build).
+    const targetType = `${SUMMARY.slice(1)}-target-type`;
+    const hasTargetType = (await page.locator(`#${targetType}-button`).count()) > 0;
     const boxes = [
       `${SUMMARY.slice(1)}-source-type`,
-      `${SUMMARY.slice(1)}-target-type`,
+      ...(hasTargetType ? [targetType] : []),
       "workbench-target",
       "workbench-reduction",
     ];
@@ -948,7 +952,7 @@ for (const width of [1440, 390]) {
       `${SUMMARY}-source-problem`,
       `${SUMMARY}-source-type-button`,
       `${SUMMARY}-target-problem`,
-      `${SUMMARY}-target-type-button`,
+      ...(hasTargetType ? [`${SUMMARY}-target-type-button`] : []),
     ];
     const tops = [];
     for (const selector of parts) {
