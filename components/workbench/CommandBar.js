@@ -16,6 +16,13 @@
 //
 // Labels sit above their controls, and the row wraps; nothing here is sticky, so it scrolls with
 // the page and the picture gets the screen.
+//
+// #279 (Workspace tweaks): collapsed (the Execute section's Show less), the row stays, live, on
+// the section heading's line, without the Mode switch: Solve mode's Solver, Solve and its chip;
+// Reduce mode's Target, Reduction, Reduce and the build's chip. The same elements, only laid out
+// without what is under the row (the busy line, the failure box, the notes, the result, Reduce
+// mode's cells), so a pick made collapsed is the pick shown expanded. Those stay on the page,
+// hidden, and the runs' announcements stay spoken.
 
 import Box from "@mui/material/Box";
 import { controlLabelSx, DROPDOWN_WIDTH } from "./layout";
@@ -69,6 +76,9 @@ const selectSlotSx = { flex: `0 1 ${DROPDOWN_WIDTH}px`, minWidth: 200, maxWidth:
  *   `onRetry` for its failure box.
  * @param {import("react").ReactNode} props.status Under the row: the instance error and a note
  *   on what the button does (or why it can't run).
+ * @param {import("react").ReactNode} [props.announcements] The runs' live regions, always on the
+ *   page (visually hidden).
+ * @param {boolean} [props.collapsed] Only the row, without the Mode switch.
  * @param {import("react").ReactNode} props.children The run's result, under everything else.
  */
 export default function CommandBar({
@@ -80,6 +90,8 @@ export default function CommandBar({
   reduction,
   run,
   status,
+  announcements = null,
+  collapsed = false,
   children,
 }) {
   return (
@@ -96,7 +108,15 @@ export default function CommandBar({
           minWidth: 0,
         }}
       >
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, flex: "none" }}>
+        <Box
+          hidden={collapsed}
+          sx={{
+            display: collapsed ? "none" : "flex",
+            flexDirection: "column",
+            gap: 0.5,
+            flex: "none",
+          }}
+        >
           <Box id={`${idPrefix}-mode-label`} sx={controlLabelSx}>
             Mode
           </Box>
@@ -173,12 +193,28 @@ export default function CommandBar({
         </Box>
       </Box>
 
-      {run.busy && (
-        <BusyLine id={`${idPrefix}-run-busy`} text={run.busy.text} startedAt={run.busy.startedAt} />
-      )}
-      <RunFailureBox id={`${idPrefix}-run-failure`} failure={run.failure} onRetry={run.onRetry} />
-      {status}
-      {children}
+      {announcements}
+      <Box
+        id={`${idPrefix}-controls-more`}
+        hidden={collapsed}
+        sx={{
+          display: collapsed ? "none" : "flex",
+          flexDirection: "column",
+          gap: 1.5,
+          minWidth: 0,
+        }}
+      >
+        {run.busy && (
+          <BusyLine
+            id={`${idPrefix}-run-busy`}
+            text={run.busy.text}
+            startedAt={run.busy.startedAt}
+          />
+        )}
+        <RunFailureBox id={`${idPrefix}-run-failure`} failure={run.failure} onRetry={run.onRetry} />
+        {status}
+        {children}
+      </Box>
     </Box>
   );
 }

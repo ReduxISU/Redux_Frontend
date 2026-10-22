@@ -15,9 +15,9 @@
 //     steps, Legend, and Gadgets), Execute (Mode, the dropdowns and the run buttons, each run's status, and
 //     the result that was the Result panel's) and Verify (./panels/VerifyBox.js). Hiding all
 //     three hides the Workspace. Hidden parts stay on the page, so nothing typed is lost. Each
-//     section also has Show all / Show less (#279 Workspace tweaks): collapsed, it keeps a
-//     one-line summary (the pictures and their types; the mode, the algorithm and the latest
-//     run's chip; each side's verdict), and the layout remembers it until Reset layout.
+//     section also has Show all / Show less (#279 Workspace tweaks): collapsed, Visualization
+//     keeps a one-line summary (the pictures and their types), and Execute and Verify keep their
+//     top controls, live, on the heading's line; the layout remembers it until Reset layout.
 //
 // What this component owns, and why here:
 //   - The one instance value. Every part of the page reads it, and editing it anywhere
@@ -137,6 +137,7 @@ import {
   solverCard,
   solverRunTags,
   targetCard,
+  verifierCard,
   visualizationCard,
   visualizationTags,
 } from "./infoCards";
@@ -146,8 +147,8 @@ import GadgetsSection from "./panels/GadgetsSection";
 import InstancePanel from "./panels/InstancePanel";
 import ReduceCells from "./panels/ReduceCells";
 import ResultPanel from "./panels/ResultPanel";
-import VerifyBox, { verdictWord } from "./panels/VerifyBox";
-import { formatSeconds, RunChip, runChip, runFailure } from "./RunParts";
+import VerifyBox from "./panels/VerifyBox";
+import { formatSeconds, runChip, runFailure } from "./RunParts";
 import VisualizationPane from "./VisualizationPane";
 import Workspace, { WorkspaceSection } from "./Workspace";
 
@@ -351,6 +352,32 @@ function answerChip(kept) {
   };
 }
 
+/** A side's verifiers: the list Redux gives, else the one verifier, else none. */
+function verifierList(verifiers, verifier) {
+  if (verifiers?.length) return verifiers;
+  return verifier ? [verifier] : [];
+}
+
+/** The verifier picked by class name, or the first. */
+function pickVerifier(verifiers, className) {
+  return verifiers.find((verifier) => verifier.className === className) ?? verifiers[0] ?? null;
+}
+
+/** The verifier dropdown's choice for one side (TaggedSelect's shape), or null with none. */
+function verifierSelectFor(verifiers, chosen, onChange) {
+  if (verifiers.length === 0) return null;
+  return {
+    value: chosen?.className ?? verifiers[0].className,
+    options: verifiers.map((verifier) => ({
+      value: verifier.className,
+      label: verifier.name,
+      tags: [],
+      card: verifierCard(verifier),
+    })),
+    onChange,
+  };
+}
+
 const ANOTHER_RUN = "Another run is going";
 
 // A live region's text is spoken, not shown: what it says is on screen already.
@@ -493,19 +520,33 @@ export default function Workbench({ problem }) {
   const reduceTargetName = reduceCurrent
     ? reduceResult.targetName
     : (selectedReduction?.target ?? targetName ?? null);
+  // #279 (Workspace tweaks): each side's verifiers, as Redux lists them, and the one picked in
+  // its dropdown (the first until another is picked). Collapsed and expanded Verify share it.
+  const [verifierPicks, setVerifierPicks] = useState({
+    [CHECK_SOURCE]: null,
+    [CHECK_TARGET]: null,
+  });
+  const sourceVerifiers = verifierList(problem.verifiers, problem.verifier);
+  const targetVerifiers = reduceCurrent
+    ? verifierList(reduceResult.targetVerifiers, reduceResult.targetVerifier)
+    : verifierList(selectedReduction?.targetVerifiers, selectedReduction?.targetVerifier);
   const verify = useCertificateCheck({
-    source: { name: problem.name, verifier: problem.verifier ?? null, instance },
+    source: {
+      name: problem.name,
+      verifier: pickVerifier(sourceVerifiers, verifierPicks[CHECK_SOURCE]),
+      instance,
+    },
     target:
       mode === "reduce" && reduceTargetName
         ? {
             name: reduceTargetName,
-            verifier: reduceCurrent
-              ? reduceResult.targetVerifier
-              : (selectedReduction?.targetVerifier ?? null),
+            verifier: pickVerifier(targetVerifiers, verifierPicks[CHECK_TARGET]),
             instance: reduceCurrent ? reduceResult.targetInstance : null,
           }
         : null,
   });
+  // Which side collapsed Verify's line checks in Reduce mode (its Problem to verify choice).
+  const [verifySidePick, setVerifySidePick] = useState(CHECK_SOURCE);
   // Each strip collapses on its own; Check it opens its side's again.
   const [stripsOpen, setStripsOpen] = useState({ [CHECK_SOURCE]: true, [CHECK_TARGET]: true });
 
@@ -848,6 +889,7 @@ export default function Workbench({ problem }) {
         targetName: reduction.target,
         targetVisualization: reduction.targetVisualization,
         targetVerifier: reduction.targetVerifier ?? null,
+        targetVerifiers: reduction.targetVerifiers ?? null,
         targetSolvers: reduction.targetSolvers ?? [],
         pictures,
         instance: runInstance,
@@ -1597,24 +1639,25 @@ export default function Workbench({ problem }) {
           The picture did not come back: {pictureRun.failure?.headline ?? ""}. The answer is below.
         </Box>
       )}
-      {/* Spoken when they change; what they say is also on screen. */}
-      {[
-        ["solve", solveAnnouncement],
-        ["reduce", reduceAnnouncement],
-        ["target", targetAnnouncement],
-      ].map(([key, text]) => (
-        <Box
-          key={key}
-          id={`${ID}-${key}-status`}
-          role="status"
-          aria-live="polite"
-          sx={visuallyHiddenSx}
-        >
-          {text}
-        </Box>
-      ))}
     </>
   );
+  // Spoken when they change; what they say is also on screen. Kept while Execute is collapsed,
+  // where the runs' chips still change.
+  const announcements = [
+    ["solve", solveAnnouncement],
+    ["reduce", reduceAnnouncement],
+    ["target", targetAnnouncement],
+  ].map(([key, text]) => (
+    <Box
+      key={key}
+      id={`${ID}-${key}-status`}
+      role="status"
+      aria-live="polite"
+      sx={visuallyHiddenSx}
+    >
+      {text}
+    </Box>
+  ));
 
   // Reduce mode's cells and results row (./panels/ReduceCells.js).
   let reduceCells = null;
@@ -1821,7 +1864,12 @@ export default function Workbench({ problem }) {
       open: stripsOpen[CHECK_SOURCE],
       onToggle: () => setStripsOpen((open) => ({ ...open, [CHECK_SOURCE]: !open[CHECK_SOURCE] })),
       check: verify[CHECK_SOURCE],
-      format: certificateHint(problem.verifier),
+      verifierSelect: verifierSelectFor(
+        sourceVerifiers,
+        verify[CHECK_SOURCE].info?.verifier,
+        (className) => setVerifierPicks((picks) => ({ ...picks, [CHECK_SOURCE]: className })),
+      ),
+      format: certificateHint(verify[CHECK_SOURCE].info?.verifier),
       checkHint: checkHintFor(verify[CHECK_SOURCE], ""),
       answer: sourceUse,
       answerHint: sourceSolvedNone
@@ -1853,12 +1901,30 @@ export default function Workbench({ problem }) {
       open: stripsOpen[CHECK_TARGET],
       onToggle: () => setStripsOpen((open) => ({ ...open, [CHECK_TARGET]: !open[CHECK_TARGET] })),
       check: targetCheck,
+      verifierSelect: verifierSelectFor(targetVerifiers, targetCheck.info.verifier, (className) =>
+        setVerifierPicks((picks) => ({ ...picks, [CHECK_TARGET]: className })),
+      ),
       format: certificateHint(targetCheck.info.verifier),
       checkHint: checkHintFor(targetCheck, lockReason),
       answer: targetUse,
       answerHint: targetAnswerHint,
     });
   }
+
+  // Collapsed, Verify's line checks one side: Solve mode's source, or in Reduce mode the side
+  // its Problem to verify choice names. The target can't be chosen until Reduce has built the
+  // instance its certificates are checked against.
+  const targetBuilt = Boolean(targetCheck) && reduceCurrent && Boolean(reduceResult.targetInstance);
+  const verifySide = targetBuilt && verifySidePick === CHECK_TARGET ? CHECK_TARGET : CHECK_SOURCE;
+  const verifyChoice = targetCheck
+    ? {
+        value: verifySide,
+        onChange: setVerifySidePick,
+        targetDisabledReason: targetBuilt
+          ? ""
+          : `Reduce first: a ${reduceTargetName} certificate is checked against the instance Reduce builds.`,
+      }
+    : null;
 
   // --- Toggle dots -------------------------------------------------------------------------
   // #279: only the Instance toggle has one, while the instance has errors. #229's "New result"
@@ -2000,37 +2066,8 @@ export default function Workbench({ problem }) {
         chosenLabel(reductionPane?.types?.target ?? target.type),
       )}`
     : sourceSummary;
-  // The latest run's chip: Solve mode's solve, or whichever of Reduce mode's runs started last.
-  const chipRuns = [{ startedAt: solveRun.startedAt, chip: solveChip }];
-  if (mode === "reduce") {
-    chipRuns.push({ startedAt: reduceRun.startedAt, chip: reduceChip });
-    if (reduceCurrent) {
-      chipRuns.push({
-        startedAt: targetRun.startedAt,
-        chip: runChip(targetRun, { current: Boolean(targetSolved), done: answerChip }),
-      });
-    }
-  }
-  const latest = chipRuns
-    .filter((entry) => entry.chip)
-    .reduce((best, entry) => (!best || entry.startedAt > best.startedAt ? entry : best), null);
-  const executeAlgorithm = mode === "solve" ? selectedSolver?.name : selectedReduction?.name;
-  const executeSummary = (
-    <Box
-      component="span"
-      sx={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: "4px 8px" }}
-    >
-      <span id={`${ID}-execute-summary-text`}>
-        {[runLabel, executeAlgorithm].filter(Boolean).join(" · ")}
-        {" · "}
-        {latest ? "" : "Not run yet"}
-      </span>
-      {latest && <RunChip id={`${ID}-execute-summary-chip`} chip={latest.chip} />}
-    </Box>
-  );
-  const verifySummary = verifyStrips
-    .map((strip) => `${strip.problemName}: ${verdictWord(strip.check)}`)
-    .join(" · ");
+  // #279 (Workspace tweaks): Execute and Verify have no summary line any more. Collapsed, they
+  // keep their top controls on the heading's line instead (CommandBar and VerifyBox, collapsed).
 
   const gadgetsProps =
     reduceGadgets.length > 0
@@ -2160,10 +2197,11 @@ export default function Workbench({ problem }) {
           first={workspaceShown[0] === "execute"}
           expanded={layout.expanded.execute}
           onExpandedChange={(expanded) => layout.setExpanded("execute", expanded)}
-          summary={executeSummary}
+          inlineCollapsed
         >
           <CommandBar
             idPrefix={ID}
+            collapsed={!layout.expanded.execute}
             mode={mode}
             onModeChange={setMode}
             solver={solverSelect}
@@ -2201,6 +2239,7 @@ export default function Workbench({ problem }) {
             }
             run={topRun}
             status={status}
+            announcements={announcements}
           >
             <ResultPanel
               idPrefix={`${ID}-result`}
@@ -2239,9 +2278,15 @@ export default function Workbench({ problem }) {
           first={workspaceShown[0] === "verify"}
           expanded={layout.expanded.verify}
           onExpandedChange={(expanded) => layout.setExpanded("verify", expanded)}
-          summary={verifySummary}
+          inlineCollapsed
         >
-          <VerifyBox idPrefix={`${ID}-verify`} strips={verifyStrips} />
+          <VerifyBox
+            idPrefix={`${ID}-verify`}
+            strips={verifyStrips}
+            collapsed={!layout.expanded.verify}
+            side={verifySide}
+            choice={verifyChoice}
+          />
         </WorkspaceSection>
       </Workspace>
     </Box>

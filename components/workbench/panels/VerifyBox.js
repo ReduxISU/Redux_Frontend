@@ -25,6 +25,19 @@
 //
 // The state lives in hooks/useCertificateCheck.js, owned by the Workbench, so what is typed
 // survives collapsing a strip and hiding the section. This file only draws it.
+//
+// #279 (Workspace tweaks):
+//   - the verifier's name became a dropdown of every verifier Redux lists for the side's problem
+//     (Navigation/Batch/allVerifiers; one each today, so one option);
+//   - each verdict says how long the check took, measured the way Execute's runs are: this
+//     browser's round trip for the request, network included;
+//   - Enter in the certificate field checks it (Shift+Enter starts a new line);
+//   - collapsed (the Verify section's Show less), the section keeps one side's top controls, live,
+//     on its heading's line: the verifier, the certificate field, Check and a chip with the
+//     verdict and its time. In Reduce mode a Problem to verify choice (source or target, by name)
+//     comes first and picks the side; the target can't be picked until Reduce has built its
+//     instance. These are the strip's own elements, laid out in a row, so what is typed or picked
+//     collapsed is what the strip shows expanded. The rest stays on the page, hidden.
 
 import Box from "@mui/material/Box";
 import { useState } from "react";
@@ -34,13 +47,18 @@ import {
   COMPUTE_RUNNING,
 } from "../../../hooks/useComputeRequest";
 import ComputeStatus from "../../detail/ComputeStatus";
-import { COMPACT_MEDIA, MONO_FONT, secondaryButtonSx, sideGridSx } from "../layout";
+import { COMPACT_MEDIA, controlLabelSx, MONO_FONT, secondaryButtonSx, sideGridSx } from "../layout";
+import { formatSeconds, RunChip } from "../RunParts";
+import TaggedSelect from "../TaggedSelect";
 
 const FAILURE_SUPPORTED = false;
 export const FAILURE_REASON =
   "Redux's verifier only answers valid or not valid, so it can't point at the part that fails yet.";
 
 const quietSx = { fontSize: "0.8125rem", color: "text.secondary" };
+
+// The collapsed row's verifier dropdown: room for "Default SAT Verifier" and its (i).
+const VERIFIER_WIDTH = 280;
 
 const stripSx = {
   display: "flex",
@@ -164,19 +182,36 @@ function resultOf(check, problemName) {
   };
 }
 
+/** How long the side's last check took, as Execute writes a run's time ("0.08 s"). */
+function checkTime(check) {
+  return formatSeconds(check.request.elapsedMs);
+}
+
 /**
- * One side's latest verdict in a word or two, for the collapsed Verify section's summary (#279):
- * "Valid", "Not valid", "Checking", or "Not checked" before any check.
+ * The collapsed line's chip (./RunParts.js RunChip): the side's verdict and its time,
+ * "Checking..." with a clock, or "Not checked" before any check.
+ * @returns {import("../RunParts").Chip}
  */
-export function verdictWord(check) {
-  if (check.request.status === COMPUTE_RUNNING) return "Checking";
-  if (check.unreadable) return "Can't check this";
+export function verdictChip(check) {
+  const { request } = check;
+  if (request.status === COMPUTE_RUNNING) {
+    return { tone: "neutral", spin: true, text: "Checking...", startedAt: request.startedAt };
+  }
+  const time = checkTime(check);
+  const timed = (tone, word) => ({
+    tone,
+    text: `${word} · ${time}`,
+    label: `${word}, ${time}, round trip`,
+  });
+  if (check.unreadable) return timed("warn", "Can't check this");
   const verdict = check.verdict;
-  if (verdict?.valid === true) return "Valid";
-  if (verdict?.valid === false) return "Not valid";
-  if (verdict) return "Unexpected answer";
-  if (check.stale) return "Changed, check again";
-  return "Not checked";
+  if (verdict?.valid === true) return timed("ok", "Valid");
+  if (verdict?.valid === false) return timed("err", "Not valid");
+  if (verdict) return timed("neutral", "Unexpected answer");
+  if (check.stale) return { tone: "neutral", text: "Changed · check again" };
+  if (request.status === COMPUTE_FAILED) return { tone: "err", text: "Failed" };
+  if (request.status === COMPUTE_CANCELLED) return { tone: "neutral", text: "Cancelled" };
+  return { tone: "neutral", text: "Not checked" };
 }
 
 /**
@@ -208,9 +243,20 @@ function announcementOf(check, result) {
  * @property {string} answerHint Why Use the solver's answer is disabled.
  */
 
-/** One side's strip. */
-function Strip({ id, strip }) {
-  const { check, problemName, open } = strip;
+// Shown on the strip only while expanded (a collapsed strip keeps its top controls).
+function expandedOnly(collapsed, display = "block") {
+  return collapsed ? { display: "none" } : { display };
+}
+
+/**
+ * One side's strip.
+ * @param {{id: string, strip: VerifyStrip, collapsed: boolean, shown: boolean}} props
+ *   `collapsed`: the Verify section is collapsed, so the strip draws only its top controls in a
+ *   row; `shown`: this is the side the collapsed row checks (the other strip is hidden).
+ */
+function Strip({ id, strip, collapsed, shown }) {
+  const { check, problemName } = strip;
+  const open = collapsed || strip.open;
   const verifier = check.info?.verifier ?? null;
   const bodyId = `${id}-body`;
   const certificateId = `${id}-certificate`;
@@ -227,16 +273,37 @@ function Strip({ id, strip }) {
       ? check.request.failure
       : null;
 
+  // Check, and Enter in the field.
+  function runCheck() {
+    if (checkDisabled) return;
+    if (empty) {
+      setAskedEmpty(true);
+      document.getElementById(certificateId)?.focus();
+      return;
+    }
+    setAskedEmpty(false);
+    check.check();
+  }
+
+  // Collapsed, the strip and its body stop being boxes of their own (`display: contents`), so
+  // their parts sit in VerifyBox's row; the other side's strip is hidden.
+  let rootSx = stripSx;
+  if (collapsed) rootSx = shown ? { display: "contents" } : { display: "none" };
+  const bodySx = collapsed
+    ? { display: "contents" }
+    : { display: open ? "flex" : "none", flexDirection: "column", gap: "6px", minWidth: 0 };
+
   return (
-    <Box id={id} data-side={strip.side} sx={stripSx}>
+    <Box id={id} data-side={strip.side} hidden={collapsed && !shown} sx={rootSx}>
       <Box
         id={`${id}-toggle`}
         component="button"
         type="button"
-        aria-expanded={open ? "true" : "false"}
+        aria-expanded={strip.open ? "true" : "false"}
         aria-controls={bodyId}
         onClick={strip.onToggle}
-        sx={headSx}
+        hidden={collapsed}
+        sx={{ ...headSx, ...expandedOnly(collapsed, "flex") }}
       >
         <span>Verify {problemName}</span>
         <Box
@@ -249,82 +316,123 @@ function Strip({ id, strip }) {
             letterSpacing: 0,
           }}
         >
-          {open ? "Hide" : "Show"}
+          {strip.open ? "Hide" : "Show"}
         </Box>
       </Box>
-      <Box
-        id={bodyId}
-        hidden={!open}
-        sx={{ display: open ? "flex" : "none", flexDirection: "column", gap: "6px", minWidth: 0 }}
-      >
+      <Box id={bodyId} hidden={!open} sx={bodySx}>
         {!verifier ? (
           <Box id={`${id}-no-verifier`} sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
             No verifier is declared for {problemName} yet, so there is nothing to check with.
           </Box>
         ) : (
           <>
-            <Box component="span" id={`${id}-verifier-name`} sx={quietSx}>
-              {verifier.name}
-            </Box>
-            <Box component="label" htmlFor={certificateId} sx={quietSx}>
-              Certificate
+            {strip.verifierSelect && (
+              <Box
+                sx={
+                  collapsed
+                    ? { flex: `0 1 ${VERIFIER_WIDTH}px`, minWidth: 200, maxWidth: "100%" }
+                    : { minWidth: 0 }
+                }
+              >
+                <TaggedSelect
+                  id={`${id}-verifier`}
+                  label="Verifier"
+                  hue="green"
+                  boxSx={{ width: "100%" }}
+                  {...strip.verifierSelect}
+                />
+              </Box>
+            )}
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                gap: collapsed ? 0.5 : "6px",
+                minWidth: 0,
+                ...(collapsed ? { flex: "1 1 220px" } : {}),
+              }}
+            >
+              <Box
+                component="label"
+                htmlFor={certificateId}
+                sx={collapsed ? controlLabelSx : quietSx}
+              >
+                Certificate
+              </Box>
+              <Box
+                id={certificateId}
+                component="textarea"
+                rows={1}
+                value={check.certificate}
+                placeholder={strip.format.example}
+                onChange={(event) => check.setCertificate(event.target.value)}
+                onKeyDown={(event) => {
+                  // Enter checks; Shift+Enter, or Enter while an input method composes, types.
+                  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+                    return;
+                  }
+                  event.preventDefault();
+                  runCheck();
+                }}
+                spellCheck={false}
+                aria-describedby={check.unreadable ? `${hintId} ${id}-verdict` : hintId}
+                aria-invalid={check.unreadable ? "true" : undefined}
+                sx={{
+                  boxSizing: "border-box",
+                  width: "100%",
+                  minWidth: 0,
+                  minHeight: collapsed ? 44 : 30,
+                  px: 1.25,
+                  py: collapsed ? 1.25 : 0.5,
+                  lineHeight: "20px",
+                  resize: collapsed ? "none" : "vertical",
+                  border: "1px solid",
+                  borderColor: check.unreadable ? "status.warn" : "border.main",
+                  borderRadius: "8px",
+                  fontFamily: MONO_FONT,
+                  fontSize: "0.875rem",
+                  color: "text.primary",
+                  backgroundColor: "surface.main",
+                  "&::placeholder": { color: "text.secondary", opacity: 1 },
+                  // Phones and small tablets: the field grows with the text instead of scrolling.
+                  [COMPACT_MEDIA]: {
+                    fieldSizing: "content",
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                    resize: "none",
+                  },
+                }}
+              />
             </Box>
             <Box
-              id={certificateId}
-              component="textarea"
-              rows={1}
-              value={check.certificate}
-              placeholder={strip.format.example}
-              onChange={(event) => check.setCertificate(event.target.value)}
-              spellCheck={false}
-              aria-describedby={check.unreadable ? `${hintId} ${id}-verdict` : hintId}
-              aria-invalid={check.unreadable ? "true" : undefined}
+              id={hintId}
               sx={{
-                boxSizing: "border-box",
-                width: "100%",
-                minWidth: 0,
-                minHeight: 30,
-                px: 1.25,
-                py: 0.5,
-                lineHeight: "20px",
-                resize: "vertical",
-                border: "1px solid",
-                borderColor: check.unreadable ? "status.warn" : "border.main",
-                borderRadius: "8px",
-                fontFamily: MONO_FONT,
-                fontSize: "0.875rem",
-                color: "text.primary",
-                backgroundColor: "surface.main",
-                "&::placeholder": { color: "text.secondary", opacity: 1 },
-                // Phones and small tablets: the field grows with the text instead of scrolling.
-                [COMPACT_MEDIA]: {
-                  fieldSizing: "content",
-                  whiteSpace: "pre-wrap",
-                  overflowWrap: "anywhere",
-                  resize: "none",
-                },
+                ...quietSx,
+                overflowWrap: "anywhere",
+                // Collapsed, still the field's description, but not shown.
+                ...(collapsed ? visuallyHiddenSx : {}),
               }}
-            />
-            <Box id={hintId} sx={{ ...quietSx, overflowWrap: "anywhere" }}>
+            >
               {strip.format.hint}
             </Box>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 0.5 }}>
+            <Box
+              sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 1,
+                minWidth: 0,
+                ...(collapsed ? {} : { mt: 0.5 }),
+              }}
+            >
               <Box
                 id={`${id}-check`}
                 component="button"
                 type="button"
                 disabled={checkDisabled}
                 aria-describedby={strip.checkHint ? `${id}-check-hint` : undefined}
-                onClick={() => {
-                  if (empty) {
-                    setAskedEmpty(true);
-                    document.getElementById(certificateId)?.focus();
-                    return;
-                  }
-                  setAskedEmpty(false);
-                  check.check();
-                }}
-                sx={checkButtonSx}
+                onClick={runCheck}
+                sx={{ ...checkButtonSx, ...(collapsed ? { minHeight: 44, px: 2 } : {}) }}
               >
                 Check
               </Box>
@@ -333,8 +441,9 @@ function Strip({ id, strip }) {
               <Box
                 component="span"
                 id={`${id}-use-answer-wrap`}
+                hidden={collapsed}
                 title={!strip.answer ? strip.answerHint : undefined}
-                sx={{ display: "inline-flex" }}
+                sx={expandedOnly(collapsed, "inline-flex")}
               >
                 <Box
                   id={`${id}-use-answer`}
@@ -348,14 +457,15 @@ function Strip({ id, strip }) {
                   {"Use the solver's answer"}
                 </Box>
               </Box>
+              {collapsed && <RunChip id={`${id}-chip`} chip={verdictChip(check)} />}
             </Box>
             {askedEmpty && empty && !strip.checkHint && (
-              <Box id={`${id}-empty`} role="status" sx={quietSx}>
+              <Box id={`${id}-empty`} role="status" sx={{ ...quietSx, flexBasis: "100%" }}>
                 Type a certificate first.
               </Box>
             )}
             {strip.checkHint && (
-              <Box id={`${id}-check-hint`} sx={quietSx}>
+              <Box id={`${id}-check-hint`} sx={{ ...quietSx, flexBasis: "100%" }}>
                 {strip.checkHint}
               </Box>
             )}
@@ -364,14 +474,17 @@ function Strip({ id, strip }) {
                 {strip.answerHint}
               </Box>
             )}
-            <ComputeStatus
-              idPrefix={`${id}-check`}
-              status={check.request.status}
-              announcement={announcementOf(check, result)}
-              failure={shownFailure}
-              onCancel={check.request.cancel}
-              busyLabel="Checking this certificate"
-            />
+            {/* Collapsed, the chip shows what this says; its live region still speaks. */}
+            <Box sx={collapsed ? visuallyHiddenSx : { display: "contents" }}>
+              <ComputeStatus
+                idPrefix={`${id}-check`}
+                status={check.request.status}
+                announcement={announcementOf(check, result)}
+                failure={shownFailure}
+                onCancel={check.request.cancel}
+                busyLabel="Checking this certificate"
+              />
+            </Box>
             {result && (
               <Box
                 id={`${id}-verdict`}
@@ -389,14 +502,25 @@ function Strip({ id, strip }) {
                   fontSize: "0.875rem",
                   overflowWrap: "anywhere",
                   ...RESULT_TONES[result.tone],
+                  // Collapsed, the chip shows it; the field's aria-describedby still reads it.
+                  ...(collapsed ? visuallyHiddenSx : {}),
                 }}
               >
-                <Box component="strong">{result.headline}</Box> {result.detail}
+                <Box component="strong">{result.headline}</Box> {result.detail}{" "}
+                <Box component="span" id={`${id}-verdict-time`} sx={{ whiteSpace: "nowrap" }}>
+                  Took {checkTime(check)} (round trip)
+                </Box>
               </Box>
             )}
             {result?.tone === "invalid" && (
               <Box
-                sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 10px" }}
+                hidden={collapsed}
+                sx={{
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: "6px 10px",
+                  ...expandedOnly(collapsed, "flex"),
+                }}
               >
                 <Box
                   id={`${id}-fail`}
@@ -420,7 +544,7 @@ function Strip({ id, strip }) {
                 )}
               </Box>
             )}
-            {check.stale && !running && (
+            {check.stale && !running && !collapsed && (
               <Box id={`${id}-stale`} sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
                 The certificate or the instance changed after the last check. Check again.
               </Box>
@@ -432,21 +556,133 @@ function Strip({ id, strip }) {
   );
 }
 
+const choiceButtonSx = {
+  minHeight: 44,
+  px: "14px",
+  borderRadius: "8px",
+  border: "1px solid",
+  borderColor: "border.main",
+  backgroundColor: "transparent",
+  color: "text.primary",
+  fontFamily: "inherit",
+  fontSize: "0.875rem",
+  fontWeight: 700,
+  cursor: "pointer",
+  overflowWrap: "anywhere",
+  "&:hover": { backgroundColor: "surface.raised" },
+  '&[aria-pressed="true"]': {
+    border: "2px solid",
+    borderColor: "brand.line",
+    backgroundColor: "surface.raised",
+  },
+  "&:disabled": {
+    cursor: "not-allowed",
+    borderStyle: "dashed",
+    backgroundColor: "surface.main",
+    color: "text.secondary",
+  },
+};
+
+/**
+ * Collapsed Verify's Problem to verify choice (Reduce mode): the source or the target, by name.
+ * The target is disabled, saying why, until Reduce has built its instance.
+ */
+function SideChoice({ id, strips, choice }) {
+  const labelId = `${id}-label`;
+  const reasonId = `${id}-target-reason`;
+  return (
+    <Box
+      sx={{ display: "flex", flexDirection: "column", gap: 0.5, flex: "none", maxWidth: "100%" }}
+    >
+      <Box id={labelId} sx={controlLabelSx}>
+        Problem to verify
+      </Box>
+      <Box
+        id={id}
+        role="group"
+        aria-labelledby={labelId}
+        sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}
+      >
+        {strips.map((strip) => {
+          const disabled = strip.side === "target" && Boolean(choice.targetDisabledReason);
+          return (
+            // A disabled button gets no hover, so the wrapper carries the reason's tooltip.
+            <Box
+              key={strip.side}
+              component="span"
+              title={disabled ? choice.targetDisabledReason : undefined}
+              sx={{ display: "inline-flex", minWidth: 0 }}
+            >
+              <Box
+                id={`${id}-${strip.side}`}
+                component="button"
+                type="button"
+                aria-pressed={choice.value === strip.side ? "true" : "false"}
+                disabled={disabled}
+                aria-describedby={disabled ? reasonId : undefined}
+                onClick={() => choice.onChange(strip.side)}
+                sx={choiceButtonSx}
+              >
+                {strip.problemName}
+              </Box>
+            </Box>
+          );
+        })}
+      </Box>
+      {choice.targetDisabledReason && (
+        <Box id={reasonId} sx={visuallyHiddenSx}>
+          {choice.targetDisabledReason}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here; each strip is
  *   `${idPrefix}-${side}`.
  * @param {VerifyStrip[]} props.strips The source's, then the target's in Reduce mode.
+ * @param {boolean} [props.collapsed] Only one side's top controls, in a row.
+ * @param {"source"|"target"} [props.side] The side the collapsed row checks.
+ * @param {{value: string, onChange: Function, targetDisabledReason: string}|null} [props.choice]
+ *   Reduce mode's Problem to verify choice, shown while collapsed.
  */
-export default function VerifyBox({ idPrefix, strips }) {
+export default function VerifyBox({
+  idPrefix,
+  strips,
+  collapsed = false,
+  side = "source",
+  choice = null,
+}) {
+  let rootSx = strips.length > 1 ? sideGridSx : { display: "flex", flexDirection: "column" };
+  if (collapsed) {
+    rootSx = {
+      display: "flex",
+      flexWrap: "wrap",
+      alignItems: "flex-end",
+      gap: "12px 16px",
+      minWidth: 0,
+    };
+  }
   return (
     <Box
       id={idPrefix}
+      data-collapsed={collapsed ? "true" : "false"}
       // #279: the Workspace's Verify section draws the heading and the rule above it.
-      sx={strips.length > 1 ? sideGridSx : { display: "flex", flexDirection: "column" }}
+      sx={rootSx}
     >
+      {collapsed && choice && strips.length > 1 && (
+        <SideChoice id={`${idPrefix}-side`} strips={strips} choice={choice} />
+      )}
       {strips.map((strip) => (
-        <Strip key={strip.side} id={`${idPrefix}-${strip.side}`} strip={strip} />
+        <Strip
+          key={strip.side}
+          id={`${idPrefix}-${strip.side}`}
+          strip={strip}
+          collapsed={collapsed}
+          shown={strip.side === side}
+        />
       ))}
     </Box>
   );

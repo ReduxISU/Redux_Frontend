@@ -12,6 +12,11 @@
 // summary and Instance's field (layout.js workspaceHeadingTabSx), dropping under the heading
 // when there isn't room.
 //
+// Execute and Verify collapse differently (`inlineCollapsed`, as Instance's pane does,
+// ./CollapsiblePane.js): their body itself moves onto the heading's line, starting at the same
+// x, and draws only its top controls there (CommandBar and VerifyBox, collapsed). The controls
+// are the same elements throughout, so what is picked or typed is the same either way.
+//
 // Every section stays on the page while hidden (the `hidden` attribute), so a typed certificate,
 // an open list or a chosen step survives hiding and showing it again.
 //
@@ -42,7 +47,9 @@ import {
  *   no rule above it.
  * @param {boolean} props.expanded Open, or collapsed to its heading and `summary`.
  * @param {(expanded: boolean) => void} props.onExpandedChange
- * @param {import("react").ReactNode} props.summary The one line shown while collapsed.
+ * @param {import("react").ReactNode} [props.summary] The one line shown while collapsed.
+ * @param {boolean} [props.inlineCollapsed] While collapsed, draw `children` on the heading's line
+ *   where `summary` would go, instead of hiding them.
  * @param {import("react").ReactNode} props.children
  */
 export function WorkspaceSection({
@@ -53,10 +60,13 @@ export function WorkspaceSection({
   expanded,
   onExpandedChange,
   summary,
+  inlineCollapsed = false,
   children,
 }) {
   const headingId = `${id}-heading`;
   const bodyId = `${id}-body`;
+  const inline = inlineCollapsed && !expanded;
+  const display = hidden ? "none" : "flex";
   return (
     <Box
       id={id}
@@ -65,24 +75,33 @@ export function WorkspaceSection({
       hidden={hidden}
       data-expanded={expanded ? "true" : "false"}
       sx={{
-        display: hidden ? "none" : "flex",
-        flexDirection: "column",
-        gap: 1.5,
+        ...(inline
+          ? // The section is the heading's line: the heading, the body and the button wrap on it.
+            // Its parts line up at the bottom, so the heading sits level with the controls under
+            // their labels.
+            { ...titleLineSx, display, alignItems: "flex-end" }
+          : { display, flexDirection: "column", gap: 1.5 }),
         minWidth: 0,
         pt: first ? 0 : 1.5,
         borderTop: first ? "none" : "1px solid",
         borderColor: "border.soft",
       }}
     >
-      <Box sx={{ ...titleLineSx, my: -0.5 }}>
+      <Box sx={inline ? { display: "contents" } : { ...titleLineSx, my: -0.5 }}>
         <Box
           component="h3"
           id={headingId}
-          sx={{ ...sectionHeadingSx, flex: "0 0 auto", ...workspaceHeadingTabSx }}
+          sx={{
+            ...sectionHeadingSx,
+            flex: "0 0 auto",
+            ...workspaceHeadingTabSx,
+            // As tall as the controls beside it, its text centered on them.
+            ...(inline ? { minHeight: 44, display: "flex", alignItems: "center" } : {}),
+          }}
         >
           {title}
         </Box>
-        {!expanded && (
+        {!expanded && !inlineCollapsed && (
           <Box
             id={`${id}-summary`}
             sx={{
@@ -106,12 +125,14 @@ export function WorkspaceSection({
       </Box>
       <Box
         id={bodyId}
-        hidden={!expanded}
+        hidden={!expanded && !inline}
         sx={{
-          display: expanded ? "flex" : "none",
+          display: expanded || inline ? "flex" : "none",
           flexDirection: "column",
           gap: 1.5,
           minWidth: 0,
+          // On the heading's line, after the heading; under it when there isn't room.
+          ...(inline ? { order: 1, flex: "1 1 280px" } : {}),
         }}
       >
         {children}
