@@ -26,7 +26,7 @@
 import { LDC_SMALL_CODE_TREE_FRAMES } from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
 import { SAT_TO_3SAT_FORMULA_VIEW, SAT3_FORMULA_FRAMES } from "./formula-payloads";
-import { showPane, solveReductionTarget } from "./helpers";
+import { showPane, solveReductionTarget, startWithPanesExpanded } from "./helpers";
 import { EXACT_COVER_RECURSIVE_NESTED_FRAMES } from "./nested-set-payloads";
 import {
   CLIQUE_GRAPH_FRAMES,
@@ -55,6 +55,12 @@ import {
 } from "./reduction-payloads";
 import { JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES } from "./schedule-payloads";
 import { ILP_TABLE_FRAMES } from "./table-payloads";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 const VIEW = "#workbench-reduction";
@@ -104,7 +110,8 @@ async function openReduce(page, instance = SAT3_TO_CLIQUE_VIEW.source.instance) 
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: target })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: target }) })
       .first()
       .click();
   }

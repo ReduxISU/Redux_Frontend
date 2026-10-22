@@ -79,7 +79,7 @@ import {
   SAT3_LONG_FORMULA_FRAMES,
   SAT3_UNSAT_FORMULA_FRAMES,
 } from "./formula-payloads";
-import { drawnCollisions, gotoProblemDetail, showPane } from "./helpers";
+import { drawnCollisions, gotoProblemDetail, showPane, startWithPanesExpanded } from "./helpers";
 import {
   EXACT_COVER_CROWDED_NESTED_FRAMES,
   EXACT_COVER_DEEP_NESTED_FRAMES,
@@ -203,6 +203,12 @@ import {
   SSSP_TABLE_FRAMES,
   SSSP_UNREACHABLE_TABLE_FRAMES,
 } from "./table-payloads";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const PROBLEM = "DFA Acceptance";
 const TABLE_VIZ = "DFATableVisualization";

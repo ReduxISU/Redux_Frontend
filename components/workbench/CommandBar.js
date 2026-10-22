@@ -3,8 +3,8 @@
 // #229: everything needed to run: the Solve | Reduce switch, the dropdowns, and the run button.
 // The dropdowns are the tagged listboxes of stage 2 (./TaggedSelect.js), each with its info card.
 //
-// #279 (board F): this is the top of the Workspace's Execute section, so it has no card of its
-// own; the Instance pane above the Workspace holds the instance. Stage 2 of #279 made it one row,
+// #279 (board F): this is the top of the Execute pane, so it has no card of its own; the
+// Instance pane above it holds the instance. Stage 2 of #279 made it one row,
 // as the mockup has it:
 //   - Solve mode: Mode | Solver | Solve | the run's chip;
 //   - Reduce mode: Mode | Target | Reduction | Reduce | the build's chip. Reduce only builds the
@@ -17,9 +17,10 @@
 // Labels sit above their controls, and the row wraps; nothing here is sticky, so it scrolls with
 // the page and the picture gets the screen.
 //
-// #279 (Workspace tweaks): collapsed (the Execute section's Show less), the row stays, live, on
-// the section heading's line, without the Mode switch: Solve mode's Solver, Solve and its chip;
-// Reduce mode's Target, Reduction, Reduce and the build's chip. The same elements, only laid out
+// #279 (Workspace tweaks): collapsed (the Execute pane's Show less), the row stays, live, on
+// the pane title's line, Mode switch first: Solve mode's Solver, Solve and its chip; Reduce
+// mode's Target, Reduction, Reduce and the build's chip. Switching the mode there swaps them, as
+// it does expanded (the same state). The same elements, only laid out
 // without what is under the row (the busy line, the failure box, the notes, the result, Reduce
 // mode's cells), so a pick made collapsed is the pick shown expanded. Those stay on the page,
 // hidden, and the runs' announcements stay spoken.
@@ -85,7 +86,7 @@ const TARGET_MAX_WIDTH = 360;
  *   on what the button does (or why it can't run).
  * @param {import("react").ReactNode} [props.announcements] The runs' live regions, always on the
  *   page (visually hidden).
- * @param {boolean} [props.collapsed] Only the row, without the Mode switch.
+ * @param {boolean} [props.collapsed] Only the row (the Mode switch included).
  * @param {import("react").ReactNode} props.children The run's result, under everything else.
  */
 export default function CommandBar({
@@ -115,15 +116,7 @@ export default function CommandBar({
           minWidth: 0,
         }}
       >
-        <Box
-          hidden={collapsed}
-          sx={{
-            display: collapsed ? "none" : "flex",
-            flexDirection: "column",
-            gap: 0.5,
-            flex: "none",
-          }}
-        >
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, flex: "none" }}>
           <Box id={`${idPrefix}-mode-label`} sx={controlLabelSx}>
             Mode
           </Box>

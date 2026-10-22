@@ -11,13 +11,15 @@
 //     keeps which are shown (and whether Details and Instance are expanded) in this browser;
 //   - the Details pane: collapsed, its Input -> Output line; Show all for the rest;
 //   - the Instance pane: collapsed, the instance as one editable line; Show all for the rest;
-//   - the one Workspace pane (./Workspace.js) with three sections: Visualization (the pictures,
-//     steps, Legend, and Gadgets), Execute (Mode, the dropdowns and the run buttons, each run's status, and
-//     the result that was the Result panel's) and Verify (./panels/VerifyBox.js). Hiding all
-//     three hides the Workspace. Hidden parts stay on the page, so nothing typed is lost. Each
-//     section also has Show all / Show less (#279 Workspace tweaks): collapsed, Visualization
-//     keeps a one-line summary (the pictures and their types), and Execute and Verify keep their
-//     top controls, live, on the heading's line; the layout remembers it until Reset layout.
+//   - the Visualization pane (the pictures, steps, Legend, and Gadgets), the Execute pane (Mode,
+//     the dropdowns and the run buttons, each run's status, and the result that was the Result
+//     panel's) and the Verify pane (./panels/VerifyBox.js). #279 (Workspace tweaks) made them
+//     panes of their own, like Details and Instance (./CollapsiblePane.js), in place of the
+//     sections of one Workspace card. Hidden parts stay on the page, so nothing typed is lost.
+//     Each has Show all / Show less: collapsed, Visualization keeps its pictures' problems with
+//     their live Visualization Type dropdowns, and Execute and Verify keep their top controls,
+//     live, on the title's line; the layout remembers it until Reset layout. Every pane but
+//     Visualization starts collapsed.
 //
 // What this component owns, and why here:
 //   - The one instance value. Every part of the page reads it, and editing it anywhere
@@ -97,7 +99,7 @@ import {
 import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
 import { verifiersOf } from "../../hooks/useProblemDetail";
-import useWorkbenchLayout, { WORKSPACE_SECTIONS } from "../../hooks/useWorkbenchLayout";
+import useWorkbenchLayout from "../../hooks/useWorkbenchLayout";
 import {
   agreeLine,
   answerFound,
@@ -138,6 +140,7 @@ import {
   solverCard,
   solverRunTags,
   targetCard,
+  targetTags,
   verifierCard,
   verifierTags,
   visualizationCard,
@@ -151,8 +154,7 @@ import ReduceCells from "./panels/ReduceCells";
 import ResultPanel from "./panels/ResultPanel";
 import VerifyBox from "./panels/VerifyBox";
 import { formatSeconds, runChip, runFailure } from "./RunParts";
-import VisualizationPane from "./VisualizationPane";
-import Workspace, { WorkspaceSection } from "./Workspace";
+import VisualizationPane, { VisualizationTypeControl } from "./VisualizationPane";
 
 const ID = "workbench";
 // #279: the id of what each rail toggle shows.
@@ -316,14 +318,42 @@ function viewTypeControl(which, all, side, pending, onPick) {
   return { options: [...workable.map(option), ...unworkable], value, onChange: onPick };
 }
 
-/** The label of a dropdown's chosen option, or null. */
-function chosenLabel(control) {
-  return control?.options.find((option) => option.value === control.value)?.label ?? null;
-}
-
-/** "3SAT · Formula": a picture's problem and its Visualization Type, for a summary. */
-function pictureSummary(name, type) {
-  return type ? `${name} · ${type}` : name;
+/**
+ * One picture in the collapsed Visualization pane's line: its problem, then its live
+ * Visualization Type dropdown (the expanded pane's own state), the pair wrapping together.
+ */
+function PictureSummaryItem({ id, name, type, arrow = false }) {
+  return (
+    <Box
+      component="span"
+      sx={{ display: "inline-flex", flexWrap: "wrap", alignItems: "flex-end", gap: 1, minWidth: 0 }}
+    >
+      {/* The target's arrow stays with it when the line wraps. */}
+      {arrow && (
+        <Box
+          component="span"
+          aria-hidden="true"
+          sx={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}
+        >
+          {ARROW}
+        </Box>
+      )}
+      <Box
+        component="span"
+        id={`${id}-problem`}
+        sx={{
+          minHeight: 44,
+          display: "inline-flex",
+          alignItems: "center",
+          fontWeight: 600,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {name}
+      </Box>
+      {type && <VisualizationTypeControl id={`${id}-type`} {...type} />}
+    </Box>
+  );
 }
 
 /** The name of a visualization among `all` by class name, or null. */
@@ -1928,7 +1958,6 @@ export default function Workbench({ problem }) {
   const dots = {
     instance: instanceError ? { label: "The instance has errors", color: "status.err" } : null,
   };
-  const workspaceShown = WORKSPACE_SECTIONS.filter((key) => layout.shown[key]);
 
   // #912: the Reduction View's dropdowns, and what it says while it draws another picture.
   let reductionPane = null;
@@ -2053,17 +2082,38 @@ export default function Workbench({ problem }) {
     };
   }
 
-  // --- The collapsed sections' summaries (#279 Workspace tweaks) ------------------------------
-  const sourceTypeLabel = chosenLabel(reductionPane?.types?.source ?? vizTypeControl);
-  const sourceSummary = pictureSummary(problem.name, sourceTypeLabel);
-  const visualizationSummary = target
-    ? `${sourceSummary} ${ARROW} ${pictureSummary(
-        target.title.replace(/^Target: /, ""),
-        chosenLabel(reductionPane?.types?.target ?? target.type),
-      )}`
-    : sourceSummary;
-  // #279 (Workspace tweaks): Execute and Verify have no summary line any more. Collapsed, they
-  // keep their top controls on the heading's line instead (CommandBar and VerifyBox, collapsed).
+  // --- The collapsed Visualization pane's line (#279 Workspace tweaks) ------------------------
+  // Each picture's problem with its live Visualization Type dropdown: the same state as the
+  // expanded pane's dropdowns, so a pick in one is the pick in the other.
+  const summaryId = `${LAYOUT_REGIONS.visualization}-summary`;
+  const visualizationSummary = (
+    <Box
+      id={summaryId}
+      sx={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "flex-end",
+        gap: "8px 12px",
+        minWidth: 0,
+      }}
+    >
+      <PictureSummaryItem
+        id={`${summaryId}-source`}
+        name={problem.name}
+        type={reductionPane?.types?.source ?? vizTypeControl}
+      />
+      {target && (
+        <PictureSummaryItem
+          id={`${summaryId}-target`}
+          name={target.title.replace(/^Target: /, "")}
+          type={reductionPane?.types?.target ?? target.type}
+          arrow
+        />
+      )}
+    </Box>
+  );
+  // #279 (Workspace tweaks): Execute and Verify have no summary line. Collapsed, they keep their
+  // top controls on the title's line instead (CommandBar and VerifyBox, collapsed).
 
   const gadgetsProps =
     reduceGadgets.length > 0
@@ -2140,151 +2190,161 @@ export default function Workbench({ problem }) {
         />
       </CollapsiblePane>
 
-      <Workspace id={`${ID}-workspace`} hidden={workspaceShown.length === 0}>
-        <WorkspaceSection
-          id={LAYOUT_REGIONS.visualization}
-          title={PANE_LABELS.visualization}
-          hidden={!layout.shown.visualization}
-          first={workspaceShown[0] === "visualization"}
-          expanded={layout.expanded.visualization}
-          onExpandedChange={(expanded) => layout.setExpanded("visualization", expanded)}
-          summary={visualizationSummary}
-        >
-          <VisualizationPane
-            idPrefix={ID}
-            showing={showing}
-            source={{
-              title: mode === "solve" ? problem.name : `Source: ${problem.name}`,
-              status: sourceStatus,
-              type: vizTypeControl,
-              content: sourceContent,
-            }}
-            target={target && { ...target, status: targetStatus }}
-            steps={steps}
-            algorithmSteps={algorithmSteps}
-            highlightGadgets={highlightGadgets}
-            reduction={reductionPane}
-            note={note}
-            legendFrames={legendFrames}
-            legendStates={legendStates}
-            legendAnnotations={legendAnnotations}
-          />
-          {/* Gadgets (#229 stage 4) belong with the pictures: what the reduction built for each
+      <CollapsiblePane
+        id={LAYOUT_REGIONS.visualization}
+        expandId={`${LAYOUT_REGIONS.visualization}-expand`}
+        bodyId={`${LAYOUT_REGIONS.visualization}-body`}
+        title={PANE_LABELS.visualization}
+        hidden={!layout.shown.visualization}
+        expanded={layout.expanded.visualization}
+        onExpandedChange={(expanded) => layout.setExpanded("visualization", expanded)}
+        summary={visualizationSummary}
+        collapsedAlign="flex-end"
+        container
+      >
+        <VisualizationPane
+          idPrefix={ID}
+          showing={showing}
+          source={{
+            title: mode === "solve" ? problem.name : `Source: ${problem.name}`,
+            status: sourceStatus,
+            type: vizTypeControl,
+            content: sourceContent,
+          }}
+          target={target && { ...target, status: targetStatus }}
+          steps={steps}
+          algorithmSteps={algorithmSteps}
+          highlightGadgets={highlightGadgets}
+          reduction={reductionPane}
+          note={note}
+          legendFrames={legendFrames}
+          legendStates={legendStates}
+          legendAnnotations={legendAnnotations}
+        />
+        {/* Gadgets (#229 stage 4) belong with the pictures: what the reduction built for each
               piece of the source. Reduce mode, after a run that lists some. */}
-          {gadgetsProps && (
-            <GadgetsSection
-              key={gadgetsProps.runId}
-              idPrefix={`${ID}-gadgets`}
-              gadgets={gadgetsProps.gadgets}
-              sourceFrame={gadgetsProps.sourceFrame}
-              targetFrame={gadgetsProps.targetFrame}
-              namers={gadgetsProps.namers}
-              colors={gadgetsProps.colors}
-              activeIndex={gadgetsProps.activeIndex}
-              onHighlight={gadgetsProps.onHighlight}
-            />
-          )}
-        </WorkspaceSection>
+        {gadgetsProps && (
+          <GadgetsSection
+            key={gadgetsProps.runId}
+            idPrefix={`${ID}-gadgets`}
+            gadgets={gadgetsProps.gadgets}
+            sourceFrame={gadgetsProps.sourceFrame}
+            targetFrame={gadgetsProps.targetFrame}
+            namers={gadgetsProps.namers}
+            colors={gadgetsProps.colors}
+            activeIndex={gadgetsProps.activeIndex}
+            onHighlight={gadgetsProps.onHighlight}
+          />
+        )}
+      </CollapsiblePane>
 
-        <WorkspaceSection
-          id={LAYOUT_REGIONS.execute}
-          title={PANE_LABELS.execute}
-          hidden={!layout.shown.execute}
-          first={workspaceShown[0] === "execute"}
-          expanded={layout.expanded.execute}
-          onExpandedChange={(expanded) => layout.setExpanded("execute", expanded)}
-          inlineCollapsed
-        >
-          <CommandBar
-            idPrefix={ID}
-            collapsed={!layout.expanded.execute}
-            mode={mode}
-            onModeChange={setMode}
-            solver={solverSelect}
-            target={
-              targets.length > 0
-                ? {
-                    value: targetName ?? targets[0],
-                    // #279 stage 2: the Target dropdown has no tags inside; its card stays.
-                    options: targets.map((name) => ({
+      <CollapsiblePane
+        id={LAYOUT_REGIONS.execute}
+        expandId={`${LAYOUT_REGIONS.execute}-expand`}
+        bodyId={`${LAYOUT_REGIONS.execute}-body`}
+        title={PANE_LABELS.execute}
+        hidden={!layout.shown.execute}
+        expanded={layout.expanded.execute}
+        onExpandedChange={(expanded) => layout.setExpanded("execute", expanded)}
+        inlineCollapsed
+        collapsedAlign="flex-end"
+        container
+      >
+        <CommandBar
+          idPrefix={ID}
+          collapsed={!layout.expanded.execute}
+          mode={mode}
+          onModeChange={setMode}
+          solver={solverSelect}
+          target={
+            targets.length > 0
+              ? {
+                  value: targetName ?? targets[0],
+                  // #279 (Workspace tweaks): each target wears its complexity class, the tag
+                  // the problem page's title row shows, in the box and in the list.
+                  options: targets.map((name) => {
+                    const targetProblem = reductions.find(
+                      (reduction) => reduction.target === name,
+                    )?.targetProblem;
+                    return {
                       value: name,
                       label: name,
-                      tags: [],
-                      card: targetCard(
-                        name,
-                        reductions.find((reduction) => reduction.target === name)?.targetProblem,
-                      ),
-                    })),
-                    onChange: selectTarget,
-                  }
-                : null
-            }
-            reduction={
-              reductionsForTarget.length > 0
-                ? {
-                    value: selectedReduction.className,
-                    options: reductionsForTarget.map((reduction) => ({
-                      value: reduction.className,
-                      label: reduction.name,
-                      tags: reductionTags(reduction),
-                      card: reductionCard(reduction, problem.name),
-                    })),
-                    onChange: setReductionClassName,
-                  }
-                : null
-            }
-            run={topRun}
-            status={status}
-            announcements={announcements}
-          >
-            <ResultPanel
-              idPrefix={`${ID}-result`}
-              mode={mode}
-              solve={
-                solveCurrent && solveRun.kept
-                  ? {
-                      found: answerFound(solveResult.output),
-                      answer: sourceAnswer,
-                      elapsedMs: solveRun.kept.elapsedMs,
-                    }
-                  : null
-              }
-              solveChanged={solveStale}
-              onCheckAnswer={() => checkIn(CHECK_SOURCE, sourceAnswer)}
-              built={
-                buildShown
-                  ? {
-                      targetName: reduceResult.targetName,
-                      reductionName: reduceResult.reductionName,
-                      elapsedMs: reduceRun.kept.elapsedMs,
-                      targetInstance: reduceResult.targetInstance,
-                    }
-                  : null
-              }
-              buildChanged={!reduceRun.isRunning && Boolean(buildKept) && !reduceCurrent}
-            />
-            <ReduceCells idPrefix={`${ID}-cells`} cells={reduceCells} />
-          </CommandBar>
-        </WorkspaceSection>
-
-        <WorkspaceSection
-          id={LAYOUT_REGIONS.verify}
-          title={PANE_LABELS.verify}
-          hidden={!layout.shown.verify}
-          first={workspaceShown[0] === "verify"}
-          expanded={layout.expanded.verify}
-          onExpandedChange={(expanded) => layout.setExpanded("verify", expanded)}
-          inlineCollapsed
+                      tags: targetTags(targetProblem),
+                      card: targetCard(name, targetProblem),
+                    };
+                  }),
+                  onChange: selectTarget,
+                }
+              : null
+          }
+          reduction={
+            reductionsForTarget.length > 0
+              ? {
+                  value: selectedReduction.className,
+                  options: reductionsForTarget.map((reduction) => ({
+                    value: reduction.className,
+                    label: reduction.name,
+                    tags: reductionTags(reduction),
+                    card: reductionCard(reduction, problem.name),
+                  })),
+                  onChange: setReductionClassName,
+                }
+              : null
+          }
+          run={topRun}
+          status={status}
+          announcements={announcements}
         >
-          <VerifyBox
-            idPrefix={`${ID}-verify`}
-            strips={verifyStrips}
-            collapsed={!layout.expanded.verify}
-            side={verifySide}
-            choice={verifyChoice}
+          <ResultPanel
+            idPrefix={`${ID}-result`}
+            mode={mode}
+            solve={
+              solveCurrent && solveRun.kept
+                ? {
+                    found: answerFound(solveResult.output),
+                    answer: sourceAnswer,
+                    elapsedMs: solveRun.kept.elapsedMs,
+                  }
+                : null
+            }
+            solveChanged={solveStale}
+            onCheckAnswer={() => checkIn(CHECK_SOURCE, sourceAnswer)}
+            built={
+              buildShown
+                ? {
+                    targetName: reduceResult.targetName,
+                    reductionName: reduceResult.reductionName,
+                    elapsedMs: reduceRun.kept.elapsedMs,
+                    targetInstance: reduceResult.targetInstance,
+                  }
+                : null
+            }
+            buildChanged={!reduceRun.isRunning && Boolean(buildKept) && !reduceCurrent}
           />
-        </WorkspaceSection>
-      </Workspace>
+          <ReduceCells idPrefix={`${ID}-cells`} cells={reduceCells} />
+        </CommandBar>
+      </CollapsiblePane>
+
+      <CollapsiblePane
+        id={LAYOUT_REGIONS.verify}
+        expandId={`${LAYOUT_REGIONS.verify}-expand`}
+        bodyId={`${LAYOUT_REGIONS.verify}-body`}
+        title={PANE_LABELS.verify}
+        hidden={!layout.shown.verify}
+        expanded={layout.expanded.verify}
+        onExpandedChange={(expanded) => layout.setExpanded("verify", expanded)}
+        inlineCollapsed
+        collapsedAlign="flex-end"
+        container
+      >
+        <VerifyBox
+          idPrefix={`${ID}-verify`}
+          strips={verifyStrips}
+          collapsed={!layout.expanded.verify}
+          side={verifySide}
+          choice={verifyChoice}
+        />
+      </CollapsiblePane>
     </Box>
   );
 }

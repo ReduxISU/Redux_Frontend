@@ -35,7 +35,7 @@ import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import PictureCanvas from "../pictures/PictureCanvas";
 import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
 import Legend from "./Legend";
-import { COMPACT_MEDIA, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
+import { SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
 import PictureFrame, { pictureGridSx } from "./PictureFrame";
 import TaggedSelect from "./TaggedSelect";
 
@@ -44,8 +44,14 @@ import TaggedSelect from "./TaggedSelect";
  * (#279 stage 3), so its list opens aligned to its left edge. With a single choice it still
  * shows (so every picture says what type it is, with its tags and info card) but cannot be
  * opened.
+ *
+ * #279 (Workspace tweaks): it grows to the right into the row's free room, up to a gap before the
+ * view controls, so a long name shows whole with its tags; when room runs out it shrinks (its
+ * tags wrap under its name) down to the shared control width, then the controls wrap under it.
+ * The collapsed Visualization pane draws the same dropdown beside each picture's problem
+ * (Workbench.js), on the same state.
  */
-function VisualizationTypeControl({ id, options, value, onChange }) {
+export function VisualizationTypeControl({ id, options, value, onChange }) {
   return (
     <TaggedSelect
       id={id}
@@ -55,7 +61,7 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
       options={options}
       value={value}
       onChange={options.length > 1 ? onChange : undefined}
-      boxSx={{ width: SHARED_CONTROL_WIDTH, flex: "none", [COMPACT_MEDIA]: { width: "100%" } }}
+      boxSx={{ flex: "1 1 auto", minWidth: `min(100%, ${SHARED_CONTROL_WIDTH}px)` }}
     />
   );
 }

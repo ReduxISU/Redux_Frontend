@@ -9,10 +9,11 @@
 // Until they do it is null, and Algorithm Steps opens by itself once a run gives it steps; once
 // they do, their choice holds until Reset layout, which makes it null again.
 //
-// #279 (Workspace tweaks): the Workspace's three sections have a Show all / Show less of their
-// own too (open by default, unlike Details and Instance), and the layout keeps whether the
-// pictures highlight the reduction's gadgets in color (`highlightGadgets`, off by default: the
-// pictures are plain until asked). Reset layout opens the sections and turns the highlight off.
+// #279 (Workspace tweaks): Visualization, Execute and Verify have a Show all / Show less of their
+// own too. Every pane starts collapsed but Visualization (open), for a viewer with no saved
+// layout; a saved layout wins. The layout also keeps whether the pictures highlight the
+// reduction's gadgets in color (`highlightGadgets`, off by default: the pictures are plain until
+// asked). Reset layout goes back to those defaults and turns the highlight off.
 //
 // The layout is the viewer's own, so it is kept in this browser (localStorage) for the next
 // visit, for every problem alike. Every read and write is wrapped: with storage blocked (private
@@ -29,7 +30,7 @@ const STORAGE_KEY = "redux-frontend.workbenchLayout";
 /** The rail's keys, in order: two panes, then the Workspace's three sections. */
 export const LAYOUT_KEYS = ["details", "instance", "visualization", "execute", "verify"];
 
-/** The keys that are sections of the one Workspace pane. */
+/** The panes that were sections of one Workspace card before #279's Workspace tweaks. */
 export const WORKSPACE_SECTIONS = ["visualization", "execute", "verify"];
 
 /** The panes and sections with a Show all / Show less of their own. */
@@ -38,10 +39,8 @@ export const EXPANDABLE_PANES = ["details", "instance", ...WORKSPACE_SECTIONS];
 function defaultLayout() {
   return {
     shown: Object.fromEntries(LAYOUT_KEYS.map((key) => [key, true])),
-    // Details and Instance start collapsed; the Workspace's sections start open.
-    expanded: Object.fromEntries(
-      EXPANDABLE_PANES.map((key) => [key, WORKSPACE_SECTIONS.includes(key)]),
-    ),
+    // Every pane starts collapsed but Visualization, so the picture leads.
+    expanded: Object.fromEntries(EXPANDABLE_PANES.map((key) => [key, key === "visualization"])),
     stepsOpen: null,
     highlightGadgets: false,
   };

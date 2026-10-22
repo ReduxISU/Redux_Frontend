@@ -17,7 +17,13 @@
 // ProblemProvider/reduce.
 
 import { expect, test } from "./fixtures";
-import { chooseReduceTarget, gotoProblemDetail, showPane } from "./helpers";
+import { chooseReduceTarget, gotoProblemDetail, showPane, startWithPanesExpanded } from "./helpers";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const PROBLEM = "3SAT";
 const ANSWER = "(x1:True,x2:False,x3:True)";

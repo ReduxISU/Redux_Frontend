@@ -17,13 +17,19 @@
 
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { drawnCollisions, showPane, solveReductionTarget } from "./helpers";
+import { drawnCollisions, showPane, solveReductionTarget, startWithPanesExpanded } from "./helpers";
 import {
   COLORING_TO_CLIQUE_COVER_VIEW,
   SAT_TO_3SAT_VIEW,
   SAT3_TO_CLIQUE_VIEW,
   SUBSET_SUM_TO_PARTITION_VIEW,
 } from "./reduction-payloads";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 const VISUALIZE_REQUEST = /\/api\/redux\/ProblemProvider\/visualize\?/;
@@ -88,7 +94,8 @@ async function openReduce(page, problem, instance, target) {
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: target })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: target }) })
       .first()
       .click();
   }

@@ -14,7 +14,13 @@
 // a real outage would.
 
 import { expect, test } from "./fixtures";
-import { gotoHomeAndWaitForLoad } from "./helpers";
+import { gotoHomeAndWaitForLoad, startWithPanesExpanded } from "./helpers";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 test("with no backend reachable, the page explains itself instead of crashing", async ({
   page,

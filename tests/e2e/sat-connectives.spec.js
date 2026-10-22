@@ -7,7 +7,13 @@
 // answered here with two clauses of three literals, so the counts below are exact.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail } from "./helpers";
+import { gotoProblemDetail, startWithPanesExpanded } from "./helpers";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const VISUALIZE_REQUEST = /\/api\/redux\/ProblemProvider\/visualize\?/;
 

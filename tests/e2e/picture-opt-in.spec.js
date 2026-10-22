@@ -12,7 +12,19 @@
 // answers visualizeRun and reductionView 404, so Reduce builds with ProblemProvider/reduce.
 
 import { expect, test } from "./fixtures";
-import { chooseReduceTarget, gotoProblemDetail, showPane, skipStartupSplash } from "./helpers";
+import {
+  chooseReduceTarget,
+  gotoProblemDetail,
+  showPane,
+  skipStartupSplash,
+  startWithPanesExpanded,
+} from "./helpers";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const REDUX = /\/api\/redux\/(.+?)(?:\?|$)/;
 const PROFILE = /^Navigation\/ContributorProfile\/(?!directory$)/;

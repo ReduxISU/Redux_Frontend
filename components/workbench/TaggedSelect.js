@@ -624,7 +624,9 @@ export default function TaggedSelect({
             zIndex: 40,
             top: "calc(100% + 4px)",
             ...(align === "right" ? { right: 0 } : { left: 0 }),
-            minWidth: "100%",
+            // As wide as the box, but no wider than the list's own cap: a box grown wide (#279,
+            // a picture's Visualization Type) keeps room beside its list for the hover card.
+            minWidth: `min(100%, ${LIST_MAX_WIDTH})`,
             width: "max-content",
             maxWidth: LIST_MAX_WIDTH,
             translate: `${popupShift}px`,

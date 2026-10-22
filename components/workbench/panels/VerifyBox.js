@@ -669,7 +669,7 @@ export default function VerifyBox({
     <Box
       id={idPrefix}
       data-collapsed={collapsed ? "true" : "false"}
-      // #279: the Workspace's Verify section draws the heading and the rule above it.
+      // #279: the Verify pane draws the title.
       sx={rootSx}
     >
       {collapsed && choice && strips.length > 1 && (

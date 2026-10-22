@@ -16,7 +16,14 @@ import {
   gotoProblemDetail,
   showPane,
   skipStartupSplash,
+  startWithPanesExpanded,
 } from "./helpers";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 /** Redux's key -> display name map, read the way the site reads it. */
 async function readDisplayNames(request) {

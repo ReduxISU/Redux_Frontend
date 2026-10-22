@@ -12,7 +12,13 @@
 // mocked compute is tests/e2e/workbench.spec.js.
 
 import { expect, test } from "./fixtures";
-import { gotoFirstProblemDetail } from "./helpers";
+import { gotoFirstProblemDetail, startWithPanesExpanded } from "./helpers";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 test("clicking a card reaches its detail page", async ({ page }) => {
   const { name } = await gotoFirstProblemDetail(page, { expect });

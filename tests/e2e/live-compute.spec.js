@@ -66,7 +66,13 @@
 // exactly what this reproduces.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, selectSolverByName, showPane } from "./helpers";
+import { gotoProblemDetail, selectSolverByName, showPane, startWithPanesExpanded } from "./helpers";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const PINNED_PROBLEM = "Topological Sort";
 const PINNED_SOLVER = "Kahn's Algorithm";

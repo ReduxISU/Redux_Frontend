@@ -19,8 +19,20 @@
 
 import { expect, test } from "./fixtures";
 import { SAT3_FORMULA_FRAMES } from "./formula-payloads";
-import { chooseReduceTarget, gotoProblemDetail, showPane, solveReductionTarget } from "./helpers";
+import {
+  chooseReduceTarget,
+  gotoProblemDetail,
+  showPane,
+  solveReductionTarget,
+  startWithPanesExpanded,
+} from "./helpers";
 import { SAT3_TO_CLIQUE_VIEW } from "./reduction-payloads";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const PROBLEM = "3SAT";
 const ANSWER = "(x1:True,x2:False,x3:True)";
@@ -74,7 +86,8 @@ async function openReduce(page) {
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: /^clique$/i })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: /^clique$/i }) })
       .first()
       .click();
   }
@@ -443,7 +456,8 @@ test("Reduce mode: one Build ── Solve ── Map back timeline that marks th
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: /^clique$/i })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: /^clique$/i }) })
       .first()
       .click();
   }

@@ -14,7 +14,7 @@
 //     their top and bottom lines;
 //   - a note under the picture, when the picture has one.
 // The old "Problem:" and "Algorithm:" lines are gone: Execute names the algorithm.
-// Stacked, in a Workspace 960px wide or less, that height is a minimum: a tall picture on a phone
+// Stacked, in a Visualization pane 960px wide or less, that height is a minimum: a tall picture on a phone
 // grows to its own shape (up to the screen's height), as before, so its text stays readable.
 //
 // The zoom buttons are DiagramZoom's own (components/pictures/DiagramZoom.js): a renderer's
@@ -30,7 +30,7 @@
 //
 // Two frames side by side (`inGrid`) sit on pictureGridSx, each spanning its four rows as a
 // subgrid, so their headings, control rows, pictures and notes line up row by row whatever each
-// one's row holds. When the Workspace is 960px wide or less they stack, source
+// one's row holds. When the Visualization pane is 960px wide or less they stack, source
 // first (#279 stage 1).
 
 import Box from "@mui/material/Box";
@@ -60,7 +60,7 @@ const VIEW_COMPACT_SIDE_PADDING = VIEW_PADDING - SECTION_COMPACT_PADDING - 1;
  */
 export const PictureToolsContext = createContext(null);
 
-/** The grid two frames sit on, side by side; stacked, source first, in a narrow Workspace. */
+/** The grid two frames sit on, side by side; stacked, source first, in a narrow pane. */
 export const pictureGridSx = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
@@ -210,7 +210,7 @@ export default function PictureFrame({
       }}
     >
       <Box
-        component="h4"
+        component="h3"
         id={headingId}
         data-status={status ?? ""}
         sx={{
@@ -245,9 +245,23 @@ export default function PictureFrame({
         }}
       >
         {typeControl}
-        <Box component="span" sx={{ flex: "1 1 0", minWidth: 0 }} />
         {tools && (
-          <>
+          // The view controls keep their size at the row's right; the dropdown grows up to them.
+          <Box
+            component="span"
+            id={`${id}-view-controls`}
+            sx={{
+              ml: "auto",
+              flex: "0 0 auto",
+              // On its own line on a narrow phone, the controls wrap within it.
+              maxWidth: "100%",
+              display: "inline-flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 1,
+              minWidth: 0,
+            }}
+          >
             <Box
               ref={setSlot}
               component="span"
@@ -270,7 +284,7 @@ export default function PictureFrame({
               <FullScreenIcon exit={on} />
               {on ? "Exit full screen" : "Full screen"}
             </Box>
-          </>
+          </Box>
         )}
       </Box>
       <Box
@@ -297,7 +311,7 @@ export default function PictureFrame({
           // Inside a frame's outlined section on a phone or tablet (not in full screen, which has
           // no section), the sides give back the section's outline and padding.
           ...(on ? {} : { [COMPACT_MEDIA]: { px: `${VIEW_COMPACT_SIDE_PADDING}px` } }),
-          // Stacked (a Workspace 960px wide or less, phones and tablets) no two frames need to
+          // Stacked (a pane 960px wide or less, phones and tablets) no two frames need to
           // line up, so a tall picture grows past the height rather than shrinking its text
           // below reading size; every frame is still at least that high.
           [WORKSPACE_NARROW]: on ? {} : { height: "auto", minHeight: PICTURE_HEIGHT },
