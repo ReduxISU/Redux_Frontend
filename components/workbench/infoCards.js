@@ -201,3 +201,19 @@ export function visualizationCard(visualization, role) {
     ],
   };
 }
+
+// --- Verifier (Verify's verifier dropdown, #279 Workspace tweaks) -------------------------
+
+/**
+ * A verifier's card: its name, its own definition, and the certificate format its problem
+ * declares.
+ * @returns {Card}
+ */
+export function verifierCard(verifier) {
+  return {
+    title: verifier.name,
+    kind: "Verifier",
+    description: verifier.certificateDescription ?? "",
+    facts: [{ label: "Certificate", value: verifier.certificateFormat || NOT_DECLARED }],
+  };
+}
