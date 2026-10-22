@@ -843,36 +843,131 @@ test("collapsed, Instance's field and Execute's and Verify's controls sit on the
   await expect(field).toHaveValue(edited);
 });
 
-test("at 1440px the chosen reduction's whole name shows, collapsed and expanded, its tags wrapping first", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await answerCompute(page);
-  await gotoProblemDetail(page, PROBLEM, { expect });
-  await page.locator("#workbench-mode-reduce").click();
-  const value = page.locator("#workbench-reduction-value");
-  const ellipsized = () => value.evaluate((element) => element.scrollWidth > element.clientWidth);
-
-  // Clique, which CI's backend has; then 3SAT's longest reduction name, where this backend has it
-  // ("Karp's 0-1 Integer Linear Programming Reduction", with two tags).
-  const targets = [/^Clique(?!\s*Cover)/];
-  await page.locator("#workbench-target-button").click();
-  const options = page.locator("#workbench-target-listbox").getByRole("option");
-  if ((await options.filter({ hasText: /0-1 Integer/ }).count()) > 0) targets.push(/0-1 Integer/);
-  await page.keyboard.press("Escape");
-
-  for (const target of targets) {
-    await chooseReduceTarget(page, target, { expect });
-    for (const expanded of [true, false]) {
-      await setExpanded(page, "execute", expanded);
-      await expect(value).toBeVisible();
-      expect(await ellipsized(), `${target} ${expanded ? "expanded" : "collapsed"}`).toBe(false);
-      // The tags stay shown: beside the name, or under it.
-      await expect(page.locator("#workbench-reduction-tags")).toBeVisible();
-    }
-    await setExpanded(page, "execute", true);
+/**
+ * Whether a tagged dropdown's closed box `id` is one line: its tags (if any) level with its name,
+ * the box no taller than one 44 px row.
+ */
+async function expectOneLine(page, id) {
+  const geometry = await page.evaluate((prefix) => {
+    const rect = (element) => element?.getBoundingClientRect() ?? null;
+    const value = rect(document.getElementById(`${prefix}-value`));
+    const tags = rect(document.getElementById(`${prefix}-tags`));
+    const button = rect(document.getElementById(`${prefix}-button`));
+    return { value, tags, button };
+  }, id);
+  expect(geometry.button.height, id).toBeLessThanOrEqual(46);
+  expect(geometry.button.height, id).toBeGreaterThanOrEqual(44);
+  if (geometry.tags) {
+    const middle = (box) => box.top + box.height / 2;
+    expect(Math.abs(middle(geometry.tags) - middle(geometry.value)), id).toBeLessThanOrEqual(2);
+    expect(geometry.tags.left, id).toBeGreaterThanOrEqual(geometry.value.right - 1);
+    expect(geometry.tags.right, id).toBeLessThanOrEqual(geometry.button.right);
   }
-});
+}
+
+/** A dropdown's full name stays whole in its tooltip, its accessible name and its value text. */
+async function expectFullName(page, id, name) {
+  const button = page.locator(`#${id}-button`);
+  await expect(button).toHaveAttribute("title", name);
+  await expect(page.locator(`#${id}-value`)).toHaveText(name);
+  await expect(button).toHaveAccessibleName(new RegExp(`${escapeRegExp(name)}$`));
+}
+
+for (const width of [1440, 390]) {
+  test(`at ${width}px every collapsed dropdown is one line, a long name cut with an ellipsis and whole in its tooltip, tags beside it`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await answerCompute(page);
+    await gotoProblemDetail(page, PROBLEM, { expect });
+    await page.locator("#workbench-mode-reduce").click();
+    // 3SAT's longest reduction name where this backend has it ("Karp's 0-1 Integer Linear
+    // Programming Reduction", two tags), else Clique (CI's backend).
+    await page.locator("#workbench-target-button").click();
+    const options = page.locator("#workbench-target-listbox").getByRole("option");
+    const longest = (await options.filter({ hasText: /0-1 Integer/ }).count()) > 0;
+    await page.keyboard.press("Escape");
+    await chooseReduceTarget(page, longest ? /0-1 Integer/ : /^Clique(?!\s*Cover)/, { expect });
+    const reduction = await textOf(page.locator("#workbench-reduction-value"));
+
+    // Expanded: the name has priority, whole, its tags wrapping first.
+    await setExpanded(page, "execute", true);
+    await expect(page.locator("#workbench-reduction-button")).not.toHaveAttribute(
+      "data-one-line",
+      "true",
+    );
+    if (width === 1440) {
+      expect(
+        await page
+          .locator("#workbench-reduction-value")
+          .evaluate((element) => element.scrollWidth > element.clientWidth),
+      ).toBe(false);
+    }
+
+    for (const key of SECTIONS) await setExpanded(page, key, false);
+    const boxes = [
+      `${SUMMARY.slice(1)}-source-type`,
+      `${SUMMARY.slice(1)}-target-type`,
+      "workbench-target",
+      "workbench-reduction",
+    ];
+    for (const id of boxes) {
+      await expect(page.locator(`#${id}-button`)).toBeVisible();
+      await expect(page.locator(`#${id}-button`)).toHaveAttribute("data-one-line", "true");
+      await expectOneLine(page, id);
+    }
+    // The reduction's name, cut on screen past ~31 characters, is whole for everyone else.
+    await expectFullName(page, "workbench-reduction", reduction);
+    if (longest) {
+      expect(
+        await page
+          .locator("#workbench-reduction-value")
+          .evaluate((element) => element.scrollWidth > element.clientWidth),
+      ).toBe(true);
+    }
+    // ...and in the open list.
+    await page.locator("#workbench-reduction-button").click();
+    await expect(
+      page
+        .locator("#workbench-reduction-listbox")
+        .locator('[role="option"][aria-selected="true"] [id$="-name"]'),
+    ).toHaveText(reduction);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#workbench-reduction-button")).toBeFocused();
+
+    // Verify's verifier, collapsed, is one line too (Solve mode, where it shows).
+    await page.locator("#workbench-mode-solve").click();
+    await expect(page.locator("#workbench-verify-source-verifier-button")).toBeVisible();
+    await expectOneLine(page, "workbench-verify-source-verifier");
+    await expectOneLine(page, "workbench-solver");
+    await page.locator("#workbench-mode-reduce").click();
+
+    // Visualization: problem, its dropdown, → target problem, its dropdown, on one line at
+    // 1440; on a phone a pair may wrap, the → staying with its target.
+    const parts = [
+      `${SUMMARY}-source-problem`,
+      `${SUMMARY}-source-type-button`,
+      `${SUMMARY}-target-problem`,
+      `${SUMMARY}-target-type-button`,
+    ];
+    const tops = [];
+    for (const selector of parts) {
+      const box = await page.locator(selector).boundingBox();
+      tops.push(box.y + box.height);
+    }
+    if (width === 1440) {
+      for (const bottom of tops) expect(Math.abs(bottom - tops[0])).toBeLessThanOrEqual(2);
+    }
+    const arrow = await page
+      .locator(`${SUMMARY}-target-problem`)
+      .evaluate((element) => element.closest("[data-summary-pair]").textContent.startsWith("→"));
+    expect(arrow).toBe(true);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+}
 
 test("the collapsed Visualization pane's Visualization Type dropdowns are live, on the expanded pane's state", async ({
   page,

@@ -7,6 +7,11 @@
 //     name has priority (#279 Workspace tweaks): when both don't fit on one line, the tags wrap
 //     under the name, and the name truncates (with an ellipsis) only when it alone is wider than
 //     the box;
+//   - `oneLine` (#279 Workspace tweaks, the collapsed panes' rows): the name and the tags stay on
+//     one line; the name truncates with an ellipsis past ONE_LINE_NAME_MAX (or sooner, when the
+//     box is squeezed), the tags never wrap, and the closed box sizes to what it shows. The full
+//     name stays in the box's tooltip (`title`), its accessible name (the value text is whole,
+//     only clipped on screen) and the open list;
 //   - the open list shows every option with its tags right-aligned, 44px rows, the chosen one
 //     on a raised background with a 3px accent mark on its left;
 //   - hovering an option with a mouse shows that option's info card beside the list (left of
@@ -35,6 +40,8 @@ const LIST_MAX_WIDTH = "min(460px, calc(100vw - 32px))";
 const CARD_WIDTH = "min(300px, calc(100vw - 32px))";
 const VIEWPORT_MARGIN = 8;
 const TYPEAHEAD_RESET_MS = 600;
+/** How long a name may run on a `oneLine` box before it truncates: "Karp's 0-1 Integer Linear Progr…". */
+export const ONE_LINE_NAME_MAX = "31ch";
 
 /** Keeps an absolutely placed popup inside the viewport by nudging it sideways. */
 function useKeepInViewport(ref, active, contentKey) {
@@ -346,6 +353,7 @@ function InfoButton({ id, card, align }) {
  *   cell of a parent grid or flex row: the label and box are returned as siblings), "stack"
  *   puts it above.
  * @param {Object} [props.boxSx] Extra `sx` for the box's wrapper (its width).
+ * @param {boolean} [props.oneLine] Name and tags on one line, the name truncated (see above).
  */
 export default function TaggedSelect({
   id: idProp,
@@ -357,6 +365,7 @@ export default function TaggedSelect({
   align = "left",
   labelPlacement = "stack",
   boxSx,
+  oneLine = false,
 }) {
   const autoId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const id = idProp ?? `tagged-select-${autoId}`;
@@ -542,6 +551,8 @@ export default function TaggedSelect({
         aria-describedby={selected?.tags?.length ? tagsId : undefined}
         disabled={fixed}
         data-fixed={fixed || undefined}
+        data-one-line={oneLine || undefined}
+        title={oneLine ? (selected?.label ?? undefined) : undefined}
         onClick={() => (open ? closeList() : openList())}
         onKeyDown={onButtonKeyDown}
         sx={{
@@ -574,7 +585,7 @@ export default function TaggedSelect({
             flex: "1 1 0%",
             minWidth: 0,
             display: "flex",
-            flexWrap: "wrap",
+            flexWrap: oneLine ? "nowrap" : "wrap",
             alignItems: "center",
             gap: "4px 8px",
           }}
@@ -583,8 +594,9 @@ export default function TaggedSelect({
             component="span"
             id={valueId}
             sx={{
-              flex: "1 1 auto",
+              flex: oneLine ? "0 1 auto" : "1 1 auto",
               minWidth: "3em",
+              ...(oneLine ? { maxWidth: ONE_LINE_NAME_MAX } : {}),
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -596,7 +608,11 @@ export default function TaggedSelect({
             id={tagsId}
             tags={selected?.tags}
             hue={hue}
-            sx={{ flex: "0 1 auto", flexWrap: "wrap", minWidth: 0, ml: "auto" }}
+            sx={
+              oneLine
+                ? { flex: "none", flexWrap: "nowrap", ml: "auto" }
+                : { flex: "0 1 auto", flexWrap: "wrap", minWidth: 0, ml: "auto" }
+            }
           />
         </Box>
         {!fixed && (

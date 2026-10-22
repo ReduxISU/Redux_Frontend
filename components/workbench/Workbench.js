@@ -320,13 +320,23 @@ function viewTypeControl(which, all, side, pending, onPick) {
 
 /**
  * One picture in the collapsed Visualization pane's line: its problem, then its live
- * Visualization Type dropdown (the expanded pane's own state), the pair wrapping together.
+ * Visualization Type dropdown (the expanded pane's own state), one line (`oneLine`). The pair
+ * wraps as a whole (the target's → with it); only on a phone, where a pair can be wider than the
+ * pane, may the dropdown drop under its problem.
  */
 function PictureSummaryItem({ id, name, type, arrow = false }) {
   return (
     <Box
       component="span"
-      sx={{ display: "inline-flex", flexWrap: "wrap", alignItems: "flex-end", gap: 1, minWidth: 0 }}
+      data-summary-pair=""
+      sx={{
+        display: "inline-flex",
+        flexWrap: { xs: "wrap", sm: "nowrap" },
+        alignItems: "flex-end",
+        gap: 1,
+        minWidth: 0,
+        maxWidth: "100%",
+      }}
     >
       {/* The target's arrow stays with it when the line wraps. */}
       {arrow && (
@@ -351,7 +361,7 @@ function PictureSummaryItem({ id, name, type, arrow = false }) {
       >
         {name}
       </Box>
-      {type && <VisualizationTypeControl id={`${id}-type`} {...type} />}
+      {type && <VisualizationTypeControl id={`${id}-type`} {...type} oneLine />}
     </Box>
   );
 }

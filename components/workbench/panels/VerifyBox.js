@@ -57,9 +57,6 @@ export const FAILURE_REASON =
 
 const quietSx = { fontSize: "0.8125rem", color: "text.secondary" };
 
-// The collapsed row's verifier dropdown: room for "Default SAT Verifier" and its (i).
-const VERIFIER_WIDTH = 280;
-
 const stripSx = {
   display: "flex",
   flexDirection: "column",
@@ -330,7 +327,7 @@ function Strip({ id, strip, collapsed, shown }) {
               <Box
                 sx={
                   collapsed
-                    ? { flex: `0 1 ${VERIFIER_WIDTH}px`, minWidth: 200, maxWidth: "100%" }
+                    ? { flex: "0 1 auto", minWidth: 160, maxWidth: "100%" }
                     : { minWidth: 0 }
                 }
               >
@@ -338,6 +335,7 @@ function Strip({ id, strip, collapsed, shown }) {
                   id={`${id}-verifier`}
                   label="Verifier"
                   hue="green"
+                  oneLine={collapsed}
                   boxSx={{ width: "100%" }}
                   {...strip.verifierSelect}
                 />
