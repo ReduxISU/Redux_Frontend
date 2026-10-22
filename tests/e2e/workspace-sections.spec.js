@@ -643,3 +643,34 @@ test("collapsed, Instance's field and Execute's and Verify's controls sit on the
   await expect(field).toHaveAttribute("rows", "1");
   await expect(field).toHaveValue(edited);
 });
+
+test("at 1440px the chosen reduction's whole name shows, collapsed and expanded, its tags wrapping first", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await answerCompute(page);
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  await page.locator("#workbench-mode-reduce").click();
+  const value = page.locator("#workbench-reduction-value");
+  const ellipsized = () => value.evaluate((element) => element.scrollWidth > element.clientWidth);
+
+  // Clique, which CI's backend has; then 3SAT's longest reduction name, where this backend has it
+  // ("Karp's 0-1 Integer Linear Programming Reduction", with two tags).
+  const targets = [/^Clique(?!\s*Cover)/];
+  await page.locator("#workbench-target-button").click();
+  const options = page.locator("#workbench-target-listbox").getByRole("option");
+  if ((await options.filter({ hasText: /0-1 Integer/ }).count()) > 0) targets.push(/0-1 Integer/);
+  await page.keyboard.press("Escape");
+
+  for (const target of targets) {
+    await chooseReduceTarget(page, target, { expect });
+    for (const expanded of [true, false]) {
+      await setExpanded(page, "execute", expanded);
+      await expect(value).toBeVisible();
+      expect(await ellipsized(), `${target} ${expanded ? "expanded" : "collapsed"}`).toBe(false);
+      // The tags stay shown: beside the name, or under it.
+      await expect(page.locator("#workbench-reduction-tags")).toBeVisible();
+    }
+    await setExpanded(page, "execute", true);
+  }
+});
