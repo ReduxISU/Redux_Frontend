@@ -96,6 +96,7 @@ import {
 } from "../../hooks/useComputeRequest";
 import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
+import { verifiersOf } from "../../hooks/useProblemDetail";
 import useWorkbenchLayout, { WORKSPACE_SECTIONS } from "../../hooks/useWorkbenchLayout";
 import {
   agreeLine,
@@ -138,6 +139,7 @@ import {
   solverRunTags,
   targetCard,
   verifierCard,
+  verifierTags,
   visualizationCard,
   visualizationTags,
 } from "./infoCards";
@@ -352,12 +354,6 @@ function answerChip(kept) {
   };
 }
 
-/** A side's verifiers: the list Redux gives, else the one verifier, else none. */
-function verifierList(verifiers, verifier) {
-  if (verifiers?.length) return verifiers;
-  return verifier ? [verifier] : [];
-}
-
 /** The verifier picked by class name, or the first. */
 function pickVerifier(verifiers, className) {
   return verifiers.find((verifier) => verifier.className === className) ?? verifiers[0] ?? null;
@@ -371,7 +367,7 @@ function verifierSelectFor(verifiers, chosen, onChange) {
     options: verifiers.map((verifier) => ({
       value: verifier.className,
       label: verifier.name,
-      tags: [],
+      tags: verifierTags(verifier),
       card: verifierCard(verifier),
     })),
     onChange,
@@ -526,10 +522,10 @@ export default function Workbench({ problem }) {
     [CHECK_SOURCE]: null,
     [CHECK_TARGET]: null,
   });
-  const sourceVerifiers = verifierList(problem.verifiers, problem.verifier);
+  const sourceVerifiers = verifiersOf(problem.verifiers, problem.verifier);
   const targetVerifiers = reduceCurrent
-    ? verifierList(reduceResult.targetVerifiers, reduceResult.targetVerifier)
-    : verifierList(selectedReduction?.targetVerifiers, selectedReduction?.targetVerifier);
+    ? verifiersOf(reduceResult.targetVerifiers, reduceResult.targetVerifier)
+    : verifiersOf(selectedReduction?.targetVerifiers, selectedReduction?.targetVerifier);
   const verify = useCertificateCheck({
     source: {
       name: problem.name,
