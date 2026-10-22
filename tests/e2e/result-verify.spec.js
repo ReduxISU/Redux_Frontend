@@ -164,10 +164,10 @@ test("Solve mode has one strip, Reduce mode one per side, side by side under the
   const right = await targetStrip.root.boundingBox();
   expect(right.x).toBeGreaterThan(left.x + left.width - 1);
   expect(Math.abs(right.y - left.y)).toBeLessThanOrEqual(1);
-  // On the same columns as Execute's solver cells, each under its own side.
+  // On the same columns as Execute's source cell and the cell carrying its answer into the target.
   await showPane(page, "execute", { expect });
   const sourceCell = await page.locator("#workbench-source-cell").boundingBox();
-  const targetCell = await page.locator("#workbench-target-cell").boundingBox();
+  const targetCell = await page.locator("#workbench-forward").boundingBox();
   expect(Math.abs(left.x - sourceCell.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(right.x - targetCell.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(right.width - targetCell.width)).toBeLessThanOrEqual(1);
@@ -351,7 +351,7 @@ test("the target strip waits for Reduce, then checks with the target's verifier 
     `Reduce first: a ${target} certificate is checked against the instance Reduce builds.`,
   );
   await expect(targetStrip.useHint).toHaveText(
-    `No answer yet. Reduce, then press Solve ${target} in Execute.`,
+    "No answer yet. Press Solve via reduction in Execute first.",
   );
 
   // The source strip works before the build, like in Solve mode.
@@ -375,7 +375,7 @@ test("the target strip waits for Reduce, then checks with the target's verifier 
 
   // Use the solver's answer: the source's answer carried into the target counts.
   await expect(targetStrip.useHint).toHaveText(
-    `No answer yet. Press Solve ${target} in Execute first.`,
+    "No answer yet. Press Solve via reduction in Execute first.",
   );
   await showPane(page, "execute", { expect });
   await page.locator("#workbench-source-cell-run").click();
@@ -421,7 +421,7 @@ test("Check it fills and checks the right strip, opening it and Verify if they w
   await expect(target.verdict).toHaveAttribute("data-valid", "true");
   expect(verifyCalls.at(-1).problemInstance).toBe(TARGET_INSTANCE);
 
-  await page.locator("#workbench-target-cell-run").click();
+  await page.locator("#workbench-chain-run").click();
   await expect(page.locator("#workbench-back-answer")).toHaveText(MAPPED_BACK);
   await page.locator("#workbench-back-check").click();
   await expect(source.field).toHaveValue(MAPPED_BACK);

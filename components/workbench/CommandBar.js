@@ -8,8 +8,8 @@
 // as the mockup has it:
 //   - Solve mode: Mode | Solver | Solve | the run's chip;
 //   - Reduce mode: Mode | Target | Reduction | Reduce | the build's chip. Reduce only builds the
-//     target; each side's solver and Solve button are in the cells under this row
-//     (./panels/ReduceCells.js).
+//     target; Solve via reduction (with the target's solver) and Solve directly (with the
+//     source's) are in the cells under this row (./panels/ReduceCells.js).
 // While the row's run is going, Cancel takes its button's place and the busy line (spinner, what
 // is running, a clock) shows under the row; a run that didn't finish shows its failure box there,
 // with Try again (./RunParts.js).

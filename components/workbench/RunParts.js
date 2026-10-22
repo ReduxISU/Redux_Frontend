@@ -128,7 +128,9 @@ export function runFailure(request) {
         text: "Stopped after 60 seconds. Try a smaller instance or a faster solver.",
       };
     }
-    return { kind: "server", text: `${failure.headline}. ${failure.detail}`.trim() };
+    // Redux's hint, when its answer has one, says what to do next (useComputeRequest.js).
+    const text = `${failure.headline}. ${failure.detail} ${failure.hint ?? ""}`;
+    return { kind: "server", text: text.replace(/\s+/g, " ").trim() };
   }
   if (request.status === "cancelled") {
     return {
@@ -174,8 +176,20 @@ const runButtonSx = {
  * @param {boolean} props.running
  * @param {() => void} props.onCancel
  * @param {Chip|null} props.chip
+ * @param {boolean} [props.secondary] The quieter outlined button, for a run beside a primary one
+ *   (Reduce mode's Solve directly, beside Solve via reduction).
  */
-export function RunControls({ id, label, onRun, disabled, hint, running, onCancel, chip }) {
+export function RunControls({
+  id,
+  label,
+  onRun,
+  disabled,
+  hint,
+  running,
+  onCancel,
+  chip,
+  secondary = false,
+}) {
   const hintId = `${id}-hint`;
   return (
     <>
@@ -198,7 +212,7 @@ export function RunControls({ id, label, onRun, disabled, hint, running, onCance
             onClick={onRun}
             disabled={disabled}
             aria-describedby={disabled && hint ? hintId : undefined}
-            sx={runButtonSx}
+            sx={secondary ? { ...secondaryButtonSx, whiteSpace: "nowrap" } : runButtonSx}
           >
             {label}
           </Box>

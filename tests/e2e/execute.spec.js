@@ -1,10 +1,12 @@
 // tests/e2e/execute.spec.js
 //
 // #279 stage 2 (board F): the Workspace's Execute section. Solve mode's one row (Solve and its
-// chip); Reduce building only; a solver cell per side; one run at a time; Cancel keeping the last
-// result; a timed-out or failed run with Try again; the results row filling in by itself, with
-// Check it, "Not available for this reduction", and the agree line; and the tags inside the
-// solver menus (none inside Target's).
+// chip); Reduce building only; one run at a time; Cancel keeping the last result; a timed-out or
+// failed run with Try again; the answers carried across filling in by themselves, with Check it,
+// "Not available for this reduction", and the agree line; and the tags inside the solver menus.
+// #279 (one Solve in Reduce mode): Solve via reduction running the chain (Reduce, Solve the
+// target, map the answer back) and showing each step in order, a failed step stopping the ones
+// after it, Solve directly beside it, and no answer of an earlier choice left on screen.
 //
 // The catalog comes from the real backend, like the rest of the suite. Every compute request is
 // answered here, for the reasons workbench.spec.js gives (these tests are about the page's state,
@@ -70,9 +72,12 @@ function gate() {
  */
 async function answerCompute(page) {
   const calls = { source: 0, target: 0, reduce: 0, forward: 0, back: 0 };
+  // The compute requests in the order they were asked, by name.
+  const order = [];
   const answers = {
     source: () => ({ json: ANSWER }),
     target: () => ({ json: TARGET_ANSWER }),
+    reduce: () => ({ json: { reductionTo: { instance: TARGET_INSTANCE } } }),
     forward: () => ({ json: MAPPED_FORWARD }),
     back: () => ({ json: MAPPED_BACK }),
   };
@@ -89,23 +94,27 @@ async function answerCompute(page) {
     const solver = new URL(route.request().url()).searchParams.get("solver") ?? "";
     const side = /clique|carraghan|chiba/i.test(solver) ? "target" : "source";
     calls[side] += 1;
+    order.push(side);
     const answer = await answers[side]();
     return route.fulfill(answer).catch(() => {});
   });
   await page.route(REDUCE_REQUEST, (route) => {
     calls.reduce += 1;
-    return route.fulfill({ json: { reductionTo: { instance: TARGET_INSTANCE } } });
+    order.push("reduce");
+    return route.fulfill(answers.reduce());
   });
   await page.route(MAP_REQUEST, (route) => {
     calls.forward += 1;
+    order.push("forward");
     return route.fulfill(answers.forward());
   });
   await page.route(MAP_BACK_REQUEST, (route) => {
     calls.back += 1;
+    order.push("back");
     return route.fulfill(answers.back());
   });
   await page.route(VERIFY_REQUEST, (route) => route.fulfill({ json: "True" }));
-  return { calls, answers };
+  return { calls, answers, order };
 }
 
 async function openSolve(page) {
@@ -134,7 +143,8 @@ async function openReduce(page) {
 const run = (page) => page.locator("#workbench-run");
 const chip = (page) => page.locator("#workbench-run-chip");
 const sourceRun = (page) => page.locator("#workbench-source-cell-run");
-const targetRun = (page) => page.locator("#workbench-target-cell-run");
+const chainRun = (page) => page.locator("#workbench-chain-run");
+const step = (page, key) => page.locator(`#workbench-chain-${key}`);
 
 test("Solve mode: Solve, its chip with the time, and Changed after an instance edit", async ({
   page,
@@ -163,12 +173,11 @@ test("Reduce builds the target and solves nothing", async ({ page }) => {
   await openReduce(page);
 
   await expect(run(page)).toHaveText("Reduce");
-  await expect(targetRun(page)).toBeDisabled();
-  await expect(page.locator("#workbench-target-cell-run-hint")).toHaveText(
-    "Reduce first: Solve Clique works on the built instance.",
-  );
+  // Solve via reduction builds for itself, so it doesn't wait for Reduce.
+  await expect(chainRun(page)).toBeEnabled();
+  await expect(step(page, "reduce")).toHaveAttribute("data-state", "waiting");
   await expect(page.locator("#workbench-back-text")).toHaveText(
-    "Reduce first, then solve Clique to see this direction.",
+    "Maps the Clique answer step 2 finds back to 3SAT.",
   );
 
   await run(page).click();
@@ -178,43 +187,76 @@ test("Reduce builds the target and solves nothing", async ({ page }) => {
   expect(calls.reduce).toBe(1);
   expect(calls.source + calls.target).toBe(0);
 
-  // Nothing is answered until a Solve button is pressed.
-  await expect(targetRun(page)).toBeEnabled();
+  // Nothing is answered until a Solve button is pressed; the chain's first step is the build.
+  await expect(step(page, "reduce")).toHaveAttribute("data-state", "done");
+  await expect(step(page, "reduce")).toContainText("Built the Clique instance");
+  await expect(step(page, "solve")).toHaveAttribute("data-state", "waiting");
   await expect(page.locator("#workbench-back-text")).toHaveText(
-    "Solve Clique to see this direction.",
+    "Maps the Clique answer step 2 finds back to 3SAT.",
   );
   await expect(page.locator("#workbench-forward-text")).toHaveText(
-    "Solve 3SAT above to see this direction.",
+    "Press Solve directly to see this direction.",
   );
   await expect(page.locator("#workbench-cells-agree")).toHaveCount(0);
   expect(calls.source + calls.target + calls.forward + calls.back).toBe(0);
 });
 
-test("each side solves in its own cell, the answers carry across by themselves, and they agree", async ({
+test("Reduce mode has one primary Solve via reduction and a secondary Solve directly", async ({
   page,
 }) => {
-  const { calls } = await answerCompute(page);
+  await answerCompute(page);
   await openReduce(page);
-  await run(page).click();
-  await expect(chip(page)).toHaveText(/^Built/);
+  await expect(chainRun(page)).toHaveText("Solve via reduction");
+  await expect(sourceRun(page)).toHaveText("Solve directly");
+  // No Solve button per side any more.
+  await expect(page.locator("#workbench-target-cell-run")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Solve (3SAT|Clique)$/ })).toHaveCount(0);
+  // The primary fill, and the quieter outlined button beside it.
+  const fill = (locator) =>
+    locator.evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(await fill(chainRun(page))).not.toBe(await fill(sourceRun(page)));
+});
 
-  await expect(sourceRun(page)).toHaveText("Solve 3SAT");
+test("Solve via reduction builds, solves the target and maps its answer back, showing each step in order", async ({
+  page,
+}) => {
+  const { calls, order } = await answerCompute(page);
+  await openReduce(page);
+
+  // No Reduce first: the chain builds for itself.
+  await chainRun(page).click();
+  await expect(step(page, "solve-result-answer")).toHaveText(TARGET_ANSWER);
+  await expect(page.locator("#workbench-back-answer")).toHaveText(MAPPED_BACK);
+  expect(order).toEqual(["reduce", "target", "back"]);
+  // Each step says what it gave, in order: the build, the target's answer, the answer mapped back.
+  const steps = page.locator("#workbench-chain-steps > li");
+  await expect(steps).toHaveCount(3);
+  await expect(steps.nth(0)).toHaveAttribute("id", "workbench-chain-reduce");
+  await expect(steps.nth(0)).toHaveAttribute("data-state", "done");
+  await expect(steps.nth(0)).toContainText("Built the Clique instance");
+  await expect(steps.nth(1)).toHaveAttribute("id", "workbench-chain-solve");
+  await expect(steps.nth(1)).toHaveAttribute("data-state", "done");
+  await expect(steps.nth(2)).toHaveAttribute("id", "workbench-back");
+  await expect(steps.nth(2)).toHaveAttribute("data-state", "answer");
+  await expect(page.locator("#workbench-chain-run-chip")).toHaveText(/^Answer found/);
+  // The build is the Reduce row's too.
+  await expect(chip(page)).toHaveText(/^Built/);
+  await expect(page.locator("#workbench-result-target-instance")).toHaveText(TARGET_INSTANCE);
+  // Solve directly hasn't run, so nothing went forward and nothing is compared.
+  expect(calls.source + calls.forward).toBe(0);
+  await expect(page.locator("#workbench-cells-agree")).toHaveCount(0);
+
+  // Again on the same build: no new build, the target solved again and its answer mapped back.
+  await chainRun(page).click();
+  await expect.poll(() => calls.target).toBe(2);
+  await expect(page.locator("#workbench-back-answer")).toHaveText(MAPPED_BACK);
+  expect(calls.reduce).toBe(1);
+
+  // Solve directly, for comparison: the 3SAT answer goes into Clique with no button.
   await sourceRun(page).click();
   await expect(page.locator("#workbench-source-cell-run-chip")).toHaveText(/^Answer found/);
   await expect(page.locator("#workbench-source-cell-result-answer")).toHaveText(ANSWER);
-  // The 3SAT answer goes into Clique with no button.
   await expect(page.locator("#workbench-forward-answer")).toHaveText(MAPPED_FORWARD);
-  expect(calls.forward).toBe(1);
-  await expect(page.locator("#workbench-back-text")).toHaveText(
-    "Solve Clique to see this direction.",
-  );
-
-  await expect(targetRun(page)).toHaveText("Solve Clique");
-  await targetRun(page).click();
-  await expect(page.locator("#workbench-target-cell-run-chip")).toHaveText(/^Answer found/);
-  await expect(page.locator("#workbench-target-cell-result-answer")).toHaveText(TARGET_ANSWER);
-  await expect(page.locator("#workbench-back-answer")).toHaveText(MAPPED_BACK);
-  expect(calls.back).toBe(1);
   await expect(page.locator("#workbench-cells-agree")).toHaveText("Same answer on both sides.");
   await expect(page.locator("#workbench-cells-agree")).toHaveAttribute("data-tone", "ok");
 
@@ -224,10 +266,130 @@ test("each side solves in its own cell, the answers carry across by themselves, 
   await page.locator("#workbench-back-check").click();
   await expect(page.locator("#workbench-verify-source-certificate")).toHaveValue(MAPPED_BACK);
 
-  // Solve <source> is Solve mode's solve: the same answer, with no new request.
+  // Solve directly is Solve mode's solve: the same answer, with no new request.
   await page.locator("#workbench-mode-solve").click();
   await expect(page.locator("#workbench-result-answer")).toHaveText(ANSWER);
   expect(calls.source).toBe(1);
+});
+
+test("a step that fails says which, with Redux's message and hint, and the steps after it don't run", async ({
+  page,
+}) => {
+  // These answers fail on purpose.
+  page.allowNetworkFailures();
+  const { answers, calls } = await answerCompute(page);
+  await openReduce(page);
+
+  // Step 1, the build.
+  answers.reduce = () => ({
+    status: 500,
+    json: { error: "reduction_failed", detail: "The reduction threw." },
+  });
+  await chainRun(page).click();
+  await expect(step(page, "reduce")).toHaveAttribute("data-state", "failed");
+  await expect(step(page, "reduce-failure")).toContainText(
+    "Step 1 didn't finish, so the steps after it didn't run.",
+  );
+  await expect(step(page, "reduce-failure")).toContainText("The reduction threw.");
+  await expect(page.locator("#workbench-chain-run-chip")).toHaveText("Failed");
+  await expect(step(page, "solve")).toHaveAttribute("data-state", "waiting");
+  expect(calls.target + calls.back).toBe(0);
+  // Its failure shows once, in the chain, not under the Reduce row too.
+  await expect(page.locator("#workbench-run-failure")).toHaveCount(0);
+
+  // Step 2, the target's solve: Try again builds, then fails solving, with Redux's hint.
+  answers.reduce = () => ({ json: { reductionTo: { instance: TARGET_INSTANCE } } });
+  answers.target = () => ({
+    status: 503,
+    json: {
+      error: "solver_unavailable",
+      detail: "The quantum service did not answer.",
+      hint: "CliqueBruteForce (Brute Force) runs without the quantum service; or try again later.",
+    },
+  });
+  await step(page, "reduce-failure-retry").click();
+  await expect(step(page, "solve")).toHaveAttribute("data-state", "failed");
+  await expect(step(page, "reduce")).toHaveAttribute("data-state", "done");
+  const failure = step(page, "solve-failure");
+  await expect(failure).toContainText("Step 2 didn't finish, so the steps after it didn't run.");
+  await expect(failure).toContainText("The quantum service did not answer.");
+  await expect(failure).toContainText("CliqueBruteForce (Brute Force) runs without the quantum");
+  await expect(page.locator("#workbench-back")).toHaveAttribute("data-state", "waiting");
+  expect(calls.back).toBe(0);
+
+  // Step 3, the map back.
+  answers.target = () => ({ json: TARGET_ANSWER });
+  answers.back = () => ({ status: 500, json: { error: "boom", detail: "Mapping broke." } });
+  await step(page, "solve-failure-retry").click();
+  await expect(step(page, "solve-result-answer")).toHaveText(TARGET_ANSWER);
+  await expect(page.locator("#workbench-back")).toHaveAttribute("data-state", "failed");
+  await expect(page.locator("#workbench-back-failure")).toContainText("Step 3 didn't finish.");
+  await expect(page.locator("#workbench-back-failure")).toContainText("Mapping broke.");
+  expect(calls.reduce).toBe(2);
+});
+
+test("Reduce mode never shows an answer of an earlier choice: the instance, the target's solver, or Solve directly's", async ({
+  page,
+}) => {
+  const { calls } = await answerCompute(page);
+  await openReduce(page);
+  await chainRun(page).click();
+  await expect(page.locator("#workbench-back-answer")).toHaveText(MAPPED_BACK);
+  await sourceRun(page).click();
+  await expect(page.locator("#workbench-source-cell-result-answer")).toHaveText(ANSWER);
+
+  // Another target solver: the target's answer and what came of it go, saying why.
+  const targetSolvers = page.locator("#workbench-chain-solver-listbox").getByRole("option");
+  await page.locator("#workbench-chain-solver-button").click();
+  if ((await targetSolvers.count()) > 1) {
+    await targetSolvers.nth(1).click();
+    await expect(step(page, "solve-result")).toHaveCount(0);
+    await expect(page.locator("#workbench-back")).toHaveAttribute("data-state", "waiting");
+    await expect(page.locator("#workbench-chain-changed")).toHaveText(
+      /^You picked another target, reduction or solver after the last run/,
+    );
+    await expect(page.locator("#workbench-chain-run-chip")).toHaveText("Changed · run again");
+    await expect(page.locator("#workbench-cells-agree")).toHaveCount(0);
+    // Run again: the same build, solved with the new solver.
+    await chainRun(page).click();
+    await expect(page.locator("#workbench-back-answer")).toHaveText(MAPPED_BACK);
+    expect(calls.reduce).toBe(1);
+  } else {
+    await page.keyboard.press("Escape");
+  }
+
+  // Solve directly's solver changed: its answer goes, and so does what it carried across.
+  const sourceSolvers = page.locator("#workbench-source-cell-solver-listbox").getByRole("option");
+  await page.locator("#workbench-source-cell-solver-button").click();
+  if ((await sourceSolvers.count()) > 1) {
+    await sourceSolvers.nth(1).click();
+    await expect(page.locator("#workbench-source-cell-result")).toHaveCount(0);
+    await expect(page.locator("#workbench-source-cell-changed")).toHaveText(
+      /^You picked another solver after the last solve/,
+    );
+    await expect(page.locator("#workbench-forward")).toHaveAttribute("data-state", "waiting");
+    await expect(page.locator("#workbench-cells-agree")).toHaveCount(0);
+  } else {
+    await page.keyboard.press("Escape");
+  }
+
+  // An instance edit: every answer goes; the chain says the instance changed.
+  await showPane(page, "instance", { expect });
+  await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
+  await expect(step(page, "solve-result")).toHaveCount(0);
+  await expect(step(page, "reduce")).toHaveAttribute("data-state", "waiting");
+  await expect(page.locator("#workbench-back")).toHaveAttribute("data-state", "waiting");
+  await expect(page.locator("#workbench-back-answer")).toHaveCount(0);
+  await expect(page.locator("#workbench-chain-changed")).toHaveText(
+    "The instance changed after the last run. Press Solve via reduction to run it again.",
+  );
+  await expect(page.locator("#workbench-source-cell-result")).toHaveCount(0);
+  await expect(page.locator("#workbench-forward-answer")).toHaveCount(0);
+
+  // Pressing it again builds the new instance first.
+  await chainRun(page).click();
+  await expect(page.locator("#workbench-back-answer")).toHaveText(MAPPED_BACK);
+  expect(calls.reduce).toBe(2);
 });
 
 test("one run at a time: the other run buttons wait, and Cancel keeps the last result", async ({
@@ -254,8 +416,8 @@ test("one run at a time: the other run buttons wait, and Cancel keeps the last r
     /^Running\.\.\. \d:\d\d$/,
   );
   await expect(page.locator("#workbench-source-cell-busy")).toContainText("Solving 3SAT with");
-  await expect(targetRun(page)).toBeDisabled();
-  await expect(page.locator("#workbench-target-cell-run-hint")).toHaveText("Another run is going");
+  await expect(chainRun(page)).toBeDisabled();
+  await expect(page.locator("#workbench-chain-run-hint")).toHaveText("Another run is going");
   await expect(run(page)).toBeDisabled();
   await expect(page.locator("#workbench-run-hint")).toHaveText("Another run is going");
 
@@ -269,7 +431,7 @@ test("one run at a time: the other run buttons wait, and Cancel keeps the last r
     "The last result is kept.",
   );
   await expect(page.locator("#workbench-source-cell-result-answer")).toHaveText(ANSWER);
-  await expect(targetRun(page)).toBeEnabled();
+  await expect(chainRun(page)).toBeEnabled();
   held.open();
 });
 
@@ -313,8 +475,8 @@ test("a reduction that can't map answers says Not available, in neutral grey", a
   await expect(page.locator("#workbench-forward-text")).toHaveText(
     /^Not available for this reduction/,
   );
-  await expect(targetRun(page)).toBeEnabled();
-  await targetRun(page).click();
+  await expect(chainRun(page)).toBeEnabled();
+  await chainRun(page).click();
   await expect(page.locator("#workbench-back")).toHaveAttribute("data-state", "na");
   await expect(page.locator("#workbench-back-text")).toHaveText(
     /^Not available for this reduction/,
@@ -336,14 +498,11 @@ test("a no from a solver not known to be exact proves nothing, and the sides are
   await expect(chip(page)).toHaveText(/^Built/);
   await sourceRun(page).click();
   await expect(page.locator("#workbench-forward-answer")).toHaveText(MAPPED_FORWARD);
-  await targetRun(page).click();
+  await chainRun(page).click();
 
-  await expect(page.locator("#workbench-target-cell-run-chip")).toHaveText(/^No answer found/);
+  await expect(page.locator("#workbench-chain-run-chip")).toHaveText(/^No answer found/);
   // Redux doesn't say which solvers are exact (ReduxISU/Redux#877), so a "no" stays neutral.
-  await expect(page.locator("#workbench-target-cell-run-chip")).toHaveAttribute(
-    "data-tone",
-    "neutral",
-  );
+  await expect(page.locator("#workbench-chain-run-chip")).toHaveAttribute("data-tone", "neutral");
   await expect(page.locator("#workbench-back")).toHaveAttribute("data-state", "none");
   await expect(page.locator("#workbench-back-text")).toContainText(
     "so this doesn't show the 3SAT instance has none",
@@ -373,6 +532,6 @@ test("solver menus carry tags inside their items, and the Target menu its comple
   await page.locator("#workbench-source-cell-solver-button").click();
   await expect(page.locator("#workbench-source-cell-solver-option-0-tags")).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.locator("#workbench-target-cell-solver-button").click();
-  await expect(page.locator("#workbench-target-cell-solver-option-0-tags")).toBeVisible();
+  await page.locator("#workbench-chain-solver-button").click();
+  await expect(page.locator("#workbench-chain-solver-option-0-tags")).toBeVisible();
 });

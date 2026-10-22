@@ -255,7 +255,7 @@ test("the Reduction View's headings follow the phase on screen: nothing during B
   await expectSectionOrder(page, target, "#workbench-target-type");
 
   await showPane(page, "execute", { expect });
-  const targetSolver = await valueOf(page, "#workbench-target-cell-solver-value");
+  const targetSolver = await valueOf(page, "#workbench-chain-solver-value");
   await solveReductionTarget(page, { expect });
   // It opens on Map back's last step: the source shows the answer mapped back.
   await expect(page.locator("#workbench-reduction")).toHaveAttribute("data-phase", "map");

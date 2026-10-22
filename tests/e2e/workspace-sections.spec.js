@@ -897,7 +897,7 @@ for (const width of [1440, 390]) {
       "workbench-target",
       "workbench-reduction",
       "workbench-source-cell-solver",
-      "workbench-target-cell-solver",
+      "workbench-chain-solver",
       "workbench-source-type",
     ]) {
       await expect(page.locator(`#${id}-button`)).toHaveAttribute("data-one-line", "true");

@@ -28,9 +28,13 @@
 //     not an effect, so there is no moment where a stale picture shows).
 //   - The runs (hooks/useComputeRequest.js), #279 stage 2: Solve (the solver's answer and the
 //     run's picture), Reduce (builds the target instance, and solves nothing), and Solve
-//     <target> (the target's solver on the instance Reduce built). Solve <source> in Reduce
-//     mode is the same Solve as Solve mode's, with the same result. One run at a time: while
-//     one is going, every other run button is disabled ("Another run is going").
+//     <target> (the target's solver on the instance Reduce built). #279 (one Solve in Reduce
+//     mode): Reduce mode solves with one button, Solve via reduction, which runs Reduce first
+//     (unless the build on screen is already of this instance and reduction), then Solve
+//     <target>, and the answer is mapped back (below); a step that fails stops the ones after
+//     it. Reduce mode's Solve directly is the same Solve as Solve mode's, with the same result.
+//     One run at a time: while one is going, every other run button is disabled ("Another run
+//     is going").
 //   - The answers carried across a reduction (#279 stage 2): once the target is solved its answer
 //     is mapped back to the source (ProblemProvider/mapSolutionBack), and once the source is
 //     solved its answer is mapped into the target (ProblemProvider/mapSolution). Mapping runs in
@@ -39,7 +43,9 @@
 //     available" there, remembered for the page.
 //   - When answers and pictures change: an answer appears only after a button press, an instance
 //     edit retires every answer (the chips say "Changed"), and changing the solver, target,
-//     reduction or mode leaves the pictures on the last run.
+//     reduction or mode leaves the pictures on the last run. In Reduce mode, picking another
+//     solver, target or reduction also retires the answers it changes (#279: no answer of an
+//     earlier choice is shown; its cell says what changed).
 //   - The default picture before a run (hooks/useDefaultPicture.js), which is also how an
 //     unreadable instance is found before anyone presses Solve.
 //   - Which gadget the pictures highlight (#229 stage 4): the Gadgets rows (under the pictures) say
@@ -464,6 +470,9 @@ export default function Workbench({ problem }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [serializeError, setSerializeError] = useState(null);
   const [lastRun, setLastRun] = useState(null);
+  // Which button the last build was for, Reduce ("reduce") or Solve via reduction ("chain"), and
+  // what it built from: `{by, instance, reductionClassName}`.
+  const [reduceBy, setReduceBy] = useState(null);
   // The gadget row being hovered or focused, by the run it belongs to: `{runId, index}`.
   const [gadgetHighlight, setGadgetHighlight] = useState(null);
   // #239: the Reduction View's gadget marks, Plain or Color. #279: the Highlight Gadgets switch
@@ -483,6 +492,17 @@ export default function Workbench({ problem }) {
     reductionsForTarget.find((reduction) => reduction.className === reductionClassName) ??
     reductionsForTarget[0] ??
     null;
+
+  // The target's solver is kept per target problem, the first one until another is picked. It
+  // belongs to the chosen reduction's target: Solve via reduction builds that one.
+  const [targetSolverPicks, setTargetSolverPicks] = useState({});
+  const cellTargetName = selectedReduction?.target ?? targetName ?? "";
+  const cellTargetSolvers = selectedReduction?.targetSolvers ?? [];
+  const targetSolverIndex = Math.min(
+    targetSolverPicks[cellTargetName] ?? 0,
+    Math.max(cellTargetSolvers.length - 1, 0),
+  );
+  const targetSolver = cellTargetSolvers[targetSolverIndex] ?? null;
 
   // --- Runs ------------------------------------------------------------------------------
   const solveRun = useComputeRequest({ subject: "instance" });
@@ -512,7 +532,14 @@ export default function Workbench({ problem }) {
   const targetKept = targetRun.kept?.result ?? null;
   const targetSolved =
     reduceCurrent && targetKept && targetKept.buildRunId === reduceResult.runId ? targetKept : null;
-  const targetResult = targetSolved && settled(targetRun) ? targetSolved : null;
+  // #279 (one Solve in Reduce mode): its answer, while it is what Solve via reduction would give
+  // now. Picking another target, reduction or target solver retires it (the pictures stay on it,
+  // as they stay on every last run).
+  const chainCurrent =
+    Boolean(targetSolved) &&
+    buildMatchesChoice &&
+    targetSolved.solverClassName === targetSolver?.className;
+  const targetResult = chainCurrent && settled(targetRun) ? targetSolved : null;
 
   // The run's picture for the chosen visualization: from one run's pictures (#252), or the one
   // picture a run asked for alone. `runGap` is the reason one run has no picture for it.
@@ -534,6 +561,10 @@ export default function Workbench({ problem }) {
   }
   const runPictureCurrent = Boolean(runPicture);
   const solveCurrent = Boolean(solveResult) && solveResult.instance === instance;
+  // #279 (one Solve in Reduce mode): Solve directly's answer, while it is of this instance and the
+  // solver picked now. (Solve mode keeps its answer across a solver change, as before.)
+  const directCurrent =
+    solveCurrent && solveResult.solverClassName === (selectedSolver?.className ?? null);
   // #215: the current build's Reduction View, when Redux sent one: Build only after Reduce, all
   // three phases once the target is solved (#279 stage 2); #912: drawn with the pictures last
   // picked for it, once Redux has sent that view.
@@ -601,7 +632,7 @@ export default function Workbench({ problem }) {
   const sourceAnswer = solveCurrent ? answerText(solveResult.output) : "";
   const forwardMap = useConversion(
     reduceCurrent &&
-      solveCurrent &&
+      directCurrent &&
       answerFound(solveResult.output) &&
       !noForwardMap.has(backReduction)
       ? { reduction: backReduction, instance, answer: sourceAnswer }
@@ -851,7 +882,7 @@ export default function Workbench({ problem }) {
     return runId;
   }
 
-  /** Solve: Solve mode's button and Reduce mode's "Solve <source>", the same run. */
+  /** Solve: Solve mode's button and Reduce mode's Solve directly, the same run. */
   function handleSolve() {
     if (solveDisabled) return;
     const runInstance = instanceToRun();
@@ -869,6 +900,7 @@ export default function Workbench({ problem }) {
       return {
         output,
         solverName: solver.name,
+        solverClassName: solver.className,
         guarantee: solverGuarantee(solver),
         instance: runInstance,
         runId,
@@ -908,8 +940,18 @@ export default function Workbench({ problem }) {
     if (reduceDisabled) return;
     const runInstance = instanceToRun();
     if (runInstance === null) return;
+    startReduce("reduce", runInstance);
+  }
+
+  /**
+   * Builds the target instance of `runInstance` with the chosen reduction: Reduce's run (`by`
+   * "reduce"), and the first step of Solve via reduction (`by` "chain"). Resolves to the build,
+   * or null when it failed, was cancelled, or another run has started since.
+   */
+  async function startReduce(by, runInstance) {
     const runId = beginRun("reduce", runInstance);
     const reduction = selectedReduction;
+    setReduceBy({ by, instance: runInstance, reductionClassName: reduction.className });
     const pictures = {
       sourceVisualization: sourceViewPicture,
       targetVisualization: targetViewPicture(reduction),
@@ -917,8 +959,8 @@ export default function Workbench({ problem }) {
     // A new build draws with the pictures picked so far; a switch still on its way is dropped.
     viewSwitch.reset();
     setSwitchNote(null);
-    let succeeded = false;
-    const finished = reduceRun.start(async (signal) => {
+    let built = null;
+    await reduceRun.start(async (signal) => {
       const ran = {
         reductionClassName: reduction.className,
         reductionName: reduction.name,
@@ -940,76 +982,93 @@ export default function Workbench({ problem }) {
         signal,
       });
       if (view) {
-        succeeded = true;
-        return {
+        built = {
           ...ran,
           view: buildPhaseOnly(view),
           reductionName: view.reductionName || reduction.name,
           targetInstance: view.target.instance,
           gadgets: view.gadgets,
         };
+        return built;
       }
       // Without the view, ProblemProvider/reduce builds the target; the same answer carries the
       // reduction's gadgets on a backend that has them (#229 stage 4).
-      const built = await requestReduction(
+      const reduced = await requestReduction(
         REDUX_API_BASE_URL,
         reduction.className,
         runInstance,
         signal,
       );
-      succeeded = true;
-      return {
+      built = {
         ...ran,
         view: null,
         targetInstance:
-          typeof built?.reductionTo?.instance === "string" ? built.reductionTo.instance : null,
-        gadgets: normalizeGadgets(built?.gadgets),
+          typeof reduced?.reductionTo?.instance === "string" ? reduced.reductionTo.instance : null,
+        gadgets: normalizeGadgets(reduced?.gadgets),
       };
+      return built;
     });
+    // Only a build that landed, for the latest run, counts (`built` is set just before the answer
+    // is kept, so a run another one replaced, or one cancelled, gives null).
+    if (!built || runIdRef.current !== runId) return null;
     // A new build retires the last target solve, which was of the build before.
-    finished.then(() => {
-      if (!succeeded || runIdRef.current !== runId) return;
-      targetRun.reset();
-    });
+    targetRun.reset();
+    return built;
   }
 
-  // --- Solve <target> (#279 stage 2) -------------------------------------------------------
-  // The target's solver is kept per target problem, the first one until another is picked.
-  const [targetSolverPicks, setTargetSolverPicks] = useState({});
-  const cellTargetName = reduceResult?.targetName ?? selectedReduction?.target ?? targetName ?? "";
-  const cellTargetSolvers = reduceCurrent
-    ? reduceResult.targetSolvers
-    : (selectedReduction?.targetSolvers ?? []);
-  const targetSolverIndex = Math.min(
-    targetSolverPicks[cellTargetName] ?? 0,
-    Math.max(cellTargetSolvers.length - 1, 0),
-  );
-  const targetSolver = cellTargetSolvers[targetSolverIndex] ?? null;
-  let targetHint = "";
-  if (!reduceCurrent) {
-    targetHint = `Reduce first: Solve ${cellTargetName} works on the built instance.`;
-  } else if (!targetSolver) {
-    targetHint = `${cellTargetName} has no solver declared yet, so there is nothing to solve it with.`;
+  // --- Solve via reduction (#279) ----------------------------------------------------------
+  // Stage 2's Solve <target> is now the chain's second step: Reduce (when the build on screen
+  // isn't of this instance and reduction), Solve <target> with the target's solver, and the
+  // target's answer mapped back (backMap above, which follows by itself). Each step starts only
+  // once the one before it landed.
+  // The build on screen is the one the chain would make: this instance, this reduction.
+  const buildFresh = reduceCurrent && buildMatchesChoice;
+  // The last build was the chain's first step, not Reduce's own run: its progress and failure
+  // show in the chain's steps, not under the Reduce row.
+  const chainOwnsBuild = reduceBy?.by === "chain";
+  const chainReducing = chainOwnsBuild && reduceRun.isRunning;
+  const chainRunning = chainReducing || targetRun.isRunning;
+  let chainHint = "";
+  if (!targetSolver) {
+    chainHint = `${cellTargetName} has no solver declared yet, so there is nothing to solve it with.`;
   } else if (!targetSolver.className) {
-    targetHint = "This solver cannot be run: the catalog did not say which backend solver it is.";
-  } else if (reduceResult.targetInstance === null) {
-    targetHint = `Redux did not send the ${cellTargetName} instance it built, so there is nothing to solve.`;
-  } else if (isRunning) {
-    targetHint = ANOTHER_RUN;
+    chainHint = "This solver cannot be run: the catalog did not say which backend solver it is.";
+  } else if (buildFresh && reduceResult.targetInstance === null) {
+    chainHint = `Redux did not send the ${cellTargetName} instance it built, so there is nothing to solve.`;
+  } else if (isRunning && !chainRunning) {
+    chainHint = ANOTHER_RUN;
   }
-  const targetDisabled = Boolean(targetHint);
+  const chainDisabled =
+    Boolean(chainHint) || isRunning || (!buildFresh && (instanceBlocked || !canReduce));
 
-  function handleSolveTarget() {
-    if (targetDisabled) return;
-    const build = reduceResult;
+  /** Solve via reduction: the whole chain, from where the build on screen leaves it. */
+  async function handleSolveViaReduction() {
+    if (chainDisabled) return;
     const solver = targetSolver;
-    // The view is asked for again with this solver, drawn with the pictures on screen.
-    const pictures = switchedCurrent
-      ? {
-          sourceVisualization: switchedView.view.source.visualization ?? null,
-          targetVisualization: switchedView.view.target.visualization ?? null,
-        }
-      : build.pictures;
+    if (buildFresh) {
+      // The view is asked for again with this solver, drawn with the pictures on screen.
+      solveTarget(
+        reduceResult,
+        solver,
+        switchedCurrent
+          ? {
+              sourceVisualization: switchedView.view.source.visualization ?? null,
+              targetVisualization: switchedView.view.target.visualization ?? null,
+            }
+          : reduceResult.pictures,
+      );
+      return;
+    }
+    const runInstance = instanceToRun();
+    if (runInstance === null) return;
+    const build = await startReduce("chain", runInstance);
+    // A failed or cancelled build stops the chain there; so does one without a target instance.
+    if (!build || build.targetInstance === null) return;
+    solveTarget(build, solver, build.pictures);
+  }
+
+  /** Solves the target instance `build` made with `solver` (the chain's second step). */
+  function solveTarget(build, solver, pictures) {
     viewSwitch.reset();
     setSwitchedView(null);
     setSwitchNote(null);
@@ -1050,6 +1109,11 @@ export default function Workbench({ problem }) {
     });
   }
 
+  function cancelChain() {
+    if (chainReducing) reduceRun.cancel();
+    else targetRun.cancel();
+  }
+
   // --- Check it -----------------------------------------------------------------------------
   // #279 stage 4: Check it in Execute fills that side's Verify strip and checks it there, showing
   // the Verify section and opening the strip if either was hidden (or the section collapsed).
@@ -1071,7 +1135,7 @@ export default function Workbench({ problem }) {
   } else if (reductions.length === 0) {
     modeNote = `No reductions from ${problem.name} are declared yet.`;
   } else {
-    modeNote = `Reduce builds the ${selectedReduction?.target ?? "target"} instance from this one and solves nothing. Solve each side in its cell below.`;
+    modeNote = `Reduce builds the ${selectedReduction?.target ?? "target"} instance from this one and solves nothing. Solve via reduction, below, also solves it and maps the answer back; Solve directly solves this instance, to compare.`;
   }
 
   // #279 stage 3: the Showing line, Reduce mode only: the reduction. (Solve mode's Problem and
@@ -1627,21 +1691,23 @@ export default function Workbench({ problem }) {
       onRetry: handleSolve,
     };
   } else {
+    // A build Solve via reduction started shows its progress and failure in the chain's steps.
+    const ownBuild = reduceRun.isRunning && !chainOwnsBuild;
     topRun = {
       label: "Reduce",
       onRun: handleReduce,
       disabled: reduceDisabled,
-      hint: !reduceRun.isRunning && isRunning ? ANOTHER_RUN : "",
-      running: reduceRun.isRunning,
+      hint: !ownBuild && isRunning ? ANOTHER_RUN : "",
+      running: ownBuild,
       onCancel: reduceRun.cancel,
       chip: reduceChip,
-      busy: reduceRun.isRunning
+      busy: ownBuild
         ? {
             text: `Building the ${selectedReduction?.target ?? "target"} instance with ${selectedReduction?.name ?? "the reduction"}`,
             startedAt: reduceRun.startedAt,
           }
         : null,
-      failure: runFailure(reduceRun),
+      failure: chainOwnsBuild ? null : runFailure(reduceRun),
       onRetry: handleReduce,
     };
   }
@@ -1695,28 +1761,39 @@ export default function Workbench({ problem }) {
     </Box>
   ));
 
-  // Reduce mode's cells and results row (./panels/ReduceCells.js).
+  // Reduce mode's cells (./panels/ReduceCells.js): Solve via reduction and its steps, Solve
+  // directly, and the answers carried across.
   let reduceCells = null;
   if (mode === "reduce" && reductions.length > 0) {
     const targetLabel = cellTargetName || "the target";
+    let directChanged = null;
+    if (!solving && solveKept && !directCurrent && !solveFailure) {
+      directChanged = solveCurrent
+        ? "You picked another solver after the last solve. Press Solve directly to run it again."
+        : "The instance changed after the last solve. Press Solve directly to run it again.";
+    }
     const sourceCell = {
       id: `${ID}-source-cell`,
       label: `${sourceName} solver`,
       select: solverSelect,
       run: {
-        label: `Solve ${sourceName}`,
+        label: "Solve directly",
+        secondary: true,
         onRun: handleSolve,
         disabled: solveDisabled,
         hint: solveHint,
         running: solving,
         onCancel: cancelSolve,
-        chip: solveChip,
+        chip: runChip(solving ? { ...solveRun, isRunning: true } : solveRun, {
+          current: directCurrent,
+          done: answerChip,
+        }),
       },
       busy: solveBusy,
       failure: solveFailure,
       onRetry: handleSolve,
       result:
-        solveCurrent && solveRun.kept
+        directCurrent && solveRun.kept
           ? {
               found: answerFound(solveResult.output),
               verdict: answerFound(solveResult.output)
@@ -1726,13 +1803,103 @@ export default function Workbench({ problem }) {
               elapsedMs: solveRun.kept.elapsedMs,
             }
           : null,
-      changed: solveStale
-        ? `The instance changed after the last solve. Press Solve ${sourceName} to run it again.`
-        : null,
+      changed: directChanged,
     };
 
-    const targetCell = {
-      id: `${ID}-target-cell`,
+    // Which step of the chain stopped, and why: the run's failure box, said as that step's.
+    const stepFailure = (number, failure) =>
+      failure && {
+        ...failure,
+        text:
+          (failure.kind === "cancelled"
+            ? `Cancelled at step ${number}`
+            : `Step ${number} didn't finish`) +
+          (number < 3 ? ", so the steps after it didn't run." : ".") +
+          (failure.kind === "cancelled" ? "" : ` ${failure.text}`),
+      };
+
+    // Step 1: Reduce, or the build on screen when it is already of this instance and reduction.
+    const reduceStep = {
+      id: `${ID}-chain-reduce`,
+      heading: `Reduce ${sourceName} to ${targetLabel}`,
+    };
+    // A failed build of the chain's is shown while it is of this instance and reduction.
+    const chainBuildFailure =
+      chainOwnsBuild &&
+      reduceBy.instance === instance &&
+      reduceBy.reductionClassName === selectedReduction?.className
+        ? runFailure(reduceRun)
+        : null;
+    if (chainReducing) {
+      reduceStep.state = "loading";
+      reduceStep.busy = {
+        text: `Building the ${targetLabel} instance with ${selectedReduction?.name ?? "the reduction"}`,
+        startedAt: reduceRun.startedAt,
+      };
+    } else if (chainBuildFailure) {
+      reduceStep.state = "failed";
+      reduceStep.failure = stepFailure(1, chainBuildFailure);
+      reduceStep.onRetry = handleSolveViaReduction;
+    } else if (buildFresh && buildShown) {
+      reduceStep.state = "done";
+      reduceStep.text = `Built the ${reduceResult.targetName} instance with ${reduceResult.reductionName}. Took ${formatSeconds(reduceRun.kept.elapsedMs)} (round trip).`;
+    } else {
+      reduceStep.state = "waiting";
+      reduceStep.text = `Builds the ${targetLabel} instance from this one with ${selectedReduction?.name ?? "the reduction"}.`;
+    }
+
+    // Step 2: Solve <target> on that build.
+    const solveStep = {
+      id: `${ID}-chain-solve`,
+      heading: `Solve ${targetLabel}${targetSolver ? ` with ${targetSolver.name}` : ""}`,
+    };
+    const targetFailure = buildFresh && !chainBuildFailure ? runFailure(targetRun) : null;
+    if (targetRun.isRunning) {
+      solveStep.state = "loading";
+      solveStep.busy = {
+        text: `Solving ${targetLabel} with ${targetSolver?.name ?? "its solver"}`,
+        startedAt: targetRun.startedAt,
+      };
+    } else if (targetFailure) {
+      solveStep.state = "failed";
+      solveStep.failure = stepFailure(2, targetFailure);
+      solveStep.onRetry = handleSolveViaReduction;
+    } else if (targetResult) {
+      solveStep.state = "done";
+      solveStep.result = {
+        found: answerFound(targetResult.output),
+        verdict: answerFound(targetResult.output)
+          ? `${targetResult.solverName} found a ${targetLabel} answer`
+          : `${targetResult.solverName} found no ${targetLabel} answer`,
+        answer: targetAnswer,
+        elapsedMs: targetRun.kept.elapsedMs,
+      };
+    } else {
+      solveStep.state = "waiting";
+      solveStep.text =
+        buildFresh && reduceResult.targetInstance === null
+          ? `Redux did not send the ${targetLabel} instance it built, so there is nothing to solve.`
+          : `Solves the ${targetLabel} instance step 1 builds.`;
+    }
+
+    // An answer from an earlier choice isn't shown; this says why it went.
+    let chainChanged = null;
+    if (!chainRunning && targetKept && !chainCurrent && !targetFailure && !chainBuildFailure) {
+      chainChanged = reduceCurrent
+        ? "You picked another target, reduction or solver after the last run. Press Solve via reduction to run it again."
+        : "The instance changed after the last run. Press Solve via reduction to run it again.";
+    }
+    let chainChip = null;
+    if (chainReducing || chainBuildFailure) {
+      chainChip = runChip(reduceRun, { current: false, done: answerChip });
+    } else if (buildFresh || targetRun.isRunning) {
+      chainChip = runChip(targetRun, { current: chainCurrent, done: answerChip });
+    } else if (targetKept) {
+      chainChip = { tone: "neutral", text: "Changed · run again" };
+    }
+
+    const chain = {
+      id: `${ID}-chain`,
       label: `${targetLabel} solver`,
       select:
         cellTargetSolvers.length > 0
@@ -1749,54 +1916,30 @@ export default function Workbench({ problem }) {
             }
           : null,
       run: {
-        label: `Solve ${targetLabel}`,
-        onRun: handleSolveTarget,
-        disabled: targetDisabled,
-        hint: targetRun.isRunning ? "" : targetHint,
-        running: targetRun.isRunning,
-        onCancel: targetRun.cancel,
-        chip: reduceCurrent
-          ? runChip(targetRun, { current: Boolean(targetSolved), done: answerChip })
-          : null,
+        label: "Solve via reduction",
+        onRun: handleSolveViaReduction,
+        disabled: chainDisabled,
+        hint: chainRunning ? "" : chainHint,
+        running: chainRunning,
+        onCancel: cancelChain,
+        chip: chainChip,
       },
-      busy: targetRun.isRunning
-        ? {
-            text: `Solving ${targetLabel} with ${targetSolver?.name ?? "its solver"}`,
-            startedAt: targetRun.startedAt,
-          }
-        : null,
-      failure: reduceCurrent ? runFailure(targetRun) : null,
-      onRetry: handleSolveTarget,
-      result: targetResult
-        ? {
-            found: answerFound(targetResult.output),
-            verdict: answerFound(targetResult.output)
-              ? `${targetResult.solverName} found a ${targetLabel} answer`
-              : `${targetResult.solverName} found no ${targetLabel} answer`,
-            answer: targetAnswer,
-            elapsedMs: targetRun.kept.elapsedMs,
-          }
-        : null,
-      changed:
-        !targetRun.isRunning && buildKept && !reduceCurrent && targetKept
-          ? `The instance changed after the last solve. Reduce, then press Solve ${targetLabel} to run it again.`
-          : null,
+      changed: chainChanged,
+      steps: [reduceStep, solveStep],
     };
 
-    // The two directions of the reduction, each under the side it gives an answer for.
+    // The two directions of the reduction: back is the chain's step 3, forward follows Solve
+    // directly.
     const reduction = backReduction ?? selectedReduction?.className;
     const back = {
       id: `${ID}-back`,
-      heading: `${targetLabel} answer ${ARROW} back to ${sourceName}`,
+      heading: `Map the ${targetLabel} answer ${ARROW} back to ${sourceName}`,
       direction: `If f(x) has a ${targetLabel} answer, x is a yes-instance of ${sourceName}.`,
     };
     if (noBackMap.has(reduction)) back.state = "na";
-    else if (!reduceCurrent) {
+    else if (!targetResult) {
       back.state = "waiting";
-      back.text = `Reduce first, then solve ${targetLabel} to see this direction.`;
-    } else if (!targetResult) {
-      back.state = "waiting";
-      back.text = `Solve ${targetLabel} to see this direction.`;
+      back.text = `Maps the ${targetLabel} answer step 2 finds back to ${sourceName}.`;
     } else if (!answerFound(targetResult.output)) {
       const claim = noAnswerClaim(
         targetLabel,
@@ -1809,7 +1952,7 @@ export default function Workbench({ problem }) {
       back.proves = claim.proves;
     } else if (backMap.failure) {
       back.state = "failed";
-      back.failure = backMap.failure;
+      back.failure = stepFailure(3, backMap.failure);
       back.onRetry = backMap.retry;
     } else if (backMap.value?.unavailable) {
       back.state = "na";
@@ -1831,10 +1974,10 @@ export default function Workbench({ problem }) {
     if (noForwardMap.has(reduction)) forward.state = "na";
     else if (!reduceCurrent) {
       forward.state = "waiting";
-      forward.text = `Reduce first to build the ${targetLabel} instance.`;
-    } else if (!solveCurrent) {
+      forward.text = `Reduce, or Solve via reduction, first to build the ${targetLabel} instance.`;
+    } else if (!directCurrent) {
       forward.state = "waiting";
-      forward.text = `Solve ${sourceName} above to see this direction.`;
+      forward.text = "Press Solve directly to see this direction.";
     } else if (!answerFound(solveResult.output)) {
       const claim = noAnswerClaim(
         sourceName,
@@ -1864,14 +2007,14 @@ export default function Workbench({ problem }) {
     }
 
     const agree =
-      reduceCurrent && targetResult && solveCurrent
+      reduceCurrent && targetResult && directCurrent
         ? agreeLine(
             { found: answerFound(solveResult.output), guarantee: solveResult.guarantee },
             { found: answerFound(targetResult.output), guarantee: targetResult.guarantee },
           )
         : null;
 
-    reduceCells = { source: sourceCell, target: targetCell, back, forward, agree };
+    reduceCells = { chain, source: sourceCell, back, forward, agree };
   }
 
   // --- The Verify strips (#279 stage 4) --------------------------------------------------------
@@ -1888,8 +2031,9 @@ export default function Workbench({ problem }) {
   }
   const noAnswerToUse = "The solver found no answer, so there is none to use.";
   // The source's answer: its own solve's, or (Reduce mode) the target's answer mapped back.
-  const sourceSolvedNone = solveCurrent && !answerFound(solveResult.output);
-  let sourceUse = solveCurrent && !sourceSolvedNone ? sourceAnswer : null;
+  const sourceSolveShown = mode === "reduce" ? directCurrent : solveCurrent;
+  const sourceSolvedNone = sourceSolveShown && !answerFound(solveResult.output);
+  let sourceUse = sourceSolveShown && !sourceSolvedNone ? sourceAnswer : null;
   if (!sourceUse && mode === "reduce" && reduceCurrent && backMap.value?.certificate) {
     sourceUse = backMap.value.certificate;
   }
@@ -1910,7 +2054,7 @@ export default function Workbench({ problem }) {
       answer: sourceUse,
       answerHint: sourceSolvedNone
         ? noAnswerToUse
-        : `No answer yet. Press ${mode === "solve" ? "Solve" : `Solve ${problem.name}`} in Execute first.`,
+        : `No answer yet. Press ${mode === "solve" ? "Solve" : "Solve via reduction or Solve directly"} in Execute first.`,
     },
   ];
   const targetCheck = verify[CHECK_TARGET];
@@ -1927,10 +2071,8 @@ export default function Workbench({ problem }) {
     if (!targetUse && reduceCurrent && forwardMap.value?.certificate) {
       targetUse = forwardMap.value.certificate;
     }
-    let targetAnswerHint = `No answer yet. Press Solve ${name} in Execute first.`;
-    if (!reduceCurrent)
-      targetAnswerHint = `No answer yet. Reduce, then press Solve ${name} in Execute.`;
-    else if (targetSolvedNone) targetAnswerHint = noAnswerToUse;
+    let targetAnswerHint = "No answer yet. Press Solve via reduction in Execute first.";
+    if (targetSolvedNone) targetAnswerHint = noAnswerToUse;
     verifyStrips.push({
       side: CHECK_TARGET,
       problemName: name,
@@ -2056,7 +2198,7 @@ export default function Workbench({ problem }) {
   } else {
     stepsEmpty = `No steps yet. Press Reduce to build the ${cellTargetName || "target"} instance step by step.`;
   }
-  const solveTargetHint = `Press Solve ${cellTargetName || "the target"} to reach this phase.`;
+  const solveTargetHint = "Press Solve via reduction to reach this phase.";
   const algorithmSteps = {
     open: stepsOpen,
     onToggle: () => layout.setStepsOpen(!stepsOpen),
