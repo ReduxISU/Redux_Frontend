@@ -29,21 +29,21 @@ export const SUB_SCALE = 0.78;
 /** How far a subscript sits below its label's middle, as a share of the label size. */
 export const SUB_SHIFT = 0.32;
 
-const PILL_HEIGHT = 30;
-const PAD = 9;
-const BOX_HEIGHT = PILL_HEIGHT + 2 * PAD;
+export const PILL_HEIGHT = 30;
+export const PAD = 9;
+export const BOX_HEIGHT = PILL_HEIGHT + 2 * PAD;
 // The room an operator takes: an inner one (inside a box, drawn at 14 px) and an outer one
 // (between boxes, drawn at 17 px and bold). The room belongs to the place, not the symbol: ∧ and ∨
 // are drawn the same width at a size, so a DNF formula (∧ inside, ∨ between) reserves exactly the
 // room a CNF one does, and its pills and boxes land in the same places (#278).
-const INNER_WIDTH = 24;
-const OUTER_WIDTH = 34;
+export const INNER_WIDTH = 24;
+export const OUTER_WIDTH = 34;
 // Room for a clause name above its box, clear of a gadget ring round the box (#270).
-const LABEL_HEIGHT = 22;
-const ROW_GAP = 16;
-const CHIP_WIDTH = 66;
-const CHIP_HEIGHT = 30;
-const MARGIN = 12;
+export const LABEL_HEIGHT = 22;
+export const ROW_GAP = 16;
+export const CHIP_WIDTH = 66;
+export const CHIP_HEIGHT = 30;
+export const MARGIN = 12;
 // The room above the first row: kept from when a heading sat there (#278 took it out of the
 // drawing), so a formula draws exactly where it did.
 const TOP = 34;
@@ -75,7 +75,7 @@ export function strikeWidth(negated, name) {
   return ((negated ? 1 : 0) + splitName(name).base.length) * CHAR_WIDTH * 0.9;
 }
 
-function pillWidth(negated, name) {
+export function pillWidth(negated, name) {
   return Math.max(34, labelWidth(negated, name) + 18);
 }
 
@@ -92,9 +92,62 @@ export function formulaForm(payload) {
 }
 
 /** A literal's variable name, from its label ("¬x2" -> "x2"). */
-function literalName(node) {
+export function literalName(node) {
   const label = String(node.label ?? "");
   return node.positive === false ? label.replace(/^[¬!~]\s*/, "") : label;
+}
+
+/** A number as drawn: a real minus sign (#278). */
+export function formatNumber(value) {
+  return typeof value === "number" && value < 0 ? `−${-value}` : String(value);
+}
+
+/** A variable's type (ReduxISU/Redux#929): "int" when the payload says so, else "bool". */
+export function variableType(variable) {
+  return variable?.type === "int" ? "int" : "bool";
+}
+
+/** The characters a chip's value takes: T / F, or "= " and the widest number of its range. */
+function valueChars(type, range) {
+  if (type !== "int") return 1;
+  const ends = Array.isArray(range) && range.length ? range : [0, 999];
+  return 2 + Math.max(...ends.map((value) => formatNumber(value).length));
+}
+
+/**
+ * The variable strip's chips, from `top`, wrapping at `right`: a chip is wide enough for its
+ * label and its value, T / F for a true / false variable, "= n" for a number (#278). A true / false
+ * chip is exactly as wide as it was before typed values.
+ */
+export function stripChips(payload, left, right, top) {
+  let vx = left;
+  let vy = top;
+  const chips = (Array.isArray(payload?.variables) ? payload.variables : [])
+    .filter((variable) => typeof variable?.id === "string")
+    .map((variable) => {
+      const label = String(variable.label ?? variable.id);
+      const type = variableType(variable);
+      const range = Array.isArray(variable.range) ? variable.range : null;
+      const w = Math.max(
+        CHIP_WIDTH,
+        labelWidth(false, label, VARIABLE_SIZE) +
+          ((1 + valueChars(type, range)) * CHAR_WIDTH * VARIABLE_SIZE) / LITERAL_SIZE +
+          18,
+      );
+      if (vx + w > right) {
+        vx = left;
+        vy += CHIP_HEIGHT + 10;
+      }
+      const chip = { id: variable.id, label, type, range, x: vx, y: vy, w, h: CHIP_HEIGHT };
+      vx += w + 8;
+      return chip;
+    });
+  return { chips, bottom: vy + CHIP_HEIGHT };
+}
+
+/** The strip's head: ASSIGNMENT when every variable is true / false, VALUES otherwise. */
+export function stripLabelOf(chips) {
+  return chips.every((chip) => chip.type !== "int") ? "ASSIGNMENT" : "VALUES";
 }
 
 /**
@@ -222,26 +275,7 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
   });
 
   // The assignment strip, under the formula, wrapping the same way.
-  let vy = y + rowHeight + 40;
-  let vx = left;
-  const variables = (Array.isArray(payload?.variables) ? payload.variables : [])
-    .filter((variable) => typeof variable?.id === "string")
-    .map((variable) => {
-      const label = String(variable.label ?? variable.id);
-      const w = Math.max(
-        CHIP_WIDTH,
-        labelWidth(false, label, VARIABLE_SIZE) +
-          (2 * CHAR_WIDTH * VARIABLE_SIZE) / LITERAL_SIZE +
-          18,
-      );
-      if (vx + w > right) {
-        vx = left;
-        vy += CHIP_HEIGHT + 10;
-      }
-      const chip = { id: variable.id, label, x: vx, y: vy, w, h: CHIP_HEIGHT };
-      vx += w + 8;
-      return chip;
-    });
+  const { chips: variables, bottom } = stripChips(payload, left, right, y + rowHeight + 40);
 
   // A literal no clause lists stays out of the drawing (it has no place).
   for (const [id, literal] of literals) if (literal.w === 0) literals.delete(id);
@@ -250,8 +284,9 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
     minX: 0,
     minY: 0,
     width: drawingWidth,
-    height: vy + CHIP_HEIGHT + 14,
+    height: bottom + 14,
     stripY: y + rowHeight + 22,
+    stripLabel: stripLabelOf(variables),
     form,
     innerOp,
     outerOp,

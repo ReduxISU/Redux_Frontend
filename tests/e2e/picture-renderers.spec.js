@@ -54,7 +54,10 @@
 // between, the chips, every step's states and marks, subscripts and the False strike, wrapping,
 // the trace, and widths from a phone to a desktop in both themes. #278: the operators and the
 // Legend's line follow the payload's layout (cnf, dnf, or none named), and every text in the
-// drawing belongs to a piece.
+// drawing belongs to a piece. #278 Part 2 (ReduxISU/Redux#929): 0-1 ILP's stacked constraint
+// rows, Prime Factorization's and Subset Sum's equations: expression pieces, plain numbers,
+// coefficients, an unknown operator, notes and marks, each step's states, frame exprs, the
+// strip's numbers (VALUES), the trace through a number's chip, and a phone in both themes.
 // #271: the Nested Set renderer (Set Cover, Exact Cover, Hitting Set) after it: the dots on a
 // circle and a region per set, names clear of everything, every step's states and ×2 hits, each
 // fallback to the set list and the Layout switch, the trace, and widths in both themes.
@@ -71,6 +74,9 @@ import {
 } from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
 import {
+  ILP_COEF_FORMULA_FRAMES,
+  ILP_FORMULA_FRAMES,
+  PRIME_FORMULA_FRAMES,
   SAT_FORMULA_FRAMES,
   SAT_LONG_FORMULA_FRAMES,
   SAT_NAMES_FORMULA_FRAMES,
@@ -78,6 +84,7 @@ import {
   SAT3_FORMULA_FRAMES,
   SAT3_LONG_FORMULA_FRAMES,
   SAT3_UNSAT_FORMULA_FRAMES,
+  SUBSET_SUM_FORMULA_FRAMES,
 } from "./formula-payloads";
 import { drawnCollisions, gotoProblemDetail, showPane, startWithPanesExpanded } from "./helpers";
 import {
@@ -8893,6 +8900,385 @@ for (const scheme of ["light", "dark"]) {
       expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
     });
   }
+}
+
+// --- #278 Part 2: the Formula's expression rows and equations (ReduxISU/Redux#929) -------------
+// 0-1 ILP's constraint rows, Prime Factorization's and Subset Sum's equations. CI's backend has
+// none of these views yet (nor a Subset Sum page), so each capture is drawn on the 3SAT page: every
+// picture request there is answered with it, and the renderer reads only the payload.
+
+const formulaPiece = (page, id) => page.locator(`${FORMULA}-formula [data-node-id="${id}"]`);
+
+/** The ids of an expression's leaves (variables, numbers, placeholders), left to right. */
+function exprLeaves(expr) {
+  if (!expr || typeof expr !== "object") return [];
+  if (!expr.op) return [expr.id];
+  return (expr.args ?? []).flatMap(exprLeaves);
+}
+
+/** Every text in the drawing that belongs to no piece (none should). */
+function strayFormulaTexts(page) {
+  return page
+    .locator(`${FORMULA}-svg`)
+    .evaluate((el) =>
+      [...el.querySelectorAll("text")]
+        .filter(
+          (text) =>
+            !text.closest(
+              "[data-clause-id], [data-node-id], [data-variable-id], [data-strip], [data-piece-for]",
+            ),
+        )
+        .map((text) => text.textContent),
+    );
+}
+
+test("Formula: 0-1 ILP's constraints are stacked rows, ≤ over sums and negations, with numbers plain until they have a state", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const capture = ILP_FORMULA_FRAMES;
+  const { payload } = capture;
+  await openFormula(page, "3SAT", capture);
+  const root = page.locator(`${FORMULA}-formula`);
+  await expect(root).toHaveAttribute("data-formula-layout", "rows");
+  await expect(root.locator("[data-clause-id]")).toHaveCount(payload.groups.length);
+  const leaves = payload.groups.flatMap((group) => exprLeaves(group.expr));
+  await expect(root.locator("[data-node-id]")).toHaveCount(leaves.length);
+  const drawn = await root
+    .locator("[data-node-id]")
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-node-id")));
+  expect(drawn).toEqual(leaves);
+  // R1 reads −x1 + x2 − x3 ≤ 0: the ids are the payload's own (r0-x0, r0-d, r0-rel).
+  const r0 = await root.evaluate((el) =>
+    [...el.querySelectorAll('[data-op-id], [data-node-id^="r0-"]')]
+      .filter((g) => (g.getAttribute("data-piece-for") ?? "r0") === "r0")
+      .map((g) => ({
+        x: g.querySelector("rect, text").getBBox().x,
+        text: g.querySelector("text").textContent,
+      }))
+      .sort((a, b) => a.x - b.x)
+      .map((piece) => piece.text)
+      .join(" "),
+  );
+  expect(r0).toBe("− x1 + x2 − x3 ≤ 0");
+  await expect(root.locator('[data-op-id="r0-rel"]')).toHaveAttribute("data-op", "le");
+  await expect(formulaPiece(page, "r0-x0")).toHaveAttribute("data-variable", "v:x1");
+  await expect(formulaPiece(page, "r0-d")).toHaveAttribute("data-kind", "num");
+  // A number with no state is plain text: no pill.
+  await expect(formulaPiece(page, "r0-d").locator("[data-body]")).toHaveAttribute("stroke", "none");
+  // Stacked: one row per line, the ∧ in a column on the left, before every row but the first.
+  const joins = root.locator('[data-join="outer"]');
+  await expect(joins).toHaveCount(payload.groups.length - 1);
+  for (const text of await joins.allTextContents()) expect(text).toBe("∧");
+  const { clauses, operators } = await formulaBoxes(page);
+  const lefts = Object.values(clauses).map((box) => box.left);
+  expect(Math.max(...lefts) - Math.min(...lefts)).toBeLessThan(1);
+  const tops = Object.values(clauses)
+    .map((box) => box.top)
+    .sort((a, b) => a - b);
+  for (let i = 1; i < tops.length; i += 1) expect(tops[i]).toBeGreaterThan(tops[i - 1] + 30);
+  for (const op of operators) {
+    expect((op.box.left + op.box.right) / 2).toBeLessThan(Math.min(...lefts));
+  }
+  // Said in words, outside the drawing.
+  await expect(formulaClause(page, "r0")).toHaveAttribute(
+    "aria-label",
+    "Constraint R1: minus x1 plus x2 minus x3 is at most 0",
+  );
+  await expect(formulaPiece(page, "r0-x0")).toHaveAttribute(
+    "aria-label",
+    "Variable x1 in constraint R1",
+  );
+  await expect(formulaPiece(page, "r0-d")).toHaveAttribute(
+    "aria-label",
+    "Number 0 in constraint R1",
+  );
+  await expect(page.locator(`${FORMULA}-svg`)).toHaveAttribute(
+    "aria-label",
+    /3 constraints, one per line, joined by AND, and 3 variables\.$/,
+  );
+  await expect(legendBody(page)).toContainText(
+    "Each box is a constraint, joined by ∧, one per line. Every constraint must hold.",
+  );
+  await expect(root.locator('[data-strip="values"]')).toHaveCount(0);
+  expect(await strayFormulaTexts(page)).toEqual([]);
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+});
+
+test("Formula: 0-1 ILP's strip shows each variable's number, and each step's states, marks and totals", async ({
+  page,
+}) => {
+  // The bug #278 Part 2 fixes: the strip drew – for every 0 / 1 value.
+  const capture = ILP_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  await runToFrame(page, capture, 0);
+  const root = page.locator(`${FORMULA}-formula`);
+  const strip = root.locator('[data-strip="values"]');
+  await expect(strip.locator("[data-strip-head]")).toHaveText("VALUES");
+  const frame = capture.frames[0];
+  for (const variable of capture.payload.variables) {
+    const chip = formulaChip(page, variable.id);
+    const value = frame.assignment[variable.id];
+    await expect(chip).toHaveAttribute("data-value", String(value));
+    await expect(chip.locator("[data-value-text]")).toHaveText(`= ${value}`);
+    // Every chip is 0 and False on this try.
+    await expect(chip).toHaveAttribute(
+      "aria-label",
+      `Variable ${variable.label}: ${value}, False (assigned false)`,
+    );
+    await expect(chip).toHaveAttribute("data-state", frame.variables[variable.id].state);
+  }
+  await expect(strip).not.toContainText("–");
+  for (const [id, entry] of Object.entries(frame.nodes)) {
+    await expect(formulaPiece(page, id)).toHaveAttribute("data-state", entry.state);
+    if (entry.state === "False") {
+      await expect(formulaPiece(page, id).locator("[data-strike]")).toHaveCount(1);
+    }
+  }
+  for (const [id, entry] of Object.entries(frame.groups)) {
+    const row = formulaClause(page, id);
+    await expect(row).toHaveAttribute("data-state", entry.state);
+    await expect(row.locator("[data-clause-mark]")).toHaveText("✓");
+    await expect(row.locator("[data-clause-note]")).toHaveText(entry.note);
+    await expect(row).toHaveAttribute("aria-label", new RegExp(`, ${entry.note}, Covered`));
+  }
+  const legend = legendBody(page);
+  await expect(legend).toContainText("= n / – (the variable's value so far)");
+  await expect(legend).toContainText("✓ / ✗ by a constraint's name (it holds / it fails)");
+  await expect(legend).toContainText(`(e.g. "${frame.groups.r0.note}")`);
+  await expect(legend).not.toContainText("T / F");
+  expect(await strayFormulaTexts(page)).toEqual([]);
+});
+
+test("Formula: a coefficient is a number before its variable, a failed row is ✗ with its total, and a bound keeps its minus sign", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const capture = ILP_COEF_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  await runToFrame(page, capture, 0);
+  // 2x1: the coefficient r0-c0 (tied to x1) right before the occurrence r0-x0, not touching it.
+  const coefficient = formulaPiece(page, "r0-c0");
+  await expect(coefficient).toHaveAttribute("data-kind", "num");
+  await expect(coefficient).toHaveAttribute("data-variable", "v:x1");
+  await expect(coefficient.locator("text")).toHaveText("2");
+  await expect(coefficient).toHaveAttribute("aria-label", /^Number 2, for x1, in constraint R1/);
+  const gap = await page.locator(`${FORMULA}-svg`).evaluate((svg) => {
+    const box = (id) => svg.querySelector(`[data-node-id="${id}"] [data-body]`).getBBox();
+    return box("r0-x0").x - (box("r0-c0").x + box("r0-c0").width);
+  });
+  expect(gap).toBeGreaterThan(0);
+  expect(gap).toBeLessThan(10);
+  // Frame 1 tries (0 0 0): R2 (−x1 − x2 ≤ −1) adds up to 0, over its bound.
+  const frame = capture.frames[0];
+  const r1 = formulaClause(page, "r1");
+  await expect(r1).toHaveAttribute("data-state", frame.groups.r1.state);
+  await expect(r1.locator("[data-clause-mark]")).toHaveText(
+    frame.groups.r1.state === "Rejected" ? "✗" : "✓",
+  );
+  await expect(r1.locator("[data-clause-note]")).toHaveText(frame.groups.r1.note);
+  await expect(formulaPiece(page, "r1-d").locator("text")).toHaveText("−1");
+  await expect(r1).toHaveAttribute("aria-label", /is at most -1/);
+  // The coefficient takes its variable's state: False, struck through.
+  await expect(coefficient).toHaveAttribute("data-state", frame.nodes["r0-c0"].state);
+  await expect(coefficient.locator("[data-body]")).not.toHaveAttribute("stroke", "none");
+  // Hovering x1's chip traces its occurrences and its coefficient, and fades the rest by color.
+  await formulaChip(page, "v:x1").hover();
+  for (const id of ["r0-x0", "r0-c0", "r1-x0", "r2-x0"]) {
+    await expect(formulaPiece(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(formulaPiece(page, "r0-x1")).toHaveAttribute("data-traced", "faint");
+  await expect(formulaPiece(page, "r0-d")).toHaveAttribute("data-traced", "faint");
+  // The answer, (1 0 0).
+  await toLastStep(page, capture);
+  const done = capture.frames.at(-1);
+  await expect(formulaChip(page, "v:x1").locator("[data-value-text]")).toHaveText("= 1");
+  await expect(formulaChip(page, "v:x1")).toHaveAttribute("data-state", "Solution");
+  for (const id of Object.keys(done.groups)) {
+    await expect(formulaClause(page, id).locator("[data-clause-mark]")).toHaveText("✓");
+  }
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+});
+
+test("Formula: Prime Factorization is one equation, its right side built step by step, with i and rest in the strip", async ({
+  page,
+}) => {
+  const capture = PRIME_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  const root = page.locator(`${FORMULA}-formula`);
+  await expect(root).toHaveAttribute("data-formula-layout", "equation");
+  // Before Run: 60 = ?, and an equation draws no box until it has a state.
+  await expect(root.locator("[data-node-id]")).toHaveCount(2);
+  await expect(formulaPiece(page, "rest")).toHaveAttribute("data-kind", "num");
+  await expect(formulaPiece(page, "rest").locator("text")).toHaveText("?");
+  await expect(formulaPiece(page, "rest")).toHaveAttribute(
+    "aria-label",
+    "Placeholder ?, for rest, in the equation",
+  );
+  await expect(formulaClause(page, "e0").locator("[data-body]")).toHaveAttribute("stroke", "none");
+  await expect(formulaClause(page, "e0")).toHaveAttribute("aria-label", "Equation: 60 equals ?");
+  await expect(legendBody(page)).toContainText(
+    "One equation, wrapped at its top-level operators; it holds when both sides are equal.",
+  );
+  // Each frame replaces the right side (exprs): 60 = 2 × 30, then 60 = 2 × 2 × 15, ...
+  await runToFrame(page, capture, 0);
+  await expect(root.locator("[data-node-id]")).toHaveCount(3);
+  await expect(formulaPiece(page, "f0")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(formulaPiece(page, "rest").locator("text")).toHaveText("30");
+  await expect(root.locator('[data-op="times"]')).toHaveCount(1);
+  await expect(root.locator('[data-strip="values"] [data-strip-head]')).toHaveText("VALUES");
+  await expect(formulaChip(page, "v:i").locator("[data-value-text]")).toHaveText("= 2");
+  await expect(formulaChip(page, "v:rest").locator("[data-value-text]")).toHaveText("= 30");
+  await expect(formulaChip(page, "v:rest")).toHaveAttribute(
+    "aria-label",
+    "Variable rest: 30, Highlighted (looked at now)",
+  );
+  await page.locator("#workbench-steps-next").click();
+  await expect(formulaPiece(page, "f0")).toHaveAttribute("data-state", "Committed");
+  await expect(formulaPiece(page, "f1")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(formulaPiece(page, "rest").locator("text")).toHaveText("15");
+  // Done: 60 = 2 × 2 × 3 × 5, every factor the answer, the equation ✓.
+  await toLastStep(page, capture);
+  const ids = await root
+    .locator("[data-node-id]")
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-node-id")));
+  expect(ids).toEqual(["n", "f0", "f1", "f2", "f3"]);
+  for (const id of ["f0", "f1", "f2", "f3"]) {
+    await expect(formulaPiece(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(formulaClause(page, "e0")).toHaveAttribute("data-state", "Covered");
+  await expect(formulaClause(page, "e0").locator("[data-clause-mark]")).toHaveText("✓");
+  await expect(formulaClause(page, "e0").locator("[data-body]")).not.toHaveAttribute(
+    "stroke",
+    "none",
+  );
+  expect(await strayFormulaTexts(page)).toEqual([]);
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+});
+
+test("Formula: Subset Sum is Σ of its numbers = T, each number tied to its chip, ending on the subset that adds up", async ({
+  page,
+}) => {
+  const capture = SUBSET_SUM_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  const root = page.locator(`${FORMULA}-formula`);
+  // Σ is a call: Σ( 1 , 7 , 12 , 15 ) = 28.
+  await expect(root.locator('[data-op="sum"]').first().locator("text")).toHaveText("Σ(");
+  await expect(root.locator('[data-op="sum"]')).toHaveCount(5);
+  await expect(formulaClause(page, "e0")).toHaveAttribute(
+    "aria-label",
+    "Equation: the sum of 1, 7, 12, 15 equals 28",
+  );
+  await expect(legendBody(page)).toContainText("Σ(…) adds up what is inside.");
+  await runToFrame(page, capture, 2);
+  // Try {1,7}: both highlighted, 12 and 15 struck through, the equation ✗ with its sum.
+  const frame = capture.frames[2];
+  for (const [id, entry] of Object.entries(frame.nodes)) {
+    await expect(formulaPiece(page, id)).toHaveAttribute("data-state", entry.state);
+  }
+  await expect(formulaPiece(page, "s2").locator("[data-strike]")).toHaveCount(1);
+  await expect(formulaClause(page, "e0").locator("[data-clause-mark]")).toHaveText("✗");
+  await expect(formulaClause(page, "e0").locator("[data-clause-note]")).toHaveText(
+    frame.groups.e0.note,
+  );
+  await expect(formulaChip(page, "v:x2").locator("[data-value-text]")).toHaveText("= 1");
+  await expect(formulaChip(page, "v:x3").locator("[data-value-text]")).toHaveText("= 0");
+  // A number tied to a chip traces with it.
+  await formulaPiece(page, "s1").hover();
+  await expect(formulaChip(page, "v:x2")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaPiece(page, "s0")).toHaveAttribute("data-traced", "faint");
+  await expect(formulaPiece(page, "T")).toHaveAttribute("data-traced", "faint");
+  await page.mouse.move(1, 1);
+  await toLastStep(page, capture);
+  for (const id of ["s0", "s2", "s3"]) {
+    await expect(formulaPiece(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(formulaPiece(page, "s1")).toHaveAttribute("data-state", "False");
+  await expect(formulaClause(page, "e0").locator("[data-clause-mark]")).toHaveText("✓");
+  expect(await strayFormulaTexts(page)).toEqual([]);
+});
+
+test("Formula: an operator the table doesn't know is written name(a, b), and the Legend says so", async ({
+  page,
+}) => {
+  const capture = structuredClone(ILP_FORMULA_FRAMES);
+  capture.payload.groups[1].expr.op = "frob";
+  await openFormula(page, "3SAT", capture);
+  const root = page.locator(`${FORMULA}-formula`);
+  const symbols = await root
+    .locator('[data-op-id="r1-rel"] text')
+    .evaluateAll((texts) => texts.map((text) => text.textContent));
+  expect(symbols).toEqual(["frob(", ",", ")"]);
+  await expect(legendBody(page)).toContainText('frob(…) is the operator "frob", written by name.');
+  await expect(formulaClause(page, "r1")).toHaveAttribute("aria-label", /: frob minus x3, 0$/);
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+});
+
+test("Formula: a flat literal list in rows with named operators is drawn by the expression layout, ¬x folded into one pill", async ({
+  page,
+}) => {
+  // Redux#929: `rows` with explicit outer / inner over today's literal lists.
+  const capture = {
+    ...SAT3_FORMULA_FRAMES,
+    payload: { ...SAT3_FORMULA_FRAMES.payload, layout: "rows", outer: "or", inner: "and" },
+  };
+  await openFormula(page, "3SAT", capture);
+  const root = page.locator(`${FORMULA}-formula`);
+  await expect(root).toHaveAttribute("data-formula-layout", "rows");
+  await expect(root.locator("[data-node-id]")).toHaveCount(capture.payload.nodes.length);
+  const negated = capture.payload.nodes.find((node) => node.positive === false);
+  await expect(formulaPiece(page, negated.id).locator("text")).toHaveText(negated.label);
+  await expect(root.locator('[data-join="outer"]')).toHaveCount(capture.payload.groups.length - 1);
+  for (const text of await root.locator('[data-join="outer"]').allTextContents()) {
+    expect(text).toBe("∨");
+  }
+  for (const text of await root.locator('[data-op="and"] text').allTextContents()) {
+    expect(text).toBe("∧");
+  }
+  await expect(legendBody(page)).toContainText(
+    "Boxes are groups, joined by ∨; the literals inside are joined by ∧. One group that holds is enough: a group holds when all its literals are true.",
+  );
+});
+
+for (const scheme of ["light", "dark"]) {
+  test(`Formula: on a phone in the ${scheme} theme the constraint rows and the equation keep readable text and fit`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width: 390, height: 900 });
+    for (const capture of [ILP_COEF_FORMULA_FRAMES, SUBSET_SUM_FORMULA_FRAMES]) {
+      await openFormula(page, "3SAT", capture);
+      await runFormula(page, capture);
+      const svg = `${FORMULA}-svg`;
+      await expectFits(page, svg);
+      const smallest = await page.locator(svg).evaluate((el) => {
+        const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+        return Math.min(
+          ...[...el.querySelectorAll("text")].map(
+            (text) =>
+              Number(text.getAttribute("font-size") ?? getComputedStyle(text).fontSize) * scale,
+          ),
+        );
+      });
+      expect(smallest).toBeGreaterThanOrEqual(11);
+      expect(await drawnCollisions(page, svg)).toEqual([]);
+      // A plain number follows the theme: no dark-on-dark, no light-on-white.
+      const plain = await page
+        .locator(`${FORMULA}-formula [data-kind="num"][data-state="Background"] text`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = plain.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    }
+  });
+}
+
+/** Goes to the run's last step (the slider's End key). */
+async function toLastStep(page, capture) {
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("End");
+  const count = capture.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
 }
 
 // --- #271: the Nested Set renderer (the set problems' sets drawn as regions) -------------------
