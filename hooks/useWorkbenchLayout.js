@@ -11,9 +11,9 @@
 //
 // #279 (Workspace tweaks): Visualization, Execute and Verify have a Show all / Show less of their
 // own too. Every pane starts collapsed but Visualization (open), for a viewer with no saved
-// layout; a saved layout wins. The layout also keeps whether the pictures highlight the
-// reduction's gadgets in color (`highlightGadgets`, off by default: the pictures are plain until
-// asked). Reset layout goes back to those defaults and turns the highlight off.
+// layout; a saved layout wins. The layout also holds whether the pictures highlight the
+// reduction's gadgets in color (`highlightGadgets`). It starts off on every visit, so the
+// pictures are plain until asked; it is not saved with the rest. Reset layout turns it off too.
 //
 // The layout is the viewer's own, so it is kept in this browser (localStorage) for the next
 // visit, for every problem alike. Every read and write is wrapped: with storage blocked (private
@@ -57,9 +57,6 @@ function readLayout() {
       }
     }
     if (typeof stored?.stepsOpen === "boolean") layout.stepsOpen = stored.stepsOpen;
-    if (typeof stored?.highlightGadgets === "boolean") {
-      layout.highlightGadgets = stored.highlightGadgets;
-    }
   } catch {
     // Storage blocked or unreadable: the defaults.
   }
@@ -68,7 +65,9 @@ function readLayout() {
 
 function writeLayout(layout) {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
+    // Highlight Gadgets is left out: it starts off on every visit.
+    const { highlightGadgets: _unsaved, ...saved } = layout;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
   } catch {
     // Storage blocked: the layout lasts for this page.
   }
