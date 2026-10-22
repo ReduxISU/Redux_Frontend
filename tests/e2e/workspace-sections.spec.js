@@ -1,13 +1,19 @@
 // tests/e2e/workspace-sections.spec.js
 //
 // #279 (Workspace tweaks): the Workspace's Visualization, Execute and Verify sections each have the
-// Show all / Show less button the Details and Instance panes have. Each collapses on its own to a
-// one-line summary: Visualization the pictures' problems and Visualization Types, Execute the mode,
-// the algorithm and the latest run's chip, Verify each side's latest verdict. What a section holds
-// survives collapsing, the layout remembers it through a reload until Reset layout, Check it opens
-// a collapsed Verify, and Algorithm Steps opening by itself after a run never opens a collapsed
-// Visualization. Collapsed, every pane's and section's one line starts at one x, Instance's field on
-// its title's line.
+// Show all / Show less button the Details and Instance panes have, and each collapses on its own.
+// Collapsed, Visualization keeps a one-line summary (the pictures' problems and Visualization
+// Types); Execute and Verify keep their top controls, live, on the heading's line, like Instance's
+// field (the director's ask, Oct 21):
+//   - Execute: Solve mode's Solver, Solve and its chip; Reduce mode's Target, Reduction, Reduce
+//     and the build's chip; no Mode switch, and none of Reduce mode's cells or results;
+//   - Verify: the verifier dropdown (the problem's verifiers, as Redux lists them), the
+//     certificate field, Check (and Enter in the field), and a chip with the verdict and its time;
+//     in Reduce mode first a Problem to verify choice, whose target waits for Reduce.
+// A collapsed control is the expanded one, so what is picked or typed shows both ways. What a
+// section holds survives collapsing, the layout remembers it through a reload until Reset layout,
+// Check it opens a collapsed Verify, and Algorithm Steps opening by itself after a run never
+// opens a collapsed Visualization. Collapsed, every pane's and section's line starts at one x.
 //
 // The catalog comes from the real backend, like the rest of the suite; every compute request is
 // answered here (see workbench.spec.js for why).
@@ -17,6 +23,7 @@ import { chooseReduceTarget, gotoProblemDetail, showPane } from "./helpers";
 
 const PROBLEM = "3SAT";
 const ANSWER = "(x1:True,x2:False,x3:True)";
+const WRONG = "(x1:False,x2:True,x3:False)";
 const TARGET_INSTANCE = "(({a,b,c},{{a,b},{b,c},{a,c}}),3)";
 const TARGET_ANSWER = "{a,b,c}";
 const MAPPED = "{a,b,c}";
@@ -88,7 +95,47 @@ async function setExpanded(page, key, expanded) {
   await expect(button).toHaveAttribute("aria-expanded", String(expanded));
 }
 
-test("each Workspace section has Show less and Show all, like Details and Instance, and collapses on its own to a summary line", async ({
+/** Picks the option matching `pattern` from one of the page's tagged dropdowns. */
+async function pick(page, id, pattern) {
+  await page.locator(`#${id}-button`).click();
+  await page
+    .locator(`#${id}-listbox`)
+    .getByRole("option")
+    .filter({ has: page.locator('[id$="-name"]', { hasText: pattern }) })
+    .first()
+    .click();
+  await expect(page.locator(`#${id}-value`)).toHaveText(pattern);
+}
+
+/** The option labels of one of the page's tagged dropdowns. */
+async function optionsOf(page, id) {
+  await page.locator(`#${id}-button`).click();
+  const labels = await page
+    .locator(`#${id}-listbox`)
+    .locator('[role="option"] [id$="-name"]')
+    .allTextContents();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(`#${id}-listbox`)).toBeHidden();
+  return labels;
+}
+
+/** Holds every request matching `pattern` until the returned function is called. */
+async function holdRequests(page, pattern, json) {
+  let release;
+  const released = new Promise((resolve) => {
+    release = resolve;
+  });
+  await page.route(pattern, async (route) => {
+    await released;
+    await route.fulfill({ json });
+  });
+  return () => release();
+}
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const TIME = "\\d+\\.\\d\\d s";
+
+test("each Workspace section has Show less and Show all, like Details and Instance, and collapses on its own", async ({
   page,
 }) => {
   await answerCompute(page);
@@ -109,7 +156,7 @@ test("each Workspace section has Show less and Show all, like Details and Instan
   }
   await expect(page.locator("#workbench-details-expand")).toHaveText("Show all");
 
-  // Visualization: the problem and its Visualization Type.
+  // Visualization: a summary, the problem and its Visualization Type.
   const type = await textOf(page.locator("#workbench-source-type-value"));
   await expand(page, "visualization").click();
   await expect(expand(page, "visualization")).toHaveText("Show all");
@@ -117,42 +164,27 @@ test("each Workspace section has Show less and Show all, like Details and Instan
   await expect(body(page, "visualization")).toBeHidden();
   await expect(summary(page, "visualization")).toHaveText(`${PROBLEM} · ${type}`);
   // The others are still open: each collapses on its own.
-  await expect(body(page, "execute")).toBeVisible();
-  await expect(body(page, "verify")).toBeVisible();
+  await expect(page.locator("#workbench-mode-solve")).toBeVisible();
+  await expect(page.locator("#workbench-verify-source-toggle")).toBeVisible();
   // Keyboard: Enter on the button opens it again.
   await expand(page, "visualization").focus();
   await page.keyboard.press("Enter");
   await expect(body(page, "visualization")).toBeVisible();
 
-  // Execute: the mode and the solver, then the latest run's chip with its time.
-  const solver = await textOf(page.locator("#workbench-solver-value"));
-  await expand(page, "execute").click();
-  await expect(summary(page, "execute")).toHaveText(`Solve · ${solver} · Not run yet`);
-  await expand(page, "execute").click();
-  await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-run-chip")).toHaveText(/^Answer found/);
-  await expand(page, "execute").click();
-  await expect(summary(page, "execute")).toHaveText(
-    new RegExp(
-      `^Solve · ${solver.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} · Answer found · \\d+\\.\\d\\d s$`,
-    ),
-  );
-  await expect(page.locator("#workbench-execute-summary-chip")).toHaveAttribute("data-tone", "ok");
-
-  // Verify: each side's latest verdict, or Not checked; what is typed survives collapsing.
+  // Execute and Verify have no summary: their top controls stay, and the rest is hidden.
+  await setExpanded(page, "execute", false);
+  await expect(summary(page, "execute")).toHaveCount(0);
+  await expect(page.locator("#workbench-solver-button")).toBeVisible();
+  await expect(page.locator("#workbench-run")).toHaveText("Solve");
+  await expect(page.locator("#workbench-controls-more")).toBeHidden();
   const field = page.locator("#workbench-verify-source-certificate");
   await field.fill(ANSWER);
-  await expand(page, "verify").click();
-  await expect(summary(page, "verify")).toHaveText(`${PROBLEM}: Not checked`);
-  await expand(page, "verify").click();
+  await setExpanded(page, "verify", false);
+  await expect(summary(page, "verify")).toHaveCount(0);
+  await expect(field).toBeVisible();
   await expect(field).toHaveValue(ANSWER);
-  await page.locator("#workbench-verify-source-check").click();
-  await expect(page.locator("#workbench-verify-source-verdict")).toHaveAttribute(
-    "data-valid",
-    "true",
-  );
-  await expand(page, "verify").click();
-  await expect(summary(page, "verify")).toHaveText(`${PROBLEM}: Valid`);
+  await expect(page.locator("#workbench-verify-source-toggle")).toBeHidden();
+  await expect(page.locator("#workbench-verify-source-use-answer")).toBeHidden();
 
   // A reload remembers which are collapsed; Reset layout opens them all.
   await setExpanded(page, "visualization", false);
@@ -162,8 +194,10 @@ test("each Workspace section has Show less and Show all, like Details and Instan
   });
   for (const key of SECTIONS) {
     await expect(expand(page, key)).toHaveAttribute("aria-expanded", "false");
-    await expect(summary(page, key)).toBeVisible();
   }
+  await expect(summary(page, "visualization")).toBeVisible();
+  await expect(page.locator("#workbench-run")).toBeVisible();
+  await expect(page.locator("#workbench-verify-source-certificate")).toBeVisible();
   await page.locator("#workbench-layout-reset").click();
   for (const key of SECTIONS) {
     await expect(expand(page, key)).toHaveAttribute("aria-expanded", "true");
@@ -188,33 +222,210 @@ test("a run never opens a collapsed Visualization, though Algorithm Steps inside
   );
 });
 
-test("Reduce mode's summaries name both sides and the reduction", async ({ page }) => {
+test("collapsed Execute in Solve mode: the Solver, Solve and its chip work, with no Mode switch, and share their state with the expanded section", async ({
+  page,
+}) => {
+  await answerCompute(page);
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  await setExpanded(page, "execute", false);
+  // No Mode switch: the director listed none, and Show all brings it back.
+  await expect(page.locator("#workbench-mode-solve")).toBeHidden();
+  await expect(page.locator("#workbench-mode-reduce")).toBeHidden();
+
+  // Picking a solver collapsed is the pick expanded, and back.
+  const solvers = await optionsOf(page, "workbench-solver");
+  expect(solvers.length).toBeGreaterThan(1);
+  const [first, second] = solvers.map((label) => new RegExp(`^${escapeRegExp(label.trim())}$`));
+  await pick(page, "workbench-solver", second);
+  await setExpanded(page, "execute", true);
+  await expect(page.locator("#workbench-mode-solve")).toBeVisible();
+  await expect(page.locator("#workbench-solver-value")).toHaveText(second);
+  await pick(page, "workbench-solver", first);
+  await setExpanded(page, "execute", false);
+  await expect(page.locator("#workbench-solver-value")).toHaveText(first);
+
+  // Solve, collapsed: the running chip with its clock and Cancel, then the answer with its time.
+  const release = await holdRequests(page, SOLVE_REQUEST, ANSWER);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-run-chip")).toHaveText(/^Running\.\.\. \d+:\d\d$/);
+  await expect(page.locator("#workbench-run-cancel")).toBeVisible();
+  // The busy line is under the row, so it stays hidden with the rest.
+  await expect(page.locator("#workbench-run-busy")).toBeHidden();
+  release();
+  await expect(page.locator("#workbench-run-chip")).toHaveText(
+    new RegExp(`^Answer found · ${TIME}$`),
+  );
+  await expect(page.locator("#workbench-run-chip")).toHaveAttribute("data-tone", "ok");
+  await expect(page.locator("#workbench-result-solve")).toBeHidden();
+  // Expanded, the same run: its chip and its result.
+  const chip = await textOf(page.locator("#workbench-run-chip"));
+  await setExpanded(page, "execute", true);
+  await expect(page.locator("#workbench-run-chip")).toHaveText(chip);
+  await expect(page.locator("#workbench-result-solve")).toBeVisible();
+});
+
+test("collapsed Execute in Reduce mode: Target, Reduction, Reduce and the build's chip, without the cells", async ({
+  page,
+}) => {
+  await answerCompute(page);
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  await page.locator("#workbench-mode-reduce").click();
+  await setExpanded(page, "execute", false);
+  await expect(page.locator("#workbench-mode-reduce")).toBeHidden();
+  await expect(page.locator("#workbench-solver-button")).toHaveCount(0);
+
+  // Target and Reduction, picked collapsed, are the picks expanded.
+  const target = await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
+  const reductions = await optionsOf(page, "workbench-reduction");
+  expect(reductions.length).toBeGreaterThan(0);
+  const reduction = await textOf(page.locator("#workbench-reduction-value"));
+  await expect(page.locator("#workbench-run")).toHaveText("Reduce");
+  // Reduce mode's cells and results row are for the expanded section.
+  await expect(page.locator("#workbench-cells")).toBeHidden();
+  await expect(page.locator("#workbench-source-cell-run")).toBeHidden();
+
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-run-chip")).toHaveText(new RegExp(`^Built · ${TIME}$`));
+  await expect(page.locator("#workbench-run-chip")).toHaveAttribute("data-tone", "ok");
+
+  // The Visualization summary names both sides.
+  const sourceType = await textOf(page.locator("#workbench-source-type-value"));
+  const targetType = await textOf(page.locator("#workbench-target-type-value"));
+  await setExpanded(page, "visualization", false);
+  await expect(summary(page, "visualization")).toHaveText(
+    `${PROBLEM} · ${sourceType} → ${target} · ${targetType}`,
+  );
+
+  await setExpanded(page, "execute", true);
+  await expect(page.locator("#workbench-mode-reduce")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#workbench-target-value")).toHaveText(target);
+  await expect(page.locator("#workbench-reduction-value")).toHaveText(reduction);
+  await expect(page.locator("#workbench-source-cell-run")).toBeVisible();
+  // Solving a side expanded doesn't change the collapsed row's chip: it is the build's.
+  await page.locator("#workbench-source-cell-run").click();
+  await expect(page.locator("#workbench-source-cell-run-chip")).toHaveText(/^Answer found/);
+  await setExpanded(page, "execute", false);
+  await expect(page.locator("#workbench-run-chip")).toHaveText(/^Built/);
+});
+
+test("collapsed Verify in Solve mode: the verifier, the certificate, Check and Enter, and the verdict with its time, shared with the strip", async ({
+  page,
+}) => {
+  await answerCompute(page);
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  const field = page.locator("#workbench-verify-source-certificate");
+  const chip = page.locator("#workbench-verify-source-chip");
+  await setExpanded(page, "verify", false);
+
+  // The verifier dropdown lists the verifiers Redux declares for the problem (one, today).
+  const declared = await (
+    await page.request.get("/api/redux/Navigation/Batch/allVerifiers")
+  ).json();
+  const verifiers = await optionsOf(page, "workbench-verify-source-verifier");
+  expect(verifiers).toHaveLength(declared.SAT3.length);
+  const verifier = await textOf(page.locator("#workbench-verify-source-verifier-value"));
+  expect(verifier).toBeTruthy();
+  await pick(page, "workbench-verify-source-verifier", new RegExp(`^${escapeRegExp(verifier)}`));
+
+  await expect(chip).toHaveText("Not checked");
+  // Enter checks, and the chip says the verdict and how long it took.
+  await field.fill(WRONG);
+  await field.press("Enter");
+  await expect(chip).toHaveText(new RegExp(`^Not valid · ${TIME}$`));
+  await expect(chip).toHaveAttribute("data-tone", "err");
+  await expect(chip).toHaveAttribute("aria-label", /^Not valid, \d+\.\d\d s, round trip$/);
+  await expect(field).toHaveValue(WRONG);
+  // While a check runs the chip says so.
+  const release = await holdRequests(page, VERIFY_REQUEST, "True");
+  await field.fill(ANSWER);
+  await page.locator("#workbench-verify-source-check").click();
+  await expect(chip).toHaveText(/^Checking\.\.\. \d+:\d\d$/);
+  release();
+  await expect(chip).toHaveText(new RegExp(`^Valid · ${TIME}$`));
+  await expect(chip).toHaveAttribute("data-tone", "ok");
+
+  // Expanded, the strip has the same text, the same verifier and the same verdict, with its time.
+  await setExpanded(page, "verify", true);
+  await expect(field).toHaveValue(ANSWER);
+  await expect(page.locator("#workbench-verify-source-verifier-value")).toHaveText(verifier);
+  await expect(page.locator("#workbench-verify-source-verdict")).toHaveAttribute(
+    "data-valid",
+    "true",
+  );
+  await expect(page.locator("#workbench-verify-source-verdict-time")).toHaveText(
+    new RegExp(`^Took ${TIME} \\(round trip\\)$`),
+  );
+  await expect(chip).toHaveCount(0);
+  // Typed expanded, shown collapsed: the verdict no longer matches the field.
+  await field.fill(WRONG);
+  await setExpanded(page, "verify", false);
+  await expect(field).toHaveValue(WRONG);
+  await expect(chip).toHaveText("Changed · check again");
+});
+
+test("collapsed Verify in Reduce mode: Problem to verify picks the side, its target waiting for Reduce", async ({
+  page,
+}) => {
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
   await page.locator("#workbench-mode-reduce").click();
   const target = await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
-  const reduction = await textOf(page.locator("#workbench-reduction-value"));
+  await setExpanded(page, "verify", false);
+
+  const choice = page.locator("#workbench-verify-side");
+  const sourceChoice = page.locator("#workbench-verify-side-source");
+  const targetChoice = page.locator("#workbench-verify-side-target");
+  await expect(choice).toHaveAttribute("role", "group");
+  await expect(page.locator("#workbench-verify-side-label")).toHaveText("Problem to verify");
+  await expect(sourceChoice).toHaveText(PROBLEM);
+  await expect(sourceChoice).toHaveAttribute("aria-pressed", "true");
+  await expect(targetChoice).toHaveText(target);
+  // The target waits for Reduce, saying why.
+  await expect(targetChoice).toBeDisabled();
+  await expect(targetChoice).toHaveAttribute(
+    "aria-describedby",
+    "workbench-verify-side-target-reason",
+  );
+  await expect(page.locator("#workbench-verify-side-target-reason")).toHaveText(
+    `Reduce first: a ${target} certificate is checked against the instance Reduce builds.`,
+  );
+  await expect(page.locator("#workbench-verify-source-certificate")).toBeVisible();
+  await expect(page.locator("#workbench-verify-target-certificate")).toBeHidden();
+
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-run-chip")).toHaveText(/^Built/);
-
-  const sourceType = await textOf(page.locator("#workbench-source-type-value"));
-  const targetType = await textOf(page.locator("#workbench-target-type-value"));
-  for (const key of SECTIONS) await setExpanded(page, key, false);
-  await expect(summary(page, "visualization")).toHaveText(
-    `${PROBLEM} · ${sourceType} → ${target} · ${targetType}`,
+  await expect(targetChoice).toBeEnabled();
+  await targetChoice.click();
+  await expect(targetChoice).toHaveAttribute("aria-pressed", "true");
+  await expect(sourceChoice).toHaveAttribute("aria-pressed", "false");
+  const field = page.locator("#workbench-verify-target-certificate");
+  await expect(field).toBeVisible();
+  await expect(page.locator("#workbench-verify-source-certificate")).toBeHidden();
+  // The target's own verifier.
+  const verifier = await textOf(page.locator("#workbench-verify-target-verifier-value"));
+  expect(verifier).toMatch(/clique/i);
+  await field.fill(MAPPED);
+  await field.press("Enter");
+  await expect(page.locator("#workbench-verify-target-chip")).toHaveText(
+    new RegExp(`^Valid · ${TIME}$`),
   );
-  await expect(summary(page, "execute")).toContainText(`Reduce · ${reduction} · `);
-  await expect(page.locator("#workbench-execute-summary-chip")).toHaveText(/^Built · \d+\.\d\d s$/);
-  await expect(summary(page, "verify")).toHaveText(
-    `${PROBLEM}: Not checked · ${target}: Not checked`,
-  );
 
-  // The latest run's chip: solving the source after the build shows the solve's chip.
-  await setExpanded(page, "execute", true);
-  await page.locator("#workbench-source-cell-run").click();
-  await expect(page.locator("#workbench-source-cell-run-chip")).toHaveText(/^Answer found/);
-  await setExpanded(page, "execute", false);
-  await expect(page.locator("#workbench-execute-summary-chip")).toHaveText(/^Answer found/);
+  // Expanded, the target strip holds the same text and verdict.
+  await setExpanded(page, "verify", true);
+  await expect(choice).toHaveCount(0);
+  await expect(field).toHaveValue(MAPPED);
+  await expect(page.locator("#workbench-verify-target-verdict")).toHaveAttribute(
+    "data-valid",
+    "true",
+  );
+  await setExpanded(page, "verify", false);
+  await expect(targetChoice).toHaveAttribute("aria-pressed", "true");
+
+  // An instance edit retires the build: the target waits again and the line checks the source.
+  await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
+  await expect(targetChoice).toBeDisabled();
+  await expect(sourceChoice).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#workbench-verify-source-certificate")).toBeVisible();
 });
 
 test("Check it opens a collapsed Verify, as it opens a hidden one", async ({ page }) => {
@@ -226,6 +437,7 @@ test("Check it opens a collapsed Verify, as it opens a hidden one", async ({ pag
   await page.locator("#workbench-result-verify-answer").click();
   await expect(expand(page, "verify")).toHaveAttribute("aria-expanded", "true");
   await expect(body(page, "verify")).toBeVisible();
+  await expect(page.locator("#workbench-verify-source-toggle")).toBeVisible();
   await expect(page.locator("#workbench-verify-source-certificate")).toHaveValue(ANSWER);
   await expect(page.locator("#workbench-verify-source-verdict")).toHaveAttribute(
     "data-valid",
@@ -234,7 +446,7 @@ test("Check it opens a collapsed Verify, as it opens a hidden one", async ({ pag
   await expect(section(page, "verify")).toHaveAttribute("data-expanded", "true");
 });
 
-test("at phone width a collapsed section's summary wraps and nothing scrolls sideways", async ({
+test("at phone width the collapsed controls wrap under their headings, 44px tall, and nothing scrolls sideways", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -243,27 +455,65 @@ test("at phone width a collapsed section's summary wraps and nothing scrolls sid
   await page.locator("#workbench-mode-reduce").click();
   await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
   for (const key of SECTIONS) await setExpanded(page, key, false);
-  for (const key of SECTIONS) await expect(summary(page, key)).toBeVisible();
+  await expect(summary(page, "visualization")).toBeVisible();
+  const controls = [
+    "#workbench-target-button",
+    "#workbench-reduction-button",
+    "#workbench-run",
+    "#workbench-verify-side-source",
+    "#workbench-verify-source-verifier-button",
+    "#workbench-verify-source-certificate",
+    "#workbench-verify-source-check",
+  ];
+  const width = await page.evaluate(() => document.documentElement.clientWidth);
+  for (const selector of controls) {
+    const control = page.locator(selector);
+    await expect(control).toBeVisible();
+    const box = await control.boundingBox();
+    expect(box.height, selector).toBeGreaterThanOrEqual(44);
+    expect(box.x + box.width, selector).toBeLessThanOrEqual(width);
+  }
+  // Under the heading, not beside it.
+  for (const key of ["execute", "verify"]) {
+    const heading = await page.locator(`#workbench-section-${key}-heading`).boundingBox();
+    const box = await body(page, key).boundingBox();
+    expect(box.y).toBeGreaterThanOrEqual(heading.y + heading.height - 1);
+  }
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("collapsed, Instance's field sits on its title's line, and it and every summary start at Details' x", async ({
+test("collapsed, Instance's field and Execute's and Verify's controls sit on their title's line, and every line starts at Details' x", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
   const field = page.locator("#workbench-instance-full-instance");
-  const leftEdges = async () => {
+  const firstControls = {
+    solve: ["#workbench-solver-button", "#workbench-verify-source-verifier-button"],
+    reduce: ["#workbench-target-button", "#workbench-verify-side"],
+  };
+  const leftEdges = async (mode) => {
     const lines = [
       page.locator("#workbench-details-summary"),
       field,
-      ...SECTIONS.map((key) => summary(page, key)),
+      summary(page, "visualization"),
+      body(page, "execute"),
+      body(page, "verify"),
+      ...firstControls[mode].map((selector) => page.locator(selector)),
     ];
     return Promise.all(lines.map(async (line) => (await line.boundingBox()).x));
+  };
+  /** `inner` is on `heading`'s line, to its right, the heading level with it. */
+  const onTitleLine = async (headingSelector, inner) => {
+    const heading = await page.locator(headingSelector).boundingBox();
+    const box = await inner.boundingBox();
+    expect(box.x).toBeGreaterThan(heading.x + heading.width);
+    expect(box.y).toBeLessThan(heading.y + heading.height);
+    expect(box.y + box.height).toBeGreaterThan(heading.y);
   };
 
   for (const mode of ["solve", "reduce"]) {
@@ -276,15 +526,18 @@ test("collapsed, Instance's field sits on its title's line, and it and every sum
     for (const key of SECTIONS) await setExpanded(page, key, false);
 
     // Instance's one-line field: on the title's line, to the right of the title, still editable.
-    const heading = await page.locator("#workbench-instance-pane-heading").boundingBox();
-    const box = await field.boundingBox();
-    expect(box.x).toBeGreaterThan(heading.x + heading.width);
-    expect(box.y).toBeLessThan(heading.y + heading.height);
-    expect(box.y + box.height).toBeGreaterThan(heading.y);
+    await onTitleLine("#workbench-instance-pane-heading", field);
     await expect(field).toBeEditable();
+    // Execute's and Verify's controls: on the heading's line too, the first at the tab stop.
+    await onTitleLine("#workbench-section-execute-heading", page.locator("#workbench-run"));
+    await onTitleLine(
+      "#workbench-section-verify-heading",
+      page.locator("#workbench-verify-source-certificate"),
+    );
 
-    // One tab stop: Details' summary, Instance's field and the three sections' summaries.
-    const [details, ...rest] = await leftEdges();
+    // One tab stop: Details' summary, Instance's field, Visualization's summary, and Execute's
+    // and Verify's first controls.
+    const [details, ...rest] = await leftEdges(mode);
     for (const x of rest) expect(Math.abs(x - details)).toBeLessThanOrEqual(1);
   }
 
