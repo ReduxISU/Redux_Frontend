@@ -357,12 +357,14 @@ export default function ProblemCatalogCard({
             overflow: "hidden",
             WebkitBoxOrient: "vertical",
             WebkitLineClamp: 2,
-            minHeight: "calc(1em * 2)",
+            // 1.2, not 1: mixed case has descenders (g, p, y) that 1 would clip.
+            minHeight: "calc(1.2em * 2)",
             fontSize: "1.0625rem",
-            lineHeight: 1,
-            textTransform: "uppercase",
+            lineHeight: 1.2,
           }}
         >
+          {/* #279: Redux's display name exactly as written ("Vertex Cover", "3SAT"), never
+              re-cased; the link above still routes by it. */}
           {problem.name}
         </Typography>
         {/* #149: see this file's header for why this stops propagation

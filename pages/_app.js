@@ -29,6 +29,8 @@ export default function App({ Component, pageProps }) {
       <CssBaseline enableColorScheme />
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* #279: every page is titled; a problem page or Compare names its problems (theirs wins). */}
+        <title>Redux</title>
       </Head>
       <Component {...pageProps} />
     </ThemeProvider>

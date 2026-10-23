@@ -67,10 +67,9 @@ const headSx = {
   background: "transparent",
   color: "text.secondary",
   fontFamily: "inherit",
-  fontSize: "0.75rem",
+  fontSize: "0.8125rem",
   fontWeight: 600,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
+  // #279: not upper-cased, so the problem reads as Redux names it ("Verify Vertex Cover").
   textAlign: "left",
   cursor: "pointer",
 };

@@ -578,7 +578,7 @@ export default function Home({ serverBootId }) {
   // rather than just CSS visibility.
   const isWideLayout = useMediaQuery(theme.breakpoints.up(SIDEBAR_BREAKPOINT));
 
-  const { index, completeness, reductionGraphByName, loading, error } =
+  const { index, completeness, reductionGraphByName, codeToName, loading, error } =
     useCatalogIndex(REDUX_API_BASE_URL);
   // Live backend enum member names for the six backend-backed sidebar
   // facets (data/taxonomy.js's buildOptionsFromBackendNames via
@@ -590,6 +590,7 @@ export default function Home({ serverBootId }) {
   const { results, facetOptions, matchedTags } = useCatalogFilters(index, {
     selected,
     searchValue,
+    codeToName,
     reductionGraph: reductionGraphByName,
     reachabilitySource,
     reachabilityMode,
@@ -795,6 +796,7 @@ export default function Home({ serverBootId }) {
             onClearFilters={handleClearAll}
             loading={loading}
             problemNames={problemNames}
+            codeToName={codeToName}
             reachabilitySource={reachabilitySource}
             reachabilityMode={reachabilityMode}
             onReachabilitySourceChange={setReachabilitySource}
@@ -829,6 +831,7 @@ export default function Home({ serverBootId }) {
                 onClearFilters={handleClearAll}
                 loading={loading}
                 problemNames={problemNames}
+                codeToName={codeToName}
                 reachabilitySource={reachabilitySource}
                 reachabilityMode={reachabilityMode}
                 onReachabilitySourceChange={setReachabilitySource}
