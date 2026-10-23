@@ -9,7 +9,7 @@
 //     step sets (Clique's K).
 //   - A dashed "Rule says no" line is a piece: pointing at it (or tapping, or focusing it) names
 //     the edge rule that left the pair unjoined.
-//   - The Result panel's Gadgets rows say each gadget in plain words.
+//   - The Gadgets rows (under the pictures) say each gadget in plain words.
 //   - The gadget gold and the orange hover trace look clearly different in both themes.
 //   - A picture other than the default (SAT's Factor Graph) shares the default's ids, so links
 //     work there; a Search Tree draws none of them and says so, and its pane fits the tree so far.
@@ -23,7 +23,7 @@
 import { LDC_SMALL_CODE_TREE_FRAMES } from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
 import { SAT_TO_3SAT_FORMULA_VIEW, SAT3_FORMULA_FRAMES } from "./formula-payloads";
-import { openPanel } from "./helpers";
+import { showPane } from "./helpers";
 import { EXACT_COVER_RECURSIVE_NESTED_FRAMES } from "./nested-set-payloads";
 import {
   CLIQUE_GRAPH_FRAMES,
@@ -59,7 +59,7 @@ const pane = (page, side) => page.locator(`${VIEW}-${side}`);
 const rings = (page, side) => pane(page, side).locator("[data-gadget-ring]");
 const readout = (page) => page.locator(`${VIEW}-link`);
 const marksButton = (page, mode) => page.locator(`${VIEW}-marks-${mode}`);
-const gadgetRow = (page, index) => page.locator(`#workbench-result-gadgets-row-${index}`);
+const gadgetRow = (page, index) => page.locator(`#workbench-gadgets-row-${index}`);
 
 // The pieces' id attributes, as lib/reductionView.js PIECE_ID_ATTRIBUTES lists them.
 const PIECE_SELECTOR = [
@@ -258,8 +258,8 @@ for (const [type, capture] of Object.entries(PICTURES)) {
     // Plain: nothing is marked until a Gadgets row is pointed at; then its piece, in the gold,
     // on both sides.
     await expect(rings(page, "source")).toHaveCount(0);
-    await openPanel(page, "result", { expect });
-    await page.locator("#workbench-result-gadgets-toggle").click();
+    await showPane(page, "visualization", { expect });
+    await page.locator("#workbench-gadgets-toggle").click();
     const row = gadgetRow(page, 0);
     await row.scrollIntoViewIfNeeded();
     await row.hover();
@@ -291,7 +291,6 @@ for (const [type, capture] of Object.entries(PICTURES)) {
     // Color: every drawn piece has a mark of its own id, on both sides, in a palette color.
     await marksButton(page, "color").click();
     await expect(marksButton(page, "color")).toHaveAttribute("aria-pressed", "true");
-    await page.locator("#workbench-panel-close").click();
     for (const side of ["source", "target"]) {
       const marked = new Set(
         await rings(page, side).evaluateAll((marks) =>
@@ -440,16 +439,16 @@ test("a dashed Rule says no line names the edge rule that left the pair unjoined
   await page.keyboard.press("Escape");
 });
 
-// --- The Result panel's names -------------------------------------------------------------------
+// --- The Gadgets rows' names --------------------------------------------------------------------
 
-test("the Result panel's Gadgets rows say each gadget in plain words, with the pictures' own names", async ({
+test("the Gadgets rows say each gadget in plain words, with the pictures' own names", async ({
   page,
 }) => {
   const view = SAT3_TO_CLIQUE_RULES_VIEW;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, () => view);
-  await openPanel(page, "result", { expect });
-  await page.locator("#workbench-result-gadgets-toggle").click();
+  await showPane(page, "visualization", { expect });
+  await page.locator("#workbench-gadgets-toggle").click();
   const index = (kind, test) =>
     view.gadgets.findIndex((gadget) => gadget.gadgetKind === kind && test(gadget));
 
@@ -466,9 +465,9 @@ test("the Result panel's Gadgets rows say each gadget in plain words, with the p
   // An edge rule and the bound say their own reason, once.
   const rule = index("edgeRule", (gadget) => gadget.note.includes("contradict"));
   await expect(gadgetRow(page, rule)).toHaveAttribute("aria-label", view.gadgets[rule].note);
-  await expect(page.locator(`#workbench-result-gadgets-row-${rule}-note`)).toHaveCount(0);
+  await expect(page.locator(`#workbench-gadgets-row-${rule}-note`)).toHaveCount(0);
   const bound = index("bound", () => true);
-  await page.locator("#workbench-result-gadgets-group-bound").scrollIntoViewIfNeeded();
+  await page.locator("#workbench-gadgets-group-bound").scrollIntoViewIfNeeded();
   await expect(gadgetRow(page, bound)).toHaveAttribute("aria-label", view.gadgets[bound].note);
 });
 
@@ -509,8 +508,8 @@ test("on SAT's Factor Graph target the gadgets' ids are the picture's own, so a 
   await expect(pane(page, "target")).toHaveAttribute("data-picture-type", "BipartiteGraph");
   await expect(page.locator(`${VIEW}-target-note`)).not.toContainText("can't be shown");
   await page.locator("#workbench-phases-solve").click();
-  await openPanel(page, "result", { expect });
-  await page.locator("#workbench-result-gadgets-toggle").click();
+  await showPane(page, "visualization", { expect });
+  await page.locator("#workbench-gadgets-toggle").click();
   const group = view.gadgets.findIndex((gadget) => gadget.gadgetKind === "group");
   await gadgetRow(page, group).hover();
   // C1 was split into C1, C4 and C5: each is a clause node of the factor graph.
@@ -536,7 +535,6 @@ test("a Search Tree pane says gadget links can't be shown there, and fits the tr
   const view = SAT_TO_3SAT_SEARCH_TREE_VIEW;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, () => view);
-  await page.locator("#workbench-panel-close").click();
   await toStep(page, 0);
   await expect(page.locator(`${VIEW}-target-note`)).toContainText(
     "Gadget links can't be shown on this picture",
@@ -582,7 +580,7 @@ test("a Search Tree pane says gadget links can't be shown there, and fits the tr
   expect(whole).toBeGreaterThan(0);
 });
 
-// --- A non-graph target, from the Result panel --------------------------------------------------
+// --- A non-graph target, from the Gadgets rows --------------------------------------------------
 
 test("Exact Cover to Subset Sum and 3SAT to 0-1 ILP: a Gadgets row marks a set's number and a literal's coefficient", async ({
   page,
@@ -591,8 +589,8 @@ test("Exact Cover to Subset Sum and 3SAT to 0-1 ILP: a Gadgets row marks a set's
   let view = EXACT_COVER_TO_SUBSET_SUM_VIEW;
   await openView(page, () => view);
   await page.locator("#workbench-phases-solve").click();
-  await openPanel(page, "result", { expect });
-  await page.locator("#workbench-result-gadgets-toggle").click();
+  await showPane(page, "visualization", { expect });
+  await page.locator("#workbench-gadgets-toggle").click();
   const set = view.gadgets.findIndex((gadget) => gadget.gadgetKind === "element");
   await gadgetRow(page, set).hover();
   await expect(
@@ -606,8 +604,8 @@ test("Exact Cover to Subset Sum and 3SAT to 0-1 ILP: a Gadgets row marks a set's
   await page.locator("#workbench-run").click();
   await expect(pane(page, "target")).toHaveAttribute("data-picture-type", "Table");
   await page.locator("#workbench-phases-map").click();
-  await openPanel(page, "result", { expect });
-  const toggle = page.locator("#workbench-result-gadgets-toggle");
+  await showPane(page, "visualization", { expect });
+  const toggle = page.locator("#workbench-gadgets-toggle");
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
   const literal = view.gadgets.findIndex(
     (gadget) => gadget.gadgetKind === "element" && gadget.sourceIds[0] === "c0-0",

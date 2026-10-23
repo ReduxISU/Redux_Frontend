@@ -235,6 +235,8 @@ export const THEME_TOKENS = {
       lineDark: "#CC5219",
       onLine: BLACK,
       text: ISU_ORANGE,
+      // #279: the pale orange behind a shown pane's rail toggle (the same value #280 adds).
+      tint: "#2E1A0E",
       gold: ISU_GOLD,
       goldLine: ISU_GOLD,
       onGold: BLACK,
@@ -322,6 +324,8 @@ export const THEME_TOKENS = {
       lineDark: "#8F390A",
       onLine: WHITE,
       text: "#B84A0E",
+      // #279: the pale orange behind a shown pane's rail toggle (the same value #280 adds).
+      tint: "#FFF1E8",
       gold: ISU_GOLD,
       goldLine: "#B45309",
       onGold: BLACK,

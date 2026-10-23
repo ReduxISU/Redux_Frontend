@@ -13,7 +13,7 @@
 
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { drawnCollisions, openPanel } from "./helpers";
+import { drawnCollisions, showPane } from "./helpers";
 import {
   COLORING_TO_CLIQUE_COVER_VIEW,
   SAT_TO_3SAT_VIEW,
@@ -150,7 +150,6 @@ for (const key of Object.keys(CASES)) {
     const { view } = CASES[key];
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, key);
-    await page.locator("#workbench-panel-close").click();
 
     await expect(pane(page, "source")).toHaveAttribute(
       "data-picture-type",
@@ -228,8 +227,8 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(page.locator(`${VIEW}-caption-verdict`)).toHaveText("Verdict: yes");
   await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames.at(-1).caption);
 
-  // The Result panel says the answer was mapped back, and by which solver.
-  await openPanel(page, "result", { expect });
+  // The result in Execute says the answer was mapped back, and by which solver.
+  await showPane(page, "execute", { expect });
   await expect(page.locator("#workbench-result-mapped-back")).toContainText(
     view.frames.at(-1).caption,
   );
@@ -283,7 +282,6 @@ for (const key of ["satTo3sat", "sat3ToClique", "subsetSumToPartition"]) {
     const { view } = CASES[key];
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, key);
-    await page.locator("#workbench-panel-close").click();
     await toStep(page, 0);
     // #274: the run now opens on its last step, and the pointer left over a piece would ring it
     // (a hover link), so it is moved off the pictures before anything is measured.
@@ -326,7 +324,6 @@ test("the Packing panes' texts never meet a line or a marker, at each phase's fi
 }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "subsetSumToPartition");
-  await page.locator("#workbench-panel-close").click();
   for (const phase of ["build", "solve", "map"]) {
     await phaseButton(page, phase).click();
     for (const side of ["source", "target"]) {
@@ -359,7 +356,6 @@ test("pointing at a source piece marks what it became on the target, and the oth
   const { view } = CASES.sat3ToClique;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "sat3ToClique");
-  await page.locator("#workbench-panel-close").click();
   await phaseButton(page, "solve").click();
   await expect(readout(page)).toHaveAttribute("data-linked", "false");
 
@@ -403,7 +399,6 @@ test("a tap pins a link, keyboard focus links too, and Escape clears it", async 
   const { view } = CASES.coloringToCliqueCover;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "coloringToCliqueCover");
-  await page.locator("#workbench-panel-close").click();
   await phaseButton(page, "map").click();
 
   // Tap (click) a node of the source graph: the link stays once the pointer leaves.
@@ -429,13 +424,13 @@ test("a tap pins a link, keyboard focus links too, and Escape clears it", async 
   await expect(readout(page)).toHaveAttribute("data-linked", "false");
 });
 
-test("a Gadgets row in the Result panel marks its gadget on both pictures", async ({ page }) => {
+test("a Gadgets row under the pictures marks its gadget on both pictures", async ({ page }) => {
   const { view } = CASES.satTo3sat;
   await openView(page, "satTo3sat");
-  await openPanel(page, "result", { expect });
-  await page.locator("#workbench-result-gadgets-toggle").click();
+  await showPane(page, "visualization", { expect });
+  await page.locator("#workbench-gadgets-toggle").click();
   const group = view.gadgets.findIndex((gadget) => gadget.gadgetKind === "group");
-  const row = page.locator(`#workbench-result-gadgets-row-${group}`);
+  const row = page.locator(`#workbench-gadgets-row-${group}`);
   await row.scrollIntoViewIfNeeded();
   await row.hover();
   await expect(readout(page)).toHaveAttribute("data-linked", "true");
@@ -459,8 +454,6 @@ for (const scheme of ["light", "dark"]) {
       await page.setViewportSize({ width, height: 900 });
       for (const key of ["satTo3sat", "coloringToCliqueCover"]) {
         await openView(page, key);
-        const close = page.locator("#workbench-panel-close");
-        if (await close.isVisible()) await close.click();
         const source = await pane(page, "source").boundingBox();
         const target = await pane(page, "target").boundingBox();
         expect(target.y).toBeGreaterThan(source.y + source.height);
@@ -541,7 +534,7 @@ for (const [status, body] of [
     }
     expect(asked).toBe(1);
     await expect(page.locator("#workbench-mode-note")).toContainText("carries the answer across");
-    await openPanel(page, "result", { expect });
+    await showPane(page, "execute", { expect });
     await expect(page.locator("#workbench-result-carried")).toBeVisible();
   });
 }

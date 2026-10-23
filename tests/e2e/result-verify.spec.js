@@ -4,7 +4,7 @@
 // keeping the solved picture and its current step, the "Show where it fails" button after a
 // Run (and its absence for a valid certificate), an unreadable certificate showing only its
 // error, Reduce mode's Check-against lock (target locked until the reduction has built the
-// target instance), the target instance in the Result panel, and Map a solution across.
+// target instance), the target instance in the result (Execute), and Map a solution across.
 //
 // The catalog comes from the real backend, like the rest of the suite. Every compute request
 // (solve, visualize, visualizeReduction, reduce, mapSolution, verify) is answered here, for the
@@ -18,7 +18,7 @@
 // draw a certificate.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, openPanel } from "./helpers";
+import { gotoProblemDetail, showPane } from "./helpers";
 
 const PROBLEM = "3SAT";
 const NOT_RUN = "Not run yet. Showing the default picture of the instance.";
@@ -92,8 +92,8 @@ async function answerCompute(page) {
   return verifyCalls;
 }
 
-const certificateBox = (page) => page.locator("#workbench-result-verify-certificate");
-const checkButton = (page) => page.locator("#workbench-result-verify-check");
+const certificateBox = (page) => page.locator("#workbench-verify-certificate");
+const checkButton = (page) => page.locator("#workbench-verify-check");
 const verdict = (page) => page.locator("#workbench-verdict");
 const overlayButton = (page) => page.locator("#workbench-verdict-overlay");
 
@@ -105,21 +105,21 @@ async function check(page, certificate) {
 test("Verify works before any Run and leaves the default picture as it is", async ({ page }) => {
   const verifyCalls = await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
-  await openPanel(page, "result", { expect });
+  await showPane(page, "execute", { expect });
 
   await expect(page.locator("#workbench-result-empty")).toHaveText(
     "No run yet: press Run for an answer.",
   );
-  await expect(page.locator("#workbench-result-verify-verifier-name")).not.toBeEmpty();
-  await expect(page.locator("#workbench-result-verify-format")).not.toBeEmpty();
+  await expect(page.locator("#workbench-verify-verifier-name")).not.toBeEmpty();
+  await expect(page.locator("#workbench-verify-format")).not.toBeEmpty();
   // Solve mode has no Check-against switch.
-  await expect(page.locator("#workbench-result-verify-check-on-source")).toHaveCount(0);
+  await expect(page.locator("#workbench-verify-check-on-source")).toHaveCount(0);
 
   await check(page, ANSWER);
   await expect(verdict(page)).toHaveText(
     `Verifier: your certificate on the ${PROBLEM} instance is valid`,
   );
-  await expect(page.locator("#workbench-result-verify-verdict")).toContainText("Valid certificate");
+  await expect(page.locator("#workbench-verify-verdict")).toContainText("Valid certificate");
   expect(verifyCalls.at(-1).certificate).toBe(ANSWER);
 
   // Nothing ran, so the Showing text is unchanged, and the picture says why the certificate
@@ -131,8 +131,6 @@ test("Verify works before any Run and leaves the default picture as it is", asyn
     "frame",
   );
   await expect(overlayButton(page)).toHaveCount(0);
-  // A check does not put a dot on the rail.
-  await expect(page.locator("#workbench-rail-result-dot")).toHaveCount(0);
 
   await check(page, WRONG);
   await expect(verdict(page)).toHaveText(
@@ -141,7 +139,7 @@ test("Verify works before any Run and leaves the default picture as it is", asyn
   await expect(verdict(page)).toHaveAttribute("data-valid", "false");
 
   // An instance edit retires the verdict.
-  await openPanel(page, "instance", { expect });
+  await showPane(page, "instance", { expect });
   await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
   await expect(verdict(page)).toHaveCount(0);
 });
@@ -155,7 +153,7 @@ test("Verify This Answer fills the box with the run's answer and checks it in on
 
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-showing")).toHaveText(solverName);
-  await openPanel(page, "result", { expect });
+  await showPane(page, "execute", { expect });
   await expect(page.locator("#workbench-result-answer")).toHaveText(ANSWER);
 
   await page.locator("#workbench-result-verify-answer").click();
@@ -185,7 +183,7 @@ test("Check keeps the solved picture and its current step, and a new Run retires
   await page.locator("#workbench-steps-previous").click();
   await expect(position).toContainText("Step 2 of 3");
 
-  await openPanel(page, "result", { expect });
+  await showPane(page, "verify", { expect });
   await check(page, WRONG);
   await expect(verdict(page)).toHaveText(
     `Verifier: your certificate on the ${PROBLEM} instance is not valid`,
@@ -212,7 +210,7 @@ test("after a Run, an invalid certificate offers Show where it fails (disabled w
 
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-steps-position")).toContainText("Step 3 of 3");
-  await openPanel(page, "result", { expect });
+  await showPane(page, "verify", { expect });
 
   await check(page, WRONG);
   const button = overlayButton(page);
@@ -235,21 +233,21 @@ test("a certificate Redux cannot read shows only its error under the box", async
   page.allowNetworkFailures();
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
-  await openPanel(page, "result", { expect });
+  await showPane(page, "verify", { expect });
 
   await check(page, UNREADABLE);
-  const error = page.locator("#workbench-result-verify-certificate-error");
+  const error = page.locator("#workbench-verify-certificate-error");
   await expect(error).toContainText("Redux could not read this certificate.");
   await expect(error).toContainText("x1 has no True or False value.");
   await expect(certificateBox(page)).toHaveAttribute("aria-invalid", "true");
   await expect(certificateBox(page)).toHaveAttribute(
     "aria-describedby",
-    "workbench-result-verify-certificate-error",
+    "workbench-verify-certificate-error",
   );
   // Nothing else: no verdict on the picture, no banner, no second copy of the error.
   await expect(verdict(page)).toHaveCount(0);
-  await expect(page.locator("#workbench-result-verify-verdict")).toHaveCount(0);
-  await expect(page.locator("#workbench-result-verify-check-failure")).toHaveCount(0);
+  await expect(page.locator("#workbench-verify-verdict")).toHaveCount(0);
+  await expect(page.locator("#workbench-verify-check-failure")).toHaveCount(0);
   await expect(page.locator("#workbench-showing")).toHaveText(NOT_RUN);
 
   // A readable certificate clears it.
@@ -266,15 +264,15 @@ test("in Reduce mode the target side of Check against unlocks once the reduction
 
   await page.locator("#workbench-mode-reduce").click();
   const target = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
-  await openPanel(page, "result", { expect });
+  await showPane(page, "verify", { expect });
 
-  const sourceSide = page.locator("#workbench-result-verify-check-on-source");
-  const targetSide = page.locator("#workbench-result-verify-check-on-target");
+  const sourceSide = page.locator("#workbench-verify-check-on-source");
+  const targetSide = page.locator("#workbench-verify-check-on-target");
   await expect(sourceSide).toHaveText(PROBLEM);
   await expect(sourceSide).toHaveAttribute("aria-pressed", "true");
   await expect(targetSide).toHaveText(target);
   await expect(targetSide).toBeDisabled();
-  await expect(page.locator("#workbench-result-verify-check-on-hint")).toHaveText(
+  await expect(page.locator("#workbench-verify-check-on-hint")).toHaveText(
     `Run the reduction first: checking against ${target} needs the target instance it builds.`,
   );
   await expect(page.locator("#workbench-result-empty")).toHaveText(
@@ -296,8 +294,8 @@ test("in Reduce mode the target side of Check against unlocks once the reduction
   await expect(verdict(page)).toHaveCount(0);
   await expect(targetSide).toBeEnabled();
   await expect(targetSide).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#workbench-result-verify-check-on-hint")).toHaveCount(0);
-  await expect(page.locator(`label[for="workbench-result-verify-certificate"]`)).toHaveText(
+  await expect(page.locator("#workbench-verify-check-on-hint")).toHaveCount(0);
+  await expect(page.locator(`label[for="workbench-verify-certificate"]`)).toHaveText(
     `Certificate for the ${target} target`,
   );
   await expect(page.locator("#workbench-result-target-instance")).toHaveText(TARGET_INSTANCE);
@@ -322,9 +320,9 @@ test("in Reduce mode the target side of Check against unlocks once the reduction
   await expect(certificateBox(page)).toHaveValue(WRONG);
 
   // An instance edit locks the target side again.
-  await openPanel(page, "instance", { expect });
+  await showPane(page, "instance", { expect });
   await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
-  await openPanel(page, "result", { expect });
+  await showPane(page, "verify", { expect });
   await expect(targetSide).toBeDisabled();
   await expect(sourceSide).toHaveAttribute("aria-pressed", "true");
 });
@@ -344,8 +342,8 @@ test("Map a solution across maps an answer onto the target, and its Verify This 
   await page.locator("#workbench-mode-reduce").click();
   const target = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
   await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-rail-result-dot")).toBeVisible();
-  await openPanel(page, "result", { expect });
+  await showPane(page, "execute", { expect });
+  await expect(page.locator("#workbench-result-reduce")).toBeVisible();
 
   await expect(page.locator("#workbench-result-map-solver-value")).toHaveText(solverName);
   await expect(page.locator("#workbench-result-map-hint")).toHaveText(
@@ -362,8 +360,6 @@ test("Map a solution across maps an answer onto the target, and its Verify This 
     `Verifier: your certificate on the ${target} target is valid`,
   );
   expect(verifyCalls.at(-1).problemInstance).toBe(TARGET_INSTANCE);
-  // Mapping and checking add no dot (the panel is open, and only a Run sets it).
-  await expect(page.locator("#workbench-rail-result-dot")).toHaveCount(0);
 
   // Another solver has no answer from this run, so mapping solves first.
   let solves = 0;

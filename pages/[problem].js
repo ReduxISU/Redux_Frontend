@@ -265,7 +265,7 @@ export default function ProblemDetail() {
           px: "20px",
           pt: 2,
           pb: 6,
-          [COMPACT_MEDIA]: { px: 2, pt: 1.5, pb: 11 },
+          [COMPACT_MEDIA]: { px: 2, pt: 1.5 },
         }}
       >
         <Box

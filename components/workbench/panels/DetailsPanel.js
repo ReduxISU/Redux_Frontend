@@ -2,6 +2,8 @@
 //
 // #229: the Details panel: the problem's description, then Input, Output, Source and
 // Contributors as a definition list. No "Reduces to" (the Reduce dropdown covers that).
+// #279: this is what the Details pane shows after Show all; collapsed, the pane shows only
+// DetailsSummary below, the Input -> Output line.
 //
 // "Also known as" is in the design but the backend declares no alternative names for any
 // problem today, so the row only appears when that data exists rather than showing a
@@ -23,14 +25,48 @@ function Row({ label, children }) {
   );
 }
 
+function inputOutput(problem) {
+  const overview = problem.overview ?? {};
+  return {
+    input: overview.inputDescription ?? overview.input,
+    output: overview.outputDescription ?? overview.output,
+  };
+}
+
+/**
+ * #279: the collapsed Details pane's one line, "Input -> Output", cut short with an ellipsis
+ * (the whole line is its title, for a pointer).
+ * @param {Object} props
+ * @param {string} props.id
+ * @param {Object} props.problem The problem, as hooks/useProblemDetail.js builds it.
+ */
+export function DetailsSummary({ id, problem }) {
+  const { input, output } = inputOutput(problem);
+  const text = `${input ?? "Input not documented yet."} → ${output ?? "Output not documented yet."}`;
+  return (
+    <Box
+      id={id}
+      title={text}
+      sx={{
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        color: "ink.text2",
+        "@media (max-width:640px)": { whiteSpace: "normal" },
+      }}
+    >
+      {text}
+    </Box>
+  );
+}
+
 /**
  * @param {Object} props
  * @param {Object} props.problem The problem, as hooks/useProblemDetail.js builds it.
  */
 export default function DetailsPanel({ problem }) {
   const overview = problem.overview ?? {};
-  const input = overview.inputDescription ?? overview.input;
-  const output = overview.outputDescription ?? overview.output;
+  const { input, output } = inputOutput(problem);
   const aliases = Array.isArray(problem.aliases) ? problem.aliases.join(", ") : problem.aliases;
 
   return (

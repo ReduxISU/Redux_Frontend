@@ -6,7 +6,7 @@ This is a standalone Next.js web client for the [Redux backend](https://github.c
 
 ## Status: catalog UI built and running against the real backend
 
-The Home page (search + 8-facet sidebar + card grid), the Problem Detail page (a workbench: the picture in the middle, a command bar to Solve or Reduce above it, and Details / Instance / Result panels opened from a rail), and the reduction-network graph page are all built and wired to the real Redux backend via the same-origin proxy. Solvers' "Run" and Verifier's "Verify" call the backend live (not canned output), and the Visualizations/Reductions diagrams support direct-manipulation editing, not just static rendering. See "Planned Features" below for what's real-backend-driven today versus still covered by the local tag overlay.
+The Home page (search + 8-facet sidebar + card grid), the Problem Detail page (a bar of toggles that shows or hides the Details and Instance panes and the Workspace's Visualization, Execute and Verify sections), and the reduction-network graph page are all built and wired to the real Redux backend via the same-origin proxy. Solvers' "Run" and Verifier's "Verify" call the backend live (not canned output), and the Visualizations/Reductions diagrams support direct-manipulation editing, not just static rendering. See "Planned Features" below for what's real-backend-driven today versus still covered by the local tag overlay.
 
 ## Planned Features
 

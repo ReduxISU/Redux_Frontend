@@ -1,7 +1,8 @@
 // components/workbench/panels/GadgetsSection.js
 //
-// #229 stage 4: the Gadgets section at the bottom of the Result panel's reduction result
-// (Reduce mode, after a run). Closed by default, titled "Gadgets (n)", and not rendered at all
+// #229 stage 4: the Gadgets section, under the pictures in the Workspace's Visualization section
+// since #279 (it was at the bottom of the Result panel's reduction result). Reduce mode, after a
+// run. Closed by default, titled "Gadgets (n)", and not rendered at all
 // when the reduction lists no gadgets (or the backend sends none: see lib/gadgets.js).
 //
 // Groups follow data/gadgetKinds.js (Bounds, Groups, Edge rules, Elements, then Palette and

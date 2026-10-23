@@ -22,7 +22,7 @@
 // same step, its rows as that step leaves them.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, openPanel, selectSolverByName } from "./helpers";
+import { gotoProblemDetail, selectSolverByName, showPane } from "./helpers";
 import { DFA_ONE_RUN, SAT3_BACKTRACKING_ONE_RUN, SAT3_PPZ_ONE_RUN } from "./run-payloads";
 import { SSSP_ONE_RUN } from "./table-payloads";
 
@@ -243,7 +243,7 @@ test("Run again and a new instance start fresh", async ({ page }) => {
   expect(asked.filter((request) => request === "run")).toHaveLength(2);
 
   // A new instance drops the run: the picture is the plain instance, with no steps.
-  await openPanel(page, "instance", { expect });
+  await showPane(page, "instance", { expect });
   const input = page.locator("#workbench-instance-full-instance");
   await input.fill(`${await input.inputValue()} `);
   await expect(page.locator(POSITION)).toHaveCount(0);

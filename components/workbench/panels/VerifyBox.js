@@ -1,6 +1,7 @@
 // components/workbench/panels/VerifyBox.js
 //
-// #229 stage 3: the Verify section at the bottom of the Result & Verify panel. It works before
+// #229 stage 3: Verify, the Workspace's Verify section since #279 (it was the bottom of the
+// Result & Verify panel). It works before
 // anything has run (a student checking their own answer): the verifier's name, the certificate
 // format the backend declares (built from the verifier's CertificateGrammar where it has one),
 // the certificate box and Check.
@@ -11,7 +12,7 @@
 //
 // The state lives in hooks/useCertificateCheck.js, owned by the Workbench: the verdict also
 // goes on the picture pane's Showing line, and Verify This Answer fills this box from the
-// Result panel. This file only draws it.
+// result in Execute. This file only draws it.
 //
 // A certificate Redux cannot read (400 certificate_parse_error) shows its error right under
 // the box, and nothing else: there is no verdict to show and nothing to draw.
@@ -135,19 +136,9 @@ export default function VerifyBox({
   return (
     <Box
       id={idPrefix}
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "10px",
-        borderTop: "1px solid",
-        borderColor: "border.soft",
-        pt: "14px",
-      }}
+      // #279: the Workspace's Verify section draws the heading and the rule above it.
+      sx={{ display: "flex", flexDirection: "column", gap: "10px" }}
     >
-      <Typography component="h3" sx={{ m: 0, fontSize: "1rem", fontWeight: 700 }}>
-        Verify
-      </Typography>
-
       {mode === "reduce" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
           <Box

@@ -5,10 +5,15 @@
 // clause, or Nodes / Edges / K) need the backend's per-part description (ReduxISU/Redux#851)
 // and land with the part editor (#228); the spot is marked below and nothing here guesses
 // at how to split an instance.
+//
+// #279 (board F): this is the Instance pane's content. Collapsed (`expanded` false) it is just
+// the instance field, one line high (it wraps and grows on phones and tablets), with any error
+// under it; Show all adds the label, three lines, the format and "By part". It is the same field
+// in both states, so focus and the caret stay put across Show all / Show less.
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { MONO_FONT } from "../layout";
+import { COMPACT_MEDIA, MONO_FONT } from "../layout";
 
 /**
  * @param {Object} props
@@ -18,6 +23,7 @@ import { MONO_FONT } from "../layout";
  * @param {(next: string) => void} props.onInstanceChange Called on every edit.
  * @param {{headline: string, detail: string, expected?: string}|null} props.instanceError
  *   Why Redux could not read this instance, when it could not.
+ * @param {boolean} [props.expanded] Show all (#279); collapsed it is the field alone.
  */
 export default function InstancePanel({
   idPrefix,
@@ -25,23 +31,30 @@ export default function InstancePanel({
   instance,
   onInstanceChange,
   instanceError,
+  expanded = true,
 }) {
   const inputId = `${idPrefix}-full-instance`;
   const errorId = `${idPrefix}-full-instance-error`;
   const formatId = `${idPrefix}-full-instance-format`;
-  const describedBy = [instanceError ? errorId : null, problem.instanceFormat ? formatId : null]
+  const describedBy = [
+    instanceError ? errorId : null,
+    expanded && problem.instanceFormat ? formatId : null,
+  ]
     .filter(Boolean)
     .join(" ");
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-      <Box component="label" htmlFor={inputId} sx={{ fontWeight: 600 }}>
-        Full instance
-      </Box>
+      {expanded && (
+        <Box component="label" htmlFor={inputId} sx={{ fontWeight: 600 }}>
+          Full instance
+        </Box>
+      )}
       <Box
         id={inputId}
         component="textarea"
-        rows={3}
+        rows={expanded ? 3 : 1}
+        aria-label={expanded ? undefined : "Full instance"}
         value={instance}
         onChange={(event) => onInstanceChange(event.target.value)}
         placeholder="No default instance declared for this problem yet."
@@ -51,7 +64,21 @@ export default function InstancePanel({
         sx={{
           width: "100%",
           boxSizing: "border-box",
-          resize: "vertical",
+          resize: expanded ? "vertical" : "none",
+          // Collapsed: one line, scrolling sideways on a wide screen; wrapping and growing with
+          // the text on phones and tablets.
+          ...(expanded
+            ? {}
+            : {
+                whiteSpace: "pre",
+                overflowX: "auto",
+                overflowY: "hidden",
+                [COMPACT_MEDIA]: {
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
+                  fieldSizing: "content",
+                },
+              }),
           backgroundColor: "surface.input",
           color: "text.primary",
           border: "1px solid",
@@ -76,24 +103,29 @@ export default function InstancePanel({
           )}
         </Box>
       )}
-      {problem.instanceFormat && (
+      {expanded && problem.instanceFormat && (
         <Typography id={formatId} variant="body2" sx={{ color: "text.secondary" }}>
           {problem.instanceFormat}
         </Typography>
       )}
-      <Box
-        sx={{
-          borderTop: "1px solid",
-          borderColor: "border.soft",
-          pt: 1.5,
-          fontWeight: 600,
-        }}
-      >
-        By part
-      </Box>
-      <Typography variant="body2" sx={{ color: "text.secondary" }}>
-        Editing the instance one part at a time is not available yet. Edit the full instance above.
-      </Typography>
+      {expanded && (
+        <>
+          <Box
+            sx={{
+              borderTop: "1px solid",
+              borderColor: "border.soft",
+              pt: 1.5,
+              fontWeight: 600,
+            }}
+          >
+            By part
+          </Box>
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            Editing the instance one part at a time is not available yet. Edit the full instance
+            above.
+          </Typography>
+        </>
+      )}
     </Box>
   );
 }
