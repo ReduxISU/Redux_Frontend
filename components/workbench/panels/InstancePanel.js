@@ -10,10 +10,48 @@
 // the instance field, one line high (it wraps and grows on phones and tablets), with any error
 // under it; Show all adds the label, three lines, the format and "By part". It is the same field
 // in both states, so focus and the caret stay put across Show all / Show less.
+//
+// A one-line field that scrolls sideways would put its scrollbar over the text, so the field
+// grows by the scrollbar's height whenever one shows (useRoomForScrollbar below).
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import { useLayoutEffect, useRef } from "react";
 import { COMPACT_MEDIA, MONO_FONT } from "../layout";
+
+/**
+ * Gives a field the height of its horizontal scrollbar on top of its own, so the bar sits under
+ * the text instead of covering it. Measured rather than guessed, since the bar's height depends
+ * on the browser and the system (overlay scrollbars take none).
+ * @param {string} text The field's value; the bar comes and goes with it.
+ * @returns {import("react").RefObject<HTMLTextAreaElement>}
+ */
+function useRoomForScrollbar(text) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const fit = () => {
+      el.style.height = "";
+      const style = getComputedStyle(el);
+      const borders = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      const bar = el.offsetHeight - el.clientHeight - borders;
+      if (bar > 0) el.style.height = `${el.offsetHeight + bar}px`;
+    };
+    fit();
+    // The bar also comes and goes with the field's width (window size, panes opening). Only a
+    // new width refits: fit() changes the height, which would otherwise call it again.
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      fit();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text]);
+  return ref;
+}
 
 /**
  * @param {Object} props
@@ -34,6 +72,7 @@ export default function InstancePanel({
   expanded = true,
 }) {
   const inputId = `${idPrefix}-full-instance`;
+  const inputRef = useRoomForScrollbar(`${expanded}|${instance}`);
   const errorId = `${idPrefix}-full-instance-error`;
   const formatId = `${idPrefix}-full-instance-format`;
   const describedBy = [
@@ -52,6 +91,7 @@ export default function InstancePanel({
       )}
       <Box
         id={inputId}
+        ref={inputRef}
         component="textarea"
         rows={expanded ? 3 : 1}
         aria-label={expanded ? undefined : "Full instance"}

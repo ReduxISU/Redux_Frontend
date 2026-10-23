@@ -324,7 +324,7 @@ for (const [type, capture] of Object.entries(PICTURES)) {
 // --- Highlight Gadgets ---------------------------------------------------------------------------
 
 for (const scheme of ["light", "dark"]) {
-  test(`Highlight Gadgets in the ${scheme} theme: a switch at the bottom of Algorithm Steps, off by default; on colors every gadget on both sides in matching colors, remembered until Reset layout`, async ({
+  test(`Highlight Gadgets in the ${scheme} theme: a switch at the bottom of Algorithm Steps, off by default; on colors every gadget on both sides in matching colors, and starts off again on the next visit`, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme: scheme });
@@ -377,12 +377,14 @@ for (const scheme of ["light", "dark"]) {
     // More gadgets than colors: the Legend lists the colors and says they repeat.
     await expect(page.locator("#workbench-legend-body")).toContainText("the colors repeat");
 
-    // Kept for the next visit.
+    // Not kept for the next visit: it starts off again.
     await page.reload();
     await page.locator("#workbench-mode-reduce").click();
     await page.locator("#workbench-run").click();
     await expect(page.locator(VIEW)).toBeVisible();
-    await expect(highlight(page)).toHaveAttribute("aria-checked", "true");
+    await expect(highlight(page)).toHaveAttribute("aria-checked", "false");
+    await expect(rings(page, "target")).toHaveCount(0);
+    await highlight(page).click();
     await expect(rings(page, "target").first()).toBeVisible();
 
     // Off: plain again.
