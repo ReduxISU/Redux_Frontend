@@ -15,7 +15,8 @@
 //
 // #295 (ReduxISU/Redux#932): a randomized solver's run says which seed it ran with (SeedLine,
 // below, shared with ./ReduceCells.js), with Run again with this seed to see the same steps
-// again. A solver without a seed shows neither.
+// again. A solver without a seed shows neither. Solve's answer is that same run's whenever
+// ProblemProvider/visualizeRun gave one (Workbench.js), so the answer and the steps agree.
 //
 // Time is the round trip this browser measured, network included, and is labelled that way:
 // Redux reports no running time of its own for a solve (#95).
@@ -111,17 +112,13 @@ export function SeedLine({ id, seed }) {
           {seed.seed}
         </Box>
       </Box>
-      {/* ProblemProvider/solve takes no seed, so the answer above can be another draw's. */}
-      <Box component="span" id={`${id}-note`} sx={{ color: "text.secondary" }}>
-        of the run Algorithm Steps shows
-      </Box>
       <Box
         id={`${id}-rerun`}
         component="button"
         type="button"
         onClick={seed.onRerun}
         disabled={Boolean(seed.disabled)}
-        aria-describedby={`${id} ${id}-note`}
+        aria-describedby={id}
         sx={{ ...secondaryButtonSx, minHeight: 40 }}
       >
         Run again with this seed

@@ -95,9 +95,12 @@
 //     each time. The seed and its button show only while the run is of this instance and the
 //     solver picked now (the result's own rule); a solver with no seed, or a backend older than
 //     #932, shows neither. Picking another picture of a Reduction View after a seeded solve asks
-//     with that seed, so the new picture draws the same run. The answer line still comes from
-//     ProblemProvider/solve, which takes no seed: for a randomized solver it can be another run's
-//     answer than the one the steps show.
+//     with that seed, so the new picture draws the same run. Solve's answer is visualizeRun's own
+//     `answer` when it has one, so the answer line and Algorithm Steps are one run (and Solve
+//     makes one request, not two); ProblemProvider/solve answers only when visualizeRun can't.
+//     Solve via reduction still asks ProblemProvider/solve for the target's answer: the
+//     Reduction View carries no answer of its own, so for a randomized target solver that answer
+//     can be another draw than the view's solve phase.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -907,13 +910,24 @@ export default function Workbench({ problem }) {
     const runId = beginRun("solve", runInstance);
     const solver = selectedSolver;
     const visualization = selectedViz;
+    const oneRun = Boolean(visualization) && drawsFromRun(visualization);
+    // #295: the answer comes from the same run as the steps. When visualizeRun answers, its
+    // `answer` is the result (one request, and the answer is the run Algorithm Steps walks);
+    // ProblemProvider/solve is asked only when there is no such answer: no visualization, a
+    // backend without visualizeRun, a list or frames picture (neither carries the answer), a
+    // failed visualizeRun, or a run that timed out.
+    let shareRun = () => {};
+    const sharedRun = oneRun
+      ? new Promise((resolve) => {
+          shareRun = resolve;
+        })
+      : Promise.resolve(null);
     solveRun.start(async (signal) => {
-      const output = await requestSolvedInstance(
-        REDUX_API_BASE_URL,
-        solver.className,
-        runInstance,
-        signal,
-      );
+      const run = await sharedRun;
+      const output =
+        typeof run?.answer === "string" && !run.timedOut
+          ? run.answer
+          : await requestSolvedInstance(REDUX_API_BASE_URL, solver.className, runInstance, signal);
       return {
         output,
         solverName: solver.name,
@@ -924,7 +938,6 @@ export default function Workbench({ problem }) {
       };
     });
     if (!visualization) return;
-    const oneRun = drawsFromRun(visualization);
     pictureRun.start(async (signal) => {
       const ran = {
         solverName: solver.name,
@@ -934,12 +947,17 @@ export default function Workbench({ problem }) {
       };
       // #252: one run and every picture of it, when the backend has visualizeRun.
       if (oneRun) {
-        const run = await requestRunPictures({
-          instance: runInstance,
-          solver: solver.className,
-          seed: runSeed,
-          signal,
-        });
+        let run = null;
+        try {
+          run = await requestRunPictures({
+            instance: runInstance,
+            solver: solver.className,
+            seed: runSeed,
+            signal,
+          });
+        } finally {
+          shareRun(run);
+        }
         if (run) return { run, seed: run.seed, ...ran };
       }
       // #199: {format, frames} plus, for a format=frames picture, its type and payload.

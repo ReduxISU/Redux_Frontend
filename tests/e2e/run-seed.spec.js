@@ -6,7 +6,9 @@
 // time. Nothing shows when the run reports no seed (a solver that isn't randomized, or a backend
 // older than #932), and the seed goes once the instance or the solver changes. In Reduce mode the
 // Solve via reduction step's Reduction View carries the seed the same way, and Solve directly
-// shows Solve's.
+// shows Solve's. Solve's answer line is the run's own answer (visualizeRun's `answer`), so it is
+// the run the steps show, and Solve asks once; ProblemProvider/solve answers only without one (no
+// visualizeRun, or a run that timed out).
 //
 // CI's backend has no seeds yet, so every compute request is answered here: the 3SAT runs from
 // tests/e2e/run-payloads.js and the Reduction View from tests/e2e/reduction-payloads.js, each
@@ -166,4 +168,65 @@ test("in Reduce mode, Solve via reduction and Solve directly show their run's se
   // Solve directly is Solve mode's run, with its seed.
   await page.locator("#workbench-source-cell-run").click();
   await expect(page.locator("#workbench-source-cell-result-seed")).toHaveText(`Seed: ${SEED + 1}`);
+});
+
+/** Answers visualizeRun with `run` (or `status`), and solve with OTHER; counts the solves. */
+async function answerWithOtherSolve(page, { run = SAT3_PPZ_ONE_RUN, status = null } = {}) {
+  const asked = { runs: 0, solves: 0 };
+  await page.route(RUN_REQUEST, (route) => {
+    asked.runs += 1;
+    if (status) return route.fulfill({ status, json: { error: "missing" } });
+    return route.fulfill({ json: run });
+  });
+  await page.route(VISUALIZE_REQUEST, (route) => {
+    const visualization = new URL(route.request().url()).searchParams.get("visualization");
+    const picture =
+      SAT3_PPZ_ONE_RUN.pictures.find((entry) => entry.visualization === visualization) ??
+      SAT3_PPZ_ONE_RUN.pictures[0];
+    return route.fulfill({
+      json: { type: picture.type, payload: picture.payload, frames: picture.frames },
+    });
+  });
+  await page.route(SOLVE_REQUEST, (route) => {
+    asked.solves += 1;
+    return route.fulfill({ json: OTHER_ANSWER });
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  await selectSolverByName(page, SAT3_PPZ_ONE_RUN.solverName, { expect });
+  return asked;
+}
+
+// A different answer than the run's, as a second draw of a randomized solver could give.
+const OTHER_ANSWER = "(x1:False,x2:True,x3:True)";
+
+test("Solve's answer is the run's own answer, so it matches the steps, and Solve asks only once", async ({
+  page,
+}) => {
+  const asked = await answerWithOtherSolve(page);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-result-answer")).toHaveText(SAT3_PPZ_ONE_RUN.answer);
+  await expect(page.locator("#workbench-result-verdict")).toHaveText("Answer found");
+  expect(asked).toEqual({ runs: 1, solves: 0 });
+  // Check it checks that answer.
+  await page.locator("#workbench-result-verify-answer").click();
+  await expect(page.locator("#workbench-verify-source-certificate")).toHaveValue(
+    SAT3_PPZ_ONE_RUN.answer,
+  );
+});
+
+test("a backend without visualizeRun gets the answer from solve", async ({ page }) => {
+  const asked = await answerWithOtherSolve(page, { status: 404 });
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-result-answer")).toHaveText(OTHER_ANSWER);
+  expect(asked.solves).toBe(1);
+});
+
+test("a run that timed out gets its answer from solve", async ({ page }) => {
+  const asked = await answerWithOtherSolve(page, {
+    run: { ...SAT3_PPZ_ONE_RUN, timedOut: true, answer: null },
+  });
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-result-answer")).toHaveText(OTHER_ANSWER);
+  expect(asked).toEqual({ runs: 1, solves: 1 });
 });
