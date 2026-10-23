@@ -22,11 +22,16 @@
 //
 // #250: nothing here can be dragged. A point's place is its coordinates, which are the instance
 // itself, so a moved point would be a different instance with a different hull.
+//
+// #239: a gadget's points (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring around
+// the dot, outside the trace ring so both show. Hulls and chains have no ids of their own, so
+// nothing names them.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
+import { GadgetCircle, useGadgetMarks } from "./gadgetRings";
 import {
   BADGE_RADIUS,
   DOT_RADIUS,
@@ -71,8 +76,19 @@ function pathOf(ids, byId) {
  * @param {Object} props.frame The frame to draw.
  * @param {Object[]} [props.frames] Every frame of the run (none before Run): their lines keep
  *   clear of the labels.
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-export default function GeometryRenderer({ idPrefix, name, payload, frame, frames = [] }) {
+export default function GeometryRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  frames = [],
+  highlightIds,
+  gadgetColors,
+}) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
   // The labels keep clear of every line the run draws, so they hold still over its steps; a
@@ -374,6 +390,14 @@ export default function GeometryRenderer({ idPrefix, name, payload, frame, frame
                     strokeWidth={1.8}
                   />
                 )}
+                <GadgetCircle
+                  id={point.id}
+                  color={gadgetOf(point.id)}
+                  cx={point.px}
+                  cy={point.py}
+                  r={DOT_RADIUS}
+                  gap={8}
+                />
                 <text
                   x={point.label.x}
                   y={point.label.y}

@@ -159,6 +159,12 @@ function pairsFor(t) {
   add("gadget highlight on canvas (input)", v.gadget, s.input, UI);
   add("gadget highlight on surface", v.gadget, s.main, UI);
   add("gadget highlight next to background node fill", v.gadget, v.background.fill, UI);
+  // #239: Color mode's gadget palette, on the canvas, the pane and next to a background node.
+  for (const [key, color] of Object.entries(v.gadgetPalette)) {
+    add(`gadget color ${key} on canvas (input)`, color, s.input, UI);
+    add(`gadget color ${key} on surface`, color, s.main, UI);
+    add(`gadget color ${key} next to background node fill`, color, v.background.fill, UI);
+  }
 
   // #199: the picture states (components/pictures/pictureStates.js). Pictures sit on the
   // canvas (input) and the Legend on the pane (surface). Each state's line and its own text
@@ -207,4 +213,58 @@ for (const [themeName, tokens] of Object.entries(THEME_TOKENS)) {
   }
 }
 console.log(failures ? `\n${failures} pair(s) under WCAG AA.` : "\nAll pairs meet WCAG AA.");
-process.exit(failures ? 1 : 0);
+
+// #239: colors that must not be mistaken for each other on a picture. Contrast says a mark shows
+// on the canvas; this says two marks don't look alike. Distance is CIE76 delta E in CIELAB
+// (about 2.3 is a just-noticeable difference): the gadget gold against the orange hover trace
+// (they were 6 apart in the light theme), and Color mode's gadget colors against each other, the
+// picture states' lines and the trace.
+const DISTINCT = 30;
+const STATE_DISTINCT = 25;
+
+function lab(color) {
+  const { r, g, b } = parse(color);
+  const linear = (value) => {
+    const s = value / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  const [lr, lg, lb] = [linear(r), linear(g), linear(b)];
+  const x = (lr * 0.4124 + lg * 0.3576 + lb * 0.1805) / 0.95047;
+  const y = lr * 0.2126 + lg * 0.7152 + lb * 0.0722;
+  const z = (lr * 0.0193 + lg * 0.1192 + lb * 0.9505) / 1.08883;
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+}
+
+function deltaE(a, b) {
+  const [l1, a1, b1] = lab(a);
+  const [l2, a2, b2] = lab(b);
+  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+}
+
+let alike = 0;
+for (const [themeName, t] of Object.entries(THEME_TOKENS)) {
+  const v = t.viz;
+  const pairs = [["gadget gold vs hover trace (orange)", v.gadget, t.brand.line, DISTINCT]];
+  const palette = Object.entries(v.gadgetPalette);
+  palette.forEach(([key, color], index) => {
+    pairs.push([`gadget color ${key} vs hover trace`, color, t.brand.line, DISTINCT]);
+    for (const [otherKey, other] of palette.slice(index + 1)) {
+      pairs.push([`gadget color ${key} vs ${otherKey}`, color, other, DISTINCT]);
+    }
+    for (const [state, family] of Object.entries(v.state)) {
+      pairs.push([`gadget color ${key} vs state ${state}`, color, family.line, STATE_DISTINCT]);
+    }
+  });
+  console.log(`\n${themeName.toUpperCase()} THEME: colors that must look different (delta E)`);
+  for (const [name, a, b, min] of pairs) {
+    const distance = deltaE(a, b);
+    const pass = distance >= min;
+    if (!pass) alike += 1;
+    console.log(
+      `${name.padEnd(48)} ${a.padEnd(9)} ${b.padEnd(9)} ${distance.toFixed(0).padStart(5)}  ${String(min).padEnd(4)} ${pass ? "pass" : "FAIL"}`,
+    );
+  }
+}
+console.log(alike ? `\n${alike} pair(s) too alike.` : "\nAll marks are distinct.");
+process.exit(failures || alike ? 1 : 0);

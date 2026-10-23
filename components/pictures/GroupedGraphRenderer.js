@@ -20,6 +20,10 @@
 // name) moves the whole clause with its literals; a literal moves only inside its own clause's
 // circle; any edge bends. A clause's place is kept as its centre (`group:<id>`), a literal's as
 // where it sits from its clause's centre, so a literal goes with its clause.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are marked: a clause
+// gets a ring just outside its circle, a literal a ring outside its trace ring, a variable chip a
+// ring around its box, and an edge a band under its line.
 
 import Box from "@mui/material/Box";
 import { Fragment, useMemo, useState } from "react";
@@ -32,6 +36,7 @@ import {
   offsetAlongNormal,
   useDiagramEdits,
 } from "./diagramEdits";
+import { GadgetCircle, GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import {
   edgeLook,
   FAINT_EDGE,
@@ -100,8 +105,19 @@ function edgeControl(kind, a, b, ring, extra) {
  * @param {Object} props.payload The Grouped Graph payload.
  * @param {Object} props.frame The frame to draw.
  * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-export default function GroupedGraphRenderer({ idPrefix, name, payload, frame, layoutKey = null }) {
+export default function GroupedGraphRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  layoutKey = null,
+  highlightIds,
+  gadgetColors,
+}) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const layout = useMemo(() => layoutClauseGraph(payload), [payload]);
   const literals = useMemo(
     () =>
@@ -260,6 +276,13 @@ export default function GroupedGraphRenderer({ idPrefix, name, payload, frame, l
                   strokeWidth={look.width}
                   strokeDasharray={look.dash}
                 />
+                <GadgetCircle
+                  id={group.id}
+                  color={gadgetOf(group.id)}
+                  cx={group.x}
+                  cy={group.y}
+                  r={group.hull}
+                />
                 <text
                   x={group.x + labelDistance * Math.cos(group.angle)}
                   y={group.y + labelDistance * Math.sin(group.angle)}
@@ -306,6 +329,7 @@ export default function GroupedGraphRenderer({ idPrefix, name, payload, frame, l
                   : `M${r(a.x)},${r(a.y)} L${r(b.x)},${r(b.y)}`;
               return (
                 <Fragment key={`${kind}-${edge.id}`}>
+                  <GadgetUnderlay id={edge.id} color={gadgetOf(edge.id)} d={d} width={width} />
                   <path
                     data-edge-id={edge.id}
                     data-edge-kind={kind}
@@ -374,6 +398,14 @@ export default function GroupedGraphRenderer({ idPrefix, name, payload, frame, l
                     pointerEvents="none"
                   />
                 )}
+                <GadgetCircle
+                  id={literal.id}
+                  color={gadgetOf(literal.id)}
+                  cx={p.x}
+                  cy={p.y}
+                  r={LITERAL_RADIUS}
+                  gap={8}
+                />
                 <NodeLabel
                   x={p.x}
                   y={p.y}
@@ -434,6 +466,15 @@ export default function GroupedGraphRenderer({ idPrefix, name, payload, frame, l
                   fill={fill}
                   stroke={line}
                   strokeWidth={width}
+                />
+                <GadgetRect
+                  id={variable.id}
+                  color={gadgetOf(variable.id)}
+                  x={variable.x}
+                  y={variable.y}
+                  width={variable.width}
+                  height={variable.height}
+                  rx={7}
                 />
                 <NodeLabel
                   x={variable.x + variable.width / 2}

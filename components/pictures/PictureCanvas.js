@@ -81,7 +81,11 @@ function FrameCaption({ id, frame }) {
  *   Run), for a picture whose layout spans the whole run (#217).
  * @param {boolean} [props.showCaption] Show the step's caption (during a run, not for the
  *   default picture before Run, where the caption would describe a run nobody started).
- * @param {string[]} [props.highlightIds] Gadget piece ids (#239).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark in the gadget gold (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks: a color per piece id
+ *   (#239; components/pictures/gadgetRings.js).
+ * @param {boolean} [props.boxSoFar] A picture whose layout spans the run (the Search Tree) sizes
+ *   its box to the steps so far, not the whole run (#239; the Reduction View sets it).
  * @param {{options: Array<{id: string, label: string, accepted?: boolean}>,
  *   value: string|null, onChange: Function}|null} [props.runs] The other runs the steps can
  *   follow (registry.js pictureRuns; #204), during a run only.
@@ -98,6 +102,8 @@ export default function PictureCanvas({
   frames = null,
   showCaption,
   highlightIds,
+  gadgetColors,
+  boxSoFar = false,
   runs = null,
 }) {
   // Read straight off the module's table (not through a function) so React sees one stable
@@ -128,6 +134,8 @@ export default function PictureCanvas({
         frameCount={frameCount}
         frames={frames ?? []}
         highlightIds={highlightIds}
+        gadgetColors={gadgetColors}
+        boxSoFar={boxSoFar}
         runs={runs}
       />
       {showCaption && typeof frame.caption === "string" && frame.caption && (

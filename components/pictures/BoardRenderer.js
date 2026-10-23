@@ -23,6 +23,10 @@
 //
 // #250: nothing here can be dragged. A square's place is its row and column, which is the
 // instance itself, so a moved square would only draw a different board.
+//
+// #239: a gadget's squares (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring just
+// inside the square (inside the state outline, so it never spills onto a neighbour). A queen's
+// id is its square's, so the square's ring marks it too.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
@@ -37,6 +41,7 @@ import {
   valueSize,
 } from "./boardLayout";
 import DiagramZoom from "./DiagramZoom";
+import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, PictureToggle, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import { useBoxWidth } from "./useBoxWidth";
@@ -119,8 +124,18 @@ function linksOf(frame, size) {
  * @param {string} props.name The visualization's name, for the diagram's label.
  * @param {Object} props.payload The Board payload.
  * @param {Object} props.frame The frame to draw.
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-export default function BoardRenderer({ idPrefix, name, payload, frame }) {
+export default function BoardRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  highlightIds,
+  gadgetColors,
+}) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
   const layout = useMemo(() => layoutBoard(payload, boxWidth), [payload, boxWidth]);
@@ -292,6 +307,17 @@ export default function BoardRenderer({ idPrefix, name, payload, frame }) {
                     pointerEvents="none"
                   />
                 )}
+                <GadgetRect
+                  id={square.id}
+                  color={gadgetOf(square.id)}
+                  x={square.x}
+                  y={square.y}
+                  width={cell}
+                  height={cell}
+                  // rx + gap: corners rounded 2 units, like the state outline's.
+                  rx={8.5}
+                  gap={-6.5}
+                />
                 {text && (
                   <text
                     x={square.x + cell / 2}

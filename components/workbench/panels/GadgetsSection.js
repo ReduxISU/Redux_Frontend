@@ -9,24 +9,23 @@
 // the gadget's note under it; a group shows its first GADGET_ROW_LIMIT rows and a "Show all n"
 // button. Hovering or focusing a row tells the workbench which gadget to highlight on the two
 // pictures (`onHighlight`), and the row itself is marked while its gadget is the one drawn.
+//
+// #239: a row says its gadget in plain words (lib/gadgets.js describeGadget): the pieces by the
+// names the pictures give them ("x1 in C1 becomes x1_0."), or the gadget's own note where the
+// kind needs one (an edge rule's reason, a bound's formula). In the Reduction View's Color mode a
+// row carries its gadget's color as a swatch, the color its pieces wear on both pictures.
 
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import { useState } from "react";
 import { GADGET_EMPTY_SIDE, GADGET_ROW_LIMIT, GADGETS_INTRO } from "../../../data/gadgetKinds";
-import { describeGadgetId, groupGadgets } from "../../../lib/gadgets";
+import { describeGadget, gadgetIdName, groupGadgets } from "../../../lib/gadgets";
 import { paletteVars } from "../../theme";
-import { MONO_FONT, secondaryButtonSx } from "../layout";
+import { secondaryButtonSx } from "../layout";
 
-const ARROW = "→";
-
-function sideText(ids, frame, emptyText) {
-  return ids.length > 0 ? ids.map((id) => describeGadgetId(id, frame)).join(", ") : emptyText;
-}
-
-function GadgetRow({ idPrefix, gadget, sourceFrame, targetFrame, active, onHighlight }) {
-  const source = sideText(gadget.sourceIds, sourceFrame, GADGET_EMPTY_SIDE.source);
-  const target = sideText(gadget.targetIds, targetFrame, GADGET_EMPTY_SIDE.target);
+function GadgetRow({ idPrefix, gadget, name, color, active, onHighlight }) {
+  const { sentence, usesNote } = describeGadget(gadget, name, GADGET_EMPTY_SIDE);
+  const note = usesNote ? "" : gadget.note;
   const rowId = `${idPrefix}-row-${gadget.index}`;
   const enter = () => onHighlight(gadget.index);
   const leave = () => onHighlight(null, gadget.index);
@@ -36,10 +35,11 @@ function GadgetRow({ idPrefix, gadget, sourceFrame, targetFrame, active, onHighl
       component="li"
       id={rowId}
       tabIndex={0}
-      aria-label={`${source} becomes ${target}`}
-      aria-describedby={gadget.note ? `${rowId}-note` : undefined}
+      aria-label={sentence}
+      aria-describedby={note ? `${rowId}-note` : undefined}
       aria-current={active ? "true" : undefined}
       data-active={active ? "true" : "false"}
+      data-gadget-color={color ?? undefined}
       onMouseEnter={enter}
       onMouseLeave={leave}
       onFocus={enter}
@@ -62,28 +62,35 @@ function GadgetRow({ idPrefix, gadget, sourceFrame, targetFrame, active, onHighl
       <Box
         component="span"
         aria-hidden="true"
+        id={`${rowId}-text`}
         sx={{
           display: "flex",
-          flexWrap: "wrap",
           alignItems: "baseline",
-          gap: "4px 8px",
-          fontFamily: MONO_FONT,
+          gap: "8px",
           fontSize: "0.8125rem",
+          overflowWrap: "anywhere",
         }}
       >
-        <Box component="span" sx={{ overflowWrap: "anywhere" }}>
-          {source}
-        </Box>
-        <Box component="span" sx={{ color: "text.secondary" }}>
-          {ARROW}
-        </Box>
-        <Box component="span" sx={{ overflowWrap: "anywhere" }}>
-          {target}
-        </Box>
+        {color && (
+          <Box
+            component="span"
+            data-swatch=""
+            sx={{
+              flex: "none",
+              width: 12,
+              height: 12,
+              borderRadius: "50%",
+              border: `3px solid ${color}`,
+              boxSizing: "border-box",
+              alignSelf: "center",
+            }}
+          />
+        )}
+        <span>{sentence}</span>
       </Box>
-      {gadget.note && (
+      {note && (
         <Box component="span" id={`${rowId}-note`} sx={{ fontSize: "0.75rem", color: "ink.text2" }}>
-          {gadget.note}
+          {note}
         </Box>
       )}
     </Box>
@@ -97,6 +104,10 @@ function GadgetRow({ idPrefix, gadget, sourceFrame, targetFrame, active, onHighl
  *   normalizeGadgets returns them. Nothing renders when empty.
  * @param {Object|null} props.sourceFrame The source picture's frame, for readable names.
  * @param {Object|null} props.targetFrame The target picture's frame, for readable names.
+ * @param {{source: (id: string) => string, target: (id: string) => string}|null} [props.namers]
+ *   Each picture's own names for its pieces (lib/reductionView.js pieceNamer), used first.
+ * @param {Map<number, string>|null} [props.colors] Color mode's color per gadget index, shown
+ *   as a swatch on the row (#239); null in Plain mode.
  * @param {number|null} props.activeIndex The gadget the pictures are highlighting.
  * @param {(index: number|null, leaving?: number) => void} props.onHighlight Called with a
  *   gadget's index when its row is hovered or focused, and with null (plus the row it is
@@ -107,10 +118,16 @@ export default function GadgetsSection({
   gadgets,
   sourceFrame,
   targetFrame,
+  namers = null,
+  colors = null,
   activeIndex,
   onHighlight,
 }) {
   const [open, setOpen] = useState(false);
+  const name = {
+    source: (id) => gadgetIdName(id, namers?.source ?? null, sourceFrame),
+    target: (id) => gadgetIdName(id, namers?.target ?? null, targetFrame),
+  };
   const [showAll, setShowAll] = useState({});
   if (!gadgets || gadgets.length === 0) return null;
 
@@ -222,8 +239,8 @@ export default function GadgetsSection({
                     key={gadget.index}
                     idPrefix={idPrefix}
                     gadget={gadget}
-                    sourceFrame={sourceFrame}
-                    targetFrame={targetFrame}
+                    name={name}
+                    color={colors?.get(gadget.index) ?? null}
                     active={gadget.index === activeIndex}
                     onHighlight={onHighlight}
                   />

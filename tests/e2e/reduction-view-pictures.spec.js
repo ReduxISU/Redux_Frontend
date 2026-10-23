@@ -164,14 +164,28 @@ test("the 3SAT pane switches between its Grouped Graph, Factor Graph and Search 
     "data-target-visualization",
     "Sat3DefaultVisualization",
   );
-  // Only the pictures the view can draw: all three on the target, and SAT's Grover (no frames
-  // picture) left out of the source's.
+  // Only the pictures the view can draw can be chosen: all three on the target. SAT's Grover (no
+  // frames picture) is listed last on the source's, greyed, saying why, and can't be picked
+  // (#239).
   const targets = await optionNames(page, "target");
   expect(targets).toHaveLength(3);
   expect(targets.join("|")).toMatch(/3SAT Visualization.*3SAT Factor Graph.*3SAT Search Tree/);
   const sources = await optionNames(page, "source");
-  expect(sources).toHaveLength(2);
-  expect(sources.join("|")).not.toContain("Grover");
+  expect(sources).toHaveLength(3);
+  expect(sources[2]).toContain("Grover");
+  await typeButton(page, "source").click();
+  const grover = page
+    .locator("#workbench-source-type-listbox")
+    .getByRole("option", { name: /Grover/ });
+  await expect(grover).toHaveAttribute("aria-disabled", "true");
+  await expect(grover).toContainText("The Reduction View can't draw this picture yet.");
+  await grover.click({ force: true });
+  await expect(page.locator("#workbench-source-type-listbox")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(VIEW)).toHaveAttribute(
+    "data-source-visualization",
+    "SatDefaultVisualization",
+  );
 
   for (const [name, className, type] of [
     ["3SAT Factor Graph", "Sat3FactorGraphVisualization", "BipartiteGraph"],
@@ -205,9 +219,13 @@ test("a target picture without the build's pieces is shown whole during Build, w
 
   await pick(page, "target", "3SAT Search Tree");
   await expect(page.locator(`${VIEW}-target-note`)).toContainText("grows when the solver runs");
-  // Past Build the note goes.
+  // Past Build that note goes. A Search Tree draws none of the pieces the gadgets name, so the
+  // pane keeps saying links can't be shown there (#239).
   await page.locator("#workbench-phases-solve").click();
-  await expect(page.locator(`${VIEW}-target-note`)).toHaveCount(0);
+  await expect(page.locator(`${VIEW}-target-note`)).not.toContainText("grows when the solver runs");
+  await expect(page.locator(`${VIEW}-target-note`)).toContainText(
+    "Gadget links can't be shown on this picture",
+  );
 });
 
 test("switching a picture keeps the phase and the step in it", async ({ page }) => {

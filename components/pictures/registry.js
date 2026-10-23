@@ -12,11 +12,18 @@
 //
 // Adding a renderer (phase B, #200):
 //   1. Write components/pictures/<Type>Renderer.js. It receives
-//        { idPrefix, name, payload, frame, frameIndex, frameCount, frames, highlightIds }
+//        { idPrefix, name, payload, frame, frameIndex, frameCount, frames, highlightIds,
+//          gadgetColors }
 //      where `payload` is the response's static part, `frame` is `frames[frameIndex]`, `name`
 //      is the visualization's name (for labels), `frames` is every frame the steps walk (empty
 //      before Run; only a picture whose layout must hold still over a growing run, the Search
-//      Tree's, needs it) and `highlightIds` are gadget piece ids (#239; ignore them until then).
+//      Tree's, needs it). `highlightIds` are gadget piece ids and `gadgetColors` a color per
+//      piece id (#239): mark each of those pieces with gadgetRings.js (a ring, an inset box or a
+//      band under a line, in the color gadgetRings.js's useGadgetMarks gives it, drawn inside the
+//      piece's own group so its fade covers it, never by opacity). Every piece a renderer marks
+//      with a data-*-id attribute (lib/reductionView.js PIECE_ID_ATTRIBUTES) takes a mark.
+//      `boxSoFar` (the Reduction View) asks a picture whose box spans the run (the Search Tree)
+//      to size it to the steps so far instead, without moving any piece.
 //      Before Run, `frame` is the plain frame (plainFrame() below; `{}` unless the type
 //      registers one) and `frameIndex` is null: the renderer must draw the whole instance from
 //      the payload alone, every piece in Background, and place it exactly where the run's steps

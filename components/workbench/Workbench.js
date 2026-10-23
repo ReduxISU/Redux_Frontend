@@ -64,11 +64,13 @@ import {
 } from "../../hooks/useComputeRequest";
 import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
-import { highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
+import useGadgetColorMode from "../../hooks/useGadgetColorMode";
+import { gadgetColorMap, highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
   hasSkippedPairs,
   paneFrame,
+  pieceNamer,
   reductionViewWorth,
   requestReductionViewOrNull,
   samePlaceIn,
@@ -83,6 +85,7 @@ import {
 } from "../../lib/redux";
 import { frameAtPosition, framePosition, RUN_END } from "../../lib/runSteps";
 import ComputeStatus from "../detail/ComputeStatus";
+import { GADGET_PALETTE } from "../pictures/gadgetRings";
 import { pictureStateStyle, statesInFrames } from "../pictures/pictureStates";
 import { pictureAnnotations, pictureLegendFrames, pictureRuns } from "../pictures/registry";
 import { paletteVars } from "../theme";
@@ -194,7 +197,18 @@ function viewTypeControl(which, all, side, pending, onPick) {
     const named = all.find((visualization) => visualization.className === value);
     workable.unshift(named ?? { className: value, name: value });
   }
-  return { options: workable.map(option), value, onChange: onPick };
+  // #239: the pictures the view can't draw are listed after the rest, greyed, saying why.
+  const unworkable = all
+    .filter((visualization) => !workable.includes(visualization))
+    .map((visualization) => ({
+      ...option(visualization),
+      disabled: true,
+      reason:
+        which === "source" && visualization.pictureType === "SearchTree"
+          ? "Grows from a solver's steps, and this side runs no solver."
+          : "The Reduction View can't draw this picture yet.",
+    }));
+  return { options: [...workable.map(option), ...unworkable], value, onChange: onPick };
 }
 
 /** The name of a visualization among `all` by class name, or null. */
@@ -255,6 +269,8 @@ export default function Workbench({ problem }) {
   const [lastRun, setLastRun] = useState(null);
   // The gadget row being hovered or focused, by the run it belongs to: `{runId, index}`.
   const [gadgetHighlight, setGadgetHighlight] = useState(null);
+  // #239: the Reduction View's gadget marks, Plain or Color, kept for this viewer.
+  const [gadgetMarkMode, setGadgetMarkMode] = useGadgetColorMode();
   const runIdRef = useRef(0);
   // #912: the picture each side of the Reduction View is drawn with, kept for the page's life.
   // The source's follows the Visualization Type (null) until one is picked in the view; the
@@ -1073,6 +1089,31 @@ export default function Workbench({ problem }) {
     gadgetHighlight && reduceCurrent && gadgetHighlight.runId === reduceResult.runId
       ? (reduceGadgets[gadgetHighlight.index] ?? null)
       : null;
+  // #239: a format=frames picture (the default picture before a Reduction View, or on a backend
+  // without one) is marked the same way, through its payload's ids.
+  if (activeGadget && sourceContent.kind === "picture") {
+    sourceContent = {
+      ...sourceContent,
+      highlightIds: highlightIdsOn(
+        sourceContent.payload,
+        activeGadget.sourceIds,
+        activeGadget.legacySourceIds,
+      ),
+    };
+  }
+  if (activeGadget && target?.content.kind === "picture") {
+    target = {
+      ...target,
+      content: {
+        ...target.content,
+        highlightIds: highlightIdsOn(
+          target.content.payload,
+          activeGadget.targetIds,
+          activeGadget.legacyTargetIds,
+        ),
+      },
+    };
+  }
   if (activeGadget && sourceContent.kind === "frame") {
     sourceContent = {
       ...sourceContent,
@@ -1096,6 +1137,22 @@ export default function Workbench({ problem }) {
       },
     };
   }
+
+  // #239: the Gadgets rows name pieces the way the pictures label them, and in the Reduction
+  // View's Color mode carry each gadget's color.
+  let gadgetNamers = null;
+  if (reduceView) {
+    gadgetNamers = {
+      source: pieceNamer(reduceView.source.payload),
+      target: pieceNamer(reduceView.target.payload),
+    };
+  } else if (sourceContent.kind === "picture") {
+    gadgetNamers = { source: pieceNamer(sourceContent.payload), target: null };
+  }
+  const gadgetRowColors =
+    reduceView && gadgetMarkMode === "color"
+      ? gadgetColorMap(reduceView.gadgets, GADGET_PALETTE).byGadget
+      : null;
 
   function handleGadgetHighlight(index, leaving) {
     if (index !== null) {
@@ -1206,6 +1263,24 @@ export default function Workbench({ problem }) {
         text: "Linked by a gadget (point at a piece to see what it became or came from)",
         swatch: { kind: "ring", color: paletteVars.viz.gadget },
       });
+      // #239: Color mode's colors, and that they repeat past the palette's size.
+      if (gadgetMarkMode === "color") {
+        const used = new Set(gadgetColorMap(reduceView.gadgets, GADGET_PALETTE).byGadget.values());
+        GADGET_PALETTE.filter((color) => used.has(color)).forEach((color, index) => {
+          entries.push({
+            key: `gadget-color-${index}`,
+            text:
+              index === 0
+                ? `Gadget colors (Color mode: each gadget's pieces share a color on both sides${
+                    used.size >= GADGET_PALETTE.length
+                      ? `; with more than ${GADGET_PALETTE.length} gadgets the colors repeat`
+                      : ""
+                  })`
+                : `Gadget color ${index + 1}`,
+            swatch: { kind: "ring", color },
+          });
+        });
+      }
     }
     legendAnnotations = entries;
   } else if (sourceContent.kind === "picture") {
@@ -1372,6 +1447,8 @@ export default function Workbench({ problem }) {
     reductionPane = {
       view: reduceView,
       activeGadget,
+      colorMode: gadgetMarkMode,
+      onColorMode: setGadgetMarkMode,
       runId: reduceResult.runId,
       loading,
       types: {
@@ -1575,6 +1652,8 @@ export default function Workbench({ problem }) {
                       gadgets: reduceGadgets,
                       sourceFrame: sourceContent.kind === "frame" ? sourceContent.frame : null,
                       targetFrame: reducedTargetFrame(reduceResult),
+                      namers: gadgetNamers,
+                      colors: gadgetRowColors,
                       activeIndex: activeGadget ? gadgetHighlight.index : null,
                       onHighlight: handleGadgetHighlight,
                     }

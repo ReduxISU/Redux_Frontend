@@ -25,6 +25,10 @@
 //
 // #250: nothing here can be dragged. Where a node stands is the tree's shape (its height and
 // the order its leaves read in), so a node moved by hand would misstate the code.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring around
+// their node (a merged circle or a character's box) and a band under their edge, drawn inside
+// the piece's own group; a marked character's cells in the text strip get an outline too.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
@@ -38,6 +42,13 @@ import {
   WEIGHT_SIZE,
 } from "./codeTreeLayout";
 import DiagramZoom from "./DiagramZoom";
+import {
+  GadgetCircle,
+  GadgetRect,
+  GadgetUnderlay,
+  gadgetOutlineProps,
+  useGadgetMarks,
+} from "./gadgetRings";
 import { edgeLook, FAINT_EDGE, FAINT_FILTER, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import { useBoxWidth } from "./useBoxWidth";
@@ -74,6 +85,8 @@ function canvasInk(state) {
  * @param {Object} props.frame The frame to draw.
  * @param {number|null} props.frameIndex The frame shown, or null before Run.
  * @param {Object[]} [props.frames] Every frame of the run (one layout for all of them).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
 export default function CodeTreeRenderer({
   idPrefix,
@@ -82,7 +95,10 @@ export default function CodeTreeRenderer({
   frame,
   frameIndex,
   frames = [],
+  highlightIds,
+  gadgetColors,
 }) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
   const plain = frameIndex === null || frameIndex === undefined;
@@ -241,6 +257,12 @@ export default function CodeTreeRenderer({
                 data-traced={near ? (onTrace ? "trace" : "faint") : undefined}
                 pointerEvents="none"
               >
+                <GadgetUnderlay
+                  id={edge.id}
+                  color={gadgetOf(edge.id)}
+                  d={`M${edge.x1},${edge.y1} L${edge.x2},${edge.y2}`}
+                  width={look.width}
+                />
                 <line
                   x1={edge.x1}
                   y1={edge.y1}
@@ -299,6 +321,13 @@ export default function CodeTreeRenderer({
                   stroke={isTraced ? TRACE_COLOR : look.line}
                   strokeWidth={isTraced ? 3 : look.strokeWidth}
                   strokeDasharray={isTraced ? undefined : look.dash}
+                />
+                <GadgetCircle
+                  id={merge.id}
+                  color={gadgetOf(merge.id)}
+                  cx={merge.x}
+                  cy={merge.y}
+                  r={layout.radius}
                 />
                 <text
                   x={merge.x}
@@ -372,6 +401,15 @@ export default function CodeTreeRenderer({
                   strokeWidth={isTraced ? 3 : look.strokeWidth}
                   strokeDasharray={isTraced ? undefined : look.dash}
                 />
+                <GadgetRect
+                  id={leaf.id}
+                  color={gadgetOf(leaf.id)}
+                  x={left}
+                  y={leaf.y - leaf.height / 2}
+                  width={leaf.width}
+                  height={leaf.height}
+                  rx={7}
+                />
                 <text
                   x={side ? left + 8 : leaf.x}
                   y={side ? leaf.y : leaf.y - 7}
@@ -435,6 +473,7 @@ export default function CodeTreeRenderer({
         bits={bits}
         traced={near ? new Set(leavesUnder(traced)) : null}
         onPoint={setHover}
+        gadgetOf={gadgetOf}
       />
     </Box>
   );
@@ -445,7 +484,7 @@ export default function CodeTreeRenderer({
  * (the mockup's ENCODED strip). Pointing at a cell traces its character's leaf. HTML, so it
  * wraps to the box at its own text size.
  */
-function EncodedStrip({ idPrefix, payload, text, codes, bits, traced, onPoint }) {
+function EncodedStrip({ idPrefix, payload, text, codes, bits, traced, onPoint, gadgetOf }) {
   const symbols = Array.isArray(payload?.symbols) ? payload.symbols : [];
   // A character's leaf, by its UTF-16 code (Redux counts code units: each half of a surrogate
   // pair is a character there, with its own leaf).
@@ -485,6 +524,7 @@ function EncodedStrip({ idPrefix, payload, text, codes, bits, traced, onPoint })
               component="li"
               // biome-ignore lint/suspicious/noArrayIndexKey: a cell is a position in the text.
               key={k}
+              {...(symbol ? gadgetOutlineProps(symbol.id, gadgetOf(symbol.id)) : {})}
               data-cell={symbol?.id ?? ""}
               data-traced={traced ? (lit ? "trace" : "faint") : undefined}
               onPointerEnter={(event) => {
