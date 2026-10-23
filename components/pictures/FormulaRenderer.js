@@ -35,6 +35,9 @@
 // "and" or "or") and its place (`data-join`, "inner" or "outer"). The form is said outside the
 // drawing, in the Legend (formulaAnnotations) and the picture's label; every text inside the
 // drawing belongs to a piece and moves with it, so ASSIGNMENT is part of the variable strip.
+//
+// #279 stage 3: plain until answered. Before Run (the plain frame, `frameIndex` null) the variable
+// strip is left out: it holds values only a run gives. Its room stays, so nothing moves at step 1.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
@@ -252,6 +255,7 @@ export default function FormulaRenderer({
   name,
   payload,
   frame,
+  frameIndex = null,
   highlightIds,
   gadgetColors,
 }) {
@@ -545,72 +549,76 @@ export default function FormulaRenderer({
           })}
         </g>
         {/* The variable strip: its ASSIGNMENT head is part of it, so it moves with the chips. */}
-        <g data-layer="variables" data-strip="assignment">
-          {layout.variables.length > 0 && (
-            <text x={12} y={layout.stripY} data-strip-head="" {...headStyle}>
-              ASSIGNMENT
-            </text>
-          )}
-          {layout.variables.map((variable, index) => {
-            const state = hasChipStates
-              ? stateOf(frame.variables, variable.id)
-              : derivedChipState(frame, variable.id, layout.literals);
-            const look = pillLook(state);
-            const value = assignment[variable.id];
-            const assigned = typeof value === "boolean";
-            const trace = traceOf(variable.id);
-            const traced = trace === "trace";
-            const spoken = assigned ? (value ? "true" : "false") : "not assigned yet";
-            const parts = [`Variable ${variableLabel.get(variable.id)}: ${spoken}`];
-            if (state !== "Background") parts.push(pictureStateStyle(state).legend);
-            return (
-              // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
-              <g
-                key={variable.id}
-                id={`${idPrefix}-variable-${index}`}
-                data-variable-id={variable.id}
-                data-value={assigned ? String(value) : "unassigned"}
-                data-state={state}
-                data-traced={trace}
-                aria-label={parts.join(", ")}
-                style={trace === "faint" ? { filter: FAINT_FILTER } : undefined}
-                {...traceProps(variable.id)}
-              >
-                <rect
-                  x={variable.x}
-                  y={variable.y}
-                  width={variable.w}
-                  height={variable.h}
-                  rx={7}
-                  data-body=""
-                  fill={look.fill}
-                  stroke={traced ? TRACE_COLOR : look.line}
-                  strokeWidth={traced ? 3 : look.width}
-                  strokeDasharray={traced ? undefined : trace === "faint" ? FAINT_DASH : look.dash}
-                />
-                <GadgetRect
-                  id={variable.id}
-                  color={gadgetOf(variable.id)}
-                  x={variable.x}
-                  y={variable.y}
-                  width={variable.w}
-                  height={variable.h}
-                  rx={7}
-                />
-                <LabelText
-                  x={variable.x + 9}
-                  y={variable.y + variable.h / 2}
-                  negated={false}
-                  name={variable.label}
-                  size={VARIABLE_SIZE}
-                  color={look.ink}
-                  bold={false}
-                  after={assigned ? (value ? "T" : "F") : "–"}
-                />
-              </g>
-            );
-          })}
-        </g>
+        {frameIndex !== null && (
+          <g data-layer="variables" data-strip="assignment">
+            {layout.variables.length > 0 && (
+              <text x={12} y={layout.stripY} data-strip-head="" {...headStyle}>
+                ASSIGNMENT
+              </text>
+            )}
+            {layout.variables.map((variable, index) => {
+              const state = hasChipStates
+                ? stateOf(frame.variables, variable.id)
+                : derivedChipState(frame, variable.id, layout.literals);
+              const look = pillLook(state);
+              const value = assignment[variable.id];
+              const assigned = typeof value === "boolean";
+              const trace = traceOf(variable.id);
+              const traced = trace === "trace";
+              const spoken = assigned ? (value ? "true" : "false") : "not assigned yet";
+              const parts = [`Variable ${variableLabel.get(variable.id)}: ${spoken}`];
+              if (state !== "Background") parts.push(pictureStateStyle(state).legend);
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
+                <g
+                  key={variable.id}
+                  id={`${idPrefix}-variable-${index}`}
+                  data-variable-id={variable.id}
+                  data-value={assigned ? String(value) : "unassigned"}
+                  data-state={state}
+                  data-traced={trace}
+                  aria-label={parts.join(", ")}
+                  style={trace === "faint" ? { filter: FAINT_FILTER } : undefined}
+                  {...traceProps(variable.id)}
+                >
+                  <rect
+                    x={variable.x}
+                    y={variable.y}
+                    width={variable.w}
+                    height={variable.h}
+                    rx={7}
+                    data-body=""
+                    fill={look.fill}
+                    stroke={traced ? TRACE_COLOR : look.line}
+                    strokeWidth={traced ? 3 : look.width}
+                    strokeDasharray={
+                      traced ? undefined : trace === "faint" ? FAINT_DASH : look.dash
+                    }
+                  />
+                  <GadgetRect
+                    id={variable.id}
+                    color={gadgetOf(variable.id)}
+                    x={variable.x}
+                    y={variable.y}
+                    width={variable.w}
+                    height={variable.h}
+                    rx={7}
+                  />
+                  <LabelText
+                    x={variable.x + 9}
+                    y={variable.y + variable.h / 2}
+                    negated={false}
+                    name={variable.label}
+                    size={VARIABLE_SIZE}
+                    color={look.ink}
+                    bold={false}
+                    after={assigned ? (value ? "T" : "F") : "–"}
+                  />
+                </g>
+              );
+            })}
+          </g>
+        )}
       </DiagramZoom>
     </Box>
   );

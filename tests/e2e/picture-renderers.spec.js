@@ -8205,6 +8205,11 @@ test("Drag: a clause moves with its literals, and a literal stays inside its cla
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
+  // The picture at the top of the window, so the long drags below stay on screen (#279 stage 3:
+  // the picture frame is taller than the drawing's own shape).
+  await page
+    .locator("#workbench-source-frame-view")
+    .evaluate((element) => element.scrollIntoView({ block: "start" }));
   const scope = `${CLAUSES}-graph`;
   const before = await centresOf(page, scope);
   const hull = clause(page, "c0").locator("circle");
@@ -8276,6 +8281,16 @@ async function openFormula(page, problem, capture) {
   await expect(page.locator(`${FORMULA}-formula`)).toBeVisible();
 }
 
+/**
+ * Presses Run and waits for the run's last step. #279 stage 3: the variable strip holds values
+ * only a run gives, so the plain picture before Run leaves it out.
+ */
+async function runFormula(page, capture) {
+  await page.locator("#workbench-run").click();
+  const count = capture.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+}
+
 /** Frame `index`'s states, piece by piece: literals, clauses and chips (absent = Background). */
 async function expectFormulaStates(page, capture, index) {
   const frame = capture.frames[index];
@@ -8342,6 +8357,9 @@ for (const [problem, capture] of [
     const root = page.locator(`${FORMULA}-formula`);
     await expect(root.locator("[data-clause-id]")).toHaveCount(payload.groups.length);
     await expect(root.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
+    // #279 stage 3: the chips come with a run's values.
+    await expect(root.locator("[data-variable-id]")).toHaveCount(0);
+    await runFormula(page, capture);
     await expect(root.locator("[data-variable-id]")).toHaveCount(payload.variables.length);
     // ∧ joins the clauses (one fewer than there are), ∨ the literals inside each clause.
     await expect(root.locator('[data-connective="and"]')).toHaveCount(payload.groups.length - 1);
@@ -8403,7 +8421,8 @@ test("Formula: before Run the formula is plain, and step 1 keeps every pill in p
   await expect(root.locator('[data-variable-id]:not([data-value="unassigned"])')).toHaveCount(0);
   await expect(root.locator("[data-strike]")).toHaveCount(0);
   await expect(root.locator("[data-clause-mark]")).toHaveCount(0);
-  await expect(formulaChip(page, "v:x1").locator("[data-value-text]")).toHaveText("–");
+  // #279 stage 3: plain until answered, so no variable strip before Run.
+  await expect(root.locator('[data-strip="assignment"]')).toHaveCount(0);
   await expect(page.locator(CAPTION)).toHaveCount(0);
   await expect(legendBody(page)).toContainText(
     "Boxes are clauses, joined by ∧; the literals inside are joined by ∨ (CNF).",
@@ -8604,6 +8623,8 @@ test("Formula: hovering a literal traces its variable, a clause its literals, an
   page,
 }) => {
   await openFormula(page, "3SAT", SAT3_FORMULA_FRAMES);
+  // The chips trace too, and they come with a run (#279 stage 3).
+  await runFormula(page, SAT3_FORMULA_FRAMES);
   await formulaLiteral(page, "c0-0").hover();
   // x1 is in c0-0, c1-0, c1-2 and c2-2.
   for (const id of ["c0-0", "c1-0", "c1-2", "c2-2"]) {
@@ -8729,7 +8750,8 @@ for (const [kind, layout] of [
     const { payload } = capture;
     await expect(root.locator("[data-clause-id]")).toHaveCount(payload.groups.length);
     await expect(root.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
-    await expect(root.locator("[data-variable-id]")).toHaveCount(payload.variables.length);
+    // #279 stage 3: before Run there is no variable strip (it holds a run's values).
+    await expect(root.locator("[data-variable-id]")).toHaveCount(0);
     // The groups are drawn as CNF's are, symbols and all...
     await expect(root.locator('[data-join="outer"][data-connective="and"]')).toHaveCount(
       payload.groups.length - 1,
@@ -8756,6 +8778,8 @@ test("Formula: every text in the drawing belongs to a piece; no heading, and ASS
 }) => {
   const capture = SAT3_FORMULA_FRAMES;
   await openFormula(page, "3SAT", capture);
+  // The strip comes with a run (#279 stage 3).
+  await runFormula(page, capture);
   const svg = page.locator(`${FORMULA}-svg`);
   const stray = await svg.evaluate((el) =>
     [...el.querySelectorAll("text")]

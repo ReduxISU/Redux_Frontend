@@ -281,21 +281,23 @@ test("the (i) card shows on keyboard focus and on a tap, as a tooltip the button
   expect(box.height).toBeGreaterThanOrEqual(44);
 });
 
-test("the Visualization Type list opens aligned to the box's right edge", async ({ page }) => {
+// #279 stage 3: the dropdown sits after the picture's name in its caption, at the left, so its
+// list opens on its left edge and the hover card goes to the list's right.
+test("the Visualization Type list opens aligned to the box's left edge", async ({ page }) => {
   const button = page.locator("#workbench-source-type-button");
   await button.click();
   const list = page.locator("#workbench-source-type-listbox");
   await expect(list).toBeVisible();
   const buttonBox = await button.boundingBox();
   const listBox = await list.boundingBox();
-  expect(Math.abs(buttonBox.x + buttonBox.width - (listBox.x + listBox.width))).toBeLessThan(2);
+  expect(Math.abs(buttonBox.x - listBox.x)).toBeLessThan(2);
 
-  // Its hover card sits to the left of the list.
+  // Its hover card sits to the right of the list.
   await list.getByRole("option").last().hover();
   const card = page.locator("#workbench-source-type-option-card");
   await expect(card).toBeVisible();
   const cardBox = await card.boundingBox();
-  expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(listBox.x + 1);
+  expect(cardBox.x).toBeGreaterThanOrEqual(listBox.x + listBox.width - 1);
 });
 
 test("every id on the page is unique, with every dropdown and card on screen", async ({ page }) => {

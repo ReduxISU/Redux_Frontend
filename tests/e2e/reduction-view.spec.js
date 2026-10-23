@@ -63,6 +63,16 @@ const readout = (page) => page.locator(`${VIEW}-link`);
 const phaseButton = (page, key) => page.locator(`#workbench-phases-${key}`);
 const nextStep = (page) => page.locator("#workbench-steps-next");
 const position = (page) => page.locator("#workbench-steps-position");
+// #279 stage 3: the Target picture's Algorithm line names the target's solver once it ran.
+async function expectTargetSolverShown(page) {
+  const solver = (
+    (await page.locator("#workbench-target-cell-solver-value").textContent()) ?? ""
+  ).trim();
+  expect(solver).not.toBe("");
+  await expect(page.locator("#workbench-reduction-target-frame-showing-algorithm")).toHaveText(
+    solver,
+  );
+}
 
 /** Opens `problem` on `instance` in Reduce mode with the target matching `target` chosen. */
 async function openReduce(page, problem, instance, target) {
@@ -164,12 +174,9 @@ for (const key of Object.keys(CASES)) {
       "data-picture-type",
       view.target.picture.type,
     );
-    await expect(page.locator(`${VIEW}-source-title`)).toHaveText(
-      `${view.source.problem} · the instance you gave`,
-    );
-    await expect(page.locator(`${VIEW}-target-title`)).toHaveText(
-      `${view.target.problem} · built by the reduction`,
-    );
+    // #279 stage 3: each frame is named by its side and problem, as the page names them.
+    await expect(page.locator(`${VIEW}-source-title`)).toHaveText(/^Source · /);
+    await expect(page.locator(`${VIEW}-target-title`)).toHaveText(/^Target · /);
     for (const side of ["source", "target"]) {
       await expect(zoomOf(page, side)).toHaveAttribute("data-zoom", "1.00");
     }
@@ -194,7 +201,7 @@ for (const key of Object.keys(CASES)) {
     await expect(page.locator(`${VIEW}-caption-phase`)).toHaveText(`Build 1 of ${builds}`);
     await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames[0].caption);
     await expect(position(page)).toHaveText(`Step 1 of ${view.frames.length}`);
-    await expect(page.locator("#workbench-showing")).toContainText(`solved by ${view.solver}`);
+    await expectTargetSolverShown(page);
     await expect(page.locator("#workbench-note")).toHaveCount(0);
     const scroll = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -218,7 +225,9 @@ test("Reduce alone shows only the Build phase; Solve <target> brings Solve and M
   await expect(phaseButton(page, "build")).toHaveAttribute("aria-current", "step");
   await expect(phaseButton(page, "solve")).toBeDisabled();
   await expect(phaseButton(page, "map")).toBeDisabled();
-  await expect(page.locator("#workbench-showing")).toContainText(", built");
+  await expect(page.locator("#workbench-reduction-target-frame-showing-algorithm")).toHaveText(
+    "Built, not solved",
+  );
 
   await solveReductionTarget(page, { expect });
   await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "map");
@@ -256,9 +265,9 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(page.locator(`${VIEW}-caption-verdict`)).toHaveText("Verdict: yes");
   await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames.at(-1).caption);
 
-  // The Showing line names the target solver whose run the view shows (#279 stage 2: the
+  // The target's Algorithm line names the solver whose run the view shows (#279 stage 3; the
   // answers themselves are in Execute's cells).
-  await expect(page.locator("#workbench-showing")).toContainText(`, solved by ${view.solver}`);
+  await expectTargetSolverShown(page);
 });
 
 test("Build shows only what the target has built so far, and the finished target after it", async ({
@@ -487,7 +496,8 @@ for (const scheme of ["light", "dark"]) {
         expect(scroll).toBeLessThanOrEqual(0);
         for (const side of ["source", "target"]) {
           await expect(zoomOf(page, side)).toHaveAttribute("data-zoom", "1.00");
-          const zoomIn = pane(page, side).locator('[id$="-zoom-in"]');
+          // #279 stage 3: the zoom buttons sit in the picture frame's caption.
+          const zoomIn = page.locator(`${VIEW}-${side}-frame`).locator('[id$="-zoom-in"]');
           for (let press = 0; press < 4; press += 1) {
             if ((await smallestText(page, side)) >= PHONE_TEXT_PX) break;
             await zoomIn.click();

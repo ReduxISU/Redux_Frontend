@@ -546,12 +546,16 @@ test("a Search Tree pane says gadget links can't be shown there, and fits the tr
 
   const svg = pane(page, "target").locator('svg[id$="-svg"]');
   const height = async () => (await svg.boundingBox()).height;
-  // During Build the tree is empty: the pane is short.
+  // #279 stage 3: the pane is the picture frame's shared height (the source's beside it), so
+  // the empty tree during Build does not make it short; it keeps that height throughout.
   const empty = await height();
-  expect(empty).toBeLessThanOrEqual(260);
-  // The tree grows down through Solve; the box only ever grows downwards, and a node keeps its
-  // row (the renderer re-centres each step's tree across, as it always has; the box changes
-  // nothing about where a node is drawn).
+  const frameHeight = async (side) =>
+    (await page.locator(`${VIEW}-${side}-frame-view`).boundingBox()).height;
+  expect(Math.abs((await frameHeight("target")) - (await frameHeight("source")))).toBeLessThan(1);
+  expect(empty).toBeGreaterThan(300);
+  // The tree grows down through Solve; the box never shrinks, and a node keeps its row (the
+  // renderer re-centres each step's tree across, as it always has; the box changes nothing
+  // about where a node is drawn).
   const solve = view.frames.findIndex((frame) => frame.phase === "solve");
   const centres = async () =>
     svg.evaluate((element) => {
