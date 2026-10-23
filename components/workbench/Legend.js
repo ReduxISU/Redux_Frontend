@@ -11,12 +11,21 @@
 // #199: a format=frames picture names its pieces with the shared picture states instead
 // (components/pictures/pictureStates.js). Those are listed from `states`, in that table's
 // order, wording and colors, with the faded states' swatches dashed as they are drawn.
+//
+// #201: after the states come the picture's annotations (`annotations`, from
+// components/pictures/registry.js's pictureAnnotations): what it draws that is not a state,
+// such as group colors, order badges or missing edges. Each names its swatch's kind:
+//   fill   {fill, line}       a box like a state's
+//   line   {color, dash?}     a short stroke (an edge kind)
+//   badge                     a round position badge with a number
+//   ring   {color?}           a circle inside an outer ring (a terminal, the tried variable)
+//   arrow                     an arrowhead (a directed edge)
 
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import { useState } from "react";
 import { PICTURE_STATES, pictureStateStyle } from "../pictures/pictureStates";
-import { getVisualizationColor, getVisualizationFill } from "../theme";
+import { getVisualizationColor, getVisualizationFill, paletteVars } from "../theme";
 
 // Order and wording of each color key's legend entry.
 const KEY_TEXT = [
@@ -52,13 +61,100 @@ function collectKeys(value, found, parentKey) {
   }
 }
 
+/** An annotation's swatch, drawn in the same 22 x 16 box as a state's. */
+function AnnotationSwatch({ swatch }) {
+  const plain = pictureStateStyle("Background");
+  let inner = null;
+  if (swatch.kind === "line") {
+    inner = (
+      <line
+        x1={1}
+        y1={8}
+        x2={21}
+        y2={8}
+        stroke={swatch.color ?? plain.line}
+        strokeWidth={2.4}
+        strokeDasharray={swatch.dash}
+      />
+    );
+  } else if (swatch.kind === "badge") {
+    inner = (
+      <>
+        <circle cx={11} cy={8} r={7.5} fill={paletteVars.text.primary} />
+        <text
+          x={11}
+          y={8}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={9}
+          fontWeight={700}
+          fill={paletteVars.surface.input}
+        >
+          3
+        </text>
+      </>
+    );
+  } else if (swatch.kind === "ring") {
+    inner = (
+      <>
+        <circle cx={11} cy={8} r={4.5} fill={plain.fill} stroke={plain.line} strokeWidth={1.5} />
+        <circle
+          cx={11}
+          cy={8}
+          r={7.2}
+          fill="none"
+          stroke={swatch.color ?? plain.text}
+          strokeWidth={1.5}
+        />
+      </>
+    );
+  } else if (swatch.kind === "arrow") {
+    inner = (
+      <>
+        <line x1={1} y1={8} x2={14} y2={8} stroke={plain.line} strokeWidth={2} />
+        <polygon points="21,8 12,3 12,13" fill={plain.line} />
+      </>
+    );
+  }
+  if (inner) {
+    return (
+      <Box
+        component="svg"
+        aria-hidden="true"
+        viewBox="0 0 22 16"
+        sx={{ width: 22, height: 16, flex: "none", overflow: "visible" }}
+      >
+        {inner}
+      </Box>
+    );
+  }
+  return (
+    <Box
+      component="span"
+      aria-hidden="true"
+      sx={{
+        width: 22,
+        height: 16,
+        borderRadius: "4px",
+        backgroundColor: swatch.fill,
+        border: "2px solid",
+        borderColor: swatch.line,
+        boxSizing: "border-box",
+        flex: "none",
+      }}
+    />
+  );
+}
+
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {Object[]} props.frames Every frame currently drawn (one per picture on screen).
  * @param {Set<string>|null} [props.states] Picture states a format=frames picture uses.
+ * @param {Array<{key: string, text: string, swatch: Object}>|null} [props.annotations] What a
+ *   format=frames picture draws besides states (#201).
  */
-export default function Legend({ idPrefix, frames, states }) {
+export default function Legend({ idPrefix, frames, states, annotations }) {
   const [open, setOpen] = useState(true);
   const found = new Set();
   for (const frame of frames) {
@@ -80,6 +176,13 @@ export default function Legend({ idPrefix, frames, states }) {
       fill: style.fill,
       line: style.line,
       dashed: Boolean(style.dash),
+    });
+  }
+  for (const annotation of annotations ?? []) {
+    entries.push({
+      key: `note-${annotation.key}`,
+      text: annotation.text,
+      swatch: annotation.swatch,
     });
   }
   const bodyId = `${idPrefix}-body`;
@@ -139,27 +242,31 @@ export default function Legend({ idPrefix, frames, states }) {
         {entries.length === 0 ? (
           <Box component="span">This picture uses no highlight colors.</Box>
         ) : (
-          entries.map(({ key, text, fill, line, dashed }) => (
+          entries.map(({ key, text, fill, line, dashed, swatch }) => (
             <Box
               key={key}
               component="span"
               data-legend-key={key}
               sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}
             >
-              <Box
-                component="span"
-                aria-hidden="true"
-                sx={{
-                  width: 22,
-                  height: 16,
-                  borderRadius: "4px",
-                  backgroundColor: fill,
-                  border: `2px ${dashed ? "dashed" : "solid"}`,
-                  borderColor: line,
-                  boxSizing: "border-box",
-                  flex: "none",
-                }}
-              />
+              {swatch ? (
+                <AnnotationSwatch swatch={swatch} />
+              ) : (
+                <Box
+                  component="span"
+                  aria-hidden="true"
+                  sx={{
+                    width: 22,
+                    height: 16,
+                    borderRadius: "4px",
+                    backgroundColor: fill,
+                    border: `2px ${dashed ? "dashed" : "solid"}`,
+                    borderColor: line,
+                    boxSizing: "border-box",
+                    flex: "none",
+                  }}
+                />
+              )}
               {text}
             </Box>
           ))

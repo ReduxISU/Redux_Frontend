@@ -174,6 +174,21 @@ const LIGHT_PICTURE_STATES = {
   false: { line: "#8A8A8A", fill: "#E6E6E6", ink: "#525252", text: "#525252" },
 };
 
+// #201: group colors for the Graph picture's cut sides, color classes and clique-cover groups
+// (a node's group is an annotation, not a state, so it has its own colors). The Okabe-Ito hues
+// the design mockup uses: `fill` is a node's body, `ink` its label (at least 4.5:1 on the fill)
+// and `line` its outline and the Legend swatch's edge (at least 3:1 on the canvas). The dark
+// theme uses the hues as they are; the light theme keeps the fills and darkens the lines.
+// Group 4 is a teal, not green, so a group never reads as the answer.
+const GROUP_FILLS = ["#56B4E9", "#E69F00", "#B59CE0", "#F0E442", "#5FC4A8", "#CC79A7"];
+const LIGHT_GROUP_LINES = ["#2B7FB0", "#A87200", "#7A5CB8", "#968C0C", "#2A8A70", "#9A4C78"];
+
+function groupFamilies(lines) {
+  return Object.fromEntries(
+    GROUP_FILLS.map((fill, index) => [`g${index}`, { fill, line: lines[index], ink: "#10131A" }]),
+  );
+}
+
 const DARK_FACET_FAMILIES = withFilledState(DARK_FACETS, BLACK);
 const LIGHT_FACET_FAMILIES = withFilledState(LIGHT_FACETS, WHITE);
 
@@ -233,6 +248,7 @@ export const THEME_TOKENS = {
       // color key uses, so it reads as "this gadget" and not as an answer or a step.
       gadget: ISU_GOLD,
       state: DARK_PICTURE_STATES,
+      group: groupFamilies(GROUP_FILLS),
       label: WHITE,
       blue: "#60A5FA",
       orange: "#FB923C",
@@ -305,6 +321,7 @@ export const THEME_TOKENS = {
       dim: "#8A8A8A",
       gadget: "#B45309",
       state: LIGHT_PICTURE_STATES,
+      group: groupFamilies(LIGHT_GROUP_LINES),
       label: BLACK,
       blue: "#1D4ED8",
       orange: "#C2410C",
