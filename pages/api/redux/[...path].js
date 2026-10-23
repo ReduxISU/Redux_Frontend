@@ -87,6 +87,9 @@ const rateLimitBuckets = new Map();
  * build a reduction on the backend, so they are compute endpoints: rate-limited, body-capped
  * and on the 60s timeout like the rest of ProblemProvider.
  *
+ * `ProblemProvider/reductionView` (#215) builds a reduction step by step, solves the target and
+ * maps its answer back, all in one request (`requestReductionView`). A compute endpoint too.
+ *
  * `Navigation/Reductions/path` (#148) is its own exact entry rather than folded into
  * `Navigation/Reductions` above: it is a genuinely different endpoint (a weighted
  * shortest-path lookup taking `source`/`target` query parameters) that happens to share
@@ -118,6 +121,7 @@ const ALLOWED_ENDPOINTS = new Map([
   ["ProblemProvider/visualizeRun", ["POST"]],
   ["ProblemProvider/reduce", ["POST"]],
   ["ProblemProvider/mapSolution", ["POST"]],
+  ["ProblemProvider/reductionView", ["POST"]],
 ]);
 
 /**
@@ -164,6 +168,7 @@ const COMPUTE_ENDPOINTS = new Set([
   "ProblemProvider/visualizeRun",
   "ProblemProvider/reduce",
   "ProblemProvider/mapSolution",
+  "ProblemProvider/reductionView",
 ]);
 
 export const config = {
