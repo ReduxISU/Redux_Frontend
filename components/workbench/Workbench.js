@@ -395,13 +395,14 @@ export default function Workbench({ problem }) {
     setRunPosition(RUN_END);
   }
 
-  // #215: where the Reduction View's steps are. A new reduction opens on its first step, the
-  // start of Build, as the mockup's does.
+  // #215: where the Reduction View's steps are. #274: a new reduction opens on its last step,
+  // the end of Map back, as a solve opens on its finished result; the step controls and the
+  // phase buttons still go back to Build and Solve.
   const [reduceStep, setReduceStep] = useState(0);
   const [reduceStepsFor, setReduceStepsFor] = useState(reduceRun.result);
   if (reduceStepsFor !== reduceRun.result) {
     setReduceStepsFor(reduceRun.result);
-    setReduceStep(0);
+    setReduceStep(openingStep(reduceRun.result?.view?.frames));
   }
   // #912: another picture's view opens on the same phase and step as the one before it.
   const [switchLanded, setSwitchLanded] = useState(viewSwitch.result);
