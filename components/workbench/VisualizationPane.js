@@ -13,15 +13,23 @@
 //     960px or narrower. Before a build the target is a placeholder frame, "Not built yet";
 //   - a line saying what the picture is, when there is something to say;
 //   - the Legend, open by default;
-//   - Algorithm Steps: the step controls, closed until a run gives them steps (then they open
-//     by themselves, unless the viewer closed them; hooks/useWorkbenchLayout.js remembers that
-//     until Reset layout). In Reduce mode its timeline reads Build ── Solve ── Map back, and the
+//   - Algorithm Steps: the step's caption and the step controls, closed until a run gives them
+//     steps (then they open by themselves, unless the viewer closed them; hooks/
+//     useWorkbenchLayout.js remembers that until Reset layout). In Reduce mode its timeline reads Build ── Solve ── Map back, and the
 //     Highlight Gadgets switch sits at its bottom: on, every gadget wears its own color on both
 //     pictures; off, the pictures are plain (a gadget is still marked while pointed at).
 //
 // #215: in Reduce mode, once Redux has sent a Reduction View, the two pictures are that view
 // (components/pictures/ReductionView.js) instead. Each of its pictures keeps its Visualization
 // Type dropdown in its caption (#912).
+//
+// #279: the step's caption (what the solver did at this step, and the verdict at the end; in
+// Reduce mode the phase and place in it too) is never drawn inside or over a picture. It is the
+// first thing in Algorithm Steps, with the step controls, and in full screen it sits with the
+// step controls under the picture (StepControls draws both copies). Two pictures share one step,
+// so one caption: the source's (Solve mode's target never has one) or the Reduction View's. The
+// default picture before Run has none. While a picture is in full screen, the copy it covers in
+// Algorithm Steps stops announcing itself, so a screen reader hears each step once.
 //
 // The pictures themselves come from the renderers: a format=frames picture through
 // components/pictures/PictureCanvas.js (#199), every other one through the older
@@ -30,13 +38,14 @@
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
+import { useState } from "react";
 import StepScrubber from "../detail/StepScrubber";
 import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
-import PictureCanvas from "../pictures/PictureCanvas";
-import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
+import PictureCanvas, { FrameCaption, hasFrameCaption } from "../pictures/PictureCanvas";
+import ReductionView, { ReductionPhaseBar, ReductionStepCaption } from "../pictures/ReductionView";
 import Legend from "./Legend";
 import { SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
-import PictureFrame, { pictureGridSx } from "./PictureFrame";
+import PictureFrame, { FullScreenContext, pictureGridSx } from "./PictureFrame";
 import TaggedSelect from "./TaggedSelect";
 
 /**
@@ -122,7 +131,6 @@ function PictureContentView({ idPrefix, content }) {
         frameIndex={content.frameIndex}
         frameCount={content.frameCount}
         frames={content.frames ?? null}
-        showCaption={content.showCaption}
         highlightIds={content.highlightIds}
         runs={content.runs ?? null}
       />
@@ -267,10 +275,20 @@ function AlgorithmSteps({ idPrefix, open, onToggle, children }) {
 }
 
 /**
- * The step controls: the reduction's timeline (Reduce mode) and the scrubber, or a line saying
- * there are no steps yet. `prefix` keeps the full-screen copy's ids apart from the section's.
+ * The step's caption (#279), then the step controls: the reduction's timeline (Reduce mode) and
+ * the scrubber, or a line saying there are no steps yet. `prefix` keeps the full-screen copy's
+ * ids apart from the section's; `live` is "off" for the copy a full-screen picture covers.
+ * `captionFrame` is Solve mode's step with a caption, if there is one.
  */
-function StepControls({ prefix, steps, reduction, phaseHints, emptyText }) {
+function StepControls({
+  prefix,
+  steps,
+  reduction,
+  phaseHints,
+  emptyText,
+  captionFrame = null,
+  live = "polite",
+}) {
   if (!steps) {
     return (
       <Box
@@ -284,6 +302,19 @@ function StepControls({ prefix, steps, reduction, phaseHints, emptyText }) {
   }
   return (
     <>
+      {reduction
+        ? !reduction.loading && (
+            <ReductionStepCaption
+              id={`${prefix}-reduction-caption`}
+              view={reduction.view}
+              frameIndex={steps.currentStep}
+              colorMode={reduction.colorMode ?? "plain"}
+              live={live}
+            />
+          )
+        : captionFrame && (
+            <FrameCaption id={`${prefix}-source-frames-caption`} frame={captionFrame} live={live} />
+          )}
       {reduction && (
         <ReductionPhaseBar
           idPrefix={`${prefix}-phases`}
@@ -473,6 +504,17 @@ export default function VisualizationPane({
   reduction = null,
   highlightGadgets = null,
 }) {
+  // Whether one of the pictures is in full screen (./PictureFrame.js FullScreenContext).
+  const [fullScreen, setFullScreen] = useState(false);
+  // Solve mode's caption: the source picture's step, during a run.
+  const sourceContent = source.content;
+  const captionFrame =
+    !reduction &&
+    sourceContent.kind === "picture" &&
+    sourceContent.showCaption &&
+    hasFrameCaption(sourceContent.frame)
+      ? sourceContent.frame
+      : null;
   const noteColor =
     note?.tone === "error"
       ? "error.light"
@@ -489,141 +531,146 @@ export default function VisualizationPane({
         reduction={reduction}
         phaseHints={algorithmSteps.phaseHints}
         emptyText={algorithmSteps.emptyText}
+        captionFrame={captionFrame}
       />
     </Box>
   );
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
-      {showing && (
-        <Box
-          sx={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "flex-start",
-            gap: "4px 16px",
-            fontSize: "0.875rem",
-          }}
-        >
-          <Box id={`${idPrefix}-showing`} aria-live="polite" sx={{ minWidth: 0 }}>
-            <Box
-              sx={{
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "text.secondary",
-              }}
-            >
-              Showing
-            </Box>
-            <Box
-              component="dl"
-              sx={{
-                m: 0,
-                display: "grid",
-                gridTemplateColumns: "auto minmax(0, 1fr)",
-                columnGap: 3,
-                rowGap: 0.25,
-              }}
-            >
-              <ShowingLine
-                id={`${idPrefix}-showing-reduction`}
-                label="Reduction:"
-                value={showing.reduction}
-              />
+    <FullScreenContext.Provider value={setFullScreen}>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
+        {showing && (
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "flex-start",
+              gap: "4px 16px",
+              fontSize: "0.875rem",
+            }}
+          >
+            <Box id={`${idPrefix}-showing`} aria-live="polite" sx={{ minWidth: 0 }}>
+              <Box
+                sx={{
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "text.secondary",
+                }}
+              >
+                Showing
+              </Box>
+              <Box
+                component="dl"
+                sx={{
+                  m: 0,
+                  display: "grid",
+                  gridTemplateColumns: "auto minmax(0, 1fr)",
+                  columnGap: 3,
+                  rowGap: 0.25,
+                }}
+              >
+                <ShowingLine
+                  id={`${idPrefix}-showing-reduction`}
+                  label="Reduction:"
+                  value={showing.reduction}
+                />
+              </Box>
             </Box>
           </Box>
-        </Box>
-      )}
+        )}
 
-      {reduction ? (
-        <ReductionView
-          // A new run, or another picture on either side, starts with nothing pointed at.
-          key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
-          idPrefix={`${idPrefix}-reduction`}
-          view={reduction.view}
-          frameIndex={steps?.currentStep ?? 0}
-          activeGadget={reduction.activeGadget}
-          loading={reduction.loading ?? null}
-          colorMode={reduction.colorMode ?? "plain"}
-          timeline={timeline}
-          sides={{
-            source: { title: source.title, status: source.status ?? null },
-            target: target ? { title: target.title, status: target.status ?? null } : undefined,
-          }}
-          typeControls={{
-            source: reduction.types?.source && (
-              <VisualizationTypeControl
-                id={`${idPrefix}-source-type`}
-                {...reduction.types.source}
-              />
-            ),
-            target: reduction.types?.target && (
-              <VisualizationTypeControl
-                id={`${idPrefix}-target-type`}
-                {...reduction.types.target}
-              />
-            ),
-          }}
-        />
-      ) : (
-        <Box sx={target ? pictureGridSx : { display: "flex", flexDirection: "column" }}>
-          <SidePicture
-            idPrefix={`${idPrefix}-source`}
-            typeId={`${idPrefix}-source-type`}
-            side={source}
-            inGrid={Boolean(target)}
+        {reduction ? (
+          <ReductionView
+            // A new run, or another picture on either side, starts with nothing pointed at.
+            key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
+            idPrefix={`${idPrefix}-reduction`}
+            view={reduction.view}
+            frameIndex={steps?.currentStep ?? 0}
+            activeGadget={reduction.activeGadget}
+            loading={reduction.loading ?? null}
+            colorMode={reduction.colorMode ?? "plain"}
             timeline={timeline}
+            sides={{
+              source: { title: source.title, status: source.status ?? null },
+              target: target ? { title: target.title, status: target.status ?? null } : undefined,
+            }}
+            typeControls={{
+              source: reduction.types?.source && (
+                <VisualizationTypeControl
+                  id={`${idPrefix}-source-type`}
+                  {...reduction.types.source}
+                />
+              ),
+              target: reduction.types?.target && (
+                <VisualizationTypeControl
+                  id={`${idPrefix}-target-type`}
+                  {...reduction.types.target}
+                />
+              ),
+            }}
           />
-          {target && (
+        ) : (
+          <Box sx={target ? pictureGridSx : { display: "flex", flexDirection: "column" }}>
             <SidePicture
-              idPrefix={`${idPrefix}-target`}
-              typeId={`${idPrefix}-target-type`}
-              side={target}
-              inGrid
+              idPrefix={`${idPrefix}-source`}
+              typeId={`${idPrefix}-source-type`}
+              side={source}
+              inGrid={Boolean(target)}
               timeline={timeline}
             />
-          )}
-        </Box>
-      )}
+            {target && (
+              <SidePicture
+                idPrefix={`${idPrefix}-target`}
+                typeId={`${idPrefix}-target-type`}
+                side={target}
+                inGrid
+                timeline={timeline}
+              />
+            )}
+          </Box>
+        )}
 
-      {note && (
-        <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.875rem", color: noteColor }}>
-          {note.text}
-        </Box>
-      )}
+        {note && (
+          <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.875rem", color: noteColor }}>
+            {note.text}
+          </Box>
+        )}
 
-      {(legendFrames.some(Boolean) || legendStates) && (
-        <Legend
-          idPrefix={`${idPrefix}-legend`}
-          frames={legendFrames}
-          states={legendStates}
-          annotations={legendAnnotations}
-        />
-      )}
-
-      <AlgorithmSteps
-        idPrefix={`${idPrefix}-algorithm-steps`}
-        open={algorithmSteps.open}
-        onToggle={algorithmSteps.onToggle}
-      >
-        <StepControls
-          prefix={idPrefix}
-          steps={steps}
-          reduction={reduction}
-          phaseHints={algorithmSteps.phaseHints}
-          emptyText={algorithmSteps.emptyText}
-        />
-        {highlightGadgets && (
-          <HighlightGadgetsSwitch
-            id={`${idPrefix}-algorithm-steps-highlight-gadgets`}
-            checked={highlightGadgets.checked}
-            onChange={highlightGadgets.onChange}
-            disabledReason={highlightGadgets.disabledReason}
+        {(legendFrames.some(Boolean) || legendStates) && (
+          <Legend
+            idPrefix={`${idPrefix}-legend`}
+            frames={legendFrames}
+            states={legendStates}
+            annotations={legendAnnotations}
           />
         )}
-      </AlgorithmSteps>
-    </Box>
+
+        <AlgorithmSteps
+          idPrefix={`${idPrefix}-algorithm-steps`}
+          open={algorithmSteps.open}
+          onToggle={algorithmSteps.onToggle}
+        >
+          <StepControls
+            prefix={idPrefix}
+            steps={steps}
+            reduction={reduction}
+            phaseHints={algorithmSteps.phaseHints}
+            emptyText={algorithmSteps.emptyText}
+            captionFrame={captionFrame}
+            live={fullScreen ? "off" : "polite"}
+          />
+          {highlightGadgets && (
+            <HighlightGadgetsSwitch
+              id={`${idPrefix}-algorithm-steps-highlight-gadgets`}
+              checked={highlightGadgets.checked}
+              onChange={highlightGadgets.onChange}
+              disabledReason={highlightGadgets.disabledReason}
+            />
+          )}
+        </AlgorithmSteps>
+      </Box>
+    </FullScreenContext.Provider>
   );
 }

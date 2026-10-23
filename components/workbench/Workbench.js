@@ -2185,7 +2185,16 @@ export default function Workbench({ problem }) {
       : null;
   // Algorithm Steps is closed until a run gives it steps, then opens by itself, unless the viewer
   // opened or closed it (kept until Reset layout).
-  const hasSteps = Boolean(steps) && (Boolean(reduceView) || steps.frameCount > 1);
+  // A one-step run with a caption opens it too: the caption is there now (#279), not on the
+  // picture.
+  const hasSteps =
+    Boolean(steps) &&
+    (Boolean(reduceView) ||
+      steps.frameCount > 1 ||
+      (sourceContent.kind === "picture" &&
+        sourceContent.showCaption &&
+        typeof sourceContent.frame?.caption === "string" &&
+        sourceContent.frame.caption !== ""));
   const stepsOpen = layout.stepsOpen ?? hasSteps;
   let stepsEmpty;
   if (mode === "solve") {
