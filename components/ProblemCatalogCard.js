@@ -91,7 +91,6 @@
 // documented" message on missing data instead of crashing, so an incomplete
 // problem is still meaningfully comparable.
 
-import CheckIcon from "@mui/icons-material/Check";
 import Box from "@mui/material/Box";
 import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
@@ -185,8 +184,9 @@ function TagRow({ facetKey, tagKeys, matchedKeys, idPrefix, onTagClick, scrollab
             key={optionKey}
             id={`${idPrefix}-tag-${facetKey}-${optionKey}`}
             size="small"
+            // Direct project-owner instruction (#269): a matched chip is marked by its
+            // filled variant alone, with no check icon.
             variant={matched ? `${facetKey}Filled` : `${facetKey}Outlined`}
-            icon={matched ? <CheckIcon /> : undefined}
             label={optionLabel(facetKey, optionKey)}
             clickable={clickable}
             onClick={
