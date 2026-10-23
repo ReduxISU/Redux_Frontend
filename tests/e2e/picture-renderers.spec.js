@@ -1218,7 +1218,8 @@ const BIPARTITE_CASES = [
     capture: EXACT_COVER_BIPARTITE_FRAMES,
   },
   {
-    problem: "Hitting Set",
+    // ReduxISU/Redux#742 renamed Hitting Set to Karp's Exact Hitting Set.
+    problem: "Exact Hitting Set",
     viz: "HittingSetDefaultVisualization",
     capture: HITTING_SET_BIPARTITE_FRAMES,
   },
@@ -9291,7 +9292,8 @@ const nestedRegion = (page, id) => nestedRoot(page).locator(`[data-region-id="${
 const NESTED_CASES = [
   { problem: "Set Cover", capture: SET_COVER_NESTED_FRAMES },
   { problem: "Exact Cover", capture: EXACT_COVER_NESTED_FRAMES },
-  { problem: "Hitting Set", capture: HITTING_SET_NESTED_FRAMES },
+  // ReduxISU/Redux#742 renamed Hitting Set to Karp's Exact Hitting Set.
+  { problem: "Exact Hitting Set", capture: HITTING_SET_NESTED_FRAMES },
 ];
 
 /** Opens `problem` with every picture answered by the Nested Set `capture`. */
@@ -9516,7 +9518,7 @@ test("Nested Set: Hitting Set picks elements and hits sets, and a greedy cover o
   page,
 }) => {
   const hitting = HITTING_SET_NESTED_FRAMES;
-  await openNested(page, "Hitting Set", hitting);
+  await openNested(page, "Exact Hitting Set", hitting);
   await runToFrame(page, hitting, hitting.frames.length - 1);
   await expectNestedStates(page, hitting, hitting.frames.length - 1);
   const picked = Object.entries(hitting.frames.at(-1).nodes).find(
