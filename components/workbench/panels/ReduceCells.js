@@ -23,12 +23,15 @@
 //     a difference is only called a bug when exact solvers gave both answers).
 // A result from an earlier choice (another instance, target, reduction or solver) isn't shown:
 // its cell says what changed instead.
+//
+// #295: a randomized solver's answer (Solve directly, or the Solve <Target> step) says the seed
+// its run used, with Run again with this seed (./ResultPanel.js SeedLine).
 
 import Box from "@mui/material/Box";
 import { DROPDOWN_WIDTH, MONO_FONT, secondaryButtonSx, sideGridSx } from "../layout";
 import { BusyLine, RunControls, RunFailureBox } from "../RunParts";
 import TaggedSelect from "../TaggedSelect";
-import { AnswerLine } from "./ResultPanel";
+import { AnswerLine, SeedLine } from "./ResultPanel";
 
 const cellSx = {
   display: "flex",
@@ -108,7 +111,8 @@ function SolverSelect({ id, label, select }) {
 /**
  * The source's solver cell.
  * @param {{cell: Object}} props `cell`: `{id, label, select, run, busy, failure, onRetry,
- *   result: {found, answer, elapsedMs}|null, changed: string|null}`. `run` is what RunControls
+ *   result: {found, answer, elapsedMs, seed?}|null, changed: string|null}` (`seed` as
+ *   ./ResultPanel.js SeedLine takes it). `run` is what RunControls
  *   takes (its id is `${id}-run`).
  */
 function SolverCell({ cell }) {
@@ -129,6 +133,7 @@ function SolverCell({ cell }) {
           elapsedMs={cell.result.elapsedMs}
         />
       )}
+      {cell.result && <SeedLine id={`${cell.id}-result-seed`} seed={cell.result.seed ?? null} />}
       {cell.changed && (
         <Box id={`${cell.id}-changed`} sx={{ fontSize: "0.875rem" }}>
           {cell.changed}
@@ -239,6 +244,9 @@ function ChainStep({ step, number }) {
           answer={step.result.answer}
           elapsedMs={step.result.elapsedMs}
         />
+      )}
+      {step.state === "done" && step.result && (
+        <SeedLine id={`${step.id}-result-seed`} seed={step.result.seed ?? null} />
       )}
       {step.state === "failed" && (
         <RunFailureBox id={`${step.id}-failure`} failure={step.failure} onRetry={step.onRetry} />

@@ -13,6 +13,10 @@
 // An instance edit after a run says so instead of showing an answer that is about another
 // instance. A run in progress, or one that failed, speaks for itself above (CommandBar.js).
 //
+// #295 (ReduxISU/Redux#932): a randomized solver's run says which seed it ran with (SeedLine,
+// below, shared with ./ReduceCells.js), with Run again with this seed to see the same steps
+// again. A solver without a seed shows neither.
+//
 // Time is the round trip this browser measured, network included, and is labelled that way:
 // Redux reports no running time of its own for a solve (#95).
 
@@ -84,11 +88,55 @@ export function AnswerLine({ id, found, verdict, answer, elapsedMs }) {
 }
 
 /**
+ * The seed a randomized solver's run reported, and Run again with this seed (#295).
+ * @param {{id: string, seed: {seed: number, onRerun: () => void, disabled?: boolean}|null}} props
+ *   The button's id is `${id}-rerun`.
+ */
+export function SeedLine({ id, seed }) {
+  if (!seed) return null;
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "4px 12px",
+        fontSize: "0.875rem",
+        minWidth: 0,
+      }}
+    >
+      <Box component="span" id={id} sx={{ color: "text.primary" }}>
+        Seed:{" "}
+        <Box component="span" id={`${id}-value`} sx={{ fontFamily: MONO_FONT }}>
+          {seed.seed}
+        </Box>
+      </Box>
+      {/* ProblemProvider/solve takes no seed, so the answer above can be another draw's. */}
+      <Box component="span" id={`${id}-note`} sx={{ color: "text.secondary" }}>
+        of the run Algorithm Steps shows
+      </Box>
+      <Box
+        id={`${id}-rerun`}
+        component="button"
+        type="button"
+        onClick={seed.onRerun}
+        disabled={Boolean(seed.disabled)}
+        aria-describedby={`${id} ${id}-note`}
+        sx={{ ...secondaryButtonSx, minHeight: 40 }}
+      >
+        Run again with this seed
+      </Box>
+    </Box>
+  );
+}
+
+/**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {"solve"|"reduce"} props.mode The command bar's mode.
- * @param {{found: boolean, answer: string, elapsedMs: number}|null} props.solve The Solve mode
- *   result while it is current (null otherwise).
+ * @param {{found: boolean, answer: string, elapsedMs: number, seed?: Object|null}|null}
+ *   props.solve The Solve mode result while it is current (null otherwise); `seed` as SeedLine
+ *   takes it.
  * @param {boolean} props.solveChanged A solve ran, on an instance since changed.
  * @param {() => void} props.onCheckAnswer Check it, for the solve's answer.
  * @param {{targetName: string, reductionName: string, elapsedMs: number,
@@ -115,6 +163,7 @@ export default function ResultPanel({
             answer={solve.answer}
             elapsedMs={solve.elapsedMs}
           />
+          <SeedLine id={`${idPrefix}-seed`} seed={solve.seed ?? null} />
           {solve.found && (
             <Box
               id={`${idPrefix}-verify-answer`}
