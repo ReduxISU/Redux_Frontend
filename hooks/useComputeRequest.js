@@ -64,12 +64,20 @@ function isAbort(error) {
  * @param {Error} error
  * @param {string} subject What was being sent, for the copy: "instance" or
  *   "certificate".
- * @returns {{headline: string, detail: string, expected?: string, code?: string}} `code` is
- *   set to "instance_parse_error" when Redux could not read the instance, so the workbench
- *   (#229) can mark the instance itself as the problem, and to "timeout" when the run hit the
- *   proxy's time limit (#279 stage 2).
+ * @returns {{headline: string, detail: string, expected?: string, code?: string,
+ *   hint?: string}} `code` is set to "instance_parse_error" when Redux could not read the
+ *   instance, so the workbench (#229) can mark the instance itself as the problem, and to
+ *   "timeout" when the run hit the proxy's time limit (#279 stage 2). `hint` is what Redux says
+ *   to do next, when its error body has one (ReduxISU/Redux#933's error shape, e.g. a quantum
+ *   solver whose service is down naming the problem's other solvers).
  */
 export function describeComputeFailure(error, subject = "instance") {
+  const described = describeFailure(error, subject);
+  const hint = error instanceof ReduxRequestError ? error.payload?.hint : undefined;
+  return typeof hint === "string" && hint.trim() ? { ...described, hint: hint.trim() } : described;
+}
+
+function describeFailure(error, subject) {
   if (!(error instanceof ReduxRequestError)) {
     // fetch itself rejected, so there was never a response: the browser
     // could not reach this app's own server. Distinct from a 502, which

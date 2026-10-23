@@ -46,13 +46,13 @@ import TaggedSelect from "./TaggedSelect";
  * opened.
  *
  * #279 (Workspace tweaks): it grows to the right into the row's free room, up to a gap before the
- * view controls, so a long name shows whole with its tags; when room runs out it shrinks (its
- * tags wrap under its name) down to the shared control width, then the controls wrap under it.
- * The collapsed Visualization pane draws the same dropdown beside each picture's problem
- * (Workbench.js), on the same state, as one line (`oneLine`: the name truncated, the tags beside
- * it, the box only as wide as that line).
+ * view controls; when room runs out it shrinks down to the shared control width, then the
+ * controls wrap under it. Like every dropdown its name and tags stay on one line, the name cut
+ * with an ellipsis past ./TaggedSelect.js ONE_LINE_NAME_MAX. The collapsed Visualization pane
+ * draws the same dropdown beside each picture's problem (Workbench.js), on the same state,
+ * `compact`: the box only as wide as its line.
  */
-export function VisualizationTypeControl({ id, options, value, onChange, oneLine = false }) {
+export function VisualizationTypeControl({ id, options, value, onChange, compact = false }) {
   return (
     <TaggedSelect
       id={id}
@@ -62,9 +62,8 @@ export function VisualizationTypeControl({ id, options, value, onChange, oneLine
       options={options}
       value={value}
       onChange={options.length > 1 ? onChange : undefined}
-      oneLine={oneLine}
       boxSx={
-        oneLine
+        compact
           ? { flex: "0 1 auto", minWidth: 160, maxWidth: "100%" }
           : { flex: "1 1 auto", minWidth: `min(100%, ${SHARED_CONTROL_WIDTH}px)` }
       }

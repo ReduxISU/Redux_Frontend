@@ -874,7 +874,7 @@ async function expectFullName(page, id, name) {
 }
 
 for (const width of [1440, 390]) {
-  test(`at ${width}px every collapsed dropdown is one line, a long name cut with an ellipsis and whole in its tooltip, tags beside it`, async ({
+  test(`at ${width}px every dropdown, collapsed or expanded, is one line, a long name cut with an ellipsis and whole in its tooltip, tags beside it`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -890,19 +890,22 @@ for (const width of [1440, 390]) {
     await chooseReduceTarget(page, longest ? /0-1 Integer/ : /^Clique(?!\s*Cover)/, { expect });
     const reduction = await textOf(page.locator("#workbench-reduction-value"));
 
-    // Expanded: the name has priority, whole, its tags wrapping first.
-    await setExpanded(page, "execute", true);
-    await expect(page.locator("#workbench-reduction-button")).not.toHaveAttribute(
-      "data-one-line",
-      "true",
-    );
-    if (width === 1440) {
-      expect(
-        await page
-          .locator("#workbench-reduction-value")
-          .evaluate((element) => element.scrollWidth > element.clientWidth),
-      ).toBe(false);
+    // Expanded, every dropdown is one line too: Target, Reduction, each side's solver and the
+    // Visualization Type (Verify's verifiers are checked expanded below).
+    for (const key of SECTIONS) await setExpanded(page, key, true);
+    for (const id of [
+      "workbench-target",
+      "workbench-reduction",
+      "workbench-source-cell-solver",
+      "workbench-chain-solver",
+      "workbench-source-type",
+    ]) {
+      await expect(page.locator(`#${id}-button`)).toHaveAttribute("data-one-line", "true");
+      await expectOneLine(page, id);
     }
+    await expectFullName(page, "workbench-reduction", reduction);
+    await expect(page.locator("#workbench-verify-source-verifier-button")).toBeVisible();
+    await expectOneLine(page, "workbench-verify-source-verifier");
 
     for (const key of SECTIONS) await setExpanded(page, key, false);
     // The target's Visualization Type shows when Redux lists a picture for it (CI's backend may

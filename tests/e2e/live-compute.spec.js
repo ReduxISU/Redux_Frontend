@@ -66,7 +66,13 @@
 // exactly what this reproduces.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, selectSolverByName, showPane, startWithPanesExpanded } from "./helpers";
+import {
+  chooseReduceTarget,
+  gotoProblemDetail,
+  selectSolverByName,
+  showPane,
+  startWithPanesExpanded,
+} from "./helpers";
 
 // #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
 // what the open panes hold, so each starts as a viewer who saved them open.
@@ -195,6 +201,72 @@ test("a certificate produced by a live Run verifies against the instance it was 
   await expect(verdict).toBeVisible({ timeout: 30_000 });
   await expect(verdict).toContainText("Valid. Redux checked it");
   await expect(verdict).toHaveAttribute("role", "status");
+});
+
+// --- Decision: Solve via reduction's live pair is 3SAT -> Clique, Clique Brute Force ----------
+// #279 (one Solve in Reduce mode). 3SAT's declared instance has three clauses, so the Clique
+// instance its reduction builds has nine vertices; a brute force over nine vertices answers in a
+// fraction of a second, and its answer maps back (ProblemProvider/mapSolutionBack) on a backend
+// that has that route (ReduxISU/Redux#690). ghcr.io/reduxisu/redux:latest (CSharpAPI) doesn't yet:
+// there the map-back step must say it isn't available, and the verify part is skipped. The target's solver is picked by name, not by position, for the
+// reason the Topological Sort decision above gives.
+const REDUCE_PROBLEM = "3SAT";
+const REDUCE_TARGET = /^Clique(?!\s*Cover)/;
+const REDUCE_TARGET_SOLVER = /brute force/i;
+
+test("Solve via reduction builds Clique from 3SAT, solves it and maps the answer back, which verifies", async ({
+  page,
+}) => {
+  await gotoProblemDetail(page, REDUCE_PROBLEM, { expect });
+  await showPane(page, "execute", { expect });
+  await page.locator("#workbench-mode-reduce").click();
+  await chooseReduceTarget(page, REDUCE_TARGET, { expect });
+  await page.locator("#workbench-chain-solver-button").click();
+  await page
+    .locator("#workbench-chain-solver-listbox")
+    .getByRole("option", { name: REDUCE_TARGET_SOLVER })
+    .first()
+    .click();
+  await expect(page.locator("#workbench-chain-solver-value")).toHaveText(REDUCE_TARGET_SOLVER);
+
+  await page.locator("#workbench-chain-run").click();
+  // Each step in order: the build, Clique's answer, and that answer mapped back to 3SAT.
+  await expect(page.locator("#workbench-chain-reduce")).toHaveAttribute("data-state", "done", {
+    timeout: 30_000,
+  });
+  await expect(page.locator("#workbench-chain-solve")).toHaveAttribute("data-state", "done", {
+    timeout: 30_000,
+  });
+  await expect(page.locator("#workbench-chain-solve-result-verdict")).toHaveText(
+    /found a Clique answer$/,
+  );
+  // Step 3 settles on the answer mapped back, or on "not available".
+  const back = page.locator("#workbench-back");
+  await expect(back).toHaveAttribute("data-state", /^(answer|na)$/, { timeout: 30_000 });
+  if ((await back.getAttribute("data-state")) === "na") {
+    // A backend without ProblemProvider/mapSolutionBack (ReduxISU/Redux#690, not on CSharpAPI
+    // yet) can't map the answer back, and the cell says so. Asked directly, the route answers
+    // 404 or 405 there; a backend that has it answers anything else, and then "na" is a bug.
+    const probe = await page.request.post(
+      "/api/redux/ProblemProvider/mapSolutionBack?reduction=SipserReduceToCliqueStandard&solution=%7B%7D",
+      { data: JSON.stringify("(x1 | x2 | x3)"), headers: { "Content-Type": "application/json" } },
+    );
+    expect([404, 405]).toContain(probe.status());
+    await expect(page.locator("#workbench-back-text")).toHaveText(
+      /^Not available for this reduction/,
+    );
+    // Nothing came back to verify (ReduxISU/Redux#690).
+    return;
+  }
+  const mapped = ((await page.locator("#workbench-back-answer").textContent()) ?? "").trim();
+  expect(mapped).not.toBe("");
+
+  // The answer mapped back is a 3SAT answer: Redux's own verifier says so.
+  await page.locator("#workbench-back-check").click();
+  await expect(page.locator(CERTIFICATE_INPUT)).toHaveValue(mapped);
+  const verdict = page.locator(VERDICT_BANNER);
+  await expect(verdict).toBeVisible({ timeout: 30_000 });
+  await expect(verdict).toContainText("Valid. Redux checked it");
 });
 
 test("Verify reports Redux's rejection of a wrong certificate rather than deciding locally", async ({

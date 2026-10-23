@@ -72,9 +72,7 @@ const position = (page) => page.locator("#workbench-steps-position");
 // #279: once the target is solved the view opens on Map back, and the Target picture's heading
 // says whose steps it shows.
 async function expectTargetSolverShown(page) {
-  const solver = (
-    (await page.locator("#workbench-target-cell-solver-value").textContent()) ?? ""
-  ).trim();
+  const solver = ((await page.locator("#workbench-chain-solver-value").textContent()) ?? "").trim();
   expect(solver).not.toBe("");
   await expect(page.locator("#workbench-reduction-target-frame-status")).toHaveText(
     `${solver} steps`,

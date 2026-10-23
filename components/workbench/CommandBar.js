@@ -8,8 +8,8 @@
 // as the mockup has it:
 //   - Solve mode: Mode | Solver | Solve | the run's chip;
 //   - Reduce mode: Mode | Target | Reduction | Reduce | the build's chip. Reduce only builds the
-//     target; each side's solver and Solve button are in the cells under this row
-//     (./panels/ReduceCells.js).
+//     target; Solve via reduction (with the target's solver) and Solve directly (with the
+//     source's) are in the cells under this row (./panels/ReduceCells.js).
 // While the row's run is going, Cancel takes its button's place and the busy line (spinner, what
 // is running, a clock) shows under the row; a run that didn't finish shows its failure box there,
 // with Try again (./RunParts.js).
@@ -61,14 +61,15 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
 // One dropdown's slot in the row: it grows to the shared dropdown width and shrinks to fit.
 const selectSlotSx = { flex: `0 1 ${DROPDOWN_WIDTH}px`, minWidth: 200, maxWidth: "100%" };
 
-// #279 (Workspace tweaks): collapsed, each dropdown is one line (TaggedSelect `oneLine`: its name
-// truncated, its tags beside it) and its slot takes only what that line needs.
+// #279 (Workspace tweaks): every dropdown is one line (./TaggedSelect.js: its name truncated, its
+// tags beside it); collapsed, its slot takes only what that line needs.
 const collapsedSlotSx = { flex: "0 1 auto", minWidth: 160, maxWidth: "100%" };
 
 // #279 (Workspace tweaks): reduction names run long ("Karp's 0-1 Integer Linear Programming
 // Reduction") and carry two tags, so the Reduction dropdown also grows into free room on the
-// row, up to this width, to show its whole name and tags on one line. The Target dropdown grows
-// too, for a long problem name ("0-1 Integer Linear Programming").
+// row, up to this width, to show its name (cut past ./TaggedSelect.js ONE_LINE_NAME_MAX) and tags
+// on one line. The Target dropdown grows too, for a long problem name ("0-1 Integer Linear
+// Programming").
 const REDUCTION_MAX_WIDTH = 640;
 const TARGET_MAX_WIDTH = 360;
 
@@ -154,7 +155,6 @@ export default function CommandBar({
               id={`${idPrefix}-solver`}
               label="Solver"
               hue="blue"
-              oneLine={collapsed}
               boxSx={{ width: "100%" }}
               {...solver}
             />
@@ -179,7 +179,6 @@ export default function CommandBar({
                 id={`${idPrefix}-target`}
                 label="Target"
                 hue="violet"
-                oneLine={collapsed}
                 boxSx={{ width: "100%" }}
                 {...target}
               />
@@ -199,7 +198,6 @@ export default function CommandBar({
                 id={`${idPrefix}-reduction`}
                 label="Reduction"
                 hue="violet"
-                oneLine={collapsed}
                 boxSx={{ width: "100%" }}
                 {...reduction}
               />
