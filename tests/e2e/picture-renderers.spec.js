@@ -43,7 +43,15 @@
 // #213: the Tripartite Matching renderer (3-Dimensional Matching) after that: the three columns
 // of names, each triple's line and list row, the ×2 badges, the Blocked and Committed triples,
 // the trace, texts that meet nothing, and on a phone the list under the columns.
+// #214: the Code Tree renderer (Lossless Data Compression) after that: every character, each
+// step's merges, states and codes on one layout for the whole run, the tidy tree, the text strip,
+// the trace, texts that meet nothing, and on a phone a tree on its side at its own size.
 
+import {
+  LDC_CODE_TREE_FRAMES,
+  LDC_ONE_CODE_TREE_FRAMES,
+  LDC_SMALL_CODE_TREE_FRAMES,
+} from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel } from "./helpers";
 import {
@@ -6197,6 +6205,399 @@ for (const key of ["bruteForce", "wide"]) {
   });
 }
 
+// --- #214: the Code Tree renderer (Lossless Data Compression) ----------------------------------
+
+const CODE_TREE = "#workbench-source-frames-codetree";
+
+/**
+ * Each Lossless Data Compression capture. Every capture is drawn on the 3SAT page (its
+ * visualization made to name CodeTree), as CI's backend may serve no Code Tree visualization
+ * yet: the picture is the capture's, whatever the page.
+ */
+const CODE_TREE_CASES = {
+  default: LDC_CODE_TREE_FRAMES,
+  small: LDC_SMALL_CODE_TREE_FRAMES,
+  one: LDC_ONE_CODE_TREE_FRAMES,
+};
+
+async function openCodeTree(page, capture) {
+  await setEveryPictureType(page, "CodeTree");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${CODE_TREE}-codetree`)).toBeVisible();
+}
+
+const treePiece = (page, id) => page.locator(`${CODE_TREE}-codetree [data-node-id="${id}"]`);
+const treeEdgeOf = (page, id) => page.locator(`${CODE_TREE}-codetree [data-edge-id="${id}"]`);
+
+/** Frame `index`'s merges, node and edge states and codes, checked one by one. */
+async function expectCodeTreeFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const picture = page.locator(`${CODE_TREE}-codetree`);
+  const nodes = await picture
+    .locator("[data-node-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((node) => [
+          node.getAttribute("data-node-id"),
+          [node.getAttribute("data-state"), node.getAttribute("data-code")],
+        ]),
+      ),
+    );
+  const expected = {};
+  for (const symbol of capture.payload.symbols) {
+    expected[symbol.id] = [
+      frame.nodes[symbol.id]?.state ?? "Background",
+      frame.codes[symbol.id] ?? null,
+    ];
+  }
+  for (const merge of frame.merged) {
+    expected[merge.id] = [frame.nodes[merge.id]?.state ?? "Background", null];
+  }
+  expect(nodes).toEqual(expected);
+  const edges = await picture
+    .locator("[data-edge-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((edge) => [edge.getAttribute("data-edge-id"), edge.getAttribute("data-state")]),
+      ),
+    );
+  const expectedEdges = {};
+  for (const merge of frame.merged) {
+    for (const bit of ["0", "1"]) {
+      const id = `${merge.id}.${bit}`;
+      expectedEdges[id] = frame.edges[id]?.state ?? "Background";
+    }
+  }
+  expect(edges).toEqual(expectedEdges);
+  for (const merge of frame.merged) {
+    await expect(treePiece(page, merge.id).locator("[data-label]")).toHaveText(
+      String(merge.weight),
+    );
+  }
+  await expect(page.locator(`${CODE_TREE}-strip`)).toHaveAttribute(
+    "data-encoded",
+    frame.bits === undefined ? "false" : "true",
+  );
+}
+
+for (const [key, capture] of Object.entries(CODE_TREE_CASES)) {
+  test(`Code Tree: the ${key} capture draws every character, and every step's merges, states and codes`, async ({
+    page,
+  }) => {
+    test.slow();
+    const { payload } = capture;
+    await openCodeTree(page, capture);
+    const picture = page.locator(`${CODE_TREE}-codetree`);
+    await expect(picture.locator("[data-leaf]")).toHaveCount(payload.symbols.length);
+    for (const symbol of payload.symbols) {
+      await expect(treePiece(page, symbol.id).locator("[data-label]")).toHaveText(symbol.label);
+      await expect(treePiece(page, symbol.id).locator("[data-count]")).toHaveText(
+        String(symbol.count),
+      );
+    }
+    await expect(page.locator(`${CODE_TREE}-strip li[data-cell]`)).toHaveCount(payload.text.length);
+
+    await runToFrame(page, capture, 0);
+    await expectCodeTreeFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectCodeTreeFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    await expect(page.locator(`${CODE_TREE}-strip-head`)).toHaveText(
+      `ENCODED · ${last.bits} ${last.bits === 1 ? "BIT" : "BITS"}`,
+    );
+    await expect(page.locator(`${CODE_TREE}-summary`)).toHaveText(
+      `${last.bits} bits vs ${8 * payload.text.length} at 8 bits each`,
+    );
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^(Character \S+, appears|Merged tree n)/);
+    }
+  });
+}
+
+/** Each node's drawn box by id, in viewBox units. */
+function codeTreeBoxes(page) {
+  return page.locator(`${CODE_TREE}-codetree [data-node-id]`).evaluateAll((all) =>
+    Object.fromEntries(
+      all.map((node) => {
+        const box = node.querySelector("[data-body]").getBBox();
+        return [node.getAttribute("data-node-id"), [box.x, box.y, box.width, box.height]];
+      }),
+    ),
+  );
+}
+
+test("Code Tree: before Run the characters stand alone in character order, and the run's steps never move a node", async ({
+  page,
+}) => {
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  const picture = page.locator(`${CODE_TREE}-codetree`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator("[data-edge-id], [data-code-text]")).toHaveCount(0);
+  await expect(picture.locator("[data-node-id]")).toHaveCount(capture.payload.symbols.length);
+  const plain = await codeTreeBoxes(page);
+  const order = capture.payload.symbols.map((symbol) => plain[symbol.id][0]);
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+  await expect(page.locator(`${CODE_TREE}-strip-head`)).toHaveText("INPUT · 70 CHARACTERS");
+  await expect(page.locator(`${CODE_TREE}-summary`)).toHaveText("19 one-node trees to merge");
+
+  // One layout for the whole run: a node drawn at one step is in the same place at every other.
+  await page.locator("#workbench-run").click();
+  const count = capture.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+  const finished = await codeTreeBoxes(page);
+  expect(Object.keys(finished)).toHaveLength(capture.payload.symbols.length + 18);
+  for (const index of [0, 5, 12]) {
+    await toFrame(page, capture, index);
+    const boxes = await codeTreeBoxes(page);
+    for (const [id, box] of Object.entries(boxes)) expect(box, id).toEqual(finished[id]);
+  }
+  await expect(page.locator(`${CODE_TREE}-summary`)).toHaveText("7 trees left to merge");
+});
+
+test("Code Tree: the tree hangs tidily, each merged node centred over its children, 0 to the left and 1 to the right", async ({
+  page,
+}) => {
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const picture = page.locator(`${CODE_TREE}-codetree`);
+  await expect(picture).toHaveAttribute("data-orientation", "down");
+  const boxes = await codeTreeBoxes(page);
+  const centre = (id) => ({
+    x: boxes[id][0] + boxes[id][2] / 2,
+    y: boxes[id][1] + boxes[id][3] / 2,
+  });
+  const leafY = centre("c1").y;
+  for (const symbol of capture.payload.symbols) expect(centre(symbol.id).y).toBeCloseTo(leafY, 1);
+  for (const merge of capture.frames.at(-1).merged) {
+    const parent = centre(merge.id);
+    const left = centre(merge.left);
+    const right = centre(merge.right);
+    expect(parent.x).toBeCloseTo((left.x + right.x) / 2, 1);
+    expect(parent.y).toBeLessThan(Math.min(left.y, right.y));
+    expect(left.x).toBeLessThan(right.x);
+    await expect(treeEdgeOf(page, `${merge.id}.0`).locator("[data-bit]")).toHaveText("0");
+    await expect(treeEdgeOf(page, `${merge.id}.1`).locator("[data-bit]")).toHaveText("1");
+  }
+  // Each code is the path from the root: e (c5) is 1100, written under its leaf.
+  await expect(treePiece(page, "c5")).toHaveAttribute("data-code", "1100");
+  await expect(treePiece(page, "c5").locator("[data-code-text]")).toHaveText("1100");
+});
+
+test("Code Tree: a merge highlights its trees and their new parent, merges kept so far are Committed, and the finished tree turns Solution", async ({
+  page,
+}) => {
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await runToFrame(page, capture, 2);
+  // Step 3 merges c (c3) and d (c4) into n2; n1 (r and x) is kept so far.
+  for (const id of ["c3", "c4", "n2"]) {
+    await expect(treePiece(page, id)).toHaveAttribute("data-state", "ElementHighlight");
+    await expect(treePiece(page, id)).toHaveAttribute("data-focus", "true");
+  }
+  await expect(treePiece(page, "n1")).toHaveAttribute("data-state", "Committed");
+  await expect(treePiece(page, "n1").locator("circle")).toHaveAttribute("stroke-dasharray", "6 3");
+  await expect(treeEdgeOf(page, "n1.0").locator("line")).toHaveAttribute("stroke-dasharray", "6 3");
+  await expect(treePiece(page, "n3")).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("Committed (kept so far)");
+  await expect(legendBody(page)).toContainText(
+    "0 / 1 on an edge (going left adds 0 to a code, going right adds 1)",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Circle (a merged tree; its number is how many characters it holds)",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Code (a character's bits, read from the root down to it)",
+  );
+  await toFrame(page, capture, capture.frames.length - 1);
+  await expect(
+    page.locator(`${CODE_TREE}-codetree [data-node-id]:not([data-state="Solution"])`),
+  ).toHaveCount(0);
+  await expect(page.locator(`${CODE_TREE}-strip [data-cell-code]`).first()).toHaveText("01100");
+});
+
+test("Code Tree: a text of one character has no merge, and its code is 0", async ({ page }) => {
+  const capture = LDC_ONE_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await expect(page.locator(`${CODE_TREE}-codetree [data-edge-id]`)).toHaveCount(0);
+  await expect(treePiece(page, "c1")).toHaveAttribute("data-state", "Solution");
+  await expect(treePiece(page, "c1").locator("[data-code-text]")).toHaveText("0");
+  await expect(page.locator(`${CODE_TREE}-strip [data-cell-code]`)).toHaveText([
+    "0",
+    "0",
+    "0",
+    "0",
+  ]);
+  await expect(page.locator(`${CODE_TREE}-strip-head`)).toHaveText("ENCODED · 4 BITS");
+});
+
+test("Code Tree: hovering, focusing or tapping a node traces its path to the root and the tree under it, the rest fading by color", async ({
+  page,
+}) => {
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  // e (c5) hangs under n10, n15, n17 and the root n18.
+  await treePiece(page, "c5").hover();
+  for (const id of ["c5", "n10", "n15", "n17", "n18"]) {
+    await expect(treePiece(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(treePiece(page, "c9")).toHaveAttribute("data-traced", "faint");
+  await expect(treeEdgeOf(page, "n10.0")).toHaveAttribute("data-traced", "trace");
+  await expect(treeEdgeOf(page, "n10.1")).toHaveAttribute("data-traced", "faint");
+  const faded = await treePiece(page, "c9").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  // Every e in the text is traced too.
+  const cells = page.locator(`${CODE_TREE}-strip li[data-cell="c5"]`);
+  await expect(cells).toHaveCount(5);
+  for (const cell of await cells.all()) await expect(cell).toHaveAttribute("data-traced", "trace");
+  // A merged node traces the tree under it as well.
+  await page.mouse.move(0, 0);
+  await treePiece(page, "n10").hover();
+  for (const id of ["c5", "c9", "n10", "n18"]) {
+    await expect(treePiece(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(treePiece(page, "n11")).toHaveAttribute("data-traced", "faint");
+  // A character in the text traces its leaf.
+  await page.mouse.move(0, 0);
+  await page.locator(`${CODE_TREE}-strip li[data-cell="c12"]`).first().hover();
+  await expect(treePiece(page, "c12")).toHaveAttribute("data-traced", "trace");
+  await page.mouse.move(0, 0);
+  await treePiece(page, "n14").focus();
+  await expect(treePiece(page, "n14")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(treePiece(page, "n14")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Code Tree: on a phone the tree lies on its side, and a tap traces a node after zooming in", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const picture = page.locator(`${CODE_TREE}-codetree`);
+  await expect(picture).toHaveAttribute("data-orientation", "side");
+  await expectFits(page, `${CODE_TREE}-svg`);
+  // The leaves stand in one column, each merged node left of its children.
+  const boxes = await codeTreeBoxes(page);
+  const leafX = boxes.c1[0];
+  for (const symbol of capture.payload.symbols) expect(boxes[symbol.id][0]).toBeCloseTo(leafX, 1);
+  for (const merge of capture.frames.at(-1).merged) {
+    expect(boxes[merge.id][0]).toBeLessThan(Math.min(boxes[merge.left][0], boxes[merge.right][0]));
+  }
+  await page.locator(`${CODE_TREE}-zoom-in`).click();
+  await expect(page.locator(`${CODE_TREE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await treePiece(page, "c5").focus();
+  await treePiece(page, "c5").blur();
+  await treePiece(page, "c5").click();
+  await expect(treePiece(page, "c5")).toHaveAttribute("aria-pressed", "true");
+  await expect(treePiece(page, "c9")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${CODE_TREE}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Code Tree: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      const capture = LDC_CODE_TREE_FRAMES;
+      await openCodeTree(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      await runToFrame(page, capture, capture.frames.length - 1);
+      const svg = page.locator(`${CODE_TREE}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${CODE_TREE}-svg`);
+      await expect(page.locator(`${CODE_TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The heading and the bits follow the theme: no dark-on-dark, no light-on-white. (A
+      // node's label is drawn on its state's fill.)
+      for (const selector of ["[data-head]", "[data-bit]"]) {
+        const ink = await page
+          .locator(`${CODE_TREE}-codetree ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+      const cell = await page
+        .locator(`${CODE_TREE}-strip li[data-cell] span`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).color);
+      const [r, g, b] = cell.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128, "strip").toBe(scheme === "dark");
+    });
+  }
+}
+
+for (const [key, capture] of Object.entries(CODE_TREE_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Code Tree: the ${key} capture's texts never meet each other, a line or a node at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openCodeTree(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${CODE_TREE}-svg`, null)),
+        ...(await drawnCollisions(page, `${CODE_TREE}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["default", "small"]) {
+  test(`Code Tree: on a 390 px phone the ${key} tree is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = CODE_TREE_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openCodeTree(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${CODE_TREE}-codetree`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(400);
+    await expect(page.locator(`${CODE_TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${CODE_TREE}-svg`);
+    const before = await smallestText(page, `${CODE_TREE}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, capture.frames.length - 1);
+    const after = await smallestText(page, `${CODE_TREE}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    // The text strip under the tree lists every character's code at its own size too.
+    const strip = await page
+      .locator(`${CODE_TREE}-strip [data-cell-code]`)
+      .first()
+      .evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+    expect(strip).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
 // --- Every renderer opens at fit -------------------------------------------------------------
 //
 // Each registered picture type (components/pictures/registry.js), drawn from one capture on the
@@ -6208,6 +6609,7 @@ const FIT_CASES = {
   Automaton: DFA_AUTOMATON_FRAMES,
   BipartiteGraph: SET_COVER_BIPARTITE_FRAMES,
   Board: N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES,
+  CodeTree: LDC_CODE_TREE_FRAMES,
   FlowNetwork: MIN_CUT_FLOW_FRAMES,
   Geometry: CONVEX_HULL_GEOMETRY_FRAMES,
   Graph: CLIQUE_GRAPH_FRAMES,
