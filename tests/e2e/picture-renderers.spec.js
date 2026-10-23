@@ -55,6 +55,9 @@
 // the trace, and widths from a phone to a desktop in both themes. #278: the operators and the
 // Legend's line follow the payload's layout (cnf, dnf, or none named), and every text in the
 // drawing belongs to a piece.
+// #271: the Nested Set renderer (Set Cover, Exact Cover, Hitting Set) after it: the dots on a
+// circle and a region per set, names clear of everything, every step's states and ×2 hits, each
+// fallback to the set list and the Layout switch, the trace, and widths in both themes.
 // #209: the Table renderer (Edit Distance's grid, 0-1 ILP's matrix, and the step tables of DFA,
 // NFA, SSSP and SPSP) after that: the blank before Run, every step's cells, states and arrows, a
 // layout that holds still, the edits the answer spells out, the chips, shaded coefficients, pills
@@ -77,6 +80,18 @@ import {
   SAT3_UNSAT_FORMULA_FRAMES,
 } from "./formula-payloads";
 import { drawnCollisions, gotoProblemDetail, openPanel } from "./helpers";
+import {
+  EXACT_COVER_CROWDED_NESTED_FRAMES,
+  EXACT_COVER_DEEP_NESTED_FRAMES,
+  EXACT_COVER_NESTED_FRAMES,
+  EXACT_COVER_NO_ROOM_NESTED_FRAMES,
+  EXACT_COVER_RECURSIVE_NESTED_FRAMES,
+  HITTING_SET_NESTED_FRAMES,
+  SET_COVER_GREEDY_OVER_NESTED_FRAMES,
+  SET_COVER_MANY_ELEMENTS_NESTED_FRAMES,
+  SET_COVER_MANY_SETS_NESTED_FRAMES,
+  SET_COVER_NESTED_FRAMES,
+} from "./nested-set-payloads";
 import {
   ARC_SET_LAYERED_FRAMES,
   BIN_PACKING_FFD_SHORT_PACKING_FRAMES,
@@ -8860,6 +8875,403 @@ for (const scheme of ["light", "dark"]) {
         .evaluate((el) => getComputedStyle(el).fill);
       const [r, g, b] = ink.match(/\d+/g).map(Number);
       expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+// --- #271: the Nested Set renderer (the set problems' sets drawn as regions) -------------------
+
+const NESTED = "#workbench-source-frames-nestedset";
+const nestedRoot = (page) => page.locator(`${NESTED}-nestedset`);
+const nestedNode = (page, id) => nestedRoot(page).locator(`[data-node-id="${id}"]`);
+const nestedRegion = (page, id) => nestedRoot(page).locator(`[data-region-id="${id}"]`);
+
+const NESTED_CASES = [
+  { problem: "Set Cover", capture: SET_COVER_NESTED_FRAMES },
+  { problem: "Exact Cover", capture: EXACT_COVER_NESTED_FRAMES },
+  // ReduxISU/Redux#742 renamed Hitting Set to Karp's Exact Hitting Set.
+  { problem: "Exact Hitting Set", capture: HITTING_SET_NESTED_FRAMES },
+];
+
+/** Opens `problem` with every picture answered by the Nested Set `capture`. */
+async function openNested(page, problem, capture) {
+  await openPicture(page, problem, capture);
+  await expect(nestedRoot(page)).toBeVisible();
+}
+
+/** Frame `index`'s states on every element and set (absent = Background); a chip per member. */
+async function expectNestedStates(page, capture, index) {
+  const frame = capture.frames[index];
+  for (const piece of [...capture.payload.elements, ...capture.payload.sets]) {
+    const want = frame.nodes[piece.id]?.state ?? "Background";
+    for (const drawn of await nestedNode(page, piece.id).all()) {
+      await expect(drawn).toHaveAttribute("data-state", want);
+    }
+  }
+}
+
+/**
+ * Where the regions' names sit against everything else, in screen px: each name's box, every
+ * dot, and points along every region's outline (with whose it is), plus which dots fall inside
+ * each region.
+ */
+function nestedGeometry(page) {
+  return nestedRoot(page).evaluate((root) => {
+    const svg = root.querySelector("svg");
+    const toScreen = (element, x, y) => {
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      return point.matrixTransform(element.getScreenCTM());
+    };
+    const names = [...root.querySelectorAll('[data-layer="names"] [data-node-id]')].map((g) => {
+      const rect = g.querySelector("[data-body]").getBoundingClientRect();
+      const box = { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      return { id: g.getAttribute("data-node-id"), box };
+    });
+    const dots = [...root.querySelectorAll('[data-layer="elements"] [data-node-id]')].map((g) => {
+      const body = g.querySelector("circle");
+      return {
+        id: g.getAttribute("data-node-id"),
+        centre: (({ x, y }) => ({ x, y }))(
+          toScreen(body, Number(body.getAttribute("cx")), Number(body.getAttribute("cy"))),
+        ),
+        cx: Number(body.getAttribute("cx")),
+        cy: Number(body.getAttribute("cy")),
+        r: body.getBoundingClientRect().width / 2,
+      };
+    });
+    const outlines = [...root.querySelectorAll("[data-region-id]")].map((g) => {
+      const path = g.querySelector("[data-region-edge]");
+      const length = path.getTotalLength();
+      const points = [];
+      for (let at = 0; at < length; at += 2) {
+        const p = path.getPointAtLength(at);
+        const q = toScreen(path, p.x, p.y);
+        points.push({ x: q.x, y: q.y });
+      }
+      const inside = dots
+        .filter((dot) => {
+          const point = svg.createSVGPoint();
+          point.x = dot.cx;
+          point.y = dot.cy;
+          return path.isPointInFill(point);
+        })
+        .map((dot) => dot.id);
+      return { id: g.getAttribute("data-region-id"), points, inside };
+    });
+    return { names, dots, outlines };
+  });
+}
+
+for (const { problem, capture } of NESTED_CASES) {
+  test(`Nested Set: ${problem} draws its elements on a circle and every set as a region round them`, async ({
+    page,
+  }) => {
+    await openNested(page, problem, capture);
+    const { payload } = capture;
+    const root = nestedRoot(page);
+    await expect(root).toHaveAttribute("data-layout", "regions");
+    await expect(root).toHaveAttribute("data-pick-side", payload.pickSide);
+    await expect(root.locator('[data-layer="elements"] [data-node-id]')).toHaveCount(
+      payload.elements.length,
+    );
+    await expect(root.locator('[data-layer="names"] [data-node-id]')).toHaveCount(
+      payload.sets.length,
+    );
+    await expect(root.locator("[data-region-id]")).toHaveCount(payload.sets.length);
+    await expect(root.locator("[data-picked-head]")).toHaveText(
+      payload.pickSide === "elements" ? /PICKED: ELEMENTS/ : /PICKED: SETS/,
+    );
+    for (const piece of await root.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("aria-label", /^(Element \S+, |Set S\d+ \{)/);
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // Every member sits inside its set's region, and every other dot outside it.
+    const { outlines } = await nestedGeometry(page);
+    for (const set of payload.sets) {
+      const outline = outlines.find((candidate) => candidate.id === set.id);
+      expect(new Set(outline.inside), set.id).toEqual(new Set(set.members));
+    }
+    // The Bipartite Graph's ids, each piece once, and every DOM id in the picture unique.
+    const pieceIds = await root
+      .locator("[data-node-id]")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-node-id")));
+    expect(pieceIds.sort()).toEqual(
+      [...payload.elements, ...payload.sets].map((piece) => piece.id).sort(),
+    );
+    const ids = await page
+      .locator(PICTURE)
+      .evaluate((el) => [...el.querySelectorAll("[id]")].map((node) => node.id));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+}
+
+for (const { problem, capture } of [
+  ...NESTED_CASES,
+  { problem: "Exact Cover", capture: EXACT_COVER_RECURSIVE_NESTED_FRAMES },
+]) {
+  test(`Nested Set: ${problem}'s names (${capture.payload.sets.length} sets) clear every other name, every dot and every other outline`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await openNested(page, problem, capture);
+    const { names, dots, outlines } = await nestedGeometry(page);
+    const meet = (a, b) =>
+      a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    for (const [i, name] of names.entries()) {
+      for (const other of names.slice(i + 1)) {
+        expect(meet(name.box, other.box), `${name.id} and ${other.id}`).toBe(false);
+      }
+      for (const dot of dots) {
+        const dx = Math.max(name.box.left - dot.centre.x, 0, dot.centre.x - name.box.right);
+        const dy = Math.max(name.box.top - dot.centre.y, 0, dot.centre.y - name.box.bottom);
+        expect(Math.hypot(dx, dy), `${name.id} and dot ${dot.id}`).toBeGreaterThan(dot.r);
+      }
+      for (const outline of outlines) {
+        if (outline.id === name.id) continue;
+        const crossing = outline.points.some(
+          (p) =>
+            p.x > name.box.left &&
+            p.x < name.box.right &&
+            p.y > name.box.top &&
+            p.y < name.box.bottom,
+        );
+        expect(crossing, `${outline.id}'s outline under ${name.id}`).toBe(false);
+      }
+    }
+  });
+}
+
+test("Nested Set: before Run the regions are plain, and step 1 keeps every dot and name in place", async ({
+  page,
+}) => {
+  const capture = SET_COVER_NESTED_FRAMES;
+  await openNested(page, "Set Cover", capture);
+  const root = nestedRoot(page);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(root.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(root.locator("[data-hits]")).toHaveCount(0);
+  await expect(root.locator("[data-badge]")).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(legendBody(page)).not.toContainText("×N");
+  const before = await nodeCentres(page, `${NESTED}-nestedset`);
+  await runToFrame(page, capture, 0);
+  await expectNestedStates(page, capture, 0);
+  expect(await nodeCentres(page, `${NESTED}-nestedset`)).toEqual(before);
+});
+
+test("Nested Set: the steps walk the brute force's tries, the ×2 hits and the confirmed answer", async ({
+  page,
+}) => {
+  const capture = SET_COVER_NESTED_FRAMES;
+  await openNested(page, "Set Cover", capture);
+  // Frame 5 tries {S1,S2}: 2 is in both, and 5 is in neither.
+  await runToFrame(page, capture, 4);
+  await expectNestedStates(page, capture, 4);
+  await expect(nestedNode(page, "e:2")).toHaveAttribute("data-hits", "2");
+  await expect(nestedNode(page, "e:2").locator('[data-badge="hits"]')).toHaveText("×2");
+  await expect(nestedNode(page, "e:2")).toHaveAttribute("aria-label", /hit by 2 picked sets/);
+  await expect(nestedNode(page, "e:1").locator("[data-badge]")).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("×N (hit by N picked sets)");
+  // The region's own outline says the set's state too.
+  await expect(nestedRegion(page, "S1")).toHaveAttribute("data-state", "ElementHighlight");
+  for (let index = 5; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+    await expectNestedStates(page, capture, index);
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(nestedNode(page, "S1")).toHaveAttribute("data-state", "Solution");
+  await expect(nestedNode(page, "S4")).toHaveAttribute("data-state", "Solution");
+  await expect(nestedNode(page, "S2")).toHaveAttribute("data-state", "Background");
+});
+
+test("Nested Set: Exact Cover's kept sets are Committed and dashed, the ones that would double up Blocked", async ({
+  page,
+}) => {
+  const capture = EXACT_COVER_RECURSIVE_NESTED_FRAMES;
+  await openNested(page, "Exact Cover", capture);
+  await runToFrame(page, capture, 1);
+  await expectNestedStates(page, capture, 1);
+  await expect(nestedNode(page, "S1")).toHaveAttribute("data-state", "Committed");
+  await expect(nestedNode(page, "S4")).toHaveAttribute("data-state", "Blocked");
+  const dash = (id) =>
+    nestedRegion(page, id).locator("[data-region-edge]").getAttribute("stroke-dasharray");
+  expect(await dash("S1")).toBeTruthy();
+  expect(await dash("S4")).toBeTruthy();
+  expect(await dash("S1")).not.toBe(await dash("S4"));
+  const legend = legendBody(page);
+  await expect(legend).toContainText("Blocked (can't be picked)");
+  await expect(legend).toContainText("Committed (kept so far)");
+  for (let index = 2; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expectNestedStates(page, capture, index);
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Nested Set: Hitting Set picks elements and hits sets, and a greedy cover over K ends on no with nothing green", async ({
+  page,
+}) => {
+  const hitting = HITTING_SET_NESTED_FRAMES;
+  await openNested(page, "Exact Hitting Set", hitting);
+  await runToFrame(page, hitting, hitting.frames.length - 1);
+  await expectNestedStates(page, hitting, hitting.frames.length - 1);
+  const picked = Object.entries(hitting.frames.at(-1).nodes).find(
+    ([id, entry]) => id.startsWith("e:") && entry.state === "Solution",
+  );
+  expect(picked).toBeTruthy();
+  await expect(nestedNode(page, "S2")).toHaveAttribute("aria-label", /hit by 1 picked element/);
+
+  const over = SET_COVER_GREEDY_OVER_NESTED_FRAMES;
+  await openNested(page, "Set Cover", over);
+  await runToFrame(page, over, 2);
+  await expect(nestedNode(page, "S4")).toHaveAttribute("data-state", "Rejected");
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(nestedRoot(page).locator('[data-state="Solution"]')).toHaveCount(0);
+  await expect(nestedRoot(page).locator('[data-state="Committed"]')).toHaveCount(0);
+});
+
+const FALLBACKS = [
+  { problem: "Set Cover", capture: SET_COVER_MANY_SETS_NESTED_FRAMES, why: /more than 8 sets/ },
+  {
+    problem: "Set Cover",
+    capture: SET_COVER_MANY_ELEMENTS_NESTED_FRAMES,
+    why: /more than 12 elements/,
+  },
+  {
+    problem: "Exact Cover",
+    capture: EXACT_COVER_DEEP_NESTED_FRAMES,
+    why: /an element sits in more than 4 overlapping sets/,
+  },
+  {
+    problem: "Exact Cover",
+    capture: EXACT_COVER_CROWDED_NESTED_FRAMES,
+    why: /S\d's region would run into \d/,
+  },
+  {
+    problem: "Exact Cover",
+    capture: EXACT_COVER_NO_ROOM_NESTED_FRAMES,
+    why: /no room for S\d's label/,
+  },
+];
+
+for (const { problem, capture, why } of FALLBACKS) {
+  test(`Nested Set: the set list is drawn when ${why.source.replace(/\\[a-z]|[\\^$]/g, "#")}, saying why`, async ({
+    page,
+  }) => {
+    await openNested(page, problem, capture);
+    const root = nestedRoot(page);
+    await expect(root).toHaveAttribute("data-layout", "list");
+    await expect(root).toHaveAttribute("data-fallback", why);
+    await expect(root.locator("[data-fallback-reason]")).toHaveText(/^REGIONS DON'T FIT: /);
+    await expect(root.locator("[data-region-id]")).toHaveCount(0);
+    const { payload } = capture;
+    // U first, every element once; then a row per set with a chip per member.
+    await expect(root.locator('[data-row="U"]')).toHaveCount(1);
+    await expect(
+      root.locator('[data-layer="chips"] [data-node-id]:not([data-in-set])'),
+    ).toHaveCount(payload.elements.length);
+    await expect(root.locator("[data-row]:not([data-row='U'])")).toHaveCount(payload.sets.length);
+    for (const set of payload.sets) {
+      await expect(root.locator(`[data-in-set="${set.label}"]`)).toHaveCount(set.members.length);
+    }
+    // Each chip carries its element's state at a step.
+    await runToFrame(page, capture, 0);
+    await expectNestedStates(page, capture, 0);
+    expect(await drawnCollisions(page, `${NESTED}-svg`)).toEqual([]);
+  });
+}
+
+test("Nested Set: the Layout switch forces the set list, and Regions (auto) brings the regions back", async ({
+  page,
+}) => {
+  await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
+  const root = nestedRoot(page);
+  await expect(page.locator(`${NESTED}-layout-auto`)).toHaveAttribute("aria-pressed", "true");
+  await page.locator(`${NESTED}-layout-list`).click();
+  await expect(page.locator(`${NESTED}-layout-list`)).toHaveAttribute("aria-pressed", "true");
+  await expect(root).toHaveAttribute("data-layout", "list");
+  await expect(root.locator("[data-fallback-reason]")).toHaveText("SET LIST CHOSEN BY HAND");
+  await expect(root.locator('[data-row="S1"]')).toHaveAttribute("aria-label", /^Set S1 \{1,2,3\}/);
+  // The choice holds while stepping.
+  await runToFrame(page, SET_COVER_NESTED_FRAMES, 4);
+  await expect(root).toHaveAttribute("data-layout", "list");
+  await expectNestedStates(page, SET_COVER_NESTED_FRAMES, 4);
+  await expect(root.locator('[data-node-id="e:2"] [data-badge="hits"]').first()).toHaveText("×2");
+  await page.locator(`${NESTED}-layout-auto`).click();
+  await expect(root).toHaveAttribute("data-layout", "regions");
+  await expect(root.locator("[data-fallback-reason]")).toHaveCount(0);
+});
+
+test("Nested Set: hovering a dot traces it and its sets, a set its region and elements, and the rest fade by color", async ({
+  page,
+}) => {
+  await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
+  // 4 is in S2, S3 and S4.
+  await nestedNode(page, "e:4").hover();
+  for (const id of ["e:4", "S2", "S3", "S4"]) {
+    await expect(nestedNode(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(nestedRegion(page, "S3")).toHaveAttribute("data-traced", "trace");
+  await expect(nestedNode(page, "S1")).toHaveAttribute("data-traced", "faint");
+  await expect(nestedRegion(page, "S1")).toHaveAttribute("data-traced", "faint");
+  await expect(nestedNode(page, "e:1")).toHaveAttribute("data-traced", "faint");
+  const faded = await nestedNode(page, "e:1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+    dash: el.querySelector("[data-body]").getAttribute("stroke-dasharray"),
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  expect(faded.dash).toBeTruthy();
+  // Keyboard: focusing a set's name traces its elements; Enter pins it.
+  await page.mouse.move(0, 0);
+  await nestedNode(page, "S1").focus();
+  for (const id of ["e:1", "e:2", "e:3"]) {
+    await expect(nestedNode(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(nestedNode(page, "e:5")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(nestedNode(page, "S1")).toHaveAttribute("aria-pressed", "true");
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Nested Set: at ${width} px in the ${scheme} theme the regions and the set list fit with nothing to scroll`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
+      if (width < 1200) await page.locator("#workbench-panel-close").click();
+      const svg = `${NESTED}-svg`;
+      await expect(page.locator(svg)).toBeVisible();
+      await expectFits(page, svg);
+      await expect(page.locator(`${NESTED}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The heading follows the theme: no dark-on-dark, no light-on-white.
+      const ink = await page
+        .locator(`${NESTED}-nestedset [data-layer="heads"] text`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+      // The set list is laid out at its box's width, so its chips wrap instead of shrinking.
+      await page.locator(`${NESTED}-layout-list`).click();
+      await expect(nestedRoot(page)).toHaveAttribute("data-layout", "list");
+      await expectFits(page, svg);
+      const smallest = await page.locator(svg).evaluate((el) => {
+        const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+        return Math.min(
+          ...[...el.querySelectorAll("[data-node-id] text")].map(
+            (text) => Number(text.getAttribute("font-size")) * scale,
+          ),
+        );
+      });
+      expect(smallest).toBeGreaterThanOrEqual(width < 700 ? 9 : 11);
+      expect(await drawnCollisions(page, svg)).toEqual([]);
     });
   }
 }
