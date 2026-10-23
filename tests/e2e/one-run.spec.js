@@ -330,8 +330,9 @@ const CLAUSES_VIZ = "Sat3DefaultVisualization";
 const TREE_VIZ = "Sat3SearchTreeVisualization";
 const TREE_NAME = "3SAT Search Tree";
 const TREE = "#workbench-source-frames-searchtree";
-const ALL_VISUALIZATIONS_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizations$/;
-const ALL_VISUALIZATION_TYPES_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizationTypes$/;
+const ALL_VISUALIZATIONS_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizations(?=\?|$)/;
+const ALL_VISUALIZATION_TYPES_REQUEST =
+  /\/api\/redux\/Navigation\/Batch\/allVisualizationTypes(?=\?|$)/;
 
 /** 3SAT's Search Tree as the local build's allInfo describes it. */
 const TREE_INFO = {

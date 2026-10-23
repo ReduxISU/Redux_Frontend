@@ -162,7 +162,7 @@ function buildVisualizations(visualizationClassNames, info, visualizationTypesBy
 // Generic "Default Verifier" naming convention (ARCHITECTURE.md's Naming
 // convention section) -- a problem can declare more than one verifier class,
 // but the detail page shows exactly one, so this always takes the first.
-function buildVerifier(verifierClassNames, info, problemInfo) {
+function buildVerifier(verifierClassNames, info, problemInfo, problemCode) {
   const [firstVerifierClassName] = verifierClassNames ?? [];
   if (!firstVerifierClassName) return null;
 
@@ -180,6 +180,9 @@ function buildVerifier(verifierClassNames, info, problemInfo) {
     name: verifierInfo.verifierName ?? firstVerifierClassName,
     certificateDescription: verifierInfo.verifierDefinition ?? "",
     certificateFormat: problemInfo.certificateFormat || "",
+    // #279 stage 4: the problem's class name in Redux ("SAT3"), which lib/certificateHints.js
+    // keys its plain descriptions by.
+    problemCode: problemCode ?? null,
     exampleCertificate: verifierInfo.certificate || undefined,
   };
 }
@@ -257,7 +260,12 @@ function buildReductions(
             targetProblem: buildTargetProblem(toCode, info, codeToName),
             // #229 stage 3: Verify's "Check against: target" checks with the target
             // problem's own verifier, against the instance the reduction built.
-            targetVerifier: buildVerifier(verifiersByProblem?.[toCode], info, info[toCode] ?? {}),
+            targetVerifier: buildVerifier(
+              verifiersByProblem?.[toCode],
+              info,
+              info[toCode] ?? {},
+              toCode,
+            ),
             // #279 stage 2: the target problem's solvers, for Execute's "Solve <target>" cell.
             targetSolvers: buildSolvers(solversByProblem?.[toCode], info),
           });
@@ -351,7 +359,7 @@ function buildProblem(problemCode, info, batches, codeToName) {
       info,
       visualizationTypesByInstance,
     ),
-    verifier: buildVerifier(verifiersByProblem[problemCode], info, problemInfo),
+    verifier: buildVerifier(verifiersByProblem[problemCode], info, problemInfo, problemCode),
     reductions: buildReductions(
       problemCode,
       reductionGraph,

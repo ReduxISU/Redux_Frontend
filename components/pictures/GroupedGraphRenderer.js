@@ -24,6 +24,10 @@
 // #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are marked: a clause
 // gets a ring just outside its circle, a literal a ring outside its trace ring, a variable chip a
 // ring around its box, and an edge a band under its line.
+//
+// #279: plain until answered, as the Formula is. Before Run (the plain frame, `frameIndex` null)
+// the variable chips are left out: they hold values only a run gives. Their room stays, so
+// nothing moves at step 1.
 
 import Box from "@mui/material/Box";
 import { Fragment, useMemo, useState } from "react";
@@ -104,6 +108,7 @@ function edgeControl(kind, a, b, ring, extra) {
  * @param {string} props.name The visualization's name, for the diagram's label.
  * @param {Object} props.payload The Grouped Graph payload.
  * @param {Object} props.frame The frame to draw.
+ * @param {number|null} [props.frameIndex] The step on screen, or null for the plain frame.
  * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
  * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
  * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
@@ -113,6 +118,7 @@ export default function GroupedGraphRenderer({
   name,
   payload,
   frame,
+  frameIndex = null,
   layoutKey = null,
   highlightIds,
   gadgetColors,
@@ -418,76 +424,78 @@ export default function GroupedGraphRenderer({
             );
           })}
         </g>
-        <g data-layer="variables">
-          {layout.variables.map((variable, index) => {
-            const value = assignment[variable.id];
-            const assigned = typeof value === "boolean";
-            const tried = focus.has(variable.id);
-            const faint = traced !== null && traced !== variable.id;
-            const isTraced = traced === variable.id;
-            const falseStyle = pictureStateStyle("False");
-            const plain = pictureStateStyle("Background");
-            const fill = assigned && !value ? falseStyle.fill : "none";
-            const ink = assigned && !value ? falseStyle.ink : plain.text;
-            let line = assigned && !value ? falseStyle.line : plain.line;
-            let width = assigned && value ? 2.4 : 1.4;
-            if (tried) {
-              line = pictureStateStyle("ElementHighlight").line;
-              width = 3;
-            }
-            if (isTraced) {
-              line = TRACE_COLOR;
-              width = 3;
-            }
-            const valueText = assigned ? (value ? "T" : "F") : "-";
-            const spoken = assigned ? (value ? "true" : "false") : "not assigned yet";
-            return (
-              // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
-              <g
-                key={variable.id}
-                id={`${idPrefix}-variable-${index}`}
-                data-variable-id={variable.id}
-                data-value={assigned ? String(value) : "unassigned"}
-                data-tried={tried ? "true" : undefined}
-                data-focusable=""
-                tabIndex={0}
-                role="button"
-                aria-pressed={pinned === variable.id}
-                aria-label={`Variable ${variableLabels.get(variable.id)}: ${spoken}${tried ? ", being tried" : ""}`}
-                style={faint ? { filter: FAINT_FILTER } : undefined}
-                {...traceHandlers(variable.id)}
-              >
-                <rect
-                  x={variable.x}
-                  y={variable.y}
-                  width={variable.width}
-                  height={variable.height}
-                  rx={7}
-                  fill={fill}
-                  stroke={line}
-                  strokeWidth={width}
-                />
-                <GadgetRect
-                  id={variable.id}
-                  color={gadgetOf(variable.id)}
-                  x={variable.x}
-                  y={variable.y}
-                  width={variable.width}
-                  height={variable.height}
-                  rx={7}
-                />
-                <NodeLabel
-                  x={variable.x + variable.width / 2}
-                  y={variable.y + variable.height / 2}
-                  text={`${variable.label} ${valueText}`}
-                  color={ink}
-                  bold={assigned && value}
-                  size={LABEL_SIZE}
-                />
-              </g>
-            );
-          })}
-        </g>
+        {frameIndex !== null && (
+          <g data-layer="variables">
+            {layout.variables.map((variable, index) => {
+              const value = assignment[variable.id];
+              const assigned = typeof value === "boolean";
+              const tried = focus.has(variable.id);
+              const faint = traced !== null && traced !== variable.id;
+              const isTraced = traced === variable.id;
+              const falseStyle = pictureStateStyle("False");
+              const plain = pictureStateStyle("Background");
+              const fill = assigned && !value ? falseStyle.fill : "none";
+              const ink = assigned && !value ? falseStyle.ink : plain.text;
+              let line = assigned && !value ? falseStyle.line : plain.line;
+              let width = assigned && value ? 2.4 : 1.4;
+              if (tried) {
+                line = pictureStateStyle("ElementHighlight").line;
+                width = 3;
+              }
+              if (isTraced) {
+                line = TRACE_COLOR;
+                width = 3;
+              }
+              const valueText = assigned ? (value ? "T" : "F") : "-";
+              const spoken = assigned ? (value ? "true" : "false") : "not assigned yet";
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: an SVG group can't be a <button>.
+                <g
+                  key={variable.id}
+                  id={`${idPrefix}-variable-${index}`}
+                  data-variable-id={variable.id}
+                  data-value={assigned ? String(value) : "unassigned"}
+                  data-tried={tried ? "true" : undefined}
+                  data-focusable=""
+                  tabIndex={0}
+                  role="button"
+                  aria-pressed={pinned === variable.id}
+                  aria-label={`Variable ${variableLabels.get(variable.id)}: ${spoken}${tried ? ", being tried" : ""}`}
+                  style={faint ? { filter: FAINT_FILTER } : undefined}
+                  {...traceHandlers(variable.id)}
+                >
+                  <rect
+                    x={variable.x}
+                    y={variable.y}
+                    width={variable.width}
+                    height={variable.height}
+                    rx={7}
+                    fill={fill}
+                    stroke={line}
+                    strokeWidth={width}
+                  />
+                  <GadgetRect
+                    id={variable.id}
+                    color={gadgetOf(variable.id)}
+                    x={variable.x}
+                    y={variable.y}
+                    width={variable.width}
+                    height={variable.height}
+                    rx={7}
+                  />
+                  <NodeLabel
+                    x={variable.x + variable.width / 2}
+                    y={variable.y + variable.height / 2}
+                    text={`${variable.label} ${valueText}`}
+                    color={ink}
+                    bold={assigned && value}
+                    size={LABEL_SIZE}
+                  />
+                </g>
+              );
+            })}
+          </g>
+        )}
       </DiagramZoom>
     </Box>
   );

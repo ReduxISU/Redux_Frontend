@@ -22,7 +22,7 @@ import {
 
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 const ALL_INFO_REQUEST = /\/api\/redux\/Navigation\/Batch\/allInfo/;
-const ALL_VISUALIZATIONS_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizations$/;
+const ALL_VISUALIZATIONS_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizations(?=\?|$)/;
 
 const VIEW = "#workbench-reduction";
 const pane = (page, side) => page.locator(`${VIEW}-${side}`);

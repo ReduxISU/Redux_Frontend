@@ -213,9 +213,9 @@ test("each side solves in its own cell, the answers carry across by themselves, 
 
   // Check it puts the answer into Verify and checks it there.
   await page.locator("#workbench-forward-check").click();
-  await expect(page.locator("#workbench-verify-certificate")).toHaveValue(MAPPED_FORWARD);
+  await expect(page.locator("#workbench-verify-target-certificate")).toHaveValue(MAPPED_FORWARD);
   await page.locator("#workbench-back-check").click();
-  await expect(page.locator("#workbench-verify-certificate")).toHaveValue(MAPPED_BACK);
+  await expect(page.locator("#workbench-verify-source-certificate")).toHaveValue(MAPPED_BACK);
 
   // Solve <source> is Solve mode's solve: the same answer, with no new request.
   await page.locator("#workbench-mode-solve").click();

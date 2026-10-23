@@ -289,6 +289,10 @@ test("an edge rule highlights its node on the source and its edges on the target
 
   const index = gadgetIndex(CLIQUE, "edgeRule", "1");
   const rule = CLIQUE.reduce.gadgets[index];
+  // The pointer is still where the toggle was clicked, now over the opened list: move it off,
+  // or the row under it (hovered as the list lays out) takes the highlight from the focused one.
+  // Where it lands depends on the fonts and layout, so it bit the production build only.
+  await page.mouse.move(0, 0);
   await row(page, index).focus();
   await expect(sourcePicture(page)).toHaveAttribute("data-gadget-highlight-count", "1");
   await expect(sourcePicture(page).locator('[data-node-id="1"]')).toHaveAttribute(

@@ -1,113 +1,110 @@
 // hooks/useCertificateCheck.js
 //
-// #229 stage 3: the state behind the workbench's Verify section (components/workbench/panels/
-// VerifyBox.js). It lives in the Workbench, not the box, because the verdict also shows on the
-// picture pane's Showing line and "Verify This Answer" in the Result panel fills the box.
+// #229 stage 3, reworked by #279 stage 4 (board F): the state behind the Verify section's strips
+// (components/workbench/panels/VerifyBox.js). One strip per side: the problem's own (the source)
+// always, and the reduction's target in Reduce mode. Each side checks its own problem against its
+// own instance, with its own certificate, request and verdict, so there is no "Check against"
+// switch any more.
 //
-// What it owns:
-//   - Which side Check is against. In Solve mode that is always the problem's own instance. In
-//     Reduce mode the "Check against" switch picks the source instance or the target instance
-//     the reduction built; the target side is locked until a run has built one.
-//   - One certificate per side, so switching sides does not lose what was typed.
-//   - The check request itself, and the verdict it produced. Each verdict carries what it was
-//     checked against (side, instance, certificate) and the `context` the caller passed at the
-//     time (the workbench passes its mode and run), so the caller can tell whether a verdict
-//     still describes what is on screen. Nothing here is cleared by an effect: a verdict for an
-//     older instance or run simply stops being current.
+// It lives in the Workbench, not the strips, because Check it in Execute fills a side's field and
+// checks it there, and because a strip that is collapsed or hidden must keep what was typed.
+//
+// A verdict is shown while it still describes what is on screen: the same certificate, instance
+// and verifier it was checked with. Once any of them changes it is "stale" (the strip says to
+// check again). Nothing is cleared by an effect: a verdict simply stops matching.
 
 import { useRef, useState } from "react";
 import { readVerdict } from "../components/detail/VerifierSection";
 import { REDUX_API_BASE_URL, requestVerifiedInstance } from "../lib/redux";
-import { COMPUTE_DONE, useComputeRequest } from "./useComputeRequest";
+import { COMPUTE_DONE, COMPUTE_FAILED, useComputeRequest } from "./useComputeRequest";
 
 export const CHECK_SOURCE = "source";
 export const CHECK_TARGET = "target";
 
 /**
- * @param {Object} options
- * @param {{name: string, label: string, verifier: Object|null, instance: string}} options.source
- *   The problem's own side: its name, how the certificate box names it ("3SAT instance"), its
- *   verifier and the current instance.
- * @param {{name: string, label: string, verifier: Object|null, instance: string|null}|null}
- *   options.target Reduce mode's target side, or null in Solve mode. `instance` is null until a
- *   run has built the target instance, which keeps the target side locked.
- * @param {string} options.context Who is asking right now (the workbench passes its mode and
- *   run), stored on each verdict so the caller can tell a current one from a stale one.
+ * @typedef {Object} VerifySideInfo
+ * @property {string} name The side's problem ("3SAT").
+ * @property {Object|null} verifier Its verifier, as hooks/useProblemDetail.js builds it.
+ * @property {string|null} instance The instance a certificate is checked against; null until
+ *   Reduce has built one (the target side).
  */
-export function useCertificateCheck({ source, target, context }) {
-  const [checkOn, setCheckOnState] = useState(CHECK_SOURCE);
-  const [certificates, setCertificates] = useState(() => ({
-    [CHECK_SOURCE]: source.verifier?.exampleCertificate ?? "",
-    [CHECK_TARGET]: "",
-  }));
+
+/**
+ * One side's check.
+ * @param {VerifySideInfo|null} info
+ * @param {string} certificate What is in the side's field.
+ * @param {(text: string) => void} setCertificate
+ */
+function useSideCheck(info, certificate, setCertificate) {
   const request = useComputeRequest({ subject: "certificate" });
   const checkCountRef = useRef(0);
+  // What the last check was of, so a verdict or an unreadable certificate can tell it is stale.
+  const [checkedWith, setCheckedWith] = useState(null);
 
-  const targetLocked = !target || !target.instance;
-  const side = target && checkOn === CHECK_TARGET && !targetLocked ? CHECK_TARGET : CHECK_SOURCE;
-  const sides = { [CHECK_SOURCE]: source, [CHECK_TARGET]: target };
-  const current = sides[side];
+  const className = info?.verifier?.className ?? null;
+  const instance = info?.instance ?? null;
 
-  // Not guarded by the lock on purpose: after a reduction the workbench asks for the target
-  // side in the same moment the target instance arrives. While locked, `side` above falls
-  // back to the source, and the switch's target button is disabled.
-  function setCheckOn(next) {
-    setCheckOnState(next);
-  }
-
-  function setCertificate(text, onSide = side) {
-    setCertificates((previous) => ({ ...previous, [onSide]: text }));
-  }
-
-  /**
-   * Checks a certificate. With no arguments it checks what is in the box on the current side;
-   * Verify This Answer passes the answer (and the side it belongs to), which also goes into
-   * that side's box.
-   */
-  function check(certificateOverride, sideOverride) {
-    const onSide = sideOverride ?? side;
-    const info = sides[onSide];
-    const certificate = certificateOverride ?? certificates[onSide];
-    if (!info?.verifier?.className || !info.instance?.trim() || !certificate.trim()) return;
-    if (certificateOverride !== undefined) setCertificate(certificateOverride, onSide);
-    if (sideOverride) setCheckOnState(sideOverride);
+  /** Checks the field, or `override` (Check it, Use the solver's answer), which fills it too. */
+  function check(override) {
+    const text = override ?? certificate;
+    if (!className || !instance?.trim() || !text.trim()) return;
+    if (override !== undefined) setCertificate(override);
     checkCountRef.current += 1;
     const id = checkCountRef.current;
-    const instanceAtCheck = info.instance;
-    const contextAtCheck = context;
-    const verifierClassName = info.verifier.className;
+    setCheckedWith({ instance, certificate: text, className });
     request.start(async (signal) => {
       const raw = await requestVerifiedInstance(
         REDUX_API_BASE_URL,
-        verifierClassName,
-        instanceAtCheck,
-        certificate,
+        className,
+        instance,
+        text,
         signal,
       );
-      return {
-        ...readVerdict(raw),
-        id,
-        side: onSide,
-        problemName: info.name,
-        label: info.label,
-        instance: instanceAtCheck,
-        certificate,
-        context: contextAtCheck,
-      };
+      return { ...readVerdict(raw), id };
     });
   }
 
+  const current =
+    checkedWith !== null &&
+    checkedWith.instance === instance &&
+    checkedWith.certificate === certificate &&
+    checkedWith.className === className;
   const verdict = request.status === COMPUTE_DONE ? request.result : null;
+  const unreadable =
+    request.status === COMPUTE_FAILED && request.failure?.code === "certificate_parse_error"
+      ? request.failure
+      : null;
 
   return {
-    checkOn: side,
-    setCheckOn,
-    targetLocked,
-    current,
-    certificate: certificates[side],
-    setCertificate: (text) => setCertificate(text),
+    info,
+    certificate,
+    setCertificate,
     check,
     request,
-    verdict,
+    /** The verdict while it is of what is on screen. */
+    verdict: current ? verdict : null,
+    /** Redux could not read the certificate in the field. */
+    unreadable: current ? unreadable : null,
+    /** A verdict, or an unreadable certificate, for an earlier certificate or instance. */
+    stale: !current && (verdict !== null || unreadable !== null),
+  };
+}
+
+/**
+ * @param {Object} options
+ * @param {VerifySideInfo} options.source The problem's own side.
+ * @param {VerifySideInfo|null} options.target Reduce mode's target side, or null in Solve mode.
+ */
+export function useCertificateCheck({ source, target }) {
+  const [certificates, setCertificates] = useState({ [CHECK_SOURCE]: "", [CHECK_TARGET]: "" });
+  const setter = (side) => (text) => setCertificates((previous) => ({ ...previous, [side]: text }));
+
+  const sourceSide = useSideCheck(source, certificates[CHECK_SOURCE], setter(CHECK_SOURCE));
+  const targetSide = useSideCheck(target, certificates[CHECK_TARGET], setter(CHECK_TARGET));
+
+  return {
+    [CHECK_SOURCE]: sourceSide,
+    // The target's field keeps its text in Solve mode, ready for the next Reduce.
+    [CHECK_TARGET]: target ? targetSide : null,
   };
 }

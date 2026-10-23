@@ -182,7 +182,7 @@ test("typed text survives hiding its pane, and the layout survives a reload", as
   await showPane(page, "instance", { expect });
   await expect(field).toHaveValue(edited);
 
-  const certificate = page.locator("#workbench-verify-certificate");
+  const certificate = page.locator("#workbench-verify-source-certificate");
   await certificate.fill("x1 = T");
   await toggle(page, "verify").click();
   await expect(certificate).toBeHidden();

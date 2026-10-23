@@ -100,6 +100,7 @@ import {
   noAnswerClaim,
   solverGuarantee,
 } from "../../lib/answers";
+import { certificateHint } from "../../lib/certificateHints";
 import { gadgetColorMap, highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
@@ -158,17 +159,6 @@ const LAYOUT_REGIONS = {
 const INSTANCE_URL_DEBOUNCE_MS = 400;
 const NOT_RUN_TEXT = "Not run yet (default picture)";
 const ARROW = "→";
-
-// #229 stage 3: drawing a certificate on the picture. Before any Run, Check is meant to draw
-// the certificate right away; after a Run, a well-formed but invalid one offers "Show where it
-// fails". No Redux endpoint draws a given certificate yet: ProblemProvider/visualize only draws
-// a solver's own answer, and ProblemProvider/verify answers a bare True or False with nothing
-// about which parts fail. So the verdict, the button and its Back flow are built, the button
-// stays disabled with this reason, and the picture is left as it is. Flip this (and fetch the
-// frame) once the backend can draw a certificate. Faking it here per picture type would mean
-// re-implementing every verifier in the browser.
-const CERTIFICATE_DRAWING_SUPPORTED = false;
-const CERTIFICATE_DRAWING_REASON = "Redux can't draw a certificate on this picture yet.";
 
 /**
  * The step a run's picture opens on: its last frame, the finished result. The step controls
@@ -483,36 +473,27 @@ export default function Workbench({ problem }) {
   const switching =
     Boolean(reduceView) && viewSwitch.isRunning && switchPending?.runId === reduceResult.runId;
 
-  // --- Verify (#229 stage 3) --------------------------------------------------------------
-  // The target side is the reduction's target problem, checked against the instance the
-  // reduction built; it has an instance (and so unlocks) only while that build is current.
+  // --- Verify (#229 stage 3, one strip per side since #279 stage 4) -----------------------
+  // The target side is the reduction's target problem, checked with its own verifier against
+  // the instance the reduction built; it has an instance only while that build is current.
   const reduceTargetName = reduceCurrent
     ? reduceResult.targetName
     : (selectedReduction?.target ?? targetName ?? null);
-  const verifyContext = `${mode}:${lastRun?.id ?? 0}`;
   const verify = useCertificateCheck({
-    source: {
-      name: problem.name,
-      label: `${problem.name} instance`,
-      verifier: problem.verifier ?? null,
-      instance,
-    },
+    source: { name: problem.name, verifier: problem.verifier ?? null, instance },
     target:
       mode === "reduce" && reduceTargetName
         ? {
             name: reduceTargetName,
-            label: `${reduceTargetName} target`,
             verifier: reduceCurrent
               ? reduceResult.targetVerifier
               : (selectedReduction?.targetVerifier ?? null),
             instance: reduceCurrent ? reduceResult.targetInstance : null,
           }
         : null,
-    context: verifyContext,
   });
-
-  // Which verdict (by its id) has "Show where it fails" switched on.
-  const [overlayFor, setOverlayFor] = useState(null);
+  // Each strip collapses on its own; Check it opens its side's again.
+  const [stripsOpen, setStripsOpen] = useState({ [CHECK_SOURCE]: true, [CHECK_TARGET]: true });
 
   // --- Answers carried across (#279 stage 2) ----------------------------------------------
   // The reductions found unable to map answers one way, by class name, for the page's life.
@@ -893,14 +874,10 @@ export default function Workbench({ problem }) {
         gadgets: normalizeGadgets(built?.gadgets),
       };
     });
-    // After a build, Verify checks against the target it built (the mockup's default), when
-    // the target problem has a verifier to check with. A new build retires the last target
-    // solve, which was of the build before.
-    const checkTargetAfter = Boolean(reduction.targetVerifier);
+    // A new build retires the last target solve, which was of the build before.
     finished.then(() => {
       if (!succeeded || runIdRef.current !== runId) return;
       targetRun.reset();
-      if (checkTargetAfter) verify.setCheckOn(CHECK_TARGET);
     });
   }
 
@@ -982,56 +959,12 @@ export default function Workbench({ problem }) {
   }
 
   // --- Check it -----------------------------------------------------------------------------
-  // #279: the check happens in the Verify section, so it is shown if it was hidden. Stage 4
-  // gives each side its own Verify strip.
+  // #279 stage 4: Check it in Execute fills that side's Verify strip and checks it there, showing
+  // the Verify section and opening the strip if either was hidden.
   function checkIn(side, certificate) {
     layout.show("verify");
-    verify.check(certificate, side);
-  }
-
-  // --- The verdict on the Showing line ------------------------------------------------------
-  // A check never touches the picture's own state (the run, its current step). Its verdict
-  // shows only while it still describes what is on screen: the same mode and run, and the
-  // instance it was checked against. A new Run or an instance edit retires it.
-  const checked = verify.verdict;
-  const checkedSideInstance =
-    checked?.side === CHECK_TARGET
-      ? reduceCurrent
-        ? reduceResult.targetInstance
-        : null
-      : instance;
-  const verdictCurrent =
-    Boolean(checked) &&
-    checked.context === verifyContext &&
-    checked.instance === checkedSideInstance;
-  // Whether the picture holds a run's answer worth protecting (solved, or reduced).
-  const pictureRan = mode === "solve" ? showingRunPicture : reduceCurrent;
-  let verdictLine = null;
-  if (verdictCurrent) {
-    const text =
-      checked.valid === null
-        ? `Verifier: Redux answered "${checked.text}" for your certificate on the ${checked.label}`
-        : `Verifier: your certificate on the ${checked.label} is ${checked.valid ? "valid" : "not valid"}`;
-    let button = null;
-    // After a Run, only a well-formed but invalid certificate offers to show where it fails;
-    // a valid one gets the verdict alone (the picture already shows a correct answer). A new
-    // Check is a new verdict, so it starts with the overlay off.
-    if (pictureRan && checked.valid === false) {
-      const on = CERTIFICATE_DRAWING_SUPPORTED && overlayFor === checked.id;
-      button = {
-        id: `${ID}-verdict-overlay`,
-        label: on
-          ? mode === "solve"
-            ? "Back to the solver's answer"
-            : "Back to the reduction"
-          : "Show where it fails",
-        pressed: on,
-        disabled: !CERTIFICATE_DRAWING_SUPPORTED,
-        reason: CERTIFICATE_DRAWING_SUPPORTED ? "" : CERTIFICATE_DRAWING_REASON,
-        onClick: () => setOverlayFor(on ? null : checked.id),
-      };
-    }
-    verdictLine = { id: `${ID}-verdict`, text, valid: checked.valid, button };
+    setStripsOpen((open) => ({ ...open, [side]: true }));
+    verify[side]?.check(certificate);
   }
 
   // --- What the command bar and picture pane show ------------------------------------------
@@ -1410,12 +1343,6 @@ export default function Workbench({ problem }) {
     // The error itself is shown under the instance field (or under the run buttons while the Instance pane
     // is hidden).
     note = null;
-  } else if (verdictLine && !pictureRan && checked.valid !== null && selectedViz) {
-    // Before any Run the certificate would be drawn on the picture right away.
-    note = {
-      text: `${CERTIFICATE_DRAWING_REASON} The picture still shows the instance.`,
-      tone: "muted",
-    };
   } else if (mode === "solve" && runGap) {
     note = {
       text: runGapNote(
@@ -1850,9 +1777,9 @@ export default function Workbench({ problem }) {
     } else if (forwardMap.value) {
       forward.state = "answer";
       forward.answer = forwardMap.value.certificate;
-      forward.onCheck = verify.targetLocked
-        ? null
-        : () => checkIn(CHECK_TARGET, forwardMap.value.certificate);
+      forward.onCheck = reduceResult.targetInstance
+        ? () => checkIn(CHECK_TARGET, forwardMap.value.certificate)
+        : null;
     } else {
       forward.state = "loading";
       forward.text = `Mapping your ${sourceName} answer into ${targetLabel}`;
@@ -1870,13 +1797,69 @@ export default function Workbench({ problem }) {
     reduceCells = { source: sourceCell, target: targetCell, back, forward, agree };
   }
 
-  let targetLockReason = "";
-  if (mode === "reduce" && reduceTargetName) {
-    if (reduceRun.isRunning) targetLockReason = `Building the ${reduceTargetName} instance.`;
-    else if (reduceCurrent && !reduceResult.targetInstance)
-      targetLockReason = `Redux did not send the ${reduceTargetName} instance it built, so there is nothing to check against.`;
-    else
-      targetLockReason = `Reduce first: checking against ${reduceTargetName} needs the target instance it builds.`;
+  // --- The Verify strips (#279 stage 4) --------------------------------------------------------
+  // Why a side's Check can't run yet ("" when it can).
+  function checkHintFor(check, lockReason) {
+    if (!check.info?.verifier?.className) {
+      return "This verifier cannot be run: the catalog did not say which backend verifier it is.";
+    }
+    if (lockReason) return lockReason;
+    if (!check.info.instance?.trim()) {
+      return "There is no instance to check against. Write one in the Instance pane.";
+    }
+    return "";
+  }
+  const noAnswerToUse = "The solver found no answer, so there is none to use.";
+  // The source's answer: its own solve's, or (Reduce mode) the target's answer mapped back.
+  const sourceSolvedNone = solveCurrent && !answerFound(solveResult.output);
+  let sourceUse = solveCurrent && !sourceSolvedNone ? sourceAnswer : null;
+  if (!sourceUse && mode === "reduce" && reduceCurrent && backMap.value?.certificate) {
+    sourceUse = backMap.value.certificate;
+  }
+  const verifyStrips = [
+    {
+      side: CHECK_SOURCE,
+      problemName: problem.name,
+      open: stripsOpen[CHECK_SOURCE],
+      onToggle: () => setStripsOpen((open) => ({ ...open, [CHECK_SOURCE]: !open[CHECK_SOURCE] })),
+      check: verify[CHECK_SOURCE],
+      format: certificateHint(problem.verifier),
+      checkHint: checkHintFor(verify[CHECK_SOURCE], ""),
+      answer: sourceUse,
+      answerHint: sourceSolvedNone
+        ? noAnswerToUse
+        : `No answer yet. Press ${mode === "solve" ? "Solve" : `Solve ${problem.name}`} in Execute first.`,
+    },
+  ];
+  const targetCheck = verify[CHECK_TARGET];
+  if (targetCheck) {
+    const name = reduceTargetName;
+    let lockReason = "";
+    if (reduceRun.isRunning) lockReason = `Building the ${name} instance.`;
+    else if (!reduceCurrent)
+      lockReason = `Reduce first: a ${name} certificate is checked against the instance Reduce builds.`;
+    else if (!reduceResult.targetInstance)
+      lockReason = `Redux did not send the ${name} instance it built, so there is nothing to check against.`;
+    const targetSolvedNone = Boolean(targetResult) && !answerFound(targetResult.output);
+    let targetUse = targetResult && !targetSolvedNone ? targetAnswer : null;
+    if (!targetUse && reduceCurrent && forwardMap.value?.certificate) {
+      targetUse = forwardMap.value.certificate;
+    }
+    let targetAnswerHint = `No answer yet. Press Solve ${name} in Execute first.`;
+    if (!reduceCurrent)
+      targetAnswerHint = `No answer yet. Reduce, then press Solve ${name} in Execute.`;
+    else if (targetSolvedNone) targetAnswerHint = noAnswerToUse;
+    verifyStrips.push({
+      side: CHECK_TARGET,
+      problemName: name,
+      open: stripsOpen[CHECK_TARGET],
+      onToggle: () => setStripsOpen((open) => ({ ...open, [CHECK_TARGET]: !open[CHECK_TARGET] })),
+      check: targetCheck,
+      format: certificateHint(targetCheck.info.verifier),
+      checkHint: checkHintFor(targetCheck, lockReason),
+      answer: targetUse,
+      answerHint: targetAnswerHint,
+    });
   }
 
   // --- Toggle dots -------------------------------------------------------------------------
@@ -2074,7 +2057,6 @@ export default function Workbench({ problem }) {
             idPrefix={ID}
             showing={showing}
             showingIsError={showingIsError}
-            verdict={verdictLine}
             source={{
               title: mode === "solve" ? problem.name : `Source · ${problem.name}`,
               type: vizTypeControl,
@@ -2199,14 +2181,7 @@ export default function Workbench({ problem }) {
           hidden={!layout.shown.verify}
           first={workspaceShown[0] === "verify"}
         >
-          <VerifyBox
-            idPrefix={`${ID}-verify`}
-            mode={mode}
-            verify={verify}
-            sourceName={problem.name}
-            targetName={reduceTargetName}
-            targetLockReason={targetLockReason}
-          />
+          <VerifyBox idPrefix={`${ID}-verify`} strips={verifyStrips} />
         </WorkspaceSection>
       </Workspace>
     </Box>

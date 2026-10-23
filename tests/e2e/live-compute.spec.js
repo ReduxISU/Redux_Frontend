@@ -82,18 +82,18 @@ const PINNED_INSTANCE = "({1,2,3,4,5,6},{(1,2),(1,3),(2,4),(3,4),(4,5),(3,6)})";
 const WRONG_CERTIFICATE = "{6,5,4,3,2,1}";
 
 // The workbench's own ids (components/workbench/*): Execute's Run and its
-// status region, the result's answer, and the Verify section's box.
+// status region, the result's answer, and the Verify section's source strip.
 const RUN_BUTTON = "#workbench-run";
 const RUN_STATUS = "#workbench-solve-status";
 const RUN_CANCEL = "#workbench-run-cancel";
 const RUN_FAILURE = "#workbench-run-failure";
 const RUN_OUTPUT = "#workbench-result-answer";
 const INSTANCE_INPUT = "#workbench-instance-full-instance";
-const CERTIFICATE_INPUT = "#workbench-verify-certificate";
-const VERIFY_BUTTON = "#workbench-verify-check";
-const VERIFY_STATUS = "#workbench-verify-check-status";
-const VERIFY_FAILURE = "#workbench-verify-check-failure";
-const VERDICT_BANNER = "#workbench-verify-verdict";
+const CERTIFICATE_INPUT = "#workbench-verify-source-certificate";
+const VERIFY_BUTTON = "#workbench-verify-source-check";
+const VERIFY_STATUS = "#workbench-verify-source-check-status";
+const VERIFY_FAILURE = "#workbench-verify-source-check-failure";
+const VERDICT_BANNER = "#workbench-verify-source-verdict";
 
 // Regexes rather than Playwright glob strings: both compute requests carry
 // a query string (`?solver=...`, `?verifier=...`) and a glob's `*` does not
@@ -179,16 +179,16 @@ test("a certificate produced by a live Run verifies against the instance it was 
   expect(solved).not.toBe("");
 
   // The Verify box checks against the same one instance the solver ran on.
-  // Topological Sort declares no example certificate, so the box starts empty
-  // and Check starts disabled.
-  await expect(page.locator(VERIFY_BUTTON)).toBeDisabled();
+  // Topological Sort declares no example certificate, so the box starts empty;
+  // Check is still enabled, since checking needs no run.
+  await expect(page.locator(VERIFY_BUTTON)).toBeEnabled();
   await page.locator(CERTIFICATE_INPUT).fill(solved);
   await page.locator(VERIFY_BUTTON).click();
 
   const verdict = page.locator(VERDICT_BANNER);
   await expect(verdict).toBeVisible({ timeout: 30_000 });
-  await expect(verdict).toContainText("Valid certificate");
-  await expect(page.locator(VERIFY_STATUS)).toContainText("Certificate accepted");
+  await expect(verdict).toContainText("Valid. Redux checked it");
+  await expect(verdict).toHaveAttribute("role", "status");
 });
 
 test("Verify reports Redux's rejection of a wrong certificate rather than deciding locally", async ({
@@ -216,8 +216,7 @@ test("Verify reports Redux's rejection of a wrong certificate rather than decidi
 
   const verdict = page.locator(VERDICT_BANNER);
   await expect(verdict).toBeVisible({ timeout: 30_000 });
-  await expect(verdict).toContainText("Not a valid certificate");
-  await expect(page.locator(VERIFY_STATUS)).toContainText("Certificate rejected");
+  await expect(verdict).toContainText("Not valid. Redux checked it");
 });
 
 test("Run explains an unreachable backend instead of failing silently", async ({ page }) => {
@@ -334,7 +333,7 @@ test("a problem with no declared instance keeps Run and Verify unavailable", asy
   await page.locator(CERTIFICATE_INPUT).fill(WRONG_CERTIFICATE);
   await expect(page.locator(VERIFY_BUTTON)).toBeDisabled();
   await expect(
-    page.getByText("There is no instance to check against. Press Edit to write one."),
+    page.getByText("There is no instance to check against. Write one in the Instance pane."),
   ).toBeVisible();
 
   // Unavailable, not enabled-and-failing: nothing was ever sent, so no
