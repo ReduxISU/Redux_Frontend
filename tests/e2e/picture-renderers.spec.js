@@ -34,6 +34,9 @@
 // #208: the Board renderer (Sudoku, N-Queens) after it: every square, clue, queen and ruled-out
 // square as each step leaves them, Hints, the trace of a square's row, column and box (or a
 // queen's lines of attack), and on a phone a board drawn at its own size, its text not shrunk.
+// #212: the Geometry renderer (Convex Hull) after that: the points to scale on real axes, each
+// merge's hulls and chain, the answer's numbered corners, labels that meet nothing, and on a
+// phone a plot drawn at its own size.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel } from "./helpers";
@@ -44,6 +47,9 @@ import {
   CLIQUE_COVER_GRAPH_FRAMES,
   CLIQUE_FAILED_GRAPH_FRAMES,
   CLIQUE_GRAPH_FRAMES,
+  CONVEX_HULL_GEOMETRY_FRAMES,
+  CONVEX_HULL_SMALL_GEOMETRY_FRAMES,
+  CONVEX_HULL_WIDE_GEOMETRY_FRAMES,
   DFA_ABC_GARBAGE_AUTOMATON_FRAMES,
   DFA_AUTOMATON_FRAMES,
   DFA_AUTOMATON_LIST,
@@ -576,6 +582,13 @@ test("Graph: the groups shape keeps each node's group color under its state, wit
   await expect(page.locator(`${GRAPH}-graph [data-phantom="2|3"]`)).toHaveCount(1);
   await expect(legendBody(page)).toContainText("Clique 1");
   await expect(legendBody(page)).toContainText("Missing edge");
+  // A try that leaves node 1 in no group (Redux #890) names it and marks it Rejected.
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "Try {2,3,4},{}: node 1 is in no clique.",
+  );
+  await expect(graphNode(page, "1")).toHaveAttribute("data-state", "Rejected");
+  await expect(graphNode(page, "3")).toHaveAttribute("data-state", "Background");
 });
 
 test("Graph: a directed tour draws arrows, order badges and both edges of an opposite pair", async ({
@@ -1581,6 +1594,18 @@ test("Layered Graph: the plain shortest-path picture names the source and target
   await expect(layeredNode(page, "1").locator("[data-distance]")).toHaveText("d = 0");
   await expect(layeredNode(page, "5").locator("[data-distance]")).toHaveText("∞");
   expect(await nodeCentres(page, `${LAYERED}-graph`)).toEqual(before);
+  // Settling the target (Redux #892): only the path so far is Solution, the rest of the tree
+  // Committed, and the target highlighted.
+  await runToFrame(page, capture, 5);
+  for (const id of ["1", "3"]) {
+    await expect(layeredNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  for (const id of ["2", "4"]) {
+    await expect(layeredNode(page, id)).toHaveAttribute("data-state", "Committed");
+  }
+  await expect(layeredNode(page, "5")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(layeredEdge(page, "3>5")).toHaveAttribute("data-state", "Solution");
+  await expect(layeredEdge(page, "2>4")).toHaveAttribute("data-state", "Committed");
 });
 
 test("Layered Graph: Topological Sort shows ready, Committed and placed nodes with order badges", async ({
@@ -4647,6 +4672,433 @@ for (const key of ["sudoku", "queensConstructive"]) {
   });
 }
 
+// --- #212: the Geometry renderer (Convex Hull) ----------------------------------------------
+
+const GEOMETRY = "#workbench-source-frames-geometry";
+
+/**
+ * Each geometry capture. The catalog CI's backend serves has no Geometry visualization yet, so
+ * every capture is drawn on the 3SAT page (its visualization made to name Geometry): the picture
+ * is the capture's, whatever the page.
+ */
+const GEOMETRY_CASES = {
+  hull: CONVEX_HULL_GEOMETRY_FRAMES,
+  small: CONVEX_HULL_SMALL_GEOMETRY_FRAMES,
+  wide: CONVEX_HULL_WIDE_GEOMETRY_FRAMES,
+};
+
+async function openGeometry(page, capture) {
+  await setEveryPictureType(page, "Geometry");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${GEOMETRY}-geometry`)).toBeVisible();
+}
+
+const geometryPoint = (page, id) => page.locator(`${GEOMETRY}-geometry [data-point-id="${id}"]`);
+
+/** Frame `index`'s points, hulls, chain and answer, checked against the picture. */
+async function expectGeometryFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const picture = page.locator(`${GEOMETRY}-geometry`);
+  const drawn = await picture
+    .locator("[data-point-id]")
+    .evaluateAll((points) =>
+      Object.fromEntries(
+        points.map((point) => [
+          point.getAttribute("data-point-id"),
+          [point.getAttribute("data-state"), point.getAttribute("data-order")],
+        ]),
+      ),
+    );
+  for (const point of capture.payload.points) {
+    const order = frame.hull.indexOf(point.id);
+    expect(drawn[point.id], point.id).toEqual([
+      frame.points[point.id]?.state ?? "Background",
+      order >= 0 ? String(order + 1) : null,
+    ]);
+  }
+  const pieces = await picture
+    .locator("[data-piece-role]")
+    .evaluateAll((all) =>
+      all.map(
+        (piece) =>
+          `${piece.getAttribute("data-piece-role")}:${piece.getAttribute("data-piece-points")}`,
+      ),
+    );
+  expect(pieces).toEqual(frame.pieces.map((piece) => `${piece.role}:${piece.points.join(" ")}`));
+  if (frame.chain.length >= 2) {
+    await expect(picture.locator("[data-chain]")).toHaveAttribute(
+      "data-chain",
+      frame.chain.join(" "),
+    );
+  } else {
+    await expect(picture.locator("[data-chain]")).toHaveCount(0);
+  }
+  await expect(picture.locator("[data-hull]")).toHaveCount(frame.hull.length >= 2 ? 1 : 0);
+  await expect(picture.locator("[data-badge]")).toHaveCount(frame.hull.length);
+}
+
+for (const [key, capture] of Object.entries(GEOMETRY_CASES)) {
+  test(`Geometry: the ${key} capture draws every point to scale and every step's hulls`, async ({
+    page,
+  }) => {
+    test.slow();
+    const { payload } = capture;
+    await openGeometry(page, capture);
+    const picture = page.locator(`${GEOMETRY}-geometry`);
+    await expect(picture.locator("[data-point-id]")).toHaveCount(payload.points.length);
+    for (const point of payload.points) {
+      await expect(geometryPoint(page, point.id).locator("[data-label]")).toHaveText(point.id);
+    }
+    // Nothing here can be dragged (#250 leaves the points alone).
+    await expect(page.locator(`${GEOMETRY}-layout-reset`)).toHaveCount(0);
+    await expect(page.locator(`${GEOMETRY}-svg`)).not.toHaveAttribute("data-editable", /./);
+
+    await runToFrame(page, capture, 0);
+    await expectGeometryFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectGeometryFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^P\d+ at \(/);
+    }
+  });
+}
+
+/** Each point's drawn centre, by id, in viewBox units. */
+function pointCentres(page) {
+  return page.locator(`${GEOMETRY}-geometry [data-point-id]`).evaluateAll((points) =>
+    Object.fromEntries(
+      points.map((point) => {
+        const dot = point.querySelector("[data-body]");
+        return [
+          point.getAttribute("data-point-id"),
+          { x: Number(dot.getAttribute("cx")), y: Number(dot.getAttribute("cy")) },
+        ];
+      }),
+    ),
+  );
+}
+
+/**
+ * Every place where a Geometry point's label or order badge meets a drawn line (a hull's edge,
+ * the chain, a popped point's dashed line or a bold axis) or another point's dot, read off the
+ * screen. A line is its centre line; a label is its text's box, a badge its circle.
+ * @returns {Promise<string[]>} One line per collision; empty when every label is clear.
+ */
+function geometryLineCollisions(page) {
+  return page.locator(`${GEOMETRY}-svg`).evaluate((svg) => {
+    const found = [];
+    const toScreen = (element, x, y) => {
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      return point.matrixTransform(element.getScreenCTM());
+    };
+    const segments = [];
+    const addPath = (element, closed) => {
+      const corners = element
+        .getAttribute("points")
+        .trim()
+        .split(/\s+/)
+        .map((pair) => pair.split(",").map(Number))
+        .map(([x, y]) => toScreen(element, x, y));
+      const name = element.getAttribute("data-piece-role")
+        ? `the ${element.getAttribute("data-piece-role")} hull`
+        : element.hasAttribute("data-hull")
+          ? "the hull"
+          : "the chain";
+      const count = closed ? corners.length : corners.length - 1;
+      for (let i = 0; i < count; i += 1) {
+        segments.push({ name, a: corners[i], b: corners[(i + 1) % corners.length] });
+      }
+    };
+    for (const polygon of svg.querySelectorAll('[data-layer="hulls"] polygon')) {
+      addPath(polygon, true);
+    }
+    for (const polyline of svg.querySelectorAll('[data-layer="hulls"] polyline')) {
+      addPath(polyline, false);
+    }
+    for (const line of svg.querySelectorAll('[data-layer="hulls"] line, [data-axis-line]')) {
+      const value = (name) => Number(line.getAttribute(name));
+      segments.push({
+        name: line.hasAttribute("data-popped")
+          ? `the popped line to ${line.getAttribute("data-popped")}`
+          : `the ${line.getAttribute("data-axis-line")} axis`,
+        a: toScreen(line, value("x1"), value("y1")),
+        b: toScreen(line, value("x2"), value("y2")),
+      });
+    }
+    // Whether the segment a-b passes through the box (shrunk half a pixel): Liang-Barsky.
+    const crosses = ({ a, b }, box) => {
+      const left = box.left + 0.5;
+      const right = box.right - 0.5;
+      const top = box.top + 0.5;
+      const bottom = box.bottom - 0.5;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      let t0 = 0;
+      let t1 = 1;
+      for (const [p, q] of [
+        [-dx, a.x - left],
+        [dx, right - a.x],
+        [-dy, a.y - top],
+        [dy, bottom - a.y],
+      ]) {
+        if (p === 0) {
+          if (q < 0) return false;
+        } else {
+          const t = q / p;
+          if (p < 0) t0 = Math.max(t0, t);
+          else t1 = Math.min(t1, t);
+          if (t0 > t1) return false;
+        }
+      }
+      return true;
+    };
+    // How far the segment a-b passes from (x, y).
+    const distance = ({ a, b }, x, y) => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const length = dx * dx + dy * dy;
+      const t = length ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length)) : 0;
+      return Math.hypot(a.x + t * dx - x, a.y + t * dy - y);
+    };
+    const meets = (a, b) =>
+      a.left < b.right - 0.5 &&
+      b.left < a.right - 0.5 &&
+      a.top < b.bottom - 0.5 &&
+      b.top < a.bottom - 0.5;
+    const groups = [...svg.querySelectorAll("[data-point-id]")];
+    const dots = groups.map((group) => ({
+      id: group.getAttribute("data-point-id"),
+      box: group.querySelector("[data-body]").getBoundingClientRect(),
+    }));
+    for (const group of groups) {
+      const id = group.getAttribute("data-point-id");
+      const label = group.querySelector("[data-label]").getBoundingClientRect();
+      for (const segment of segments) {
+        if (crosses(segment, label)) found.push(`"${id}" is crossed by ${segment.name}`);
+      }
+      for (const dot of dots) {
+        if (dot.id !== id && meets(dot.box, label)) found.push(`"${id}" meets ${dot.id}'s dot`);
+      }
+      const badge = group.querySelector("[data-badge] circle");
+      if (badge) {
+        const box = badge.getBoundingClientRect();
+        const x = (box.left + box.right) / 2;
+        const y = (box.top + box.bottom) / 2;
+        const r = (box.right - box.left) / 2;
+        for (const segment of segments) {
+          if (distance(segment, x, y) < r - 0.5) {
+            found.push(`${id}'s badge is crossed by ${segment.name}`);
+          }
+        }
+        for (const dot of dots) {
+          if (dot.id !== id && meets(dot.box, box))
+            found.push(`${id}'s badge meets ${dot.id}'s dot`);
+        }
+      }
+    }
+    return found;
+  });
+}
+
+test("Geometry: the points are drawn to scale, one scale for both axes, y up", async ({ page }) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  const centres = await pointCentres(page);
+  const points = capture.payload.points;
+  const [a, b] = [points[0], points[1]];
+  const scaleX = (centres[b.id].x - centres[a.id].x) / (b.x - a.x);
+  for (const point of points) {
+    expect(centres[point.id].x - centres[a.id].x).toBeCloseTo((point.x - a.x) * scaleX, 0);
+    // The same scale for y, and y grows upward.
+    expect(centres[a.id].y - centres[point.id].y).toBeCloseTo((point.y - a.y) * scaleX, 0);
+  }
+  // The axes' numbers are outside the plot, and the lines at 0 are drawn heavier.
+  await expect(page.locator(`${GEOMETRY}-geometry [data-tick="x"]`).first()).toBeVisible();
+  await expect(page.locator(`${GEOMETRY}-geometry [data-tick="y"]`).first()).toBeVisible();
+  await expect(page.locator(`${GEOMETRY}-geometry [data-axis-line="x"]`)).toHaveCount(1);
+  await expect(page.locator(`${GEOMETRY}-geometry [data-axis-line="y"]`)).toHaveCount(1);
+});
+
+test("Geometry: before Run the picture is the plain points, and step 1 keeps every point in place", async ({
+  page,
+}) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  const picture = page.locator(`${GEOMETRY}-geometry`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(
+    picture.locator("[data-piece-role], [data-chain], [data-hull], [data-badge]"),
+  ).toHaveCount(0);
+  const before = await pointCentres(page);
+  await runToFrame(page, capture, 0);
+  expect(await pointCentres(page)).toEqual(before);
+});
+
+test("Geometry: a merge colors its left and right hulls, and walks its chain", async ({ page }) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  const index = capture.frames.findIndex(
+    (frame) => frame.chain.length >= 2 && frame.pieces.some((piece) => piece.role === "left"),
+  );
+  expect(index).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, index);
+  const frame = capture.frames[index];
+  const left = frame.pieces.find((piece) => piece.role === "left");
+  const right = frame.pieces.find((piece) => piece.role === "right");
+  await expect(geometryPoint(page, left.points[0])).toHaveAttribute("data-group", "0");
+  await expect(geometryPoint(page, right.points[0])).toHaveAttribute("data-group", "2");
+  await expect(legendBody(page)).toContainText("Left hull (being merged)");
+  await expect(legendBody(page)).toContainText("Right hull (being merged)");
+  await expect(legendBody(page)).toContainText("Blue line (the chain the merge has walked)");
+});
+
+test("Geometry: the answer's corners are green and numbered in order, the rest Covered", async ({
+  page,
+}) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const last = capture.frames.at(-1);
+  expect(last.ok).toBe(true);
+  for (const [position, id] of last.hull.entries()) {
+    await expect(geometryPoint(page, id)).toHaveAttribute("data-state", "Solution");
+    await expect(geometryPoint(page, id).locator("[data-badge]")).toHaveText(String(position + 1));
+  }
+  for (const point of capture.payload.points.filter((p) => !last.hull.includes(p.id))) {
+    await expect(geometryPoint(page, point.id)).toHaveAttribute("data-state", "Covered");
+  }
+  await expect(page.locator(`${GEOMETRY}-geometry [data-hull]`)).toHaveAttribute("data-ok", "true");
+  await expect(legendBody(page)).toContainText(
+    "Numbered badge (the corner's place in the answer's order)",
+  );
+});
+
+test("Geometry: hovering, focusing or tapping a point traces it, with its coordinates", async ({
+  page,
+}) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const [first, second] = capture.payload.points;
+  await geometryPoint(page, first.id).hover();
+  await expect(geometryPoint(page, first.id)).toHaveAttribute("data-traced", "trace");
+  await expect(geometryPoint(page, second.id)).toHaveAttribute("data-traced", "faint");
+  const faded = await geometryPoint(page, second.id).evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  const round = (value) => String(Number(value.toFixed(3)));
+  await expect(page.locator(`${GEOMETRY}-geometry [data-tip]`)).toHaveText(
+    `${first.id} (${round(first.x)}, ${round(first.y)})`,
+  );
+  await page.mouse.move(0, 0);
+  await geometryPoint(page, second.id).focus();
+  await expect(geometryPoint(page, second.id)).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(geometryPoint(page, second.id)).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Geometry: on a phone a tap traces a point, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${GEOMETRY}-svg`);
+  await page.locator(`${GEOMETRY}-zoom-in`).click();
+  await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  const [first, second] = capture.payload.points;
+  await geometryPoint(page, first.id).focus();
+  await geometryPoint(page, first.id).blur();
+  await geometryPoint(page, first.id).click();
+  await expect(geometryPoint(page, first.id)).toHaveAttribute("aria-pressed", "true");
+  await expect(geometryPoint(page, second.id)).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${GEOMETRY}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Geometry: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openGeometry(page, CONVEX_HULL_GEOMETRY_FRAMES);
+      const svg = page.locator(`${GEOMETRY}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${GEOMETRY}-svg`);
+      await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The numbers and the labels follow the theme: no dark-on-dark, no light-on-white.
+      for (const selector of ["[data-tick]", "[data-label]"]) {
+        const ink = await page
+          .locator(`${GEOMETRY}-geometry ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+    });
+  }
+}
+
+for (const [key, capture] of Object.entries(GEOMETRY_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Geometry: the ${key} capture's texts never meet each other, a line or a dot at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openGeometry(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${GEOMETRY}-svg`, null)),
+        ...(await geometryLineCollisions(page)),
+      ];
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["hull", "wide"]) {
+  test(`Geometry: on a 390 px phone the ${key} plot is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = GEOMETRY_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openGeometry(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${GEOMETRY}-geometry`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(680);
+    await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${GEOMETRY}-svg`);
+    const before = await smallestText(page, `${GEOMETRY}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, capture.frames.length - 1);
+    const after = await smallestText(page, `${GEOMETRY}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
 // --- Every renderer opens at fit -------------------------------------------------------------
 //
 // Each registered picture type (components/pictures/registry.js), drawn from one capture on the
@@ -4659,6 +5111,7 @@ const FIT_CASES = {
   BipartiteGraph: SET_COVER_BIPARTITE_FRAMES,
   Board: N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES,
   FlowNetwork: MIN_CUT_FLOW_FRAMES,
+  Geometry: CONVEX_HULL_GEOMETRY_FRAMES,
   Graph: CLIQUE_GRAPH_FRAMES,
   GroupedGraph: SAT3_CLAUSE_GRAPH_FRAMES,
   LayeredGraph: TOPOLOGICAL_SORT_LAYERED_FRAMES,
