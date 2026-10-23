@@ -16,7 +16,8 @@
 // so what is picked or typed shows both ways. What a pane holds survives collapsing, the layout
 // remembers it through a reload until Reset layout, Check it opens a collapsed Verify, and
 // Algorithm Steps opening by itself after a run never opens a collapsed Visualization. Collapsed,
-// every pane's line starts at one x. The toggles are a pane too ("Panes"), not collapsible, and
+// every pane's line starts at one x; on a narrow pane, the title and Show all share the first line
+// and what the pane keeps goes under both. The toggles are a pane too ("Panes"), not collapsible, and
 // each picture's Visualization Type dropdown grows up to its view controls.
 //
 // The catalog comes from the real backend, like the rest of the suite; every compute request is
@@ -767,6 +768,53 @@ test("at phone width the collapsed controls wrap under their headings, 44px tall
   );
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+// What each collapsed pane keeps under (or beside) its title, and its Show all button.
+const COLLAPSED_LINES = {
+  details: ["#workbench-details-summary", "#workbench-details-expand"],
+  instance: ["#workbench-instance-body", "#workbench-instance-expand"],
+  visualization: [SUMMARY, "#workbench-section-visualization-expand"],
+  execute: ["#workbench-section-execute-body", "#workbench-section-execute-expand"],
+  verify: ["#workbench-section-verify-body", "#workbench-section-verify-expand"],
+};
+
+for (const width of [390, 1280]) {
+  test(`at ${width}px a collapsed pane's Show all is on its title's line, at the right, and what it keeps is ${width < 600 ? "under both" : "between them"}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await answerCompute(page);
+    await gotoProblemDetail(page, PROBLEM, { expect });
+    for (const key of SECTIONS) await setExpanded(page, key, false);
+    for (const [key, [contentSelector, buttonSelector]] of Object.entries(COLLAPSED_LINES)) {
+      await expect(page.locator(buttonSelector), key).toHaveText("Show all");
+      const heading = await page.locator(TITLES[key]).boundingBox();
+      const button = await page.locator(buttonSelector).boundingBox();
+      const content = await page.locator(contentSelector).boundingBox();
+      const pane = await page.locator(PANES[key]).boundingBox();
+      // The button: on the title's row, at the pane's right.
+      expect(button.y, key).toBeLessThan(heading.y + heading.height);
+      expect(button.y + button.height, key).toBeGreaterThan(heading.y);
+      expect(button.x, key).toBeGreaterThan(heading.x + heading.width);
+      expect(pane.x + pane.width - (button.x + button.width), key).toBeLessThanOrEqual(20);
+      if (width < 600) {
+        // Level with the title, and what the pane keeps under both, as wide as the pane allows.
+        const middle = (box) => box.y + box.height / 2;
+        expect(Math.abs(middle(button) - middle(heading)), key).toBeLessThanOrEqual(2);
+        const top = Math.max(heading.y + heading.height, button.y + button.height);
+        expect(content.y, key).toBeGreaterThanOrEqual(top - 1);
+        expect(Math.abs(content.x - heading.x), key).toBeLessThanOrEqual(1);
+        expect(content.x + content.width, key).toBeGreaterThan(button.x + button.width - 2);
+      } else {
+        // One row: the title, then what the pane keeps, then the button.
+        expect(content.y, key).toBeLessThan(heading.y + heading.height);
+        expect(content.y + content.height, key).toBeGreaterThan(heading.y);
+        expect(content.x, key).toBeGreaterThan(heading.x + heading.width);
+        expect(button.x, key).toBeGreaterThanOrEqual(content.x + content.width - 1);
+      }
+    }
+  });
+}
 
 test("collapsed, Instance's field and Execute's and Verify's controls sit on their title's line, and every line starts at Details' x", async ({
   page,

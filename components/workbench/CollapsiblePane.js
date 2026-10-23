@@ -8,8 +8,9 @@
 // #279 (Workspace tweaks): both sit on the title's line, "tabbed" to one x (layout.js
 // PANE_TITLE_WIDTH). Instance's field moves there with `inlineCollapsed`: while collapsed, the
 // title line and the body stop being boxes of their own (`display: contents`) and the card itself
-// lays out the title, the body and the button on one wrapping line. The field stays the same
-// element in the same place in the tree, so focus, the caret and what is typed are untouched.
+// lays out the title, the body and the button on one line (on a narrow pane, two: see below).
+// The field stays the same element in the same place in the tree, so focus, the caret and what
+// is typed are untouched.
 //
 // #279 (Workspace tweaks): the Visualization, Execute and Verify panes are this pane too, each
 // its own card, in place of the one Workspace card they were sections of. Visualization
@@ -19,6 +20,13 @@
 // size containers (`container`, layout.js WORKSPACE_CONTAINER), so Reduce mode's two sides
 // stack by the pane's own width.
 //
+// #279: on a narrow pane (layout.js PANE_STACKED, a container query on the pane's own width), a
+// collapsed pane's title line doesn't fit on one line. The title stays at the left and Show all
+// at the right of the first line, and the summary or the inline body goes under both, full
+// width: CSS reorders them (flex `order`, the content last and a whole line wide), so Instance's
+// field is still the same element in the same place in the tree. Wider, it is all one line: the
+// title, what follows it at the tab stop, and the button at the far right.
+//
 // The rail's toggle hides the whole pane (`hidden`); it stays on the page so whatever is typed
 // in it survives. Collapsed to a summary, the body stays on the page too, hidden.
 
@@ -27,7 +35,9 @@ import {
   COMPACT_MEDIA,
   cardSx,
   PANE_COMPACT_PADDING,
+  PANE_CONTAINER,
   PANE_PADDING,
+  PANE_STACKED,
   paneTitleSx,
   titleLineSx,
   WORKSPACE_CONTAINER,
@@ -50,6 +60,7 @@ export function ExpandButton({ id, controls, expanded, onExpandedChange }) {
       sx={{
         order: 2,
         ml: "auto",
+        [PANE_STACKED]: { alignSelf: "center" },
         minHeight: 40,
         px: 1.5,
         borderRadius: "8px",
@@ -86,8 +97,8 @@ export function ExpandButton({ id, controls, expanded, onExpandedChange }) {
  * @param {"center"|"flex-end"} [props.collapsedAlign] How the collapsed title line lines up its
  *   parts: centered, or at the bottom, for controls with their labels above them (Execute's and
  *   Verify's controls, Visualization's dropdowns).
- * @param {boolean} [props.container] The pane is a size container (layout.js
- *   WORKSPACE_CONTAINER), so what it holds lays out by its own width.
+ * @param {boolean} [props.container] The pane is also a WORKSPACE_CONTAINER (layout.js), so
+ *   what it holds lays out by its own width. Every pane is a PANE_CONTAINER, for its title line.
  */
 export default function CollapsiblePane({
   id,
@@ -105,9 +116,14 @@ export default function CollapsiblePane({
 }) {
   const headingId = `${id}-heading`;
   const inline = inlineCollapsed && !expanded;
-  // On the title line, after the title and before the button; dropping under the title when
-  // there isn't room.
-  const onTitleLineSx = { order: 1, flex: "1 1 320px", minWidth: 0 };
+  // On the title line, after the title and before the button; on a narrow pane, under both, a
+  // whole line wide.
+  const onTitleLineSx = {
+    order: 1,
+    flex: "1 1 320px",
+    minWidth: 0,
+    [PANE_STACKED]: { order: 3, flexBasis: "100%" },
+  };
   const display = hidden ? "none" : "flex";
   const bodyHidden = !children || (!expanded && !inline);
   // The card is the title line; its padding gives back what the line's -6px margin takes from a
@@ -125,7 +141,8 @@ export default function CollapsiblePane({
         boxSizing: "border-box",
         minWidth: 0,
         p: `${PANE_PADDING}px`,
-        ...(container ? { containerType: "inline-size", containerName: WORKSPACE_CONTAINER } : {}),
+        containerType: "inline-size",
+        containerName: container ? `${WORKSPACE_CONTAINER} ${PANE_CONTAINER}` : PANE_CONTAINER,
         ...(inline
           ? {
               ...titleLineSx,
@@ -154,10 +171,13 @@ export default function CollapsiblePane({
           sx={{
             ...paneTitleSx,
             // Lined up at the bottom, as tall as the controls beside it, its text centered on
-            // them.
+            // them. On a narrow pane they are under it: it and the button are alone on the first
+            // line, centered on each other. (They do it themselves: the inline card is the line,
+            // and a container can't query its own width.)
             ...(!expanded && collapsedAlign === "flex-end"
               ? { minHeight: 44, display: "flex", alignItems: "center" }
               : {}),
+            [PANE_STACKED]: { alignSelf: "center", minHeight: 0 },
           }}
         >
           {title}

@@ -41,6 +41,23 @@ export const PANE_TITLE_WIDTH = 120;
 /** The gap between a pane's title and what follows it on the title's line. */
 export const PANE_TITLE_GAP = 12;
 
+/**
+ * #279: every pane (./CollapsiblePane.js) is a size container by this name, so its collapsed
+ * title line lays out by the pane's own width.
+ */
+export const PANE_CONTAINER = "pane";
+
+/**
+ * #279: the widest a pane's inside can be and still not fit its title, a collapsed summary or
+ * controls at least 320 px wide, and the Show all button on one line (120 + 12 + 320 + 12 + the
+ * button, rounded up). At or under it, the title and the button share the first line and what
+ * the pane keeps collapsed goes under both, full width.
+ */
+export const PANE_STACK_WIDTH = 600;
+
+/** Matches while a pane is narrow enough to stack its collapsed title line (an `sx` key). */
+export const PANE_STACKED = `@container ${PANE_CONTAINER} (max-width: ${PANE_STACK_WIDTH}px)`;
+
 /** Every pane's padding on a desktop. */
 export const PANE_PADDING = 16;
 
