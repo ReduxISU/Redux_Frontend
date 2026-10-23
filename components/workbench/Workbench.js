@@ -11,10 +11,15 @@
 //     keeps which are shown (and whether Details and Instance are expanded) in this browser;
 //   - the Details pane: collapsed, its Input -> Output line; Show all for the rest;
 //   - the Instance pane: collapsed, the instance as one editable line; Show all for the rest;
-//   - the one Workspace pane (./Workspace.js) with three sections: Visualization (the pictures,
-//     steps, Legend, and Gadgets), Execute (Mode, the dropdowns and the run buttons, each run's status, and
-//     the result that was the Result panel's) and Verify (./panels/VerifyBox.js). Hiding all
-//     three hides the Workspace. Hidden parts stay on the page, so nothing typed is lost.
+//   - the Visualization pane (the pictures, steps, Legend, and Gadgets), the Execute pane (Mode,
+//     the dropdowns and the run buttons, each run's status, and the result that was the Result
+//     panel's) and the Verify pane (./panels/VerifyBox.js). #279 (Workspace tweaks) made them
+//     panes of their own, like Details and Instance (./CollapsiblePane.js), in place of the
+//     sections of one Workspace card. Hidden parts stay on the page, so nothing typed is lost.
+//     Each has Show all / Show less: collapsed, Visualization keeps its pictures' problems with
+//     their live Visualization Type dropdowns, and Execute and Verify keep their top controls,
+//     live, on the title's line; the layout remembers it until Reset layout. Every pane but
+//     Visualization starts collapsed.
 //
 // What this component owns, and why here:
 //   - The one instance value. Every part of the page reads it, and editing it anywhere
@@ -40,6 +45,8 @@
 //   - Which gadget the pictures highlight (#229 stage 4): the Gadgets rows (under the pictures) say
 //     which one is hovered or focused, and both pictures draw its pieces. The gadgets come
 //     with ProblemProvider/reduce's answer (lib/gadgets.js), so they cost no extra request.
+//     #279: the Highlight Gadgets switch at the bottom of Algorithm Steps colors every gadget
+//     (on) or leaves the pictures plain (off, the default), kept with the layout.
 //   - Which format the picture comes in (#199): the run's picture and the default picture are
 //     asked for through lib/pictureRequest.js, so a picture type with a format=frames renderer
 //     (components/pictures/registry.js) is drawn by it, with the step controls walking its
@@ -67,9 +74,9 @@
 //     panes use), and a source picture picked before Reduce is used when the view can draw it. The
 //     dropdown shows what Redux says it drew, so a backend that ignores the choice (older than
 //     #912) gets a fixed dropdown naming the default.
-//   - What the Visualization section says and draws (#279 stage 3): the Showing lines (Problem
-//     and Algorithm in Solve mode; the Reduction, and each picture's own Problem and Algorithm, in
-//     Reduce mode, where a side's own solver wins over an answer carried across), the placeholder
+//   - What the Visualization section says and draws (#279 stage 3): the Reduction line in Reduce
+//     mode, each picture's heading and what it shows after it (#279 Workspace tweaks: a solver's
+//     steps, or an answer mapped back, only while the picture really draws that), the placeholder
 //     target before a build, Algorithm Steps opening by itself once a run gives it steps (unless
 //     the viewer closed it, hooks/useWorkbenchLayout.js), and a solved source showing its answer
 //     in Reduce mode while no Reduction View is on screen.
@@ -91,8 +98,8 @@ import {
 } from "../../hooks/useComputeRequest";
 import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
-import useGadgetColorMode from "../../hooks/useGadgetColorMode";
-import useWorkbenchLayout, { WORKSPACE_SECTIONS } from "../../hooks/useWorkbenchLayout";
+import { verifiersOf } from "../../hooks/useProblemDetail";
+import useWorkbenchLayout from "../../hooks/useWorkbenchLayout";
 import {
   agreeLine,
   answerFound,
@@ -133,6 +140,9 @@ import {
   solverCard,
   solverRunTags,
   targetCard,
+  targetTags,
+  verifierCard,
+  verifierTags,
   visualizationCard,
   visualizationTags,
 } from "./infoCards";
@@ -144,8 +154,7 @@ import ReduceCells from "./panels/ReduceCells";
 import ResultPanel from "./panels/ResultPanel";
 import VerifyBox from "./panels/VerifyBox";
 import { formatSeconds, runChip, runFailure } from "./RunParts";
-import VisualizationPane from "./VisualizationPane";
-import Workspace, { WorkspaceSection } from "./Workspace";
+import VisualizationPane, { VisualizationTypeControl } from "./VisualizationPane";
 
 const ID = "workbench";
 // #279: the id of what each rail toggle shows.
@@ -157,7 +166,6 @@ const LAYOUT_REGIONS = {
   verify: `${ID}-section-verify`,
 };
 const INSTANCE_URL_DEBOUNCE_MS = 400;
-const NOT_RUN_TEXT = "Not run yet (default picture)";
 const ARROW = "→";
 
 /**
@@ -310,6 +318,54 @@ function viewTypeControl(which, all, side, pending, onPick) {
   return { options: [...workable.map(option), ...unworkable], value, onChange: onPick };
 }
 
+/**
+ * One picture in the collapsed Visualization pane's line: its problem, then its live
+ * Visualization Type dropdown (the expanded pane's own state), one line (`oneLine`). The pair
+ * wraps as a whole (the target's → with it); only on a phone, where a pair can be wider than the
+ * pane, may the dropdown drop under its problem.
+ */
+function PictureSummaryItem({ id, name, type, arrow = false }) {
+  return (
+    <Box
+      component="span"
+      data-summary-pair=""
+      sx={{
+        display: "inline-flex",
+        flexWrap: { xs: "wrap", sm: "nowrap" },
+        alignItems: "flex-end",
+        gap: 1,
+        minWidth: 0,
+        maxWidth: "100%",
+      }}
+    >
+      {/* The target's arrow stays with it when the line wraps. */}
+      {arrow && (
+        <Box
+          component="span"
+          aria-hidden="true"
+          sx={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}
+        >
+          {ARROW}
+        </Box>
+      )}
+      <Box
+        component="span"
+        id={`${id}-problem`}
+        sx={{
+          minHeight: 44,
+          display: "inline-flex",
+          alignItems: "center",
+          fontWeight: 600,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {name}
+      </Box>
+      {type && <VisualizationTypeControl id={`${id}-type`} {...type} oneLine />}
+    </Box>
+  );
+}
+
 /** The name of a visualization among `all` by class name, or null. */
 function visualizationName(all, className) {
   return all.find((visualization) => visualization.className === className)?.name ?? null;
@@ -335,6 +391,26 @@ function answerChip(kept) {
     tone: kept.result.guarantee === "exact" ? "err" : "neutral",
     text: `No answer found · ${time}`,
     label: `No answer found, ${label}`,
+  };
+}
+
+/** The verifier picked by class name, or the first. */
+function pickVerifier(verifiers, className) {
+  return verifiers.find((verifier) => verifier.className === className) ?? verifiers[0] ?? null;
+}
+
+/** The verifier dropdown's choice for one side (TaggedSelect's shape), or null with none. */
+function verifierSelectFor(verifiers, chosen, onChange) {
+  if (verifiers.length === 0) return null;
+  return {
+    value: chosen?.className ?? verifiers[0].className,
+    options: verifiers.map((verifier) => ({
+      value: verifier.className,
+      label: verifier.name,
+      tags: verifierTags(verifier),
+      card: verifierCard(verifier),
+    })),
+    onChange,
   };
 }
 
@@ -390,8 +466,9 @@ export default function Workbench({ problem }) {
   const [lastRun, setLastRun] = useState(null);
   // The gadget row being hovered or focused, by the run it belongs to: `{runId, index}`.
   const [gadgetHighlight, setGadgetHighlight] = useState(null);
-  // #239: the Reduction View's gadget marks, Plain or Color, kept for this viewer.
-  const [gadgetMarkMode, setGadgetMarkMode] = useGadgetColorMode();
+  // #239: the Reduction View's gadget marks, Plain or Color. #279: the Highlight Gadgets switch
+  // (on is Color), kept with the layout until Reset layout.
+  const gadgetMarkMode = layout.highlightGadgets ? "color" : "plain";
   const runIdRef = useRef(0);
   // #912: the picture each side of the Reduction View is drawn with, kept for the page's life.
   // The source's follows the Visualization Type (null) until one is picked in the view; the
@@ -479,19 +556,33 @@ export default function Workbench({ problem }) {
   const reduceTargetName = reduceCurrent
     ? reduceResult.targetName
     : (selectedReduction?.target ?? targetName ?? null);
+  // #279 (Workspace tweaks): each side's verifiers, as Redux lists them, and the one picked in
+  // its dropdown (the first until another is picked). Collapsed and expanded Verify share it.
+  const [verifierPicks, setVerifierPicks] = useState({
+    [CHECK_SOURCE]: null,
+    [CHECK_TARGET]: null,
+  });
+  const sourceVerifiers = verifiersOf(problem.verifiers, problem.verifier);
+  const targetVerifiers = reduceCurrent
+    ? verifiersOf(reduceResult.targetVerifiers, reduceResult.targetVerifier)
+    : verifiersOf(selectedReduction?.targetVerifiers, selectedReduction?.targetVerifier);
   const verify = useCertificateCheck({
-    source: { name: problem.name, verifier: problem.verifier ?? null, instance },
+    source: {
+      name: problem.name,
+      verifier: pickVerifier(sourceVerifiers, verifierPicks[CHECK_SOURCE]),
+      instance,
+    },
     target:
       mode === "reduce" && reduceTargetName
         ? {
             name: reduceTargetName,
-            verifier: reduceCurrent
-              ? reduceResult.targetVerifier
-              : (selectedReduction?.targetVerifier ?? null),
+            verifier: pickVerifier(targetVerifiers, verifierPicks[CHECK_TARGET]),
             instance: reduceCurrent ? reduceResult.targetInstance : null,
           }
         : null,
   });
+  // Which side collapsed Verify's line checks in Reduce mode (its Problem to verify choice).
+  const [verifySidePick, setVerifySidePick] = useState(CHECK_SOURCE);
   // Each strip collapses on its own; Check it opens its side's again.
   const [stripsOpen, setStripsOpen] = useState({ [CHECK_SOURCE]: true, [CHECK_TARGET]: true });
 
@@ -834,6 +925,7 @@ export default function Workbench({ problem }) {
         targetName: reduction.target,
         targetVisualization: reduction.targetVisualization,
         targetVerifier: reduction.targetVerifier ?? null,
+        targetVerifiers: reduction.targetVerifiers ?? null,
         targetSolvers: reduction.targetSolvers ?? [],
         pictures,
         instance: runInstance,
@@ -960,9 +1052,10 @@ export default function Workbench({ problem }) {
 
   // --- Check it -----------------------------------------------------------------------------
   // #279 stage 4: Check it in Execute fills that side's Verify strip and checks it there, showing
-  // the Verify section and opening the strip if either was hidden.
+  // the Verify section and opening the strip if either was hidden (or the section collapsed).
   function checkIn(side, certificate) {
     layout.show("verify");
+    layout.setExpanded("verify", true);
     setStripsOpen((open) => ({ ...open, [side]: true }));
     verify[side]?.check(certificate);
   }
@@ -981,36 +1074,16 @@ export default function Workbench({ problem }) {
     modeNote = `Reduce builds the ${selectedReduction?.target ?? "target"} instance from this one and solves nothing. Solve each side in its cell below.`;
   }
 
-  // #279 stage 3: the Showing lines. Solve mode says the problem and what drew the picture;
-  // Reduce mode says the reduction, and each picture says its own Problem and Algorithm.
-  let showing;
-  let showingIsError = false;
-  if (mode === "solve") {
-    let algorithm;
-    if (solving) {
-      algorithm = `Running ${selectedSolver?.name ?? "the solver"}. The picture updates when it finishes.`;
-    } else if (showingRunPicture) {
-      algorithm = pictureResult.solverName;
-    } else if (solveCurrent) {
-      algorithm = selectedViz
-        ? `${solveResult.solverName} (the picture shows the instance before solving)`
-        : solveResult.solverName;
-    } else {
-      algorithm = selectedViz ? NOT_RUN_TEXT : "Not run yet";
-    }
-    if (instanceError) {
-      // Nothing can be drawn from an unreadable instance, so don't claim a default picture.
-      algorithm = `The instance has errors. ${algorithm === NOT_RUN_TEXT ? "Not run yet." : algorithm}`;
-      showingIsError = true;
-    }
-    showing = { problem: problem.name, algorithm };
-  } else {
-    showing = {
-      reduction: reduceCurrent
-        ? reduceResult.reductionName
-        : (selectedReduction?.name ?? `No reductions from ${problem.name} are declared yet`),
-    };
-  }
+  // #279 stage 3: the Showing line, Reduce mode only: the reduction. (Solve mode's Problem and
+  // Algorithm lines are gone: each picture's heading names its problem, and Execute the solver.)
+  const showing =
+    mode === "solve"
+      ? null
+      : {
+          reduction: reduceCurrent
+            ? reduceResult.reductionName
+            : (selectedReduction?.name ?? `No reductions from ${problem.name} are declared yet`),
+        };
 
   // #279 stage 3: in Reduce mode with no Reduction View on screen, a solved source shows its
   // answer: the run's last step, with no steps to walk (Algorithm Steps walks the reduction).
@@ -1238,7 +1311,7 @@ export default function Workbench({ problem }) {
       targetType = { options: [targetOption(targetViz)], value: targetViz.className };
     }
     target = {
-      title: `Target · ${reduceCurrent ? reduceResult.targetName : targetLabel}`,
+      title: `Target: ${reduceCurrent ? reduceResult.targetName : targetLabel}`,
       type: targetType,
       content,
     };
@@ -1432,7 +1505,8 @@ export default function Workbench({ problem }) {
         text: "Linked by a gadget (point at a piece to see what it became or came from)",
         swatch: { kind: "ring", color: paletteVars.viz.gadget },
       });
-      // #239: Color mode's colors, and that they repeat past the palette's size.
+      // #239: Color mode's colors (Highlight Gadgets on), and that they repeat past the
+      // palette's size.
       if (gadgetMarkMode === "color") {
         const used = new Set(gadgetColorMap(reduceView.gadgets, GADGET_PALETTE).byGadget.values());
         GADGET_PALETTE.filter((color) => used.has(color)).forEach((color, index) => {
@@ -1440,7 +1514,7 @@ export default function Workbench({ problem }) {
             key: `gadget-color-${index}`,
             text:
               index === 0
-                ? `Gadget colors (Color mode: each gadget's pieces share a color on both sides${
+                ? `Gadget colors (Highlight Gadgets: each gadget's pieces share a color on both sides${
                     used.size >= GADGET_PALETTE.length
                       ? `; with more than ${GADGET_PALETTE.length} gadgets the colors repeat`
                       : ""
@@ -1528,6 +1602,16 @@ export default function Workbench({ problem }) {
   const solveStale = !solving && Boolean(solveKept) && !solveCurrent && !solveFailure;
   const solveHint = !solving && isRunning ? ANOTHER_RUN : "";
 
+  const reduceChip = runChip(reduceRun, {
+    current: reduceCurrent && buildMatchesChoice,
+    done: (kept) => ({
+      tone: "ok",
+      text: `Built · ${formatSeconds(kept.elapsedMs)}`,
+      label: `Built, ${formatSeconds(kept.elapsedMs)}, round trip`,
+    }),
+    changed: "Changed · build again",
+  });
+
   let topRun;
   if (mode === "solve") {
     topRun = {
@@ -1550,15 +1634,7 @@ export default function Workbench({ problem }) {
       hint: !reduceRun.isRunning && isRunning ? ANOTHER_RUN : "",
       running: reduceRun.isRunning,
       onCancel: reduceRun.cancel,
-      chip: runChip(reduceRun, {
-        current: reduceCurrent && buildMatchesChoice,
-        done: (kept) => ({
-          tone: "ok",
-          text: `Built · ${formatSeconds(kept.elapsedMs)}`,
-          label: `Built, ${formatSeconds(kept.elapsedMs)}, round trip`,
-        }),
-        changed: "Changed · build again",
-      }),
+      chip: reduceChip,
       busy: reduceRun.isRunning
         ? {
             text: `Building the ${selectedReduction?.target ?? "target"} instance with ${selectedReduction?.name ?? "the reduction"}`,
@@ -1599,24 +1675,25 @@ export default function Workbench({ problem }) {
           The picture did not come back: {pictureRun.failure?.headline ?? ""}. The answer is below.
         </Box>
       )}
-      {/* Spoken when they change; what they say is also on screen. */}
-      {[
-        ["solve", solveAnnouncement],
-        ["reduce", reduceAnnouncement],
-        ["target", targetAnnouncement],
-      ].map(([key, text]) => (
-        <Box
-          key={key}
-          id={`${ID}-${key}-status`}
-          role="status"
-          aria-live="polite"
-          sx={visuallyHiddenSx}
-        >
-          {text}
-        </Box>
-      ))}
     </>
   );
+  // Spoken when they change; what they say is also on screen. Kept while Execute is collapsed,
+  // where the runs' chips still change.
+  const announcements = [
+    ["solve", solveAnnouncement],
+    ["reduce", reduceAnnouncement],
+    ["target", targetAnnouncement],
+  ].map(([key, text]) => (
+    <Box
+      key={key}
+      id={`${ID}-${key}-status`}
+      role="status"
+      aria-live="polite"
+      sx={visuallyHiddenSx}
+    >
+      {text}
+    </Box>
+  ));
 
   // Reduce mode's cells and results row (./panels/ReduceCells.js).
   let reduceCells = null;
@@ -1823,7 +1900,12 @@ export default function Workbench({ problem }) {
       open: stripsOpen[CHECK_SOURCE],
       onToggle: () => setStripsOpen((open) => ({ ...open, [CHECK_SOURCE]: !open[CHECK_SOURCE] })),
       check: verify[CHECK_SOURCE],
-      format: certificateHint(problem.verifier),
+      verifierSelect: verifierSelectFor(
+        sourceVerifiers,
+        verify[CHECK_SOURCE].info?.verifier,
+        (className) => setVerifierPicks((picks) => ({ ...picks, [CHECK_SOURCE]: className })),
+      ),
+      format: certificateHint(verify[CHECK_SOURCE].info?.verifier),
       checkHint: checkHintFor(verify[CHECK_SOURCE], ""),
       answer: sourceUse,
       answerHint: sourceSolvedNone
@@ -1855,6 +1937,9 @@ export default function Workbench({ problem }) {
       open: stripsOpen[CHECK_TARGET],
       onToggle: () => setStripsOpen((open) => ({ ...open, [CHECK_TARGET]: !open[CHECK_TARGET] })),
       check: targetCheck,
+      verifierSelect: verifierSelectFor(targetVerifiers, targetCheck.info.verifier, (className) =>
+        setVerifierPicks((picks) => ({ ...picks, [CHECK_TARGET]: className })),
+      ),
       format: certificateHint(targetCheck.info.verifier),
       checkHint: checkHintFor(targetCheck, lockReason),
       answer: targetUse,
@@ -1862,13 +1947,27 @@ export default function Workbench({ problem }) {
     });
   }
 
+  // Collapsed, Verify's line checks one side: Solve mode's source, or in Reduce mode the side
+  // its Problem to verify choice names. The target can't be chosen until Reduce has built the
+  // instance its certificates are checked against.
+  const targetBuilt = Boolean(targetCheck) && reduceCurrent && Boolean(reduceResult.targetInstance);
+  const verifySide = targetBuilt && verifySidePick === CHECK_TARGET ? CHECK_TARGET : CHECK_SOURCE;
+  const verifyChoice = targetCheck
+    ? {
+        value: verifySide,
+        onChange: setVerifySidePick,
+        targetDisabledReason: targetBuilt
+          ? ""
+          : `Reduce first: a ${reduceTargetName} certificate is checked against the instance Reduce builds.`,
+      }
+    : null;
+
   // --- Toggle dots -------------------------------------------------------------------------
   // #279: only the Instance toggle has one, while the instance has errors. #229's "New result"
   // dot is gone: the result now shows in Execute, right under the run buttons.
   const dots = {
     instance: instanceError ? { label: "The instance has errors", color: "status.err" } : null,
   };
-  const workspaceShown = WORKSPACE_SECTIONS.filter((key) => layout.shown[key]);
 
   // #912: the Reduction View's dropdowns, and what it says while it draws another picture.
   let reductionPane = null;
@@ -1889,7 +1988,6 @@ export default function Workbench({ problem }) {
       view: reduceView,
       activeGadget,
       colorMode: gadgetMarkMode,
-      onColorMode: setGadgetMarkMode,
       runId: reduceResult.runId,
       loading,
       types: {
@@ -1911,25 +2009,27 @@ export default function Workbench({ problem }) {
     };
   }
 
-  // --- The pictures' own Showing lines and Algorithm Steps (#279 stage 3) -------------------
-  // Reduce mode: each picture names what produced the answer it shows. Its own solver wins over
-  // an answer carried across from the other side.
-  let sourceShowing = null;
-  let targetShowing = null;
-  if (mode === "reduce") {
-    const builtTargetName = reduceCurrent ? reduceResult.targetName : cellTargetName;
-    let sourceAlgorithm = "Not run yet";
-    if (solveCurrent) sourceAlgorithm = solveResult.solverName;
-    else if (reduceCurrent && backMap.value?.certificate)
-      sourceAlgorithm = `Mapped back from ${reduceResult.targetName}`;
-    let targetAlgorithm = "Not built yet";
-    if (reduceCurrent) {
-      if (targetResult) targetAlgorithm = targetResult.solverName;
-      else if (forwardMap.value?.certificate) targetAlgorithm = `Carried from ${problem.name}`;
-      else targetAlgorithm = "Built, not solved";
+  // --- What each picture shows, after its heading (#279 Workspace tweaks) --------------------
+  // Said only when it adds something, and only while the picture really draws it: a solver's
+  // steps (named by the run that drew them, not the solver now picked), or the answer mapped
+  // back. A plain picture (no run yet, a run retired by an instance edit, the Build phase, the
+  // placeholder) says nothing. The Reduction View's sides follow the phase on screen. No picture
+  // draws an answer carried into the target (mapSolution's answer is only in Execute), so the
+  // target never claims one.
+  let sourceStatus = null;
+  let targetStatus = null;
+  if (mode === "solve") {
+    if (showingRunPicture) sourceStatus = `${pictureResult.solverName} steps`;
+  } else if (reduceView) {
+    const phase = switching
+      ? null
+      : reduceView.frames[Math.min(reduceStep, reduceView.frames.length - 1)]?.phase;
+    if (phase === "map") sourceStatus = `answer mapped back from ${reduceResult.targetName}`;
+    if ((phase === "solve" || phase === "map") && targetSolved) {
+      targetStatus = `${targetSolved.solverName} steps`;
     }
-    sourceShowing = { problem: problem.name, algorithm: sourceAlgorithm };
-    targetShowing = { problem: builtTargetName || "the target", algorithm: targetAlgorithm };
+  } else if (answeredSource && answeredFrames.length > 0) {
+    sourceStatus = `${pictureResult.solverName} steps`;
   }
 
   const steps = showingRunPicture
@@ -1971,6 +2071,59 @@ export default function Workbench({ problem }) {
             : solveTargetHint,
     },
   };
+
+  // #279: the Highlight Gadgets switch, Reduce mode only. It colors the Reduction View's gadgets,
+  // so it is disabled, saying why, until one with gadgets is on screen.
+  let highlightGadgets = null;
+  if (mode === "reduce") {
+    let disabledReason = null;
+    if (!reduceCurrent) {
+      disabledReason = `Reduce first: once the ${cellTargetName || "target"} instance is built, its gadgets can be highlighted.`;
+    } else if (!reduceView) {
+      disabledReason =
+        "Gadget colors need the Reduction View, which Redux did not send for this build.";
+    } else if (reduceView.gadgets.length === 0) {
+      disabledReason = "This reduction lists no gadgets, so there is nothing to highlight.";
+    }
+    highlightGadgets = {
+      checked: layout.highlightGadgets,
+      onChange: layout.setHighlightGadgets,
+      disabledReason,
+    };
+  }
+
+  // --- The collapsed Visualization pane's line (#279 Workspace tweaks) ------------------------
+  // Each picture's problem with its live Visualization Type dropdown: the same state as the
+  // expanded pane's dropdowns, so a pick in one is the pick in the other.
+  const summaryId = `${LAYOUT_REGIONS.visualization}-summary`;
+  const visualizationSummary = (
+    <Box
+      id={summaryId}
+      sx={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "flex-end",
+        gap: "8px 12px",
+        minWidth: 0,
+      }}
+    >
+      <PictureSummaryItem
+        id={`${summaryId}-source`}
+        name={problem.name}
+        type={reductionPane?.types?.source ?? vizTypeControl}
+      />
+      {target && (
+        <PictureSummaryItem
+          id={`${summaryId}-target`}
+          name={target.title.replace(/^Target: /, "")}
+          type={reductionPane?.types?.target ?? target.type}
+          arrow
+        />
+      )}
+    </Box>
+  );
+  // #279 (Workspace tweaks): Execute and Verify have no summary line. Collapsed, they keep their
+  // top controls on the title's line instead (CommandBar and VerifyBox, collapsed).
 
   const gadgetsProps =
     reduceGadgets.length > 0
@@ -2035,6 +2188,7 @@ export default function Workbench({ problem }) {
         hidden={!layout.shown.instance}
         expanded={layout.expanded.instance}
         onExpandedChange={(expanded) => layout.setExpanded("instance", expanded)}
+        inlineCollapsed
       >
         <InstancePanel
           idPrefix={`${ID}-instance`}
@@ -2046,144 +2200,161 @@ export default function Workbench({ problem }) {
         />
       </CollapsiblePane>
 
-      <Workspace id={`${ID}-workspace`} hidden={workspaceShown.length === 0}>
-        <WorkspaceSection
-          id={LAYOUT_REGIONS.visualization}
-          title={PANE_LABELS.visualization}
-          hidden={!layout.shown.visualization}
-          first={workspaceShown[0] === "visualization"}
-        >
-          <VisualizationPane
-            idPrefix={ID}
-            showing={showing}
-            showingIsError={showingIsError}
-            source={{
-              title: mode === "solve" ? problem.name : `Source · ${problem.name}`,
-              type: vizTypeControl,
-              content: sourceContent,
-              showing: sourceShowing,
-              fullScreenTitle:
-                mode === "solve"
-                  ? showing.algorithm
-                  : `${problem.name} · ${sourceShowing.algorithm}`,
-            }}
-            target={
-              target && {
-                ...target,
-                showing: targetShowing,
-                fullScreenTitle: `${targetShowing.problem} · ${targetShowing.algorithm}`,
-              }
-            }
-            steps={steps}
-            algorithmSteps={algorithmSteps}
-            reduction={reductionPane}
-            note={note}
-            legendFrames={legendFrames}
-            legendStates={legendStates}
-            legendAnnotations={legendAnnotations}
-          />
-          {/* Gadgets (#229 stage 4) belong with the pictures: what the reduction built for each
+      <CollapsiblePane
+        id={LAYOUT_REGIONS.visualization}
+        expandId={`${LAYOUT_REGIONS.visualization}-expand`}
+        bodyId={`${LAYOUT_REGIONS.visualization}-body`}
+        title={PANE_LABELS.visualization}
+        hidden={!layout.shown.visualization}
+        expanded={layout.expanded.visualization}
+        onExpandedChange={(expanded) => layout.setExpanded("visualization", expanded)}
+        summary={visualizationSummary}
+        collapsedAlign="flex-end"
+        container
+      >
+        <VisualizationPane
+          idPrefix={ID}
+          showing={showing}
+          source={{
+            title: mode === "solve" ? problem.name : `Source: ${problem.name}`,
+            status: sourceStatus,
+            type: vizTypeControl,
+            content: sourceContent,
+          }}
+          target={target && { ...target, status: targetStatus }}
+          steps={steps}
+          algorithmSteps={algorithmSteps}
+          highlightGadgets={highlightGadgets}
+          reduction={reductionPane}
+          note={note}
+          legendFrames={legendFrames}
+          legendStates={legendStates}
+          legendAnnotations={legendAnnotations}
+        />
+        {/* Gadgets (#229 stage 4) belong with the pictures: what the reduction built for each
               piece of the source. Reduce mode, after a run that lists some. */}
-          {gadgetsProps && (
-            <GadgetsSection
-              key={gadgetsProps.runId}
-              idPrefix={`${ID}-gadgets`}
-              gadgets={gadgetsProps.gadgets}
-              sourceFrame={gadgetsProps.sourceFrame}
-              targetFrame={gadgetsProps.targetFrame}
-              namers={gadgetsProps.namers}
-              colors={gadgetsProps.colors}
-              activeIndex={gadgetsProps.activeIndex}
-              onHighlight={gadgetsProps.onHighlight}
-            />
-          )}
-        </WorkspaceSection>
+        {gadgetsProps && (
+          <GadgetsSection
+            key={gadgetsProps.runId}
+            idPrefix={`${ID}-gadgets`}
+            gadgets={gadgetsProps.gadgets}
+            sourceFrame={gadgetsProps.sourceFrame}
+            targetFrame={gadgetsProps.targetFrame}
+            namers={gadgetsProps.namers}
+            colors={gadgetsProps.colors}
+            activeIndex={gadgetsProps.activeIndex}
+            onHighlight={gadgetsProps.onHighlight}
+          />
+        )}
+      </CollapsiblePane>
 
-        <WorkspaceSection
-          id={LAYOUT_REGIONS.execute}
-          title={PANE_LABELS.execute}
-          hidden={!layout.shown.execute}
-          first={workspaceShown[0] === "execute"}
-        >
-          <CommandBar
-            idPrefix={ID}
-            mode={mode}
-            onModeChange={setMode}
-            solver={solverSelect}
-            target={
-              targets.length > 0
-                ? {
-                    value: targetName ?? targets[0],
-                    // #279 stage 2: the Target dropdown has no tags inside; its card stays.
-                    options: targets.map((name) => ({
+      <CollapsiblePane
+        id={LAYOUT_REGIONS.execute}
+        expandId={`${LAYOUT_REGIONS.execute}-expand`}
+        bodyId={`${LAYOUT_REGIONS.execute}-body`}
+        title={PANE_LABELS.execute}
+        hidden={!layout.shown.execute}
+        expanded={layout.expanded.execute}
+        onExpandedChange={(expanded) => layout.setExpanded("execute", expanded)}
+        inlineCollapsed
+        collapsedAlign="flex-end"
+        container
+      >
+        <CommandBar
+          idPrefix={ID}
+          collapsed={!layout.expanded.execute}
+          mode={mode}
+          onModeChange={setMode}
+          solver={solverSelect}
+          target={
+            targets.length > 0
+              ? {
+                  value: targetName ?? targets[0],
+                  // #279 (Workspace tweaks): each target wears its complexity class, the tag
+                  // the problem page's title row shows, in the box and in the list.
+                  options: targets.map((name) => {
+                    const targetProblem = reductions.find(
+                      (reduction) => reduction.target === name,
+                    )?.targetProblem;
+                    return {
                       value: name,
                       label: name,
-                      tags: [],
-                      card: targetCard(
-                        name,
-                        reductions.find((reduction) => reduction.target === name)?.targetProblem,
-                      ),
-                    })),
-                    onChange: selectTarget,
-                  }
-                : null
-            }
-            reduction={
-              reductionsForTarget.length > 0
-                ? {
-                    value: selectedReduction.className,
-                    options: reductionsForTarget.map((reduction) => ({
-                      value: reduction.className,
-                      label: reduction.name,
-                      tags: reductionTags(reduction),
-                      card: reductionCard(reduction, problem.name),
-                    })),
-                    onChange: setReductionClassName,
-                  }
-                : null
-            }
-            run={topRun}
-            status={status}
-          >
-            <ResultPanel
-              idPrefix={`${ID}-result`}
-              mode={mode}
-              solve={
-                solveCurrent && solveRun.kept
-                  ? {
-                      found: answerFound(solveResult.output),
-                      answer: sourceAnswer,
-                      elapsedMs: solveRun.kept.elapsedMs,
-                    }
-                  : null
-              }
-              solveChanged={solveStale}
-              onCheckAnswer={() => checkIn(CHECK_SOURCE, sourceAnswer)}
-              built={
-                buildShown
-                  ? {
-                      targetName: reduceResult.targetName,
-                      reductionName: reduceResult.reductionName,
-                      elapsedMs: reduceRun.kept.elapsedMs,
-                      targetInstance: reduceResult.targetInstance,
-                    }
-                  : null
-              }
-              buildChanged={!reduceRun.isRunning && Boolean(buildKept) && !reduceCurrent}
-            />
-            <ReduceCells idPrefix={`${ID}-cells`} cells={reduceCells} />
-          </CommandBar>
-        </WorkspaceSection>
-
-        <WorkspaceSection
-          id={LAYOUT_REGIONS.verify}
-          title={PANE_LABELS.verify}
-          hidden={!layout.shown.verify}
-          first={workspaceShown[0] === "verify"}
+                      tags: targetTags(targetProblem),
+                      card: targetCard(name, targetProblem),
+                    };
+                  }),
+                  onChange: selectTarget,
+                }
+              : null
+          }
+          reduction={
+            reductionsForTarget.length > 0
+              ? {
+                  value: selectedReduction.className,
+                  options: reductionsForTarget.map((reduction) => ({
+                    value: reduction.className,
+                    label: reduction.name,
+                    tags: reductionTags(reduction),
+                    card: reductionCard(reduction, problem.name),
+                  })),
+                  onChange: setReductionClassName,
+                }
+              : null
+          }
+          run={topRun}
+          status={status}
+          announcements={announcements}
         >
-          <VerifyBox idPrefix={`${ID}-verify`} strips={verifyStrips} />
-        </WorkspaceSection>
-      </Workspace>
+          <ResultPanel
+            idPrefix={`${ID}-result`}
+            mode={mode}
+            solve={
+              solveCurrent && solveRun.kept
+                ? {
+                    found: answerFound(solveResult.output),
+                    answer: sourceAnswer,
+                    elapsedMs: solveRun.kept.elapsedMs,
+                  }
+                : null
+            }
+            solveChanged={solveStale}
+            onCheckAnswer={() => checkIn(CHECK_SOURCE, sourceAnswer)}
+            built={
+              buildShown
+                ? {
+                    targetName: reduceResult.targetName,
+                    reductionName: reduceResult.reductionName,
+                    elapsedMs: reduceRun.kept.elapsedMs,
+                    targetInstance: reduceResult.targetInstance,
+                  }
+                : null
+            }
+            buildChanged={!reduceRun.isRunning && Boolean(buildKept) && !reduceCurrent}
+          />
+          <ReduceCells idPrefix={`${ID}-cells`} cells={reduceCells} />
+        </CommandBar>
+      </CollapsiblePane>
+
+      <CollapsiblePane
+        id={LAYOUT_REGIONS.verify}
+        expandId={`${LAYOUT_REGIONS.verify}-expand`}
+        bodyId={`${LAYOUT_REGIONS.verify}-body`}
+        title={PANE_LABELS.verify}
+        hidden={!layout.shown.verify}
+        expanded={layout.expanded.verify}
+        onExpandedChange={(expanded) => layout.setExpanded("verify", expanded)}
+        inlineCollapsed
+        collapsedAlign="flex-end"
+        container
+      >
+        <VerifyBox
+          idPrefix={`${ID}-verify`}
+          strips={verifyStrips}
+          collapsed={!layout.expanded.verify}
+          side={verifySide}
+          choice={verifyChoice}
+        />
+      </CollapsiblePane>
     </Box>
   );
 }

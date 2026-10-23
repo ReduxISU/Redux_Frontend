@@ -22,9 +22,15 @@
 // same step, its rows as that step leaves them.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, selectSolverByName, showPane } from "./helpers";
+import { gotoProblemDetail, selectSolverByName, showPane, startWithPanesExpanded } from "./helpers";
 import { DFA_ONE_RUN, SAT3_BACKTRACKING_ONE_RUN, SAT3_PPZ_ONE_RUN } from "./run-payloads";
 import { SSSP_ONE_RUN } from "./table-payloads";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const PROBLEM = "DFA Acceptance";
 const TABLE_VIZ = "DFATableVisualization";
@@ -139,7 +145,10 @@ test("Run asks once for every picture, and switching keeps the step without aski
     "data-state",
     "ElementHighlight",
   );
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(DFA_ONE_RUN.solverName);
+  // #279: the picture's heading says whose steps it plays.
+  await expect(page.locator("#workbench-source-frame-status")).toHaveText(
+    `${DFA_ONE_RUN.solverName} steps`,
+  );
 
   // Back to the Table, one step earlier: still the same run, still no request.
   await previousStep(page);

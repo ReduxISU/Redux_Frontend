@@ -33,20 +33,22 @@
 //
 // #239: the gadget marks themselves are drawn by the renderers (gadgetRings.js), from the
 // `highlightIds` and `gadgetColors` each pane passes down: a ring around a node or a box, a band
-// under an edge. A Plain / Color switch beside the line under the pictures picks how:
-//   - Plain marks the linked pieces in the gadget gold while something is pointed at.
-//   - Color gives every gadget its own color (lib/gadgets.js gadgetColorMap, cycling
+// under an edge. `colorMode` picks how (#279: the Highlight Gadgets switch at the bottom of
+// Algorithm Steps, components/workbench/VisualizationPane.js, sets it; it was a Plain / Color
+// switch beside the line under the pictures):
+//   - Plain (off) marks the linked pieces in the gadget gold while something is pointed at.
+//   - Color (on) gives every gadget its own color (lib/gadgets.js gadgetColorMap, cycling
 //     GADGET_PALETTE) on both sides all the time, so a piece and what it became match by eye;
 //     pointing still fades what is not linked.
-// The choice is kept for the viewer (hooks/useGadgetColorMode.js). During Build the caption lists
+// During Build the caption lists
 // the gadgets the step made, in plain words, and the step's bound when it sets one. A dashed
 // "Rule says no" line is a piece too (lib/reductionView.js gives it to its edge rule). A picture
 // that draws none of the pieces a side's gadgets name (a Search Tree) says links can't be shown.
 //
 // #279 stage 3 (board F): each side is a picture frame (components/workbench/PictureFrame.js):
-// "Source · <problem>" and "Target · <problem>" with the Visualization Type, the zoom buttons
-// and Full screen in its caption, then the side's "Problem:" and "Algorithm:" lines, then the
-// picture at the frames' shared height, so the two pictures share their top and bottom lines.
+// its heading, "Source: <problem>" and "Target: <problem>" with what the side shows after it,
+// then a row with the Visualization Type, the zoom buttons and Full screen, then the picture at
+// the frames' shared height, so the two pictures share their top and bottom lines.
 // The phase bar is the Algorithm Steps timeline, Build ── Solve ── Map back.
 
 import Box from "@mui/material/Box";
@@ -70,18 +72,12 @@ import {
 import { paletteVars } from "../theme";
 import PictureFrame, { pictureGridSx } from "../workbench/PictureFrame";
 import { GADGET_PALETTE } from "./gadgetRings";
-import { FAINT_FILTER, PictureToggle } from "./graphPieces";
+import { FAINT_FILTER } from "./graphPieces";
 import PictureCanvas from "./PictureCanvas";
 
 const ARROW = "↦";
 const TIMELINE_RULE = "──";
 const GADGET_RING = paletteVars.viz.gadget;
-
-/** The Plain / Color switch's choices (#239). */
-const MARK_MODES = [
-  { value: "plain", label: "Plain" },
-  { value: "color", label: "Color" },
-];
 
 /** How many of a step's gadgets the caption lists before "and n more". */
 const STEP_GADGET_LIMIT = 4;
@@ -179,8 +175,7 @@ function ReductionPane({
   hot,
   gadgetColors,
   onPoint,
-  showing,
-  fullScreenTitle,
+  status,
   timeline,
 }) {
   const ref = useRef(null);
@@ -216,8 +211,7 @@ function ReductionPane({
       title={title}
       titleId={`${idPrefix}-title`}
       typeControl={typeControl}
-      showing={showing}
-      fullScreenTitle={fullScreenTitle}
+      status={status}
       note={note && !loading ? note : null}
       noteId={`${idPrefix}-note`}
       inGrid
@@ -439,7 +433,7 @@ function StepGadgets({ id, frame, gadgets, describe, colors }) {
           </Box>
           {more > 0 && (
             <Box component="span" id={`${id}-more`} sx={{ color: "text.secondary" }}>
-              {`and ${more} more (the Result panel's Gadgets list has them all).`}
+              {`and ${more} more (the Gadgets list has them all).`}
             </Box>
           )}
         </>
@@ -535,8 +529,10 @@ function listNames(ids, nameOf, limit = 6) {
  * @param {string|null} [props.loading] Said in both panes, in place of the pictures, while
  *   another picture is being drawn (`view` is then the one before it, for the titles).
  * @param {"plain"|"color"} [props.colorMode] How gadgets are marked (#239): Plain, in the gadget
- *   gold while pointed at, or Color, each gadget in its own color all the time.
- * @param {(mode: "plain"|"color") => void} [props.onColorMode] The Plain / Color switch.
+ *   gold while pointed at, or Color, each gadget in its own color all the time (#279: Highlight
+ *   Gadgets on).
+ * @param {{source?: {title?: string, status?: string|null},
+ *   target?: {title?: string, status?: string|null}}} [props.sides] Each side's heading.
  */
 export default function ReductionView({
   idPrefix,
@@ -546,7 +542,6 @@ export default function ReductionView({
   typeControls = {},
   loading = null,
   colorMode = "plain",
-  onColorMode = null,
   sides = {},
   timeline = null,
 }) {
@@ -696,9 +691,8 @@ export default function ReductionView({
         <ReductionPane
           idPrefix={`${idPrefix}-source`}
           which="source"
-          title={sides.source?.title ?? `Source · ${source.problem}`}
-          showing={sides.source?.showing ?? null}
-          fullScreenTitle={sides.source?.fullScreenTitle ?? null}
+          title={sides.source?.title ?? `Source: ${source.problem}`}
+          status={sides.source?.status ?? null}
           timeline={timeline}
           typeControl={typeControls.source ?? null}
           loading={loading}
@@ -717,9 +711,8 @@ export default function ReductionView({
         <ReductionPane
           idPrefix={`${idPrefix}-target`}
           which="target"
-          title={sides.target?.title ?? `Target · ${target.problem}`}
-          showing={sides.target?.showing ?? null}
-          fullScreenTitle={sides.target?.fullScreenTitle ?? null}
+          title={sides.target?.title ?? `Target: ${target.problem}`}
+          status={sides.target?.status ?? null}
           timeline={timeline}
           typeControl={typeControls.target ?? null}
           loading={loading}
@@ -738,28 +731,6 @@ export default function ReductionView({
       </Box>
       {!loading && (
         <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px" }}>
-          {gadgets.length > 0 && onColorMode && (
-            <Box
-              id={`${idPrefix}-marks-row`}
-              data-gadget-marks={colorMode}
-              sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}
-            >
-              <Box
-                component="span"
-                id={`${idPrefix}-marks-label`}
-                sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-              >
-                Gadgets
-              </Box>
-              <PictureToggle
-                id={`${idPrefix}-marks`}
-                label="Gadget marks: Plain marks one gadget while you point at it, Color gives every gadget its own color"
-                options={MARK_MODES}
-                value={colorMode}
-                onChange={onColorMode}
-              />
-            </Box>
-          )}
           <Box
             id={`${idPrefix}-link`}
             aria-live="polite"

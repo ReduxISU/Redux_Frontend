@@ -3,8 +3,8 @@
 // #229: everything needed to run: the Solve | Reduce switch, the dropdowns, and the run button.
 // The dropdowns are the tagged listboxes of stage 2 (./TaggedSelect.js), each with its info card.
 //
-// #279 (board F): this is the top of the Workspace's Execute section, so it has no card of its
-// own; the Instance pane above the Workspace holds the instance. Stage 2 of #279 made it one row,
+// #279 (board F): this is the top of the Execute pane, so it has no card of its own; the
+// Instance pane above it holds the instance. Stage 2 of #279 made it one row,
 // as the mockup has it:
 //   - Solve mode: Mode | Solver | Solve | the run's chip;
 //   - Reduce mode: Mode | Target | Reduction | Reduce | the build's chip. Reduce only builds the
@@ -16,6 +16,14 @@
 //
 // Labels sit above their controls, and the row wraps; nothing here is sticky, so it scrolls with
 // the page and the picture gets the screen.
+//
+// #279 (Workspace tweaks): collapsed (the Execute pane's Show less), the row stays, live, on
+// the pane title's line, Mode switch first: Solve mode's Solver, Solve and its chip; Reduce
+// mode's Target, Reduction, Reduce and the build's chip. Switching the mode there swaps them, as
+// it does expanded (the same state). The same elements, only laid out
+// without what is under the row (the busy line, the failure box, the notes, the result, Reduce
+// mode's cells), so a pick made collapsed is the pick shown expanded. Those stay on the page,
+// hidden, and the runs' announcements stay spoken.
 
 import Box from "@mui/material/Box";
 import { controlLabelSx, DROPDOWN_WIDTH } from "./layout";
@@ -53,6 +61,17 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
 // One dropdown's slot in the row: it grows to the shared dropdown width and shrinks to fit.
 const selectSlotSx = { flex: `0 1 ${DROPDOWN_WIDTH}px`, minWidth: 200, maxWidth: "100%" };
 
+// #279 (Workspace tweaks): collapsed, each dropdown is one line (TaggedSelect `oneLine`: its name
+// truncated, its tags beside it) and its slot takes only what that line needs.
+const collapsedSlotSx = { flex: "0 1 auto", minWidth: 160, maxWidth: "100%" };
+
+// #279 (Workspace tweaks): reduction names run long ("Karp's 0-1 Integer Linear Programming
+// Reduction") and carry two tags, so the Reduction dropdown also grows into free room on the
+// row, up to this width, to show its whole name and tags on one line. The Target dropdown grows
+// too, for a long problem name ("0-1 Integer Linear Programming").
+const REDUCTION_MAX_WIDTH = 640;
+const TARGET_MAX_WIDTH = 360;
+
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
@@ -69,6 +88,9 @@ const selectSlotSx = { flex: `0 1 ${DROPDOWN_WIDTH}px`, minWidth: 200, maxWidth:
  *   `onRetry` for its failure box.
  * @param {import("react").ReactNode} props.status Under the row: the instance error and a note
  *   on what the button does (or why it can't run).
+ * @param {import("react").ReactNode} [props.announcements] The runs' live regions, always on the
+ *   page (visually hidden).
+ * @param {boolean} [props.collapsed] Only the row (the Mode switch included).
  * @param {import("react").ReactNode} props.children The run's result, under everything else.
  */
 export default function CommandBar({
@@ -80,6 +102,8 @@ export default function CommandBar({
   reduction,
   run,
   status,
+  announcements = null,
+  collapsed = false,
   children,
 }) {
   return (
@@ -125,11 +149,12 @@ export default function CommandBar({
         </Box>
 
         {mode === "solve" && solver && (
-          <Box sx={selectSlotSx}>
+          <Box sx={collapsed ? collapsedSlotSx : selectSlotSx}>
             <TaggedSelect
               id={`${idPrefix}-solver`}
               label="Solver"
               hue="blue"
+              oneLine={collapsed}
               boxSx={{ width: "100%" }}
               {...solver}
             />
@@ -138,20 +163,43 @@ export default function CommandBar({
 
         {mode === "reduce" && target && reduction && (
           <>
-            <Box sx={{ ...selectSlotSx, flexBasis: 240 }}>
+            <Box
+              sx={
+                collapsed
+                  ? collapsedSlotSx
+                  : {
+                      ...selectSlotSx,
+                      flexBasis: 240,
+                      flexGrow: 1,
+                      maxWidth: `min(100%, ${TARGET_MAX_WIDTH}px)`,
+                    }
+              }
+            >
               <TaggedSelect
                 id={`${idPrefix}-target`}
                 label="Target"
                 hue="violet"
+                oneLine={collapsed}
                 boxSx={{ width: "100%" }}
                 {...target}
               />
             </Box>
-            <Box sx={selectSlotSx}>
+            <Box
+              sx={
+                collapsed
+                  ? collapsedSlotSx
+                  : {
+                      ...selectSlotSx,
+                      flexGrow: 1,
+                      maxWidth: `min(100%, ${REDUCTION_MAX_WIDTH}px)`,
+                    }
+              }
+            >
               <TaggedSelect
                 id={`${idPrefix}-reduction`}
                 label="Reduction"
                 hue="violet"
+                oneLine={collapsed}
                 boxSx={{ width: "100%" }}
                 {...reduction}
               />
@@ -173,12 +221,28 @@ export default function CommandBar({
         </Box>
       </Box>
 
-      {run.busy && (
-        <BusyLine id={`${idPrefix}-run-busy`} text={run.busy.text} startedAt={run.busy.startedAt} />
-      )}
-      <RunFailureBox id={`${idPrefix}-run-failure`} failure={run.failure} onRetry={run.onRetry} />
-      {status}
-      {children}
+      {announcements}
+      <Box
+        id={`${idPrefix}-controls-more`}
+        hidden={collapsed}
+        sx={{
+          display: collapsed ? "none" : "flex",
+          flexDirection: "column",
+          gap: 1.5,
+          minWidth: 0,
+        }}
+      >
+        {run.busy && (
+          <BusyLine
+            id={`${idPrefix}-run-busy`}
+            text={run.busy.text}
+            startedAt={run.busy.startedAt}
+          />
+        )}
+        <RunFailureBox id={`${idPrefix}-run-failure`} failure={run.failure} onRetry={run.onRetry} />
+        {status}
+        {children}
+      </Box>
     </Box>
   );
 }

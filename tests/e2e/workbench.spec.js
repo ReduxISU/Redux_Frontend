@@ -1,12 +1,11 @@
 // tests/e2e/workbench.spec.js
 //
 // #229 stage 1, reworked for #279 stage 1 (board F): the problem page's layout. The bar of
-// toggles (every part shown at first, each toggle hiding and showing its pane or Workspace
-// section, hiding all three sections hiding the Workspace, Reset layout), Details and Instance
+// toggles (every part shown at first, each toggle hiding and showing its pane, Reset layout), Details and Instance
 // collapsed to one line with Show all / Show less, typed text and the layout surviving hiding and
 // a reload, the result showing in Execute after Run, an instance edit resetting the picture, the
 // Instance error dot, Reduce mode's To / Using / target picture, the sides stacking by the
-// Workspace's width, the no-visualization fallback, and the phone layout.
+// Visualization pane's width, the no-visualization fallback, and the phone layout.
 //
 // The catalog comes from the real backend, like the rest of the suite. Every compute
 // request (solve, visualize, visualizeReduction, reduce) is answered here instead, for two reasons:
@@ -18,10 +17,18 @@
 // (booleanSatisfiability: clauses of literals) and it has reductions for Reduce mode.
 
 import { expect, test } from "./fixtures";
-import { chooseReduceTarget, expandPane, gotoProblemDetail, showPane } from "./helpers";
+import {
+  chooseReduceTarget,
+  expandPane,
+  gotoProblemDetail,
+  showPane,
+  startWithPanesExpanded,
+} from "./helpers";
 
 const PROBLEM = "3SAT";
-const NOT_RUN = "Not run yet (default picture)";
+// #279: the picture's heading says whose steps it plays, after its name; a plain picture's says
+// nothing more.
+const STATUS = "#workbench-source-frame-status";
 const ANSWER = "(x1:True,x2:False,x3:True)";
 
 // `visualize?` (with the `?`) so it never also catches `visualizeReduction`.
@@ -69,6 +76,13 @@ const REGIONS = {
   execute: "#workbench-section-execute",
   verify: "#workbench-section-verify",
 };
+// These tests are about what the open Execute and Verify panes hold, so each starts as a viewer
+// who saved them open (#279 Workspace tweaks: they start collapsed otherwise;
+// workspace-sections.spec.js covers the defaults).
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
+
 const toggle = (page, key) => page.locator(`#workbench-toggle-${key}`);
 const borderStyle = (locator) =>
   locator.evaluate((element) => getComputedStyle(element).borderTopStyle);
@@ -86,18 +100,15 @@ test("every pane is shown at first, each toggle hides and shows its part, and Re
     // Shown is told by a solid border, hidden by a dashed one, not by color alone.
     expect(await borderStyle(toggle(page, key))).toBe("solid");
   }
-  // The three sections are regions of the one Workspace, named by their small headings, in order.
-  await expect(page.locator("#workbench-workspace")).toBeVisible();
-  await expect(page.locator("#workbench-workspace").getByRole("region")).toHaveCount(3);
+  // #279 (Workspace tweaks): no Workspace card; the toggles, Details, Instance, Visualization,
+  // Execute and Verify are panes of their own, regions named by their same-level titles, in order.
+  await expect(page.locator("#workbench-workspace")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Workspace" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Visualization" })).toHaveId(
     "workbench-section-visualization",
   );
-  const headings = await page.locator("#workbench-workspace h3").allTextContents();
-  expect(headings.filter((text) => ["Visualization", "Execute", "Verify"].includes(text))).toEqual([
-    "Visualization",
-    "Execute",
-    "Verify",
-  ]);
+  const titles = await page.locator("#workbench h2").allTextContents();
+  expect(titles).toEqual(["Panes", "Details", "Instance", "Visualization", "Execute", "Verify"]);
 
   // Each toggle hides its own part and nothing else.
   await toggle(page, "details").click();
@@ -108,15 +119,14 @@ test("every pane is shown at first, each toggle hides and shows its part, and Re
   await toggle(page, "details").click();
   await expect(page.locator(REGIONS.details)).toBeVisible();
 
-  // Hiding the sections one at a time keeps the Workspace until the last one goes.
+  // Visualization, Execute and Verify hide one at a time, each on its own.
   await toggle(page, "visualization").click();
   await toggle(page, "execute").click();
   await expect(page.locator(REGIONS.visualization)).toBeHidden();
   await expect(page.locator(REGIONS.execute)).toBeHidden();
-  await expect(page.locator("#workbench-workspace")).toBeVisible();
   await expect(page.locator(REGIONS.verify)).toBeVisible();
   await toggle(page, "verify").click();
-  await expect(page.locator("#workbench-workspace")).toBeHidden();
+  await expect(page.locator(REGIONS.verify)).toBeHidden();
 
   // With every part hidden, the page says how to get them back.
   await expect(page.locator("#workbench-all-hidden")).toHaveCount(0);
@@ -210,13 +220,13 @@ test("after Solve, the answer shows in Execute under Solve, and the layout stays
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
-  const showing = page.locator("#workbench-showing-algorithm");
-  await expect(showing).toHaveText(NOT_RUN);
+  const showing = page.locator(STATUS);
+  await expect(showing).toHaveCount(0);
   await expect(page.locator("#workbench-result-answer")).toHaveCount(0);
 
   await page.locator("#workbench-run").click();
 
-  await expect(showing).toHaveText(solverName);
+  await expect(showing).toHaveText(`${solverName} steps`);
   await expect(page.locator(REGIONS.execute).locator("#workbench-result-answer")).toHaveText(
     ANSWER,
   );
@@ -236,10 +246,10 @@ test("editing the instance after a run resets the picture to the base instance",
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
-  const showing = page.locator("#workbench-showing-algorithm");
+  const showing = page.locator(STATUS);
 
   await page.locator("#workbench-run").click();
-  await expect(showing).toHaveText(solverName);
+  await expect(showing).toHaveText(`${solverName} steps`);
   // The run's picture has steps to play, and opens on its last; the base picture has none.
   await expect(page.locator("#workbench-steps-position")).toContainText("Step 3 of 3");
 
@@ -247,7 +257,7 @@ test("editing the instance after a run resets the picture to the base instance",
   const edited = "(x1 | x2 | !x3)";
   await page.locator("#workbench-instance-full-instance").fill(edited);
 
-  await expect(showing).toHaveText(NOT_RUN);
+  await expect(showing).toHaveCount(0);
   await expect(page.locator("#workbench-steps-position")).toHaveCount(0);
   await expect(page.locator("#workbench-instance-full-instance")).toHaveValue(edited);
   await expect(page.locator("#workbench-note")).toContainText(
@@ -288,9 +298,8 @@ test("an instance Redux cannot read gets a red dot on Instance and an error unde
   await expect(dot).toBeVisible();
   await expect(dot).toHaveAttribute("aria-label", "The instance has errors");
   await expect(page.locator("#workbench-run")).toBeDisabled();
-  await expect(page.locator("#workbench-showing-algorithm")).toContainText(
-    "The instance has errors.",
-  );
+  // #279: there is no Algorithm line to say so any more; the picture and the field do.
+  await expect(page.locator(STATUS)).toHaveCount(0);
   await expect(page.locator("#workbench-source-picture")).toContainText(
     "The instance has a problem, so it can't be drawn.",
   );
@@ -344,9 +353,8 @@ test("Reduce mode shows Target and Reduction, and Reduce builds the target pictu
 
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-showing-reduction")).toHaveText(reduction);
-  await expect(page.locator("#workbench-target-frame-showing-algorithm")).toHaveText(
-    "Built, not solved",
-  );
+  // Built, not solved: the target's heading names it and says nothing more.
+  await expect(page.locator("#workbench-target-frame-status")).toHaveCount(0);
   await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
     "data-picture-kind",
     "frame",
@@ -354,7 +362,7 @@ test("Reduce mode shows Target and Reduction, and Reduce builds the target pictu
   await expect(page.locator("#workbench-result-reduce")).toContainText(reduction);
 });
 
-test("the source and target sit side by side, and stack by the Workspace's own width", async ({
+test("the source and target sit side by side, and stack by the Visualization pane's own width", async ({
   page,
 }) => {
   await answerCompute(page);
@@ -365,7 +373,7 @@ test("the source and target sit side by side, and stack by the Workspace's own w
   const target = page.locator("#workbench-target-frame-view");
   await expect(target).toBeVisible();
 
-  // 1100 px: the Workspace is over 960 px wide, so the two sides share a row: the target to the
+  // 1100 px: the Visualization pane is over 960 px wide, so the two sides share a row: the target to the
   // right of the source, the two frames sharing their top and bottom lines.
   await page.setViewportSize({ width: 1100, height: 900 });
   await expect
@@ -377,11 +385,11 @@ test("the source and target sit side by side, and stack by the Workspace's own w
   expect(Math.abs(targetWide.y - sourceWide.y)).toBeLessThan(1);
   expect(Math.abs(targetWide.height - sourceWide.height)).toBeLessThan(1);
 
-  // 990 px: the window is still wider than 960 px, but the Workspace inside the page's margins
-  // isn't, so the sides stack, source first.
+  // 990 px: the window is still wider than 960 px, but the Visualization pane inside the page's
+  // margins isn't, so the sides stack, source first.
   await page.setViewportSize({ width: 990, height: 900 });
   const workspaceWidth = await page
-    .locator("#workbench-workspace")
+    .locator(REGIONS.visualization)
     .evaluate((element) => element.clientWidth);
   expect(workspaceWidth).toBeLessThanOrEqual(960);
   await expect
@@ -428,7 +436,7 @@ test("a problem with nothing this site can draw falls back cleanly", async ({ pa
   await expect(page.locator("#workbench-source-picture")).toContainText(
     "This problem has no visualization this site can draw yet.",
   );
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText("Not run yet");
+  await expect(page.locator(STATUS)).toHaveCount(0);
   await expect(page.locator("#workbench-source-type-button")).toHaveCount(0);
   await expect(page.locator("#workbench-legend-toggle")).toHaveCount(0);
 
@@ -464,7 +472,7 @@ test("at phone width the toggles sit two to a row and scroll with the page, and 
   );
   expect(scroll).toBeLessThanOrEqual(0);
   const instancePane = await page.locator(REGIONS.instance).boundingBox();
-  const workspace = await page.locator("#workbench-workspace").boundingBox();
+  const workspace = await page.locator(REGIONS.visualization).boundingBox();
   expect(workspace.y).toBeGreaterThanOrEqual(instancePane.y + instancePane.height);
 
   // Nothing is fixed over the picture any more: the point at its centre is the picture's own.

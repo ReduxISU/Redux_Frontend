@@ -161,30 +161,74 @@ function buildVisualizations(visualizationClassNames, info, visualizationTypesBy
 }
 
 // Generic "Default Verifier" naming convention (ARCHITECTURE.md's Naming
-// convention section) -- a problem can declare more than one verifier class,
-// but the detail page shows exactly one, so this always takes the first.
-function buildVerifier(verifierClassNames, info, problemInfo, problemCode) {
-  const [firstVerifierClassName] = verifierClassNames ?? [];
-  if (!firstVerifierClassName) return null;
+// convention section) -- a problem can declare more than one verifier class.
+//
+// #279 (Workspace tweaks): `verifiers` is every verifier the problem declares,
+// so Verify's verifier dropdown offers them all, and `verifier` is the first
+// of them. The list is Navigation/Batch/allVerifiers' array for the problem
+// (its verifier class names, which Redux finds by reflection: every class
+// implementing IVerifier<TheProblem>), each described by its allInfo entry.
+// allVerifiers sorts by class name, so the problem's own `defaultVerifier`
+// (allInfo, the verifier's info object) is moved to the front. Every problem
+// declares exactly one verifier today (Oct 2026), so the dropdown has one
+// option; a second verifier added in Redux shows up here with no change.
+function buildVerifiers(verifierClassNames, info, problemInfo, problemCode) {
+  const verifiers = (verifierClassNames ?? []).map((className) =>
+    buildOneVerifier(className, info, problemInfo, problemCode),
+  );
+  const fallback = problemInfo.defaultVerifier;
+  const isDefault = (verifier) => {
+    if (!fallback || typeof fallback !== "object") return false;
+    const verifierInfo = info[verifier.className] ?? {};
+    if (fallback.sourceFile && verifierInfo.sourceFile) {
+      return fallback.sourceFile === verifierInfo.sourceFile;
+    }
+    return Boolean(fallback.verifierName) && fallback.verifierName === verifierInfo.verifierName;
+  };
+  const index = verifiers.findIndex(isDefault);
+  if (index > 0) verifiers.unshift(...verifiers.splice(index, 1));
+  return verifiers;
+}
 
-  const verifierInfo = info[firstVerifierClassName] ?? {};
+function buildVerifier(verifierClassNames, info, problemInfo, problemCode) {
+  return buildVerifiers(verifierClassNames, info, problemInfo, problemCode)[0] ?? null;
+}
+
+/**
+ * The one place a side's verifier list is read (#279 Workspace tweaks): a problem's
+ * `verifiers` (or a reduction's `targetVerifiers`) as built above, else its single
+ * `verifier` wrapped in a list (data built before the list existed), else none.
+ * @param {Array|null|undefined} verifiers
+ * @param {Object|null|undefined} verifier
+ * @returns {Array}
+ */
+export function verifiersOf(verifiers, verifier) {
+  if (Array.isArray(verifiers) && verifiers.length > 0) return verifiers;
+  return verifier ? [verifier] : [];
+}
+
+function buildOneVerifier(verifierClassName, info, problemInfo, problemCode) {
+  const verifierInfo = info[verifierClassName] ?? {};
   return {
     // Same reason as buildSolvers' className: ProblemProvider/verify is
     // keyed by the verifier class name (T37/#95).
-    className: firstVerifierClassName,
+    className: verifierClassName,
     // The verifier's own declared display name (IVerifier.verifierName,
     // e.g. "Default SAT Verifier") -- same `?? className` fallback as
     // buildSolvers/buildVisualizations use for their own name fields.
     // Distinct from this section's title, which the ratified naming
     // convention (see this file's own header) always keeps as the generic
     // "Verifier" regardless of which verifier class is shown.
-    name: verifierInfo.verifierName ?? firstVerifierClassName,
+    name: verifierInfo.verifierName ?? verifierClassName,
     certificateDescription: verifierInfo.verifierDefinition ?? "",
     certificateFormat: problemInfo.certificateFormat || "",
     // #279 stage 4: the problem's class name in Redux ("SAT3"), which lib/certificateHints.js
     // keys its plain descriptions by.
     problemCode: problemCode ?? null,
     exampleCertificate: verifierInfo.certificate || undefined,
+    // The dropdown's tags, read the way buildSolvers reads a solver's: Redux's IVerifier
+    // declares no such member today, so this is null and the option has no tags.
+    complexityBucketName: verifierInfo.complexityBucket ?? null,
   };
 }
 
@@ -262,6 +306,13 @@ function buildReductions(
             // #229 stage 3: Verify's "Check against: target" checks with the target
             // problem's own verifier, against the instance the reduction built.
             targetVerifier: buildVerifier(
+              verifiersByProblem?.[toCode],
+              info,
+              info[toCode] ?? {},
+              toCode,
+            ),
+            // #279 (Workspace tweaks): every verifier the target declares, for Verify's dropdown.
+            targetVerifiers: buildVerifiers(
               verifiersByProblem?.[toCode],
               info,
               info[toCode] ?? {},
@@ -362,6 +413,8 @@ function buildProblem(problemCode, info, batches, codeToName) {
       visualizationTypesByInstance,
     ),
     verifier: buildVerifier(verifiersByProblem[problemCode], info, problemInfo, problemCode),
+    // #279 (Workspace tweaks): every verifier the problem declares, `verifier` first.
+    verifiers: buildVerifiers(verifiersByProblem[problemCode], info, problemInfo, problemCode),
     reductions: buildReductions(
       problemCode,
       reductionGraph,

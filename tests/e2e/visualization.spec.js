@@ -1,8 +1,11 @@
 // tests/e2e/visualization.spec.js
 //
-// #279 stage 3 (board F): the Workspace's Visualization section. The Showing lines in both modes
-// (Problem and Algorithm in Solve mode; one Reduction line, and each picture's own Problem and
-// Algorithm, in Reduce mode); the picture frames' height (about 62% of the window, clamped 360
+// #279 stage 3 (board F): the Workspace's Visualization section. #279 Workspace tweaks: each
+// picture is its own section, top to bottom its heading ("3SAT" in Solve mode, "Source: 3SAT" and
+// "Target: Clique" in Reduce mode, with what the picture shows after it only when that adds
+// something: a solver's steps, or an answer mapped back), one row with the Visualization Type and
+// the view controls, then the picture; Reduce mode keeps one Reduction line above them, and there
+// is no Problem or Algorithm line in either mode. Also the picture frames' height (about 62% of the window, clamped 360
 // to 680 px, two frames side by side sharing their top and bottom lines) and the placeholder
 // target before a build; the picture tools (−, + and Fit in the caption, Ctrl + wheel zooming and
 // a plain wheel scrolling the page, Full screen with its exit button and Escape, no text
@@ -16,8 +19,20 @@
 
 import { expect, test } from "./fixtures";
 import { SAT3_FORMULA_FRAMES } from "./formula-payloads";
-import { gotoProblemDetail, showPane, solveReductionTarget } from "./helpers";
+import {
+  chooseReduceTarget,
+  gotoProblemDetail,
+  showPane,
+  solveReductionTarget,
+  startWithPanesExpanded,
+} from "./helpers";
 import { SAT3_TO_CLIQUE_VIEW } from "./reduction-payloads";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const PROBLEM = "3SAT";
 const ANSWER = "(x1:True,x2:False,x3:True)";
@@ -71,7 +86,8 @@ async function openReduce(page) {
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: /^clique$/i })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: /^clique$/i }) })
       .first()
       .click();
   }
@@ -81,76 +97,186 @@ async function openReduce(page) {
 const valueOf = async (page, selector) =>
   ((await page.locator(selector).textContent()) ?? "").trim();
 
-// --- Showing lines --------------------------------------------------------------------------------
+// --- One section per picture (#279 Workspace tweaks) ---------------------------------------------
 
-test("Solve mode shows Problem and Algorithm: not run yet, then the solver", async ({ page }) => {
-  await answerCompute(page);
-  await gotoProblemDetail(page, PROBLEM, { expect });
+const heading = (frame) => `${frame}-heading`;
+const title = (frame) => `${frame}-title`;
+const status = (frame) => `${frame}-status`;
 
-  await expect(page.locator("#workbench-showing-problem")).toHaveText(PROBLEM);
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(
-    "Not run yet (default picture)",
-  );
-  await expect(page.locator("#workbench-showing-reduction")).toHaveCount(0);
-  // Solve mode's one picture is named by its problem; no Problem / Algorithm block of its own.
-  await expect(page.locator(`${SOURCE_FRAME}-caption`)).toContainText(PROBLEM);
-  await expect(page.locator(`${SOURCE_FRAME}-showing`)).toHaveCount(0);
+/** The frame's heading, its controls row and its picture are in that order, top to bottom. */
+async function expectSectionOrder(page, frame, typeId) {
+  const headingBox = await page.locator(heading(frame)).boundingBox();
+  const row = page.locator(`${frame}-caption`);
+  // The Visualization Type and the view controls share the one row inside the section.
+  await expect(row.locator(`${typeId}-button`)).toBeVisible();
+  await expect(row.locator(`${frame}-fullscreen`)).toBeVisible();
+  const rowBox = await row.boundingBox();
+  const viewBox = await page.locator(`${frame}-view`).boundingBox();
+  expect(rowBox.y).toBeGreaterThanOrEqual(headingBox.y + headingBox.height - 1);
+  expect(viewBox.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height - 1);
+}
 
-  const solver = await valueOf(page, "#workbench-solver-value");
-  await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(solver);
-});
-
-test("Reduce mode shows the Reduction, and each picture's Problem and Algorithm as answers arrive", async ({
+test("Solve mode: one section headed by the problem, its type and view controls, then the picture; the heading names the solver's steps only while they play", async ({
   page,
 }) => {
   await answerCompute(page);
+  await gotoProblemDetail(page, PROBLEM, { expect });
+
+  await expect(page.locator(title(SOURCE_FRAME))).toHaveText(PROBLEM);
+  await expect(page.locator(status(SOURCE_FRAME))).toHaveCount(0);
+  // No Showing block in Solve mode: no Problem, Algorithm or Reduction line.
+  await expect(page.locator("#workbench-showing")).toHaveCount(0);
+  await expect(page.locator("#workbench-section-visualization")).not.toContainText("Algorithm:");
+  await expect(page.locator("#workbench-section-visualization")).not.toContainText("Problem:");
+  await expectSectionOrder(page, SOURCE_FRAME, "#workbench-source-type");
+
+  const solver = await valueOf(page, "#workbench-solver-value");
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(status(SOURCE_FRAME))).toHaveText(`${solver} steps`);
+  await expect(page.locator(heading(SOURCE_FRAME))).toHaveText(`${PROBLEM} · ${solver} steps`);
+
+  // An instance edit retires the run: the picture is plain again, and so is its heading.
+  await showPane(page, "instance", { expect });
+  await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
+  await expect(page.locator(status(SOURCE_FRAME))).toHaveCount(0);
+  await expect(page.locator(heading(SOURCE_FRAME))).toHaveText(PROBLEM);
+});
+
+test("Reduce mode: one Reduction line, then a Source and a Target section, each headed by its problem, with no Problem or Algorithm lines", async ({
+  page,
+}) => {
+  await answerCompute(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await openReduce(page);
   const reduction = await valueOf(page, "#workbench-reduction-value");
   const target = await valueOf(page, "#workbench-target-value");
 
-  // One line for the mode: the reduction, by its display name.
   await expect(page.locator("#workbench-showing-reduction")).toHaveText(reduction);
   await expect(page.locator("#workbench-showing-problem")).toHaveCount(0);
-  // Each picture names its own problem, by display name (Clique, not CLIQUE).
-  await expect(page.locator(`${SOURCE_FRAME}-showing-problem`)).toHaveText(PROBLEM);
-  await expect(page.locator(`${SOURCE_FRAME}-showing-algorithm`)).toHaveText("Not run yet");
-  await expect(page.locator(`${TARGET_FRAME}-showing-problem`)).toHaveText(target);
-  await expect(page.locator(`${TARGET_FRAME}-showing-algorithm`)).toHaveText("Not built yet");
-  await expect(page.locator(`${SOURCE_FRAME}-caption`)).toContainText(`Source · ${PROBLEM}`);
-  await expect(page.locator(`${TARGET_FRAME}-caption`)).toContainText(`Target · ${target}`);
+  await expect(page.locator("#workbench-showing-algorithm")).toHaveCount(0);
+  await expect(page.locator("#workbench-section-visualization")).not.toContainText("Algorithm:");
+  // Each section is headed by its side and problem, by display name, and is plain so far.
+  await expect(page.locator(title(SOURCE_FRAME))).toHaveText(`Source: ${PROBLEM}`);
+  await expect(page.locator(title(TARGET_FRAME))).toHaveText(`Target: ${target}`);
+  await expect(page.locator(status(SOURCE_FRAME))).toHaveCount(0);
+  await expect(page.locator(status(TARGET_FRAME))).toHaveCount(0);
+  // The placeholder still says Not built yet, in the picture, not in the heading.
+  await expect(page.locator("#workbench-target-picture")).toContainText("Not built yet.");
+  await expect(page.locator(heading(TARGET_FRAME))).toHaveText(`Target: ${target}`);
+  await expectSectionOrder(page, SOURCE_FRAME, "#workbench-source-type");
 
-  await page.locator("#workbench-run").click();
-  await expect(page.locator(`${TARGET_FRAME}-showing-algorithm`)).toHaveText("Built, not solved");
-
-  // Solving the target first: its solver names the target, and its answer mapped back names the
-  // source.
-  await showPane(page, "execute", { expect });
-  const targetSolver = await valueOf(page, "#workbench-target-cell-solver-value");
-  await page.locator("#workbench-target-cell-run").click();
-  await expect(page.locator(`${TARGET_FRAME}-showing-algorithm`)).toHaveText(targetSolver);
-  await expect(page.locator(`${SOURCE_FRAME}-showing-algorithm`)).toHaveText(
-    `Mapped back from ${target}`,
+  // Side by side the two sections share their top and bottom lines, and their headings.
+  const sourceBox = await page.locator(SOURCE_FRAME).boundingBox();
+  const targetBox = await page.locator(TARGET_FRAME).boundingBox();
+  expect(targetBox.x).toBeGreaterThan(sourceBox.x + sourceBox.width);
+  expect(Math.abs(targetBox.y - sourceBox.y)).toBeLessThan(1);
+  expect(Math.abs(targetBox.y + targetBox.height - (sourceBox.y + sourceBox.height))).toBeLessThan(
+    1,
   );
+  const sourceHeading = await page.locator(heading(SOURCE_FRAME)).boundingBox();
+  const targetHeading = await page.locator(heading(TARGET_FRAME)).boundingBox();
+  expect(Math.abs(targetHeading.y - sourceHeading.y)).toBeLessThan(1);
+  // Each section is outlined on its own.
+  expect(
+    await page
+      .locator(SOURCE_FRAME)
+      .evaluate((element) => getComputedStyle(element).borderTopStyle),
+  ).toBe("solid");
 
-  // The source's own solver wins over an answer mapped back.
-  const sourceSolver = await valueOf(page, "#workbench-source-cell-solver-value");
-  await page.locator("#workbench-source-cell-run").click();
-  await expect(page.locator(`${SOURCE_FRAME}-showing-algorithm`)).toHaveText(sourceSolver);
-  await expect(page.locator(`${TARGET_FRAME}-showing-algorithm`)).toHaveText(targetSolver);
+  // A Workspace 960 px wide or less stacks them, source first.
+  await page.setViewportSize({ width: 900, height: 900 });
+  await expect
+    .poll(async () => {
+      const source = await page.locator(SOURCE_FRAME).boundingBox();
+      const stacked = await page.locator(TARGET_FRAME).boundingBox();
+      return stacked.y >= source.y + source.height - 1;
+    })
+    .toBe(true);
 });
 
-test("a source answer carried into a built target says so on the target", async ({ page }) => {
+test("Reduce mode without a Reduction View: the source names its solver's steps once solved; the target stays plain, an answer carried into it included", async ({
+  page,
+}) => {
   await answerCompute(page);
+  // A backend without the view: Reduce builds through ProblemProvider/reduce.
+  await page.route(REDUCTION_VIEW_REQUEST, (route) => route.fulfill({ status: 404, json: {} }));
   await openReduce(page);
+  const target = await valueOf(page, "#workbench-target-value");
   await page.locator("#workbench-run").click();
-  await expect(page.locator(`${TARGET_FRAME}-showing-algorithm`)).toHaveText("Built, not solved");
+  await expect(page.locator("#workbench-run-chip")).toHaveText(/^Built/);
+  await expect(page.locator(status(SOURCE_FRAME))).toHaveCount(0);
+  await expect(page.locator(status(TARGET_FRAME))).toHaveCount(0);
+
   await showPane(page, "execute", { expect });
+  const sourceSolver = await valueOf(page, "#workbench-source-cell-solver-value");
   await page.locator("#workbench-source-cell-run").click();
-  await expect(page.locator("#workbench-forward-answer")).toHaveText(MAPPED_FORWARD);
-  await expect(page.locator(`${TARGET_FRAME}-showing-algorithm`)).toHaveText(
-    `Carried from ${PROBLEM}`,
+  await expect(page.locator(status(SOURCE_FRAME))).toHaveText(`${sourceSolver} steps`);
+  await expect(page.locator(heading(SOURCE_FRAME))).toHaveText(
+    `Source: ${PROBLEM} · ${sourceSolver} steps`,
   );
+  // The source's answer is carried into the target (Execute shows it), but no picture draws it,
+  // so the target's heading claims nothing.
+  await expect(page.locator("#workbench-forward-answer")).toHaveText(MAPPED_FORWARD);
+  await expect(page.locator(status(TARGET_FRAME))).toHaveCount(0);
+  await expect(page.locator(heading(TARGET_FRAME))).toHaveText(`Target: ${target}`);
+
+  // An instance edit retires both: plain again.
+  await showPane(page, "instance", { expect });
+  await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
+  await expect(page.locator(status(SOURCE_FRAME))).toHaveCount(0);
+  await expect(page.locator(heading(SOURCE_FRAME))).toHaveText(`Source: ${PROBLEM}`);
+});
+
+test("the Reduction View's headings follow the phase on screen: nothing during Build, the target solver's steps in Solve, and the answer mapped back in Map back", async ({
+  page,
+}) => {
+  const view = SAT3_TO_CLIQUE_VIEW;
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route(REDUCTION_VIEW_REQUEST, (route) => route.fulfill({ json: view }));
+  await page.goto(
+    `/${encodeURIComponent(PROBLEM)}?instance=${encodeURIComponent(view.source.instance)}`,
+  );
+  await expect(page.getByRole("heading", { level: 1, name: PROBLEM })).toBeVisible({
+    timeout: 20_000,
+  });
+  await page.locator("#workbench-mode-reduce").click();
+  await chooseReduceTarget(page, /^Clique$/, { expect });
+  const source = "#workbench-reduction-source-frame";
+  const target = "#workbench-reduction-target-frame";
+
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-reduction")).toHaveAttribute("data-phase", "build");
+  // The view's titles carry their own ids.
+  await expect(page.locator("#workbench-reduction-source-title")).toHaveText(`Source: ${PROBLEM}`);
+  await expect(page.locator("#workbench-reduction-target-title")).toHaveText("Target: Clique");
+  await expect(page.locator(status(source))).toHaveCount(0);
+  await expect(page.locator(status(target))).toHaveCount(0);
+  await expectSectionOrder(page, source, "#workbench-source-type");
+  await expectSectionOrder(page, target, "#workbench-target-type");
+
+  await showPane(page, "execute", { expect });
+  const targetSolver = await valueOf(page, "#workbench-target-cell-solver-value");
+  await solveReductionTarget(page, { expect });
+  // It opens on Map back's last step: the source shows the answer mapped back.
+  await expect(page.locator("#workbench-reduction")).toHaveAttribute("data-phase", "map");
+  await expect(page.locator(status(source))).toHaveText("answer mapped back from Clique");
+  await expect(page.locator(heading(source))).toHaveText(
+    `Source: ${PROBLEM} · answer mapped back from Clique`,
+  );
+  await expect(page.locator(status(target))).toHaveText(`${targetSolver} steps`);
+
+  // Solve: the target plays its solver's steps; the source has no answer yet.
+  await phase(page, "solve").click();
+  await expect(page.locator("#workbench-reduction")).toHaveAttribute("data-phase", "solve");
+  await expect(page.locator(status(target))).toHaveText(`${targetSolver} steps`);
+  await expect(page.locator(heading(target))).toHaveText(`Target: Clique · ${targetSolver} steps`);
+  await expect(page.locator(status(source))).toHaveCount(0);
+
+  // Build: both plain.
+  await phase(page, "build").click();
+  await expect(page.locator("#workbench-reduction")).toHaveAttribute("data-phase", "build");
+  await expect(page.locator(status(source))).toHaveCount(0);
+  await expect(page.locator(status(target))).toHaveCount(0);
 });
 
 // --- Frames ---------------------------------------------------------------------------------------
@@ -269,7 +395,8 @@ test("Full screen covers the window with the timeline at the bottom; Exit and Es
   expect((await steps.boundingBox()).y).toBeGreaterThan(view.y + view.height - 1);
   await page.locator("#workbench-full-screen-steps-previous").click();
   await expect(steps).toContainText(`Step ${SAT3_FORMULA_FRAMES.frames.length - 1} of`);
-  await expect(page.locator(`${SOURCE_FRAME}-full-screen-title`)).toBeVisible();
+  // The section's heading stays at the top in full screen.
+  await expect(page.locator(heading(SOURCE_FRAME))).toBeVisible();
 
   await button.click();
   await expect(frame).toHaveAttribute("data-full-screen", "false");
@@ -329,7 +456,8 @@ test("Reduce mode: one Build ── Solve ── Map back timeline that marks th
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: /^clique$/i })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: /^clique$/i }) })
       .first()
       .click();
   }
@@ -427,9 +555,7 @@ test("a picture is plain until an answer exists for the instance, and plain agai
   // An instance edit retires the answer: the picture is drawn plain again.
   await showPane(page, "instance", { expect });
   await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
-  await expect(page.locator("#workbench-showing-algorithm")).toHaveText(
-    "Not run yet (default picture)",
-  );
+  await expect(page.locator(`${SOURCE_FRAME}-status`)).toHaveCount(0);
   await expect(formula.locator('[data-strip="assignment"]')).toHaveCount(0);
   await expect(formula.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
 });

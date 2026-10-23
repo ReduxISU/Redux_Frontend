@@ -12,13 +12,19 @@
 // does, and reductionView is answered from captures (./reduction-payloads.js).
 
 import { expect, test } from "./fixtures";
-import { solveReductionTarget } from "./helpers";
+import { solveReductionTarget, startWithPanesExpanded } from "./helpers";
 import {
   SAT_FACTOR_GRAPH_TO_3SAT_VIEW,
   SAT_TO_3SAT_FACTOR_GRAPH_VIEW,
   SAT_TO_3SAT_SEARCH_TREE_VIEW,
   SAT_TO_3SAT_VIEW,
 } from "./reduction-payloads";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 const ALL_INFO_REQUEST = /\/api\/redux\/Navigation\/Batch\/allInfo/;
@@ -127,7 +133,8 @@ async function runSatTo3sat(page) {
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: /^3SAT/ })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: /^3SAT/ }) })
       .first()
       .click();
   }
@@ -318,7 +325,8 @@ test("a picture picked before Run is the one the view is drawn with", async ({ p
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: /^3SAT/ })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: /^3SAT/ }) })
       .first()
       .click();
   }

@@ -2,27 +2,26 @@
 //
 // #229: the workbench's shared sizes and breakpoint, so the command bar, the picture pane
 // and the rail agree on them. Values come from the approved mockup (version 39). #279 (board F)
-// added the Workspace's container and the shared two-column grid its sections lay sides out on.
+// added the panes' size container and the shared two-column grid a pane lays sides out on.
 
 /** Phones and tablets: controls drop to their own lines and fields wrap. */
 export const COMPACT_MEDIA = "@media (max-width:1024px)";
 
 /**
- * #279: the Workspace pane is a size container by this name, so its sections lay out by the
- * Workspace's own width rather than the window's.
+ * #279: the Visualization, Execute and Verify panes are size containers by this name, so what
+ * they hold lays out by the pane's own width rather than the window's.
  */
 export const WORKSPACE_CONTAINER = "workspace";
 
-/** The Workspace's width at or under which each section stacks its sides, source first. */
+/** A pane's width at or under which it stacks its sides, source first. */
 export const WORKSPACE_STACK_WIDTH = 960;
 
-/** Matches while the Workspace is narrow enough to stack (an `sx` key). */
+/** Matches while the pane is narrow enough to stack (an `sx` key). */
 export const WORKSPACE_NARROW = `@container ${WORKSPACE_CONTAINER} (max-width: ${WORKSPACE_STACK_WIDTH}px)`;
 
 /**
- * #279: the one grid every Workspace section lays its source and target out on (Reduce mode),
- * so a side's parts line up down the page; one column, source first, when the Workspace is
- * narrow.
+ * #279: the one grid a pane lays its source and target out on (Reduce mode), so a side's parts
+ * line up down the page; one column, source first, when the pane is narrow.
  */
 export const sideGridSx = {
   display: "grid",
@@ -32,14 +31,37 @@ export const sideGridSx = {
   [WORKSPACE_NARROW]: { gridTemplateColumns: "minmax(0, 1fr)" },
 };
 
-/** A Workspace section's small heading (Visualization, Execute, Verify). */
-export const sectionHeadingSx = {
+/**
+ * #279 (Workspace tweaks): the "tab stop" a collapsed pane's one line starts at. Every pane's
+ * title is at least PANE_TITLE_WIDTH wide, and what follows it sits PANE_TITLE_GAP further on, so
+ * every pane's summary or collapsed controls start at one x.
+ */
+export const PANE_TITLE_WIDTH = 120;
+
+/** The gap between a pane's title and what follows it on the title's line. */
+export const PANE_TITLE_GAP = 12;
+
+/** Every pane's padding on a desktop. */
+export const PANE_PADDING = 16;
+
+/** Every pane's padding on phones and tablets, where the pictures need the room. */
+export const PANE_COMPACT_PADDING = 12;
+
+/** The title line of a pane: wraps what follows under it when narrow. */
+export const titleLineSx = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: `8px ${PANE_TITLE_GAP}px`,
+};
+
+/** A pane's title (Details, Instance, Visualization, Execute, Verify). */
+export const paneTitleSx = {
   m: 0,
-  fontSize: "0.75rem",
-  fontWeight: 600,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "text.secondary",
+  fontSize: "1.125rem",
+  fontWeight: 700,
+  flex: "0 0 auto",
+  minWidth: PANE_TITLE_WIDTH,
 };
 
 /** One width shared by Edit, Run and every Visualization Type dropdown, right edges aligned. */
@@ -74,10 +96,19 @@ export const secondaryButtonSx = {
   "&:disabled": { cursor: "not-allowed", color: "text.disabled" },
 };
 
-/** The page's surface cards (the Details, Instance and Workspace panes). */
+/** The page's surface cards (every pane). */
 export const cardSx = {
   backgroundColor: "surface.main",
   border: "1px solid",
   borderColor: "border.soft",
   borderRadius: "12px",
+};
+
+/** A pane's frame: its card and padding (./CollapsiblePane.js, ./PaneToggles.js). */
+export const paneFrameSx = {
+  ...cardSx,
+  boxSizing: "border-box",
+  minWidth: 0,
+  p: `${PANE_PADDING}px`,
+  [COMPACT_MEDIA]: { p: `${PANE_COMPACT_PADDING}px` },
 };

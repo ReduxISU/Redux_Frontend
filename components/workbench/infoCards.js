@@ -201,3 +201,27 @@ export function visualizationCard(visualization, role) {
     ],
   };
 }
+
+// --- Verifier (Verify's verifier dropdown, #279 Workspace tweaks) -------------------------
+
+/**
+ * The tags inside Verify's verifier dropdown, the same tag the solver dropdowns show: the
+ * complexity bucket, when Redux declares one. Verifiers declare none today, so there are none.
+ */
+export function verifierTags(verifier) {
+  return tagsFrom([backendEnumLabel("solverComplexity", verifier.complexityBucketName)]);
+}
+
+/**
+ * A verifier's card: its name, its own definition, and the certificate format its problem
+ * declares.
+ * @returns {Card}
+ */
+export function verifierCard(verifier) {
+  return {
+    title: verifier.name,
+    kind: "Verifier",
+    description: verifier.certificateDescription ?? "",
+    facts: [{ label: "Certificate", value: verifier.certificateFormat || NOT_DECLARED }],
+  };
+}

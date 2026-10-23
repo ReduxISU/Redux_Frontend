@@ -17,13 +17,19 @@
 
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { drawnCollisions, showPane, solveReductionTarget } from "./helpers";
+import { drawnCollisions, showPane, solveReductionTarget, startWithPanesExpanded } from "./helpers";
 import {
   COLORING_TO_CLIQUE_COVER_VIEW,
   SAT_TO_3SAT_VIEW,
   SAT3_TO_CLIQUE_VIEW,
   SUBSET_SUM_TO_PARTITION_VIEW,
 } from "./reduction-payloads";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 const VISUALIZE_REQUEST = /\/api\/redux\/ProblemProvider\/visualize\?/;
@@ -63,14 +69,15 @@ const readout = (page) => page.locator(`${VIEW}-link`);
 const phaseButton = (page, key) => page.locator(`#workbench-phases-${key}`);
 const nextStep = (page) => page.locator("#workbench-steps-next");
 const position = (page) => page.locator("#workbench-steps-position");
-// #279 stage 3: the Target picture's Algorithm line names the target's solver once it ran.
+// #279: once the target is solved the view opens on Map back, and the Target picture's heading
+// says whose steps it shows.
 async function expectTargetSolverShown(page) {
   const solver = (
     (await page.locator("#workbench-target-cell-solver-value").textContent()) ?? ""
   ).trim();
   expect(solver).not.toBe("");
-  await expect(page.locator("#workbench-reduction-target-frame-showing-algorithm")).toHaveText(
-    solver,
+  await expect(page.locator("#workbench-reduction-target-frame-status")).toHaveText(
+    `${solver} steps`,
   );
 }
 
@@ -87,7 +94,8 @@ async function openReduce(page, problem, instance, target) {
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: target })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: target }) })
       .first()
       .click();
   }
@@ -175,8 +183,8 @@ for (const key of Object.keys(CASES)) {
       view.target.picture.type,
     );
     // #279 stage 3: each frame is named by its side and problem, as the page names them.
-    await expect(page.locator(`${VIEW}-source-title`)).toHaveText(/^Source · /);
-    await expect(page.locator(`${VIEW}-target-title`)).toHaveText(/^Target · /);
+    await expect(page.locator(`${VIEW}-source-title`)).toHaveText(/^Source: /);
+    await expect(page.locator(`${VIEW}-target-title`)).toHaveText(/^Target: /);
     for (const side of ["source", "target"]) {
       await expect(zoomOf(page, side)).toHaveAttribute("data-zoom", "1.00");
     }
@@ -191,6 +199,7 @@ for (const key of Object.keys(CASES)) {
     await expect(phaseButton(page, "map")).toHaveAttribute("aria-current", "step");
     await expect(position(page)).toHaveText(`Step ${view.frames.length} of ${view.frames.length}`);
     await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
+    await expectTargetSolverShown(page);
 
     // Build's first step, with the phase named in three places: the bar, the caption, the view.
     await toStep(page, 0);
@@ -201,7 +210,8 @@ for (const key of Object.keys(CASES)) {
     await expect(page.locator(`${VIEW}-caption-phase`)).toHaveText(`Build 1 of ${builds}`);
     await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames[0].caption);
     await expect(position(page)).toHaveText(`Step 1 of ${view.frames.length}`);
-    await expectTargetSolverShown(page);
+    // During Build the target is not being solved, so its heading says nothing more.
+    await expect(page.locator("#workbench-reduction-target-frame-status")).toHaveCount(0);
     await expect(page.locator("#workbench-note")).toHaveCount(0);
     const scroll = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -225,9 +235,8 @@ test("Reduce alone shows only the Build phase; Solve <target> brings Solve and M
   await expect(phaseButton(page, "build")).toHaveAttribute("aria-current", "step");
   await expect(phaseButton(page, "solve")).toBeDisabled();
   await expect(phaseButton(page, "map")).toBeDisabled();
-  await expect(page.locator("#workbench-reduction-target-frame-showing-algorithm")).toHaveText(
-    "Built, not solved",
-  );
+  // During Build the target is being built, not solved: its heading says nothing more.
+  await expect(page.locator("#workbench-reduction-target-frame-status")).toHaveCount(0);
 
   await solveReductionTarget(page, { expect });
   await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "map");
@@ -265,7 +274,7 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(page.locator(`${VIEW}-caption-verdict`)).toHaveText("Verdict: yes");
   await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames.at(-1).caption);
 
-  // The target's Algorithm line names the solver whose run the view shows (#279 stage 3; the
+  // The target's heading names the solver whose run the view shows (#279; the
   // answers themselves are in Execute's cells).
   await expectTargetSolverShown(page);
 });

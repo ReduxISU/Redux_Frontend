@@ -13,7 +13,13 @@
 // ProblemProvider/reduce.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, showPane } from "./helpers";
+import { gotoProblemDetail, showPane, startWithPanesExpanded } from "./helpers";
+
+// #279 (Workspace tweaks): Execute and Verify start collapsed for a new viewer. These tests use
+// what the open panes hold, so each starts as a viewer who saved them open.
+test.beforeEach(async ({ page }) => {
+  await startWithPanesExpanded(page);
+});
 
 const PROBLEM = "3SAT";
 const ANSWER = "(x1:True,x2:False,x3:True)";
@@ -117,7 +123,8 @@ async function openReduce(page) {
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: /^clique$/i })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: /^clique$/i }) })
       .first()
       .click();
   }
@@ -346,7 +353,9 @@ test("a no from a solver not known to be exact proves nothing, and the sides are
   await expect(page.locator("#workbench-cells-agree")).not.toContainText("bug");
 });
 
-test("solver menus carry tags inside their items; the Target menu doesn't", async ({ page }) => {
+test("solver menus carry tags inside their items, and the Target menu its complexity classes", async ({
+  page,
+}) => {
   await answerCompute(page);
   await openSolve(page);
 
@@ -357,7 +366,8 @@ test("solver menus carry tags inside their items; the Target menu doesn't", asyn
   await page.locator("#workbench-mode-reduce").click();
   await page.locator("#workbench-target-button").click();
   await expect(page.locator("#workbench-target-listbox").getByRole("option").first()).toBeVisible();
-  await expect(page.locator('#workbench-target-listbox [id$="-tags"]')).toHaveCount(0);
+  // #279 (Workspace tweaks): the Target menu's items wear their complexity class too.
+  await expect(page.locator('#workbench-target-listbox [id$="-tags"]').first()).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.locator("#workbench-source-cell-solver-button").click();

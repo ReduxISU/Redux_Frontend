@@ -202,17 +202,47 @@ export async function showPane(page, key, { expect }) {
   await expect(button).toHaveAttribute("aria-expanded", "true");
 }
 
+/** The Show all / Show less button of a pane, by its layout key. */
+function expandButton(page, key) {
+  return ["visualization", "execute", "verify"].includes(key)
+    ? page.locator(`#workbench-section-${key}-expand`)
+    : page.locator(`#workbench-${key}-expand`);
+}
+
 /**
- * #279: shows the "details" or "instance" pane and presses its Show all, if it isn't expanded
- * already.
+ * #279: shows a pane ("details", "instance", "visualization", "execute" or "verify") and presses
+ * its Show all, if it isn't expanded already.
  */
 export async function expandPane(page, key, { expect }) {
   await showPane(page, key, { expect });
-  const button = page.locator(`#workbench-${key}-expand`);
+  const button = expandButton(page, key);
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
   }
   await expect(button).toHaveAttribute("aria-expanded", "true");
+}
+
+/**
+ * #279 (Workspace tweaks): every pane but Visualization starts collapsed for a viewer with no
+ * saved layout. A spec about what an expanded pane holds (Execute's results and cells, Verify's
+ * strips) starts as a viewer who saved those panes expanded: this stores that layout before the
+ * page loads, unless the page has stored one already (so a reload keeps what the test changed).
+ * Call it before the first navigation.
+ * @param {import("@playwright/test").Page} page
+ * @param {string[]} [keys] The panes to start expanded.
+ */
+export async function startWithPanesExpanded(page, keys = ["execute", "verify"]) {
+  await page.addInitScript((expandedKeys) => {
+    const KEY = "redux-frontend.workbenchLayout";
+    try {
+      if (window.localStorage.getItem(KEY) === null) {
+        const expanded = Object.fromEntries(expandedKeys.map((key) => [key, true]));
+        window.localStorage.setItem(KEY, JSON.stringify({ expanded }));
+      }
+    } catch {
+      // Storage blocked: the defaults.
+    }
+  }, keys);
 }
 
 /**
@@ -405,7 +435,8 @@ export async function chooseReduceTarget(page, pattern, { expect }) {
     await page
       .locator("#workbench-target-listbox")
       .getByRole("option")
-      .filter({ hasText: pattern })
+      // By its name: each option also wears its tags.
+      .filter({ has: page.locator('[id$="-name"]', { hasText: pattern }) })
       .first()
       .click();
   }
