@@ -176,6 +176,38 @@ function pairsFor(t) {
   }
   add("state cell text (primary) on canvas", t.text.primary, s.input, TEXT);
   add("table header text on raised", t.text.primary, s.raised, TEXT);
+
+  // #280: the softer theme. The soft primary button (its label on its fill and hover fill, its
+  // outline on every surface it sits on, the focus ring around it); the pale orange tint for
+  // selected or active backgrounds; the warning and info notes; the dark theme's status
+  // backgrounds, now solid; and secondary text on the off-white / near-black page.
+  add("soft button label on soft fill", t.brand.onSoft, t.brand.soft, TEXT);
+  add("soft button label on soft fill, hover", t.brand.onSoft, t.brand.softHover, TEXT);
+  for (const [bgName, bg] of [
+    ["page", t.page],
+    ["surface", s.main],
+    ["raised", s.raised],
+    ["input", s.input],
+  ]) {
+    add(`soft button outline on ${bgName}`, t.brand.softLine, bg, UI);
+  }
+  add("focus ring (orange line) on soft button", t.brand.line, t.brand.soft, UI);
+  add("text on tint", t.text.primary, t.brand.tint, TEXT);
+  add("secondary text (muted) on tint", t.text.muted, t.brand.tint, TEXT);
+  add("link / orange text on tint", t.brand.text, t.brand.tint, TEXT);
+  add("orange line on tint", t.brand.line, t.brand.tint, UI);
+  add("warning text on surface", t.status.warnText, s.main, TEXT);
+  add("warning text on page", t.status.warnText, t.page, TEXT);
+  add("warning text on warning bg", t.status.warnText, t.status.warnBg, TEXT);
+  add("warning border on warning bg", t.status.warn, t.status.warnBg, UI);
+  add("text on info bg", t.text.primary, t.info.bg, TEXT);
+  add("info (blue) text on info bg", t.viz.blue, t.info.bg, TEXT);
+  add("text on success bg", t.text.primary, t.status.okBg, TEXT);
+  add("text on error bg", t.text.primary, t.status.errBg, TEXT);
+  add("text2 on page", t.text.text2, t.page, TEXT);
+  add("text2 on raised", t.text.text2, s.raised, TEXT);
+  add("disabled text (muted2) on page", t.text.muted2, t.page, TEXT);
+  add("input border on page", t.border.main, t.page, UI);
   return pairs;
 }
 

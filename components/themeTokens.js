@@ -19,6 +19,13 @@
 //   - Greys carry surfaces, borders and secondary text; secondary text is at least 4.5:1 on the
 //     surface it sits on.
 //   - Errors are red and success is green, both distinct from the brand orange.
+//
+// #280 softened both themes: an off-white light page (#F6F6F4) with white panes and near-black
+// text, a near-black dark page (#121212) instead of pure black, and solid (not translucent) dark
+// status backgrounds. Primary actions use the soft button (`brand.soft` fill, `brand.softLine`
+// outline, `brand.onSoft` label) instead of a solid orange fill; ISU orange stays for identity:
+// active outlines, links, focus rings and sliders. `brand.tint` is the pale orange for selected
+// or active backgrounds, `status.warnText`/`warnBg` and `info.bg` the warning and info notes.
 
 const ISU_ORANGE = "#FF671F";
 const ISU_GOLD = "#F9A81A";
@@ -55,7 +62,8 @@ const DARK_FACETS = {
   },
   "salmon-red": {
     main: "#F87171",
-    border: "rgba(248, 113, 113, 0.6)",
+    // 65%, not 60%: on the #280 surface grey 60% lands just under 3:1.
+    border: "rgba(248, 113, 113, 0.65)",
     bg: "rgba(248, 113, 113, 0.12)",
     text: "#FECACA",
   },
@@ -179,17 +187,17 @@ const LIGHT_FACET_FAMILIES = withFilledState(LIGHT_FACETS, WHITE);
 
 export const THEME_TOKENS = {
   dark: {
-    page: BLACK,
+    page: "#121212",
     surface: {
-      nav: "#0A0A0A",
-      main: "#141414",
-      input: "#0A0A0A",
-      raised: "#262626",
+      nav: "#181818",
+      main: "#1E1E1E",
+      input: "#161616",
+      raised: "#2A2A2A",
       raised2: "#333333",
       track: "#333333",
     },
-    border: { soft: "#2E2E2E", main: "#666666", strong: "#808080" },
-    text: { primary: WHITE, text2: "#D9D9D9", muted: "#A6A6A6", muted2: "#8C8C8C" },
+    border: { soft: "#333333", main: "#6B6B6B", strong: "#808080" },
+    text: { primary: "#F2F2F2", text2: "#D9D9D9", muted: "#A6A6A6", muted2: "#929292" },
     brand: {
       fill: ISU_ORANGE,
       fillHover: "#E55A17",
@@ -198,7 +206,12 @@ export const THEME_TOKENS = {
       lineLight: "#FF8A4C",
       lineDark: "#CC5219",
       onLine: BLACK,
-      text: ISU_ORANGE,
+      text: "#FF8A4C",
+      soft: "#4A2511",
+      softHover: "#5C2F16",
+      softLine: "#FF8A4C",
+      onSoft: WHITE,
+      tint: "#2E1A0E",
       gold: ISU_GOLD,
       goldLine: ISU_GOLD,
       onGold: BLACK,
@@ -207,13 +220,16 @@ export const THEME_TOKENS = {
     status: {
       ok: "#4ADE80",
       okText: "#4ADE80",
-      okBg: "rgba(74, 222, 128, 0.12)",
+      okBg: "#15291D",
       err: "#F87171",
       errText: "#F87171",
-      errBg: "rgba(248, 113, 113, 0.12)",
+      errBg: "#2E1818",
       warn: "#FBBF24",
+      warnText: "#FBBF24",
+      warnBg: "#2B2410",
       onStatus: BLACK,
     },
+    info: { bg: "#17213A" },
     facet: DARK_FACET_FAMILIES,
     tag: tagHues(DARK_FACET_FAMILIES, DARK_TAG_ROW_BORDERS),
     viz: {
@@ -256,28 +272,33 @@ export const THEME_TOKENS = {
     },
   },
   light: {
-    page: WHITE,
+    page: "#F6F6F4",
     surface: {
-      nav: "#F2F2F2",
-      main: "#F5F5F5",
+      nav: WHITE,
+      main: WHITE,
       input: WHITE,
-      raised: "#E6E6E6",
+      raised: "#ECECE9",
       raised2: "#D9D9D9",
       track: "#D4D4D4",
     },
-    border: { soft: "#DEDEDE", main: "#8C8C8C", strong: "#737373" },
-    text: { primary: BLACK, text2: "#262626", muted: "#525252", muted2: "#666666" },
+    border: { soft: "#DFDFDB", main: "#8C8C88", strong: "#737373" },
+    text: { primary: "#1A1A1A", text2: "#333333", muted: "#555552", muted2: "#666666" },
     brand: {
       fill: ISU_ORANGE,
       fillHover: "#E55A17",
       onFill: BLACK,
-      // #B84A0E is 5.2:1 on white and 4.8:1 on the surface grey, but only 4.2:1 on
-      // surface.raised: don't put orange text on a raised (selected/hover) background.
+      // #B84A0E is 5.2:1 on the white panes and 4.8:1 on the off-white page, but only 4.4:1
+      // on surface.raised: don't put orange text on a raised (selected/hover) background.
       line: "#B84A0E",
       lineLight: "#D4561A",
       lineDark: "#8F390A",
       onLine: WHITE,
       text: "#B84A0E",
+      soft: "#FFD9C2",
+      softHover: "#FFC9A6",
+      softLine: "#D4561A",
+      onSoft: BLACK,
+      tint: "#FFF1E8",
       gold: ISU_GOLD,
       goldLine: "#B45309",
       onGold: BLACK,
@@ -291,8 +312,11 @@ export const THEME_TOKENS = {
       errText: "#991B1B",
       errBg: "#FDECEC",
       warn: "#B45309",
+      warnText: "#92400E",
+      warnBg: "#FFF7E6",
       onStatus: WHITE,
     },
+    info: { bg: "#EFF4FF" },
     facet: LIGHT_FACET_FAMILIES,
     tag: tagHues(LIGHT_FACET_FAMILIES),
     viz: {
