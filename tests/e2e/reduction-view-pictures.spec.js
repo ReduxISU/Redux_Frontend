@@ -12,6 +12,7 @@
 // does, and reductionView is answered from captures (./reduction-payloads.js).
 
 import { expect, test } from "./fixtures";
+import { solveReductionTarget } from "./helpers";
 import {
   SAT_FACTOR_GRAPH_TO_3SAT_VIEW,
   SAT_TO_3SAT_FACTOR_GRAPH_VIEW,
@@ -207,6 +208,7 @@ test("a target picture without the build's pieces is shown whole during Build, w
 }) => {
   await answerViews(page);
   await runSatTo3sat(page);
+  await solveReductionTarget(page, { expect });
   await page.locator("#workbench-phases-build").click();
   await expect(page.locator(VIEW)).toHaveAttribute("data-build-reveal", "pieces");
   await expect(pane(page, "target")).not.toHaveAttribute("data-hidden-count", "0");
@@ -232,6 +234,7 @@ test("a target picture without the build's pieces is shown whole during Build, w
 test("switching a picture keeps the phase and the step in it", async ({ page }) => {
   await answerViews(page);
   await runSatTo3sat(page);
+  await solveReductionTarget(page, { expect });
   await page.locator("#workbench-phases-solve").click();
   const start = Number(await page.locator(VIEW).getAttribute("data-frame-index"));
   await page.locator("#workbench-steps-next").click();

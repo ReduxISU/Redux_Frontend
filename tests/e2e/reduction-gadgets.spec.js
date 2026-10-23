@@ -23,7 +23,7 @@
 import { LDC_SMALL_CODE_TREE_FRAMES } from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
 import { SAT_TO_3SAT_FORMULA_VIEW, SAT3_FORMULA_FRAMES } from "./formula-payloads";
-import { showPane } from "./helpers";
+import { showPane, solveReductionTarget } from "./helpers";
 import { EXACT_COVER_RECURSIVE_NESTED_FRAMES } from "./nested-set-payloads";
 import {
   CLIQUE_GRAPH_FRAMES,
@@ -114,7 +114,9 @@ async function openView(page, answer) {
   await openReduce(page);
   await page.locator("#workbench-run").click();
   await expect(page.locator(VIEW)).toBeVisible();
-  // The pointer off the pictures, so nothing is hovered by where Run's button was.
+  // #279 stage 2: Reduce only builds; solving the target brings Solve and Map back.
+  await solveReductionTarget(page, { expect });
+  // The pointer off the pictures, so nothing is hovered by where a button was.
   await page.mouse.move(1, 1);
 }
 
@@ -199,8 +201,9 @@ function viewOf(capture, ids) {
     instance: "",
     picture: { type: capture.type, payload: capture.payload },
   });
+  // Build frames: #279 stage 2 shows a view's Build phase after Reduce alone.
   const frames = capture.frames.slice(-3).map((frame, index) => ({
-    phase: "solve",
+    phase: "build",
     event: frame.event ?? "Try",
     caption: frame.caption ?? `Step ${index + 1}`,
     step: index,
@@ -603,6 +606,7 @@ test("Exact Cover to Subset Sum and 3SAT to 0-1 ILP: a Gadgets row marks a set's
   view = SAT3_TO_ILP_VIEW;
   await page.locator("#workbench-run").click();
   await expect(pane(page, "target")).toHaveAttribute("data-picture-type", "Table");
+  await solveReductionTarget(page, { expect });
   await page.locator("#workbench-phases-map").click();
   await showPane(page, "visualization", { expect });
   const toggle = page.locator("#workbench-gadgets-toggle");

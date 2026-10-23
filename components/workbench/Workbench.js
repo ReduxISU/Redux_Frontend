@@ -12,7 +12,7 @@
 //   - the Details pane: collapsed, its Input -> Output line; Show all for the rest;
 //   - the Instance pane: collapsed, the instance as one editable line; Show all for the rest;
 //   - the one Workspace pane (./Workspace.js) with three sections: Visualization (the pictures,
-//     steps, Legend, and Gadgets), Execute (Mode, the dropdowns and Run, the run's status, and
+//     steps, Legend, and Gadgets), Execute (Mode, the dropdowns and the run buttons, each run's status, and
 //     the result that was the Result panel's) and Verify (./panels/VerifyBox.js). Hiding all
 //     three hides the Workspace. Hidden parts stay on the page, so nothing typed is lost.
 //
@@ -21,13 +21,22 @@
 //     resets the picture to the base instance: a run's picture and result are tagged with
 //     the instance they ran on and only shown while that is still the instance (derived,
 //     not an effect, so there is no moment where a stale picture shows).
-//   - The three compute requests behind Run (hooks/useComputeRequest.js): the solver's
-//     answer and the run's picture in Solve mode, and the reduction in Reduce mode. A
-//     reduction needs an answer for the source instance (ProblemProvider/visualizeReduction
-//     takes a `solution`), so Reduce runs the chosen solver first and carries its answer
-//     across, as the old Reductions section did.
-//   - The default picture before Run (hooks/useDefaultPicture.js), which is also how an
-//     unreadable instance is found before anyone presses Run.
+//   - The runs (hooks/useComputeRequest.js), #279 stage 2: Solve (the solver's answer and the
+//     run's picture), Reduce (builds the target instance, and solves nothing), and Solve
+//     <target> (the target's solver on the instance Reduce built). Solve <source> in Reduce
+//     mode is the same Solve as Solve mode's, with the same result. One run at a time: while
+//     one is going, every other run button is disabled ("Another run is going").
+//   - The answers carried across a reduction (#279 stage 2): once the target is solved its answer
+//     is mapped back to the source (ProblemProvider/mapSolutionBack), and once the source is
+//     solved its answer is mapped into the target (ProblemProvider/mapSolution). Mapping runs in
+//     polynomial time, so neither takes a button. A reduction that can't map answers one way
+//     (no backward map, or a mapSolution stub that answers "", ReduxISU/Redux#823) says "Not
+//     available" there, remembered for the page.
+//   - When answers and pictures change: an answer appears only after a button press, an instance
+//     edit retires every answer (the chips say "Changed"), and changing the solver, target,
+//     reduction or mode leaves the pictures on the last run.
+//   - The default picture before a run (hooks/useDefaultPicture.js), which is also how an
+//     unreadable instance is found before anyone presses Solve.
 //   - Which gadget the pictures highlight (#229 stage 4): the Gadgets rows (under the pictures) say
 //     which one is hovered or focused, and both pictures draw its pieces. The gadgets come
 //     with ProblemProvider/reduce's answer (lib/gadgets.js), so they cost no extra request.
@@ -35,24 +44,27 @@
 //     asked for through lib/pictureRequest.js, so a picture type with a format=frames renderer
 //     (components/pictures/registry.js) is drawn by it, with the step controls walking its
 //     frames and each step's caption under it, and every other type keeps its old renderer.
-//   - One run, every picture (#252): Run asks ProblemProvider/visualizeRun for the solver's run
+//   - One run, every picture (#252): Solve asks ProblemProvider/visualizeRun for the solver's run
 //     and every picture of it (lib/pictureRequest.js), so switching the Visualization Type after
-//     Run asks for nothing and stays on the same moment of the run (lib/runSteps.js). A picture
+//     Solve asks for nothing and stays on the same moment of the run (lib/runSteps.js). A picture
 //     the run can't draw shows the instance with a note saying why. On a backend without
-//     visualizeRun, and for a visualization only the old flat list draws, Run asks for the one
-//     chosen picture as before, and switching shows the instance until the next Run.
-//   - The Reduction View (#215): Run in Reduce mode first asks ProblemProvider/reductionView
+//     visualizeRun, and for a visualization only the old flat list draws, Solve asks for the one
+//     chosen picture as before, and switching shows the instance until the next Solve.
+//   - The Reduction View (#215): Reduce first asks ProblemProvider/reductionView
 //     (lib/reductionView.js) for the whole reduction in one answer: the target built step by
 //     step, solved, and its answer mapped back, with both pictures and the gadgets that link
-//     them. The step controls walk its three phases and the two pictures draw side by side
-//     (components/pictures/ReductionView.js). A backend without it (404 or 405, remembered for
-//     the page), a reduction it can't show (400), or a failure gets the older requests below,
-//     so Reduce keeps working as it did.
+//     them. The step controls walk its phases and the two pictures draw side by side
+//     (components/pictures/ReductionView.js). #279 stage 2: Reduce shows only its Build phase,
+//     since Reduce answers nothing; Solve <target> asks for the view again with the chosen
+//     target solver and shows all three phases. A backend without the view (404 or 405,
+//     remembered for the page), a reduction it can't show (400), or a failure gets
+//     ProblemProvider/reduce instead, and the target is drawn as the default picture of the
+//     instance it built.
 //     Each side's Visualization Type dropdown stays in the view (ReduxISU/Redux#912), listing the
 //     pictures the view can draw for that side (lib/reductionView.js viewPictureWorkable).
 //     Choosing one asks Redux for the view again with that picture, on the same phase and step;
 //     the choice is kept for the page's life (the source's is the Visualization Type the Solve
-//     panes use), and a source picture picked before Run is used when the view can draw it. The
+//     panes use), and a source picture picked before Reduce is used when the view can draw it. The
 //     dropdown shows what Redux says it drew, so a backend that ignores the choice (older than
 //     #912) gets a fixed dropdown naming the default.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
@@ -61,7 +73,7 @@
 
 import Box from "@mui/material/Box";
 import { useRouter } from "next/router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { VISUALIZATION_TYPE_MAP } from "../../data/visualizationTypes";
 import { CHECK_SOURCE, CHECK_TARGET, useCertificateCheck } from "../../hooks/useCertificateCheck";
 import {
@@ -75,6 +87,13 @@ import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
 import useGadgetColorMode from "../../hooks/useGadgetColorMode";
 import useWorkbenchLayout, { WORKSPACE_SECTIONS } from "../../hooks/useWorkbenchLayout";
+import {
+  agreeLine,
+  answerFound,
+  answerText,
+  noAnswerClaim,
+  solverGuarantee,
+} from "../../lib/answers";
 import { gadgetColorMap, highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
@@ -88,13 +107,13 @@ import {
 } from "../../lib/reductionView";
 import {
   REDUX_API_BASE_URL,
+  ReduxRequestError,
   requestMappedSolution,
-  requestReducedInstance,
+  requestMappedSolutionBack,
   requestReduction,
   requestSolvedInstance,
 } from "../../lib/redux";
 import { frameAtPosition, framePosition, RUN_END } from "../../lib/runSteps";
-import ComputeStatus from "../detail/ComputeStatus";
 import { GADGET_PALETTE } from "../pictures/gadgetRings";
 import { pictureStateStyle, statesInFrames } from "../pictures/pictureStates";
 import { pictureAnnotations, pictureLegendFrames, pictureRuns } from "../pictures/registry";
@@ -105,9 +124,8 @@ import {
   reductionCard,
   reductionTags,
   solverCard,
-  solverTags,
+  solverRunTags,
   targetCard,
-  targetTags,
   visualizationCard,
   visualizationTags,
 } from "./infoCards";
@@ -115,8 +133,10 @@ import PaneToggles, { PANE_LABELS } from "./PaneToggles";
 import DetailsPanel, { DetailsSummary } from "./panels/DetailsPanel";
 import GadgetsSection from "./panels/GadgetsSection";
 import InstancePanel from "./panels/InstancePanel";
+import ReduceCells from "./panels/ReduceCells";
 import ResultPanel from "./panels/ResultPanel";
 import VerifyBox from "./panels/VerifyBox";
+import { formatSeconds, runChip, runFailure } from "./RunParts";
 import VisualizationPane from "./VisualizationPane";
 import Workspace, { WorkspaceSection } from "./Workspace";
 
@@ -153,10 +173,86 @@ function openingStep(frames) {
   return Math.max((Array.isArray(frames) ? frames.length : 0) - 1, 0);
 }
 
-/** A reduction's target picture: the last of visualizeReduction's frames (source, then target). */
-function reducedTargetFrame(result) {
-  const frames = Array.isArray(result?.frames) ? result.frames : [];
-  return frames.length > 1 ? frames[frames.length - 1] : null;
+/**
+ * #279 stage 2: a Reduction View cut to its Build phase. Reduce answers nothing, so the view it
+ * shows stops where the target is built; Solve <target> brings the Solve and Map back phases.
+ * Null when the view has no Build frames.
+ */
+function buildPhaseOnly(view) {
+  if (!view) return null;
+  const frames = view.frames.filter((frame) => frame.phase === "build");
+  return frames.length > 0 ? { ...view, frames } : null;
+}
+
+/** A 404 or 405 (a backend without the endpoint), or a 400 with one of `codes`. */
+function declined(error, codes) {
+  if (!(error instanceof ReduxRequestError)) return false;
+  if (error.status === 404 || error.status === 405) return true;
+  return error.status === 400 && codes.includes(error.payload?.error);
+}
+
+/**
+ * Starts `perform` once for each new set of `args`, for the answers carried across a reduction:
+ * they fill in by themselves once their inputs exist (#279 stage 2). The result is only read
+ * while it is for the current args.
+ * @param {Object|null} args What the conversion is of; null while its inputs don't exist.
+ * @param {(args: Object, signal: AbortSignal) => Promise<unknown>} perform A module-level
+ *   function, so it depends on nothing but `args`.
+ */
+function useConversion(args, perform) {
+  const request = useComputeRequest({ subject: "certificate" });
+  const key = args === null ? null : JSON.stringify(args);
+  const [startedFor, setStartedFor] = useState(null);
+  const { start } = request;
+  const run = useCallback(
+    (forKey) => {
+      setStartedFor(forKey);
+      start(async (signal) => ({ key: forKey, value: await perform(JSON.parse(forKey), signal) }));
+    },
+    [start, perform],
+  );
+  useEffect(() => {
+    if (key === null || key === startedFor) return undefined;
+    const timeoutId = setTimeout(() => run(key), 0);
+    return () => clearTimeout(timeoutId);
+  }, [key, startedFor, run]);
+  const kept = request.kept?.result;
+  const mine = key !== null && startedFor === key;
+  return {
+    value: kept && kept.key === key ? kept.value : undefined,
+    loading: mine && request.isRunning,
+    startedAt: request.startedAt,
+    failure: mine ? runFailure(request) : null,
+    retry: () => {
+      if (key !== null) run(key);
+    },
+  };
+}
+
+/** Maps a target answer back to the source; "unavailable" when the reduction can't. */
+async function mapBack({ reduction, instance, answer }, signal) {
+  try {
+    const mapped = await requestMappedSolutionBack(
+      REDUX_API_BASE_URL,
+      reduction,
+      instance,
+      answer,
+      signal,
+    );
+    return { certificate: answerText(mapped) };
+  } catch (error) {
+    if (!declined(error, ["no_backward_map"])) throw error;
+    return { unavailable: true };
+  }
+}
+
+/** Maps a source answer into the target; "unavailable" when the reduction can't. */
+async function mapForward({ reduction, instance, answer }, signal) {
+  const mapped = answerText(
+    await requestMappedSolution(REDUX_API_BASE_URL, reduction, instance, answer, signal),
+  );
+  // A mapSolution stub answers "" for every answer (ReduxISU/Redux#823).
+  return mapped.trim() === "" ? { unavailable: true } : { certificate: mapped };
 }
 
 /**
@@ -174,18 +270,6 @@ function runGapNote(gap, visualizationName, solverName, answer, runLabel) {
   // no_frames, no_renderer (no renderer here for its picture type), or left out of the answer:
   // only a run asked for this visualization alone can draw it.
   return `${visualizationName} isn't drawn from this run, so it shows the instance. ${answerText} Press ${runLabel} to draw a run in it.`;
-}
-
-/** What the result (Execute section) says about a Reduction View's solve and map back. */
-function viewRunFields(view) {
-  const closing = view.frames[view.frames.length - 1];
-  return {
-    solverName: view.solverName,
-    mappedBack: {
-      text: closing?.caption ?? "",
-      ok: typeof closing?.ok === "boolean" ? closing.ok : null,
-    },
-  };
 }
 
 /**
@@ -241,14 +325,37 @@ function findIndexByName(items, name) {
   return index === -1 ? 0 : index;
 }
 
-function asCertificate(output) {
-  if (typeof output === "string") return output;
-  return output === null || output === undefined ? "" : JSON.stringify(output);
+/**
+ * A solve's chip: found (green) or not, with its round-trip time. A "no" is red only from an
+ * exact solver; from any other it proves nothing, so it stays neutral.
+ */
+function answerChip(kept) {
+  const time = formatSeconds(kept.elapsedMs);
+  const label = `${time}, round trip`;
+  if (answerFound(kept.result.output)) {
+    return { tone: "ok", text: `Answer found · ${time}`, label: `Answer found, ${label}` };
+  }
+  return {
+    tone: kept.result.guarantee === "exact" ? "err" : "neutral",
+    text: `No answer found · ${time}`,
+    label: `No answer found, ${label}`,
+  };
 }
 
-function formatSeconds(milliseconds) {
-  return `${(milliseconds / 1000).toFixed(2)}s`;
-}
+const ANOTHER_RUN = "Another run is going";
+
+// A live region's text is spoken, not shown: what it says is on screen already.
+const visuallyHiddenSx = {
+  position: "absolute",
+  width: "1px",
+  height: "1px",
+  p: 0,
+  m: "-1px",
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
 
 /**
  * @param {Object} props
@@ -308,13 +415,31 @@ export default function Workbench({ problem }) {
   const solveRun = useComputeRequest({ subject: "instance" });
   const pictureRun = useComputeRequest({ subject: "instance" });
   const reduceRun = useComputeRequest({ subject: "instance" });
+  // #279 stage 2: Solve <target>, on the instance the last Reduce built.
+  const targetRun = useComputeRequest({ subject: "instance" });
   // #912: asking for the Reduction View again with another picture on one side. Its own
   // request, so a slower answer to an earlier pick never lands over a later one.
   const viewSwitch = useComputeRequest({ subject: "instance" });
 
-  const solveResult = solveRun.status === COMPUTE_DONE ? solveRun.result : null;
-  const pictureResult = pictureRun.status === COMPUTE_DONE ? pictureRun.result : null;
-  const reduceResult = reduceRun.status === COMPUTE_DONE ? reduceRun.result : null;
+  // #279 stage 2: each run's last result stays through a later Cancel ("Cancelled keeps the last
+  // result"); the pictures stay on it while another run of the same kind goes or fails, and the
+  // answers show while the run isn't going or failed.
+  const settled = (request) => !request.isRunning && request.status !== COMPUTE_FAILED;
+  const solveKept = solveRun.kept?.result ?? null;
+  const solveResult = settled(solveRun) ? solveKept : null;
+  const pictureResult = pictureRun.kept?.result ?? null;
+  // The last build, while it is of this instance. Changing the Target or Reduction leaves the
+  // pictures and the cells on it until the next Reduce (its chip says "Changed").
+  const buildKept = reduceRun.kept?.result ?? null;
+  const reduceResult = buildKept && buildKept.instance === instance ? buildKept : null;
+  const reduceCurrent = Boolean(reduceResult);
+  const buildShown = reduceCurrent && settled(reduceRun);
+  const buildMatchesChoice = reduceResult?.reductionClassName === selectedReduction?.className;
+  // The target's last solve, while it is of the build on screen.
+  const targetKept = targetRun.kept?.result ?? null;
+  const targetSolved =
+    reduceCurrent && targetKept && targetKept.buildRunId === reduceResult.runId ? targetKept : null;
+  const targetResult = targetSolved && settled(targetRun) ? targetSolved : null;
 
   // The run's picture for the chosen visualization: from one run's pictures (#252), or the one
   // picture a run asked for alone. `runGap` is the reason one run has no picture for it.
@@ -336,27 +461,25 @@ export default function Workbench({ problem }) {
   }
   const runPictureCurrent = Boolean(runPicture);
   const solveCurrent = Boolean(solveResult) && solveResult.instance === instance;
-  const reduceCurrent =
-    Boolean(reduceResult) &&
-    reduceResult.instance === instance &&
-    reduceResult.reductionClassName === selectedReduction?.className;
-  // #215: the current reduction's Reduction View, when Redux sent one; #912: drawn with the
-  // pictures last picked for it, once Redux has sent that view.
+  // #215: the current build's Reduction View, when Redux sent one: Build only after Reduce, all
+  // three phases once the target is solved (#279 stage 2); #912: drawn with the pictures last
+  // picked for it, once Redux has sent that view.
   const [switchedView, setSwitchedView] = useState(null);
   const [switchNote, setSwitchNote] = useState(null);
   const [switchPending, setSwitchPending] = useState(null);
+  const baseView = targetSolved?.view ?? reduceResult?.view ?? null;
   const switchedCurrent =
     reduceCurrent && Boolean(switchedView) && switchedView.runId === reduceResult.runId;
   const reduceView =
     mode === "reduce" && reduceCurrent
-      ? ((switchedCurrent ? switchedView.view : reduceResult.view) ?? null)
+      ? ((switchedCurrent ? switchedView.view : baseView) ?? null)
       : null;
   const switching =
     Boolean(reduceView) && viewSwitch.isRunning && switchPending?.runId === reduceResult.runId;
 
   // --- Verify (#229 stage 3) --------------------------------------------------------------
   // The target side is the reduction's target problem, checked against the instance the
-  // reduction built; it has an instance (and so unlocks) only while that run is current.
+  // reduction built; it has an instance (and so unlocks) only while that build is current.
   const reduceTargetName = reduceCurrent
     ? reduceResult.targetName
     : (selectedReduction?.target ?? targetName ?? null);
@@ -385,11 +508,35 @@ export default function Workbench({ problem }) {
   // Which verdict (by its id) has "Show where it fails" switched on.
   const [overlayFor, setOverlayFor] = useState(null);
 
-  // --- Map a solution across (#229 stage 3) -----------------------------------------------
-  const mapRun = useComputeRequest({ subject: "certificate" });
-  const [mapSolverIndex, setMapSolverIndex] = useState(solverIndex);
-  const mapResult = mapRun.status === COMPUTE_DONE ? mapRun.result : null;
-  const mapCurrent = Boolean(mapResult) && reduceCurrent && mapResult.runId === reduceResult.runId;
+  // --- Answers carried across (#279 stage 2) ----------------------------------------------
+  // The reductions found unable to map answers one way, by class name, for the page's life.
+  const [noBackMap, setNoBackMap] = useState(() => new Set());
+  const [noForwardMap, setNoForwardMap] = useState(() => new Set());
+  const backReduction = reduceResult?.reductionClassName ?? null;
+  const targetAnswer = targetResult ? answerText(targetResult.output) : "";
+  const backMap = useConversion(
+    targetResult && answerFound(targetResult.output) && !noBackMap.has(backReduction)
+      ? { reduction: backReduction, instance: reduceResult.instance, answer: targetAnswer }
+      : null,
+    mapBack,
+  );
+  const sourceAnswer = solveCurrent ? answerText(solveResult.output) : "";
+  const forwardMap = useConversion(
+    reduceCurrent &&
+      solveCurrent &&
+      answerFound(solveResult.output) &&
+      !noForwardMap.has(backReduction)
+      ? { reduction: backReduction, instance, answer: sourceAnswer }
+      : null,
+    mapForward,
+  );
+  // A reduction found unable to map one way is remembered, so that cell says so from then on.
+  if (backMap.value?.unavailable && !noBackMap.has(backReduction)) {
+    setNoBackMap(new Set(noBackMap).add(backReduction));
+  }
+  if (forwardMap.value?.unavailable && !noForwardMap.has(backReduction)) {
+    setNoForwardMap(new Set(noForwardMap).add(backReduction));
+  }
 
   // Which of the picture's other runs the steps follow (#204: an NFA's one path), by id; null
   // is the run's own frames.
@@ -400,9 +547,9 @@ export default function Workbench({ problem }) {
   const [runPosition, setRunPosition] = useState(RUN_END);
 
   // A new run's picture opens on its last step (the finished result), on its own frames.
-  const [stepsFor, setStepsFor] = useState(pictureRun.result);
-  if (stepsFor !== pictureRun.result) {
-    const landed = pictureRun.result;
+  const [stepsFor, setStepsFor] = useState(pictureResult);
+  if (stepsFor !== pictureResult) {
+    const landed = pictureResult;
     setStepsFor(landed);
     setCurrentStep(
       openingStep(
@@ -413,14 +560,14 @@ export default function Workbench({ problem }) {
     setRunPosition(RUN_END);
   }
 
-  // #215: where the Reduction View's steps are. #274: a new reduction opens on its last step,
-  // the end of Map back, as a solve opens on its finished result; the step controls and the
-  // phase buttons still go back to Build and Solve.
+  // #215: where the Reduction View's steps are. #274: a new view opens on its last step, as a
+  // solve opens on its finished result: the end of Build after Reduce, the end of Map back after
+  // Solve <target> (#279 stage 2); the step controls and the phase buttons still go back.
   const [reduceStep, setReduceStep] = useState(0);
-  const [reduceStepsFor, setReduceStepsFor] = useState(reduceRun.result);
-  if (reduceStepsFor !== reduceRun.result) {
-    setReduceStepsFor(reduceRun.result);
-    setReduceStep(openingStep(reduceRun.result?.view?.frames));
+  const [reduceStepsFor, setReduceStepsFor] = useState(baseView);
+  if (reduceStepsFor !== baseView) {
+    setReduceStepsFor(baseView);
+    setReduceStep(openingStep(baseView?.frames));
   }
   // #912: another picture's view opens on the same phase and step as the one before it.
   const [switchLanded, setSwitchLanded] = useState(viewSwitch.result);
@@ -444,6 +591,12 @@ export default function Workbench({ problem }) {
     enabled: !(mode === "solve" && runPictureCurrent),
   });
   const showingRunPicture = mode === "solve" && runPictureCurrent;
+  // #279 stage 2: the target picture after a Reduce that drew no Reduction View.
+  const targetPicture = useDefaultPicture({
+    visualization: reduceCurrent ? reduceResult.targetVisualization : null,
+    instance: reduceCurrent ? (reduceResult.targetInstance ?? "") : "",
+    enabled: mode === "reduce" && reduceCurrent && !reduceResult.view,
+  });
   // #204: the other runs a format=frames picture offers (an NFA's paths, registry.js
   // pictureRuns), and the frames the steps walk: the chosen one's, or the run's own.
   const otherRuns =
@@ -484,14 +637,14 @@ export default function Workbench({ problem }) {
   });
 
   // --- Instance errors -------------------------------------------------------------------
-  const runFailure =
+  const runParseFailure =
     lastRun?.instance === instance
       ? [solveRun, pictureRun, reduceRun].find(
           (request) =>
             request.status === COMPUTE_FAILED && request.failure?.code === "instance_parse_error",
         )?.failure
       : null;
-  const instanceError = defaultPicture.instanceError ?? runFailure ?? null;
+  const instanceError = defaultPicture.instanceError ?? runParseFailure ?? null;
 
   // --- URL sync (#150) -------------------------------------------------------------------
   const [debouncedInstance, setDebouncedInstance] = useState(instance);
@@ -550,8 +703,11 @@ export default function Workbench({ problem }) {
   function chooseViewPicture(which, className) {
     if (!reduceView) return;
     const run = reduceResult;
+    const solved = targetSolved;
     let source = sourceViewPicture;
-    let target = targetViewPicture(selectedReduction);
+    let target = targetViewPicture(
+      reductions.find((reduction) => reduction.className === run.reductionClassName),
+    );
     if (which === "source") {
       source = className;
       setSourceViewPick(className);
@@ -573,250 +729,259 @@ export default function Workbench({ problem }) {
         instance: run.instance,
         sourceVisualization: source,
         targetVisualization: target,
+        // #279 stage 2: once the target is solved, the view shows that solver's run; before,
+        // only its Build phase.
+        solver: solved?.solverClassName ?? null,
         signal,
       });
-      return { view, runId: run.runId, fromFrames, fromIndex };
+      return {
+        view: solved ? view : buildPhaseOnly(view),
+        runId: run.runId,
+        fromFrames,
+        fromIndex,
+      };
     });
   }
 
-  const isRunning = solveRun.isRunning || pictureRun.isRunning || reduceRun.isRunning;
+  // #279 stage 2: one run at a time. While one is going, every other run button is disabled.
+  const solving = solveRun.isRunning || pictureRun.isRunning;
+  const isRunning = solving || reduceRun.isRunning || targetRun.isRunning;
   const hasInstance = instance.trim() !== "";
   const canSolve = Boolean(selectedSolver?.className);
-  const canReduce = canSolve && Boolean(selectedReduction?.className);
-  const runDisabled =
-    !hasInstance ||
-    Boolean(instanceError) ||
-    isRunning ||
-    (mode === "solve" ? !canSolve : !canReduce);
+  const canReduce = Boolean(selectedReduction?.className);
+  const instanceBlocked = !hasInstance || Boolean(instanceError);
+  const solveDisabled = instanceBlocked || isRunning || !canSolve;
+  const reduceDisabled = instanceBlocked || isRunning || !canReduce;
 
-  function handleRun() {
-    if (runDisabled) return;
+  // The instance a run sends: the instance, or the picture's edits written into it first.
+  function instanceToRun() {
     setSerializeError(null);
-    let runInstance = instance;
     const serialized = edits.serialize();
-    if (serialized) {
-      if ("error" in serialized) {
-        setSerializeError(serialized.error);
-        return;
-      }
-      runInstance = serialized.instanceText;
-      setInstance(runInstance);
+    if (!serialized) return instance;
+    if ("error" in serialized) {
+      setSerializeError(serialized.error);
+      return null;
     }
+    setInstance(serialized.instanceText);
+    return serialized.instanceText;
+  }
 
+  function beginRun(runMode, runInstance) {
     runIdRef.current += 1;
     const runId = runIdRef.current;
-    setLastRun({ id: runId, mode, instance: runInstance });
-    let succeeded = false;
-    const solver = selectedSolver;
+    setLastRun({ id: runId, mode: runMode, instance: runInstance });
+    return runId;
+  }
 
-    // A new Run draws with the pictures picked so far; a switch still on its way is dropped.
-    viewSwitch.reset();
-    setSwitchNote(null);
-    let finished;
-    if (mode === "solve") {
-      const visualization = selectedViz;
-      const answer = solveRun.start(async (signal) => {
-        const output = await requestSolvedInstance(
-          REDUX_API_BASE_URL,
-          solver.className,
-          runInstance,
-          signal,
-        );
-        succeeded = true;
-        return { output, solverName: solver.name, instance: runInstance, runId };
-      });
-      const oneRun = drawsFromRun(visualization);
-      const picture = visualization
-        ? pictureRun.start(async (signal) => {
-            const ran = { solverName: solver.name, instance: runInstance, runId };
-            // #252: one run and every picture of it, when the backend has visualizeRun.
-            if (oneRun) {
-              const run = await requestRunPictures({
-                instance: runInstance,
-                solver: solver.className,
-                signal,
-              });
-              if (run) return { run, ...ran };
-            }
-            // #199: {format, frames} plus, for a format=frames picture, its type and payload.
-            const picture = await requestPicture({
-              visualization,
-              instance: runInstance,
-              solver: solver.className,
-              signal,
-            });
-            return { ...picture, vizClassName: visualization.className, ...ran };
-          })
-        : Promise.resolve();
-      finished = Promise.all([answer, picture]);
-    } else {
-      const reduction = selectedReduction;
-      const pictures = {
-        sourceVisualization: sourceViewPicture,
-        targetVisualization: targetViewPicture(reduction),
+  /** Solve: Solve mode's button and Reduce mode's "Solve <source>", the same run. */
+  function handleSolve() {
+    if (solveDisabled) return;
+    const runInstance = instanceToRun();
+    if (runInstance === null) return;
+    const runId = beginRun("solve", runInstance);
+    const solver = selectedSolver;
+    const visualization = selectedViz;
+    solveRun.start(async (signal) => {
+      const output = await requestSolvedInstance(
+        REDUX_API_BASE_URL,
+        solver.className,
+        runInstance,
+        signal,
+      );
+      return {
+        output,
+        solverName: solver.name,
+        guarantee: solverGuarantee(solver),
+        instance: runInstance,
+        runId,
       };
-      finished = reduceRun.start(async (signal) => {
-        const ran = {
-          reductionClassName: reduction.className,
-          reductionName: reduction.name,
-          targetName: reduction.target,
-          targetVisualization: reduction.targetVisualization,
-          targetVerifier: reduction.targetVerifier ?? null,
+    });
+    if (!visualization) return;
+    const oneRun = drawsFromRun(visualization);
+    pictureRun.start(async (signal) => {
+      const ran = { solverName: solver.name, instance: runInstance, runId };
+      // #252: one run and every picture of it, when the backend has visualizeRun.
+      if (oneRun) {
+        const run = await requestRunPictures({
           instance: runInstance,
-          runId,
-        };
-        // #215: the Reduction View, when the backend has it for this reduction. It builds the
-        // target, solves it with a solver for the target and maps the answer back, so the
-        // source solver chosen above is not used.
-        const view = await requestReductionViewOrNull({
-          reduction: reduction.className,
-          instance: runInstance,
-          ...pictures,
+          solver: solver.className,
           signal,
         });
-        if (view) {
-          succeeded = true;
-          return {
-            ...ran,
-            view,
-            frames: [],
-            reductionName: view.reductionName || reduction.name,
-            targetInstance: view.target.instance,
-            gadgets: view.gadgets,
-            solverClassName: null,
-            certificate: null,
-            ...viewRunFields(view),
-          };
-        }
-        // The target instance's text (for the result and Check against: target) comes
-        // from ProblemProvider/reduce, which needs no answer, so it is asked for alongside the
-        // solve. Without it the run still draws; the target side of Verify just stays locked.
-        // The same answer carries the reduction's gadgets on a backend that has them (#229
-        // stage 4); without them the Gadgets section stays hidden.
-        const builtReduction = requestReduction(
-          REDUX_API_BASE_URL,
-          reduction.className,
-          runInstance,
-          signal,
-        ).then(
-          (built) => ({
-            instance:
-              typeof built?.reductionTo?.instance === "string" ? built.reductionTo.instance : null,
-            gadgets: normalizeGadgets(built?.gadgets),
-          }),
-          (error) => {
-            if (error?.name === "AbortError") throw error;
-            return { instance: null, gadgets: [] };
-          },
-        );
-        // The solve below may throw first; this keeps the request running alongside it from
-        // also surfacing as an unhandled rejection. Awaiting it later still sees the result.
-        builtReduction.catch(() => {});
-        const output = await requestSolvedInstance(
-          REDUX_API_BASE_URL,
-          solver.className,
-          runInstance,
-          signal,
-        );
-        const certificate = asCertificate(output);
-        const frames = await requestReducedInstance(
-          REDUX_API_BASE_URL,
-          reduction.className,
-          runInstance,
-          certificate,
-          signal,
-        );
-        const built = await builtReduction;
+        if (run) return { run, ...ran };
+      }
+      // #199: {format, frames} plus, for a format=frames picture, its type and payload.
+      const picture = await requestPicture({
+        visualization,
+        instance: runInstance,
+        solver: solver.className,
+        signal,
+      });
+      return { ...picture, vizClassName: visualization.className, ...ran };
+    });
+  }
+
+  function cancelSolve() {
+    solveRun.cancel();
+    pictureRun.cancel();
+  }
+
+  /** Reduce: builds the target instance, and solves nothing (#279 stage 2). */
+  function handleReduce() {
+    if (reduceDisabled) return;
+    const runInstance = instanceToRun();
+    if (runInstance === null) return;
+    const runId = beginRun("reduce", runInstance);
+    const reduction = selectedReduction;
+    const pictures = {
+      sourceVisualization: sourceViewPicture,
+      targetVisualization: targetViewPicture(reduction),
+    };
+    // A new build draws with the pictures picked so far; a switch still on its way is dropped.
+    viewSwitch.reset();
+    setSwitchNote(null);
+    let succeeded = false;
+    const finished = reduceRun.start(async (signal) => {
+      const ran = {
+        reductionClassName: reduction.className,
+        reductionName: reduction.name,
+        targetName: reduction.target,
+        targetVisualization: reduction.targetVisualization,
+        targetVerifier: reduction.targetVerifier ?? null,
+        targetSolvers: reduction.targetSolvers ?? [],
+        pictures,
+        instance: runInstance,
+        runId,
+      };
+      // #215: the Reduction View, when the backend has it for this reduction, cut to its Build
+      // phase. It carries the target instance and the gadgets too.
+      const view = await requestReductionViewOrNull({
+        reduction: reduction.className,
+        instance: runInstance,
+        ...pictures,
+        signal,
+      });
+      if (view) {
         succeeded = true;
         return {
           ...ran,
-          view: null,
-          frames: Array.isArray(frames) ? frames : [],
-          targetInstance: built.instance,
-          gadgets: built.gadgets,
-          solverName: solver.name,
-          solverClassName: solver.className,
-          certificate,
-          mappedBack: null,
+          view: buildPhaseOnly(view),
+          reductionName: view.reductionName || reduction.name,
+          targetInstance: view.target.instance,
+          gadgets: view.gadgets,
         };
-      });
-    }
-    // After a reduction, Verify checks against the target it built (the mockup's default),
-    // when the target problem has a verifier to check with.
-    const checkTargetAfter = mode === "reduce" && Boolean(selectedReduction?.targetVerifier);
+      }
+      // Without the view, ProblemProvider/reduce builds the target; the same answer carries the
+      // reduction's gadgets on a backend that has them (#229 stage 4).
+      const built = await requestReduction(
+        REDUX_API_BASE_URL,
+        reduction.className,
+        runInstance,
+        signal,
+      );
+      succeeded = true;
+      return {
+        ...ran,
+        view: null,
+        targetInstance:
+          typeof built?.reductionTo?.instance === "string" ? built.reductionTo.instance : null,
+        gadgets: normalizeGadgets(built?.gadgets),
+      };
+    });
+    // After a build, Verify checks against the target it built (the mockup's default), when
+    // the target problem has a verifier to check with. A new build retires the last target
+    // solve, which was of the build before.
+    const checkTargetAfter = Boolean(reduction.targetVerifier);
     finished.then(() => {
       if (!succeeded || runIdRef.current !== runId) return;
+      targetRun.reset();
       if (checkTargetAfter) verify.setCheckOn(CHECK_TARGET);
     });
   }
 
-  // --- Verify This Answer and Map a solution across ----------------------------------------
-  function handleVerifyAnswer() {
-    if (!solveCurrent) return;
-    // #279: the check happens in the Verify section, so it is shown if it was hidden.
-    layout.show("verify");
-    verify.check(asCertificate(solveResult.output), CHECK_SOURCE);
+  // --- Solve <target> (#279 stage 2) -------------------------------------------------------
+  // The target's solver is kept per target problem, the first one until another is picked.
+  const [targetSolverPicks, setTargetSolverPicks] = useState({});
+  const cellTargetName = reduceResult?.targetName ?? selectedReduction?.target ?? targetName ?? "";
+  const cellTargetSolvers = reduceCurrent
+    ? reduceResult.targetSolvers
+    : (selectedReduction?.targetSolvers ?? []);
+  const targetSolverIndex = Math.min(
+    targetSolverPicks[cellTargetName] ?? 0,
+    Math.max(cellTargetSolvers.length - 1, 0),
+  );
+  const targetSolver = cellTargetSolvers[targetSolverIndex] ?? null;
+  let targetHint = "";
+  if (!reduceCurrent) {
+    targetHint = `Reduce first: Solve ${cellTargetName} works on the built instance.`;
+  } else if (!targetSolver) {
+    targetHint = `${cellTargetName} has no solver declared yet, so there is nothing to solve it with.`;
+  } else if (!targetSolver.className) {
+    targetHint = "This solver cannot be run: the catalog did not say which backend solver it is.";
+  } else if (reduceResult.targetInstance === null) {
+    targetHint = `Redux did not send the ${cellTargetName} instance it built, so there is nothing to solve.`;
+  } else if (isRunning) {
+    targetHint = ANOTHER_RUN;
   }
+  const targetDisabled = Boolean(targetHint);
 
-  const mapSolver = solvers[mapSolverIndex] ?? null;
-  const mapReuses = reduceCurrent && mapSolver?.className === reduceResult.solverClassName;
-  const mapDisabled =
-    !reduceCurrent || !mapSolver?.className || mapRun.isRunning || reduceRun.isRunning;
-
-  function handleMap() {
-    if (mapDisabled) return;
-    const run = reduceResult;
-    const solver = mapSolver;
-    const reuse = mapReuses;
-    mapRun.start(async (signal) => {
-      const answer = reuse
-        ? run.certificate
-        : asCertificate(
-            await requestSolvedInstance(REDUX_API_BASE_URL, solver.className, run.instance, signal),
-          );
-      const mapped = await requestMappedSolution(
+  function handleSolveTarget() {
+    if (targetDisabled) return;
+    const build = reduceResult;
+    const solver = targetSolver;
+    // The view is asked for again with this solver, drawn with the pictures on screen.
+    const pictures = switchedCurrent
+      ? {
+          sourceVisualization: switchedView.view.source.visualization ?? null,
+          targetVisualization: switchedView.view.target.visualization ?? null,
+        }
+      : build.pictures;
+    viewSwitch.reset();
+    setSwitchedView(null);
+    setSwitchNote(null);
+    targetRun.start(async (signal) => {
+      // Both at once: the answer, and the Reduction View with this solver's run. A view that
+      // can't draw this solver (or doesn't come back) leaves the picture on the build.
+      const viewRequest = build.view
+        ? requestReductionViewOrNull({
+            reduction: build.reductionClassName,
+            instance: build.instance,
+            ...pictures,
+            solver: solver.className,
+            signal,
+          }).catch((error) => {
+            if (error?.name === "AbortError") throw error;
+            return null;
+          })
+        : Promise.resolve(null);
+      // The solve below may throw first; this keeps the view request from also surfacing as an
+      // unhandled rejection. Awaiting it later still sees the result.
+      viewRequest.catch(() => {});
+      const output = await requestSolvedInstance(
         REDUX_API_BASE_URL,
-        run.reductionClassName,
-        run.instance,
-        answer,
+        solver.className,
+        build.targetInstance,
         signal,
       );
+      const view = await viewRequest;
       return {
-        certificate: asCertificate(mapped),
+        output,
         solverName: solver.name,
-        reused: reuse,
-        runId: run.runId,
+        solverClassName: solver.className,
+        guarantee: solverGuarantee(solver),
+        buildRunId: build.runId,
+        view,
+        viewMissed: Boolean(build.view) && !view,
       };
     });
   }
 
-  function handleVerifyMapped() {
-    if (!mapCurrent || verify.targetLocked) return;
+  // --- Check it -----------------------------------------------------------------------------
+  // #279: the check happens in the Verify section, so it is shown if it was hidden. Stage 4
+  // gives each side its own Verify strip.
+  function checkIn(side, certificate) {
     layout.show("verify");
-    verify.check(mapResult.certificate, CHECK_TARGET);
+    verify.check(certificate, side);
   }
-
-  let mapHint = "";
-  if (!reduceCurrent) {
-    mapHint = reduceRun.isRunning
-      ? "Waiting for the reduction to build the target instance."
-      : "The instance changed. Run the reduction again to map an answer onto the new target.";
-  } else if (!mapSolver) {
-    mapHint = `${problem.name} has no solver to produce an answer to map.`;
-  } else if (!mapSolver.className) {
-    mapHint = "This solver cannot be run: the catalog did not say which backend solver it is.";
-  } else if (mapReuses) {
-    mapHint = `Uses ${mapSolver.name}'s answer from this run. Nothing new runs.`;
-  } else {
-    mapHint = `There's no ${mapSolver.name} answer from this run, so this solves the ${problem.name} instance first. That's the expensive step.`;
-  }
-  let mapAnnouncement = "";
-  if (mapRun.status === COMPUTE_RUNNING) mapAnnouncement = "Mapping the answer across.";
-  else if (mapRun.status === COMPUTE_DONE)
-    mapAnnouncement = `Mapped ${mapResult.solverName}'s answer onto the target.`;
-  else if (mapRun.status === COMPUTE_FAILED)
-    mapAnnouncement = `The answer was not mapped. ${mapRun.failure?.headline ?? ""}`;
-  else if (mapRun.status === COMPUTE_CANCELLED) mapAnnouncement = "Mapping cancelled.";
 
   // --- The verdict on the Showing line ------------------------------------------------------
   // A check never touches the picture's own state (the run, its current step). Its verdict
@@ -864,16 +1029,7 @@ export default function Workbench({ problem }) {
   }
 
   // --- What the command bar and picture pane show ------------------------------------------
-  const solveRan = Boolean(solveResult);
-  const reduceRan = Boolean(reduceResult);
-  const runLabel =
-    mode === "solve"
-      ? solveRan
-        ? "Run solve again"
-        : "Run solve"
-      : reduceRan
-        ? "Run reduction again"
-        : "Run reduction";
+  const runLabel = mode === "solve" ? "Solve" : "Reduce";
 
   let modeNote = "";
   if (mode === "solve") {
@@ -882,13 +1038,8 @@ export default function Workbench({ problem }) {
       modeNote = "This solver cannot be run: the catalog did not say which backend solver it is.";
   } else if (reductions.length === 0) {
     modeNote = `No reductions from ${problem.name} are declared yet.`;
-  } else if (!canSolve) {
-    modeNote =
-      "A reduction carries a solver's answer across, and this problem has no solver to run.";
-  } else if (reductionViewWorth(selectedReduction?.className)) {
-    modeNote = `Run builds the ${selectedReduction.target} instance step by step, solves it, and maps its answer back to this one.`;
   } else {
-    modeNote = `Run solves the instance with ${selectedSolver.name} first, then carries the answer across.`;
+    modeNote = `Reduce builds the ${selectedReduction?.target ?? "target"} instance from this one and solves nothing. Solve each side in its cell below.`;
   }
 
   let showing;
@@ -898,17 +1049,21 @@ export default function Workbench({ problem }) {
     else if (mode === "solve" && solveCurrent) showing = solveResult.solverName;
     else showing = "Not run yet.";
   } else if (mode === "solve") {
-    if (solveRun.isRunning || pictureRun.isRunning)
-      showing = `Running ${selectedSolver?.name ?? "the solver"}.`;
+    if (solving)
+      showing = `Running ${selectedSolver?.name ?? "the solver"}. The picture updates when it finishes.`;
     else if (showingRunPicture) showing = pictureResult.solverName;
     else if (solveCurrent)
       showing = `${solveResult.solverName}. The picture shows the instance before solving.`;
     else showing = NOT_RUN_TEXT;
   } else if (reduceRun.isRunning) {
-    showing = `Running the reduction to ${selectedReduction?.target ?? "the target"}.`;
+    showing = `Building the ${selectedReduction?.target ?? "target"} instance. The picture updates when it finishes.`;
   } else if (reduceCurrent) {
     showing = `${problem.name} ${ARROW} ${reduceResult.targetName} (${reduceResult.reductionName})`;
-    if (reduceView?.solverName) showing += `, solved by ${reduceView.solverName}`;
+    if (targetSolved?.view && reduceView?.solverName)
+      showing += `, solved by ${reduceView.solverName}`;
+    else showing += ", built";
+    if (targetRun.isRunning)
+      showing += `. Solving ${reduceResult.targetName}; the picture updates when it finishes.`;
   } else {
     showing = NOT_RUN_TEXT;
   }
@@ -1027,31 +1182,70 @@ export default function Workbench({ problem }) {
     if (!selectedReduction) {
       content = { kind: "message", text: `No reductions from ${problem.name} are declared yet.` };
     } else if (reduceCurrent) {
-      const frame = reducedTargetFrame(reduceResult);
-      content = frame
-        ? {
-            kind: "frame",
-            frame,
-            backendType: targetViz?.backendType,
-            name: targetViz?.name ?? targetLabel,
-          }
-        : { kind: "message", text: "This reduction came back without a target picture." };
+      // #279 stage 2: without a Reduction View, the target is the default picture of the
+      // instance Reduce built (the build solved nothing, so there is no answer to draw).
+      const builtTarget = reduceResult.targetName;
+      if (targetPicture.picture) {
+        content = {
+          kind: "picture",
+          type: targetPicture.picture.type,
+          payload: targetPicture.picture.payload,
+          layoutKey: `${reduceResult.targetInstance}\u0000${targetViz?.className}`,
+          frame: targetPicture.picture.frame,
+          frameIndex: null,
+          frameCount: 0,
+          name: targetViz?.name ?? builtTarget,
+          showCaption: false,
+        };
+      } else if (targetPicture.frame) {
+        content = {
+          kind: "frame",
+          frame: targetPicture.frame,
+          backendType: targetViz?.backendType,
+          name: targetViz?.name ?? builtTarget,
+        };
+      } else if (reduceResult.targetInstance === null) {
+        content = {
+          kind: "message",
+          text: `Redux did not send the ${builtTarget} instance it built, so it can't be drawn.`,
+        };
+      } else if (!targetViz) {
+        content = {
+          kind: "message",
+          text: `${builtTarget} has no visualization this site can draw yet.`,
+        };
+      } else if (targetPicture.status === "failed") {
+        content = {
+          kind: "message",
+          tone: "error",
+          text: `${targetPicture.failure.headline}. ${targetPicture.failure.detail}`,
+          action: {
+            id: `${ID}-target-picture-retry`,
+            label: "Try again",
+            onClick: targetPicture.retry,
+          },
+        };
+      } else if (targetPicture.status === "done") {
+        content = { kind: "message", text: "Redux returned no picture for this instance." };
+      } else {
+        content = { kind: "loading", text: `Drawing the ${builtTarget} instance.` };
+      }
     } else if (reduceRun.isRunning) {
       content = { kind: "loading", text: `Building the ${targetLabel} instance.` };
     } else if (reduceRun.status === COMPUTE_FAILED && lastRun?.instance === instance) {
       content = {
         kind: "message",
         tone: "error",
-        text: "The reduction did not run. The reason is shown under Run, in Execute.",
+        text: "The reduction did not build. The reason is shown under Reduce, in Execute.",
       };
     } else {
       content = {
         kind: "message",
-        text: `Press Run to build the ${targetLabel} instance from this one.`,
+        text: `Press Reduce to build the ${targetLabel} instance from this one.`,
       };
     }
-    // #912: before a Run that draws a Reduction View, the target's picture can be picked
-    // here too, from the ones the view can draw; the Run draws the target with it.
+    // #912: before a Reduce that draws a Reduction View, the target's picture can be picked
+    // here too, from the ones the view can draw; Reduce draws the target with it.
     const viewTargets =
       !reduceCurrent && reductionViewWorth(selectedReduction?.className)
         ? (selectedReduction.targetVisualizations ?? []).filter((visualization) =>
@@ -1166,19 +1360,19 @@ export default function Workbench({ problem }) {
   }
 
   // The line under the picture when there are no steps to play.
-  const runForMode = mode === "solve" ? solveResult : reduceResult;
+  const runForMode = mode === "solve" ? solveKept : buildKept;
   let note = null;
   if (serializeError) {
     note = { text: serializeError, tone: "error" };
   } else if (edits.hasPendingEdit && !showingRunPicture) {
     note = {
       text: edits.previewOnly
-        ? "This picture has edits that preview here but can't be sent to Run yet for this visualization type."
+        ? "This picture has edits that preview here but can't be sent to a run yet for this visualization type."
         : `This picture has edits that are not in the instance yet. Press ${runLabel} to send them.`,
       tone: "warning",
     };
   } else if (instanceError) {
-    // The error itself is shown under the instance field (or under Run while the Instance pane
+    // The error itself is shown under the instance field (or under the run buttons while the Instance pane
     // is hidden).
     note = null;
   } else if (verdictLine && !pictureRan && checked.valid !== null && selectedViz) {
@@ -1193,7 +1387,7 @@ export default function Workbench({ problem }) {
         runGap,
         selectedViz.name,
         pictureResult.run.solverName ?? pictureResult.solverName,
-        asCertificate(pictureResult.run.answer),
+        answerText(pictureResult.run.answer),
         runLabel,
       ),
       tone: "muted",
@@ -1204,7 +1398,13 @@ export default function Workbench({ problem }) {
     note = null;
   } else if (reduceView) {
     // The Reduction View's own caption says what each step does.
-    note = switchNote && !switching ? { text: switchNote, tone: "warning" } : null;
+    if (switchNote && !switching) note = { text: switchNote, tone: "warning" };
+    else if (targetSolved?.viewMissed && !switchedCurrent) {
+      note = {
+        text: `The Reduction View can't show ${targetSolved.solverName}'s run, so the picture stays on the build. Its answer is in Execute.`,
+        tone: "muted",
+      };
+    } else note = null;
   } else if (mode === "reduce" && reduceCurrent) {
     note = {
       text: `The target picture is the ${reduceResult.targetName} instance the reduction built.`,
@@ -1297,35 +1497,109 @@ export default function Workbench({ problem }) {
     });
   }
 
-  // --- Status under Run (the Execute section) ---------------------------------------------
+  // --- The Execute section (#279 stage 2) -----------------------------------------------------
+  const sourceName = problem.name;
   const solverName =
     lastRun?.mode === "solve"
-      ? (solveResult?.solverName ?? selectedSolver?.name)
+      ? (solveKept?.solverName ?? selectedSolver?.name)
       : selectedSolver?.name;
-  let solveAnnouncement = "";
-  if (solveRun.status === COMPUTE_RUNNING) {
-    solveAnnouncement = `Running ${solverName}. This can take up to a minute.`;
-  } else if (solveRun.status === COMPUTE_DONE) {
-    solveAnnouncement = `${solveResult.solverName} finished in ${formatSeconds(solveRun.elapsedMs)}.`;
-  } else if (solveRun.status === COMPUTE_FAILED) {
-    solveAnnouncement = `${solverName} did not run. ${solveRun.failure?.headline ?? ""}`;
-  } else if (solveRun.status === COMPUTE_CANCELLED) {
-    solveAnnouncement = "Run cancelled.";
-  }
-  let reduceAnnouncement = "";
-  if (reduceRun.status === COMPUTE_RUNNING) {
-    reduceAnnouncement = `Running the reduction to ${selectedReduction?.target}. This can take up to a minute.`;
-  } else if (reduceRun.status === COMPUTE_DONE) {
-    reduceAnnouncement = `The reduction to ${reduceResult.targetName} finished in ${formatSeconds(reduceRun.elapsedMs)}.`;
-  } else if (reduceRun.status === COMPUTE_FAILED) {
-    reduceAnnouncement = `The reduction did not run. ${reduceRun.failure?.headline ?? ""}`;
-  } else if (reduceRun.status === COMPUTE_CANCELLED) {
-    reduceAnnouncement = "Run cancelled.";
-  }
 
-  function cancelSolve() {
-    solveRun.cancel();
-    pictureRun.cancel();
+  // What each run's live region says, spoken when it changes (the chips and boxes are what is
+  // read). A failure's details are in its box.
+  function announce(request, { running, done, failed }) {
+    if (request.status === COMPUTE_RUNNING) return `${running} This can take up to a minute.`;
+    if (request.status === COMPUTE_DONE && request.kept)
+      return `${done} Took ${formatSeconds(request.kept.elapsedMs)}.`;
+    if (request.status === COMPUTE_FAILED) return `${failed} ${request.failure?.headline ?? ""}`;
+    if (request.status === COMPUTE_CANCELLED) return "Run cancelled. The last result is kept.";
+    return "";
+  }
+  const solveAnnouncement = announce(solveRun, {
+    running: `Running ${solverName}.`,
+    done: `${solveKept?.solverName ?? solverName} finished.`,
+    failed: `${solverName} did not run.`,
+  });
+  const reduceAnnouncement = announce(reduceRun, {
+    running: `Building the ${selectedReduction?.target ?? "target"} instance.`,
+    done: `Built the ${buildKept?.targetName ?? "target"} instance.`,
+    failed: "The reduction did not build.",
+  });
+  const targetAnnouncement = announce(targetRun, {
+    running: `Solving ${cellTargetName} with ${targetSolver?.name ?? "its solver"}.`,
+    done: `${targetKept?.solverName ?? "The solver"} finished.`,
+    failed: `Solving ${cellTargetName} did not finish.`,
+  });
+
+  // The Solver dropdown, in Solve mode's row and the source cell: one choice for both.
+  const solverSelect =
+    solvers.length > 0
+      ? {
+          value: String(solverIndex),
+          options: solvers.map((solver, index) => ({
+            value: String(index),
+            label: solver.name,
+            tags: solverRunTags(solver),
+            card: solverCard(solver),
+          })),
+          onChange: (value) => setSolverIndex(Number(value)),
+        }
+      : null;
+
+  const solveFailure = runFailure(solveRun);
+  // The solve's chip and its result line, shared by Solve mode's row and the source cell.
+  const solveChip = runChip(solving ? { ...solveRun, isRunning: true } : solveRun, {
+    current: solveCurrent,
+    done: answerChip,
+  });
+  const solveBusy = solving
+    ? {
+        text: `Solving ${sourceName} with ${selectedSolver?.name ?? "the solver"}`,
+        startedAt: solveRun.startedAt || pictureRun.startedAt,
+      }
+    : null;
+  const solveStale = !solving && Boolean(solveKept) && !solveCurrent && !solveFailure;
+  const solveHint = !solving && isRunning ? ANOTHER_RUN : "";
+
+  let topRun;
+  if (mode === "solve") {
+    topRun = {
+      label: "Solve",
+      onRun: handleSolve,
+      disabled: solveDisabled,
+      hint: solveHint,
+      running: solving,
+      onCancel: cancelSolve,
+      chip: solveChip,
+      busy: solveBusy,
+      failure: solveFailure,
+      onRetry: handleSolve,
+    };
+  } else {
+    topRun = {
+      label: "Reduce",
+      onRun: handleReduce,
+      disabled: reduceDisabled,
+      hint: !reduceRun.isRunning && isRunning ? ANOTHER_RUN : "",
+      running: reduceRun.isRunning,
+      onCancel: reduceRun.cancel,
+      chip: runChip(reduceRun, {
+        current: reduceCurrent && buildMatchesChoice,
+        done: (kept) => ({
+          tone: "ok",
+          text: `Built · ${formatSeconds(kept.elapsedMs)}`,
+          label: `Built, ${formatSeconds(kept.elapsedMs)}, round trip`,
+        }),
+        changed: "Changed · build again",
+      }),
+      busy: reduceRun.isRunning
+        ? {
+            text: `Building the ${selectedReduction?.target ?? "target"} instance with ${selectedReduction?.name ?? "the reduction"}`,
+            startedAt: reduceRun.startedAt,
+          }
+        : null,
+      failure: runFailure(reduceRun),
+      onRetry: handleReduce,
+    };
   }
 
   const status = (
@@ -1349,41 +1623,211 @@ export default function Workbench({ problem }) {
           {modeNote}
         </Box>
       )}
-      <Box sx={{ display: mode === "solve" ? "block" : "none" }}>
-        <ComputeStatus
-          idPrefix={`${ID}-solve`}
-          status={solveRun.status}
-          announcement={solveAnnouncement}
-          failure={solveRun.failure?.code === "instance_parse_error" ? null : solveRun.failure}
-          onCancel={cancelSolve}
-          busyLabel={`Running ${solverName}`}
-        />
-        {pictureRun.status === COMPUTE_FAILED && solveRun.status !== COMPUTE_FAILED && (
-          <ComputeStatus
-            idPrefix={`${ID}-solve-picture`}
-            status={COMPUTE_FAILED}
-            announcement=""
-            failure={{
-              ...pictureRun.failure,
-              headline: `The picture did not come back: ${pictureRun.failure?.headline ?? ""}`,
-            }}
-            onCancel={cancelSolve}
-            busyLabel=""
-          />
-        )}
-      </Box>
-      <Box sx={{ display: mode === "reduce" ? "block" : "none" }}>
-        <ComputeStatus
-          idPrefix={`${ID}-reduce`}
-          status={reduceRun.status}
-          announcement={reduceAnnouncement}
-          failure={reduceRun.failure?.code === "instance_parse_error" ? null : reduceRun.failure}
-          onCancel={reduceRun.cancel}
-          busyLabel={`Running the reduction to ${selectedReduction?.target ?? "the target"}`}
-        />
-      </Box>
+      {mode === "solve" && pictureRun.status === COMPUTE_FAILED && !solveFailure && (
+        <Box
+          id={`${ID}-solve-picture-failure`}
+          sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
+        >
+          The picture did not come back: {pictureRun.failure?.headline ?? ""}. The answer is below.
+        </Box>
+      )}
+      {/* Spoken when they change; what they say is also on screen. */}
+      {[
+        ["solve", solveAnnouncement],
+        ["reduce", reduceAnnouncement],
+        ["target", targetAnnouncement],
+      ].map(([key, text]) => (
+        <Box
+          key={key}
+          id={`${ID}-${key}-status`}
+          role="status"
+          aria-live="polite"
+          sx={visuallyHiddenSx}
+        >
+          {text}
+        </Box>
+      ))}
     </>
   );
+
+  // Reduce mode's cells and results row (./panels/ReduceCells.js).
+  let reduceCells = null;
+  if (mode === "reduce" && reductions.length > 0) {
+    const targetLabel = cellTargetName || "the target";
+    const sourceCell = {
+      id: `${ID}-source-cell`,
+      label: `${sourceName} solver`,
+      select: solverSelect,
+      run: {
+        label: `Solve ${sourceName}`,
+        onRun: handleSolve,
+        disabled: solveDisabled,
+        hint: solveHint,
+        running: solving,
+        onCancel: cancelSolve,
+        chip: solveChip,
+      },
+      busy: solveBusy,
+      failure: solveFailure,
+      onRetry: handleSolve,
+      result:
+        solveCurrent && solveRun.kept
+          ? {
+              found: answerFound(solveResult.output),
+              verdict: answerFound(solveResult.output)
+                ? `${solveResult.solverName} found a ${sourceName} answer`
+                : `${solveResult.solverName} found no ${sourceName} answer`,
+              answer: sourceAnswer,
+              elapsedMs: solveRun.kept.elapsedMs,
+            }
+          : null,
+      changed: solveStale
+        ? `The instance changed after the last solve. Press Solve ${sourceName} to run it again.`
+        : null,
+    };
+
+    const targetCell = {
+      id: `${ID}-target-cell`,
+      label: `${targetLabel} solver`,
+      select:
+        cellTargetSolvers.length > 0
+          ? {
+              value: String(targetSolverIndex),
+              options: cellTargetSolvers.map((solver, index) => ({
+                value: String(index),
+                label: solver.name,
+                tags: solverRunTags(solver),
+                card: solverCard(solver),
+              })),
+              onChange: (value) =>
+                setTargetSolverPicks((picks) => ({ ...picks, [cellTargetName]: Number(value) })),
+            }
+          : null,
+      run: {
+        label: `Solve ${targetLabel}`,
+        onRun: handleSolveTarget,
+        disabled: targetDisabled,
+        hint: targetRun.isRunning ? "" : targetHint,
+        running: targetRun.isRunning,
+        onCancel: targetRun.cancel,
+        chip: reduceCurrent
+          ? runChip(targetRun, { current: Boolean(targetSolved), done: answerChip })
+          : null,
+      },
+      busy: targetRun.isRunning
+        ? {
+            text: `Solving ${targetLabel} with ${targetSolver?.name ?? "its solver"}`,
+            startedAt: targetRun.startedAt,
+          }
+        : null,
+      failure: reduceCurrent ? runFailure(targetRun) : null,
+      onRetry: handleSolveTarget,
+      result: targetResult
+        ? {
+            found: answerFound(targetResult.output),
+            verdict: answerFound(targetResult.output)
+              ? `${targetResult.solverName} found a ${targetLabel} answer`
+              : `${targetResult.solverName} found no ${targetLabel} answer`,
+            answer: targetAnswer,
+            elapsedMs: targetRun.kept.elapsedMs,
+          }
+        : null,
+      changed:
+        !targetRun.isRunning && buildKept && !reduceCurrent && targetKept
+          ? `The instance changed after the last solve. Reduce, then press Solve ${targetLabel} to run it again.`
+          : null,
+    };
+
+    // The two directions of the reduction, each under the side it gives an answer for.
+    const reduction = backReduction ?? selectedReduction?.className;
+    const back = {
+      id: `${ID}-back`,
+      heading: `${targetLabel} answer ${ARROW} back to ${sourceName}`,
+      direction: `If f(x) has a ${targetLabel} answer, x is a yes-instance of ${sourceName}.`,
+    };
+    if (noBackMap.has(reduction)) back.state = "na";
+    else if (!reduceCurrent) {
+      back.state = "waiting";
+      back.text = `Reduce first, then solve ${targetLabel} to see this direction.`;
+    } else if (!targetResult) {
+      back.state = "waiting";
+      back.text = `Solve ${targetLabel} to see this direction.`;
+    } else if (!answerFound(targetResult.output)) {
+      const claim = noAnswerClaim(
+        targetLabel,
+        sourceName,
+        targetResult.guarantee,
+        targetResult.solverName,
+      );
+      back.state = "none";
+      back.text = claim.text;
+      back.proves = claim.proves;
+    } else if (backMap.failure) {
+      back.state = "failed";
+      back.failure = backMap.failure;
+      back.onRetry = backMap.retry;
+    } else if (backMap.value?.unavailable) {
+      back.state = "na";
+    } else if (backMap.value) {
+      back.state = "answer";
+      back.answer = backMap.value.certificate;
+      back.onCheck = () => checkIn(CHECK_SOURCE, backMap.value.certificate);
+    } else {
+      back.state = "loading";
+      back.text = `Mapping the ${targetLabel} answer back to ${sourceName}`;
+      back.startedAt = backMap.startedAt;
+    }
+
+    const forward = {
+      id: `${ID}-forward`,
+      heading: `Your ${sourceName} answer ${ARROW} into ${targetLabel}`,
+      direction: `If x is a yes-instance of ${sourceName}, f(x) has a ${targetLabel} answer.`,
+    };
+    if (noForwardMap.has(reduction)) forward.state = "na";
+    else if (!reduceCurrent) {
+      forward.state = "waiting";
+      forward.text = `Reduce first to build the ${targetLabel} instance.`;
+    } else if (!solveCurrent) {
+      forward.state = "waiting";
+      forward.text = `Solve ${sourceName} above to see this direction.`;
+    } else if (!answerFound(solveResult.output)) {
+      const claim = noAnswerClaim(
+        sourceName,
+        targetLabel,
+        solveResult.guarantee,
+        solveResult.solverName,
+      );
+      forward.state = "none";
+      forward.text = claim.text;
+      forward.proves = claim.proves;
+    } else if (forwardMap.failure) {
+      forward.state = "failed";
+      forward.failure = forwardMap.failure;
+      forward.onRetry = forwardMap.retry;
+    } else if (forwardMap.value?.unavailable) {
+      forward.state = "na";
+    } else if (forwardMap.value) {
+      forward.state = "answer";
+      forward.answer = forwardMap.value.certificate;
+      forward.onCheck = verify.targetLocked
+        ? null
+        : () => checkIn(CHECK_TARGET, forwardMap.value.certificate);
+    } else {
+      forward.state = "loading";
+      forward.text = `Mapping your ${sourceName} answer into ${targetLabel}`;
+      forward.startedAt = forwardMap.startedAt;
+    }
+
+    const agree =
+      reduceCurrent && targetResult && solveCurrent
+        ? agreeLine(
+            { found: answerFound(solveResult.output), guarantee: solveResult.guarantee },
+            { found: answerFound(targetResult.output), guarantee: targetResult.guarantee },
+          )
+        : null;
+
+    reduceCells = { source: sourceCell, target: targetCell, back, forward, agree };
+  }
 
   let targetLockReason = "";
   if (mode === "reduce" && reduceTargetName) {
@@ -1391,45 +1835,16 @@ export default function Workbench({ problem }) {
     else if (reduceCurrent && !reduceResult.targetInstance)
       targetLockReason = `Redux did not send the ${reduceTargetName} instance it built, so there is nothing to check against.`;
     else
-      targetLockReason = `Run the reduction first: checking against ${reduceTargetName} needs the target instance it builds.`;
+      targetLockReason = `Reduce first: checking against ${reduceTargetName} needs the target instance it builds.`;
   }
 
   // --- Toggle dots -------------------------------------------------------------------------
   // #279: only the Instance toggle has one, while the instance has errors. #229's "New result"
-  // dot is gone: the result now shows in Execute, right under Run.
+  // dot is gone: the result now shows in Execute, right under the run buttons.
   const dots = {
     instance: instanceError ? { label: "The instance has errors", color: "status.err" } : null,
   };
   const workspaceShown = WORKSPACE_SECTIONS.filter((key) => layout.shown[key]);
-
-  // The picture the result counts steps from: the chosen visualization's, of this run.
-  const countedPicture = pictureResult?.run
-    ? (pictureResult.run.pictures[selectedViz?.className] ?? null)
-    : pictureResult;
-  const solveSummary = solveResult
-    ? {
-        solverName: solveResult.solverName,
-        output: solveResult.output,
-        elapsedMs: solveRun.elapsedMs,
-        instance: solveResult.instance,
-        // An old flat list is [base, ...steps, solved]; a format=frames run is one frame per
-        // step, its last one the solved picture (#199).
-        stepCount:
-          countedPicture && pictureResult.runId === solveResult.runId
-            ? countedPicture.format === "frames"
-              ? countedPicture.frames.length
-              : Math.max(countedPicture.frames.length - 2, 0)
-            : null,
-      }
-    : null;
-  const reduceSummary = reduceResult
-    ? {
-        ...reduceResult,
-        // #912: another target picture may run another solver; the result reports the view shown.
-        ...(switchedCurrent && switchedView.view ? viewRunFields(switchedView.view) : {}),
-        elapsedMs: reduceRun.elapsedMs,
-      }
-    : null;
 
   // #912: the Reduction View's dropdowns, and what it says while it draws another picture.
   let reductionPane = null;
@@ -1478,7 +1893,7 @@ export default function Workbench({ problem }) {
           runId: reduceResult.runId,
           gadgets: reduceGadgets,
           sourceFrame: sourceContent.kind === "frame" ? sourceContent.frame : null,
-          targetFrame: reducedTargetFrame(reduceResult),
+          targetFrame: target?.content.kind === "frame" ? target.content.frame : null,
           namers: gadgetNamers,
           colors: gadgetRowColors,
           activeIndex: activeGadget ? gadgetHighlight.index : null,
@@ -1612,35 +2027,21 @@ export default function Workbench({ problem }) {
             idPrefix={ID}
             mode={mode}
             onModeChange={setMode}
-            solver={
-              solvers.length > 0
-                ? {
-                    value: String(solverIndex),
-                    options: solvers.map((solver, index) => ({
-                      value: String(index),
-                      label: solver.name,
-                      tags: solverTags(solver),
-                      card: solverCard(solver),
-                    })),
-                    onChange: (value) => setSolverIndex(Number(value)),
-                  }
-                : null
-            }
+            solver={solverSelect}
             target={
               targets.length > 0
                 ? {
                     value: targetName ?? targets[0],
-                    options: targets.map((name) => {
-                      const targetProblem = reductions.find(
-                        (reduction) => reduction.target === name,
-                      )?.targetProblem;
-                      return {
-                        value: name,
-                        label: name,
-                        tags: targetTags(targetProblem),
-                        card: targetCard(name, targetProblem),
-                      };
-                    }),
+                    // #279 stage 2: the Target dropdown has no tags inside; its card stays.
+                    options: targets.map((name) => ({
+                      value: name,
+                      label: name,
+                      tags: [],
+                      card: targetCard(
+                        name,
+                        reductions.find((reduction) => reduction.target === name)?.targetProblem,
+                      ),
+                    })),
                     onChange: selectTarget,
                   }
                 : null
@@ -1659,47 +2060,37 @@ export default function Workbench({ problem }) {
                   }
                 : null
             }
-            runLabel={runLabel}
-            runDisabled={runDisabled}
-            onRun={handleRun}
-            runFill={mode === "solve" ? "brand.fill" : "brand.gold"}
+            run={topRun}
             status={status}
-          />
-          <ResultPanel
-            idPrefix={`${ID}-result`}
-            problem={problem}
-            mode={mode}
-            instance={instance}
-            solveResult={solveSummary}
-            reduceResult={reduceSummary}
-            onVerifyAnswer={handleVerifyAnswer}
-            map={
-              mode === "reduce" && reduceSummary
-                ? {
-                    select:
-                      solvers.length > 0
-                        ? {
-                            value: String(mapSolverIndex),
-                            options: solvers.map((solver, index) => ({
-                              value: String(index),
-                              label: solver.name,
-                              tags: solverTags(solver),
-                              card: solverCard(solver),
-                            })),
-                            onChange: (value) => setMapSolverIndex(Number(value)),
-                          }
-                        : null,
-                    onMap: handleMap,
-                    disabled: mapDisabled,
-                    hint: mapHint,
-                    request: mapRun,
-                    announcement: mapAnnouncement,
-                    mapped: mapCurrent ? mapResult : null,
-                    onVerifyMapped: verify.targetLocked ? null : handleVerifyMapped,
-                  }
-                : null
-            }
-          />
+          >
+            <ResultPanel
+              idPrefix={`${ID}-result`}
+              mode={mode}
+              solve={
+                solveCurrent && solveRun.kept
+                  ? {
+                      found: answerFound(solveResult.output),
+                      answer: sourceAnswer,
+                      elapsedMs: solveRun.kept.elapsedMs,
+                    }
+                  : null
+              }
+              solveChanged={solveStale}
+              onCheckAnswer={() => checkIn(CHECK_SOURCE, sourceAnswer)}
+              built={
+                buildShown
+                  ? {
+                      targetName: reduceResult.targetName,
+                      reductionName: reduceResult.reductionName,
+                      elapsedMs: reduceRun.kept.elapsedMs,
+                      targetInstance: reduceResult.targetInstance,
+                    }
+                  : null
+              }
+              buildChanged={!reduceRun.isRunning && Boolean(buildKept) && !reduceCurrent}
+            />
+            <ReduceCells idPrefix={`${ID}-cells`} cells={reduceCells} />
+          </CommandBar>
         </WorkspaceSection>
 
         <WorkspaceSection

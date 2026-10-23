@@ -32,7 +32,16 @@ const labelOf = (kind) => GADGET_KINDS.find((entry) => entry.kind === kind).labe
  * between runs.
  */
 async function answerCompute(page, payload, reduceBody = () => payload.reduce) {
-  await page.route(VISUALIZE_REQUEST, (route) => route.fulfill({ json: payload.visualize }));
+  // #279 stage 2: Reduce only builds, so the target is drawn as the default picture of the
+  // instance it built: the captured reduction's last (target) frame.
+  await page.route(VISUALIZE_REQUEST, (route) =>
+    route.fulfill({
+      json:
+        route.request().postDataJSON() === payload.instance
+          ? payload.visualize
+          : [payload.visualizeReduction.at(-1)],
+    }),
+  );
   await page.route(SOLVE_REQUEST, (route) => route.fulfill({ json: payload.answer }));
   await page.route(VISUALIZE_REDUCTION_REQUEST, (route) =>
     route.fulfill({ json: payload.visualizeReduction }),
@@ -303,15 +312,17 @@ test("an edge rule highlights its node on the source and its edges on the target
   await expect(targetPicture(page).locator('[data-gadget-highlighted="true"]')).toHaveCount(0);
 });
 
-test("a Reduce run opens its target picture on the last frame, the finished result", async ({
+test("a Reduce without a Reduction View draws the target from the instance it built", async ({
   page,
 }) => {
-  // The captured reduction with a frame this picture can't draw put in the middle: the old
-  // second-frame pick would draw it; the last frame is the reduced, solved target.
-  const [base, target] = SAT3.visualizeReduction;
-  await answerCompute(page, { ...SAT3, visualizeReduction: [base, { kind: "nothing" }, target] });
+  await answerCompute(page, SAT3);
+  const drawn = [];
+  page.on("request", (request) => {
+    if (VISUALIZE_REQUEST.test(request.url())) drawn.push(request.postDataJSON());
+  });
   await openReduce(page, "3SAT", SAT3.instance, /clique/i);
   await runReduction(page);
   await expect(targetPicture(page)).not.toContainText("Cannot render");
   await expect(targetPicture(page).locator("svg").first()).toBeVisible();
+  expect(drawn).toContain(SAT3.reduce.reductionTo.instance);
 });

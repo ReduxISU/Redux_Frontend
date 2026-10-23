@@ -376,3 +376,39 @@ export function drawnCollisions(page, svgSelector) {
     return found;
   });
 }
+
+/**
+ * #279 stage 2: Reduce only builds, so a Reduction View shows its Build phase alone until the
+ * target is solved. This presses Solve <target> in Execute, answering the solve itself with no
+ * answer (so nothing is mapped back), and waits for it to finish: the view the solve asked for
+ * is on screen by then.
+ */
+export async function solveReductionTarget(page, { expect }) {
+  await page.route(/\/api\/redux\/ProblemProvider\/solve\?/, (route) =>
+    route.fulfill({ json: "{}" }),
+  );
+  await showPane(page, "execute", { expect });
+  await page.locator("#workbench-target-cell-run").click();
+  await expect(page.locator("#workbench-target-cell-run-chip")).toHaveText(/^No answer found/);
+}
+
+/**
+ * #279 stage 2: picks Reduce mode's target by name, and returns its name. Reduce draws the
+ * target as the default picture of the instance it built, so a spec that checks that picture
+ * picks a target with a visualization of its own on every backend (Clique has one; 3SAT's first
+ * target, 0-1 Integer Linear Programming, has none on today's ghcr.io/reduxisu/redux:latest).
+ */
+export async function chooseReduceTarget(page, pattern, { expect }) {
+  const current = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
+  if (!pattern.test(current)) {
+    await page.locator("#workbench-target-button").click();
+    await page
+      .locator("#workbench-target-listbox")
+      .getByRole("option")
+      .filter({ hasText: pattern })
+      .first()
+      .click();
+  }
+  await expect(page.locator("#workbench-target-value")).toHaveText(pattern);
+  return ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
+}

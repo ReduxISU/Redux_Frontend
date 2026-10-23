@@ -1,32 +1,26 @@
 // components/workbench/CommandBar.js
 //
-// #229: everything needed to run: the Solve | Reduce switch, the Solver dropdown or the To and
-// Using dropdowns, and Run on the right. Instance errors and the run's own status show under it.
-// The dropdowns are the tagged listboxes of stage 2 (./TaggedSelect.js), each with its tags and
-// info card.
+// #229: everything needed to run: the Solve | Reduce switch, the dropdowns, and the run button.
+// The dropdowns are the tagged listboxes of stage 2 (./TaggedSelect.js), each with its info card.
 //
 // #279 (board F): this is the top of the Workspace's Execute section, so it has no card of its
-// own, and the instance line and its Edit button are gone: the Instance pane above the
-// Workspace holds the instance, one editable line when collapsed. Stage 2 of #279 redesigns
-// these controls; stage 1 only moved them.
+// own; the Instance pane above the Workspace holds the instance. Stage 2 of #279 made it one row,
+// as the mockup has it:
+//   - Solve mode: Mode | Solver | Solve | the run's chip;
+//   - Reduce mode: Mode | Target | Reduction | Reduce | the build's chip. Reduce only builds the
+//     target; each side's solver and Solve button are in the cells under this row
+//     (./panels/ReduceCells.js).
+// While the row's run is going, Cancel takes its button's place and the busy line (spinner, what
+// is running, a clock) shows under the row; a run that didn't finish shows its failure box there,
+// with Try again (./RunParts.js).
 //
-// On phones and tablets (COMPACT_MEDIA) Run drops to its own line on the left. Nothing here is
-// sticky: it scrolls with the page so the picture gets the screen.
+// Labels sit above their controls, and the row wraps; nothing here is sticky, so it scrolls with
+// the page and the picture gets the screen.
 
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import Box from "@mui/material/Box";
-import { COMPACT_MEDIA, DROPDOWN_WIDTH, SHARED_CONTROL_WIDTH } from "./layout";
+import { controlLabelSx, DROPDOWN_WIDTH } from "./layout";
+import { BusyLine, RunControls, RunFailureBox } from "./RunParts";
 import TaggedSelect from "./TaggedSelect";
-
-// Forces the next item onto its own line, only on phones and tablets.
-function CompactLineBreak() {
-  return (
-    <Box
-      aria-hidden="true"
-      sx={{ display: "none", [COMPACT_MEDIA]: { display: "block", flexBasis: "100%", height: 0 } }}
-    />
-  );
-}
 
 function ModeButton({ id, pressed, onClick, accent, children }) {
   return (
@@ -56,24 +50,26 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
   );
 }
 
+// One dropdown's slot in the row: it grows to the shared dropdown width and shrinks to fit.
+const selectSlotSx = { flex: `0 1 ${DROPDOWN_WIDTH}px`, minWidth: 200, maxWidth: "100%" };
+
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {"solve"|"reduce"} props.mode
  * @param {(mode: "solve"|"reduce") => void} props.onModeChange
- * @param {{value: string, options: {value: string, label: string, tags: Array, card: Object}[],
- *   onChange: Function}|null} props.solver The Solver dropdown (options as TaggedSelect
- *   takes them), or null when the problem declares no solver.
- * @param {{value: string, options: Array, onChange: Function}|null} props.target The To
+ * @param {{value: string, options: Array, onChange: Function}|null} props.solver The Solver
+ *   dropdown (options as TaggedSelect takes them), or null when the problem declares no solver.
+ * @param {{value: string, options: Array, onChange: Function}|null} props.target The Target
  *   dropdown, or null when the problem has no reductions.
  * @param {{value: string, options: Array, onChange: Function}|null} props.reduction The
- *   Using dropdown.
- * @param {string} props.runLabel "Run solve", "Run reduction again", ...
- * @param {boolean} props.runDisabled
- * @param {() => void} props.onRun
- * @param {string} props.runFill The Run button's fill (orange for Solve, gold for Reduce).
- * @param {import("react").ReactNode} props.status Rendered under the bar: the instance error,
- *   a note on what Run will do (or why it can't), and the run's ComputeStatus.
+ *   Reduction dropdown.
+ * @param {Object} props.run The row's run, as ./RunParts.js RunControls takes it (`id` is
+ *   `${idPrefix}-run`), plus `busy` ({text, startedAt} while it runs) and `failure` and
+ *   `onRetry` for its failure box.
+ * @param {import("react").ReactNode} props.status Under the row: the instance error and a note
+ *   on what the button does (or why it can't run).
+ * @param {import("react").ReactNode} props.children The run's result, under everything else.
  */
 export default function CommandBar({
   idPrefix,
@@ -82,138 +78,107 @@ export default function CommandBar({
   solver,
   target,
   reduction,
-  runLabel,
-  runDisabled,
-  onRun,
-  runFill,
+  run,
   status,
+  children,
 }) {
   return (
     <Box
       id={`${idPrefix}-controls`}
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "10px",
-        [COMPACT_MEDIA]: { gap: 1.5 },
-      }}
+      sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
     >
       <Box
         sx={{
           display: "flex",
           flexWrap: "wrap",
-          alignItems: "flex-start",
-          gap: "10px 12px",
-          [COMPACT_MEDIA]: { rowGap: 1.5 },
+          alignItems: "flex-end",
+          gap: "12px 16px",
+          minWidth: 0,
         }}
       >
-        <Box role="group" aria-label="Mode" sx={{ display: "flex", gap: 0.5, flex: "none" }}>
-          <ModeButton
-            id={`${idPrefix}-mode-solve`}
-            pressed={mode === "solve"}
-            onClick={() => onModeChange("solve")}
-            accent="brand.line"
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, flex: "none" }}>
+          <Box id={`${idPrefix}-mode-label`} sx={controlLabelSx}>
+            Mode
+          </Box>
+          <Box
+            role="group"
+            aria-labelledby={`${idPrefix}-mode-label`}
+            sx={{ display: "flex", gap: 0.75 }}
           >
-            Solve
-          </ModeButton>
-          <ModeButton
-            id={`${idPrefix}-mode-reduce`}
-            pressed={mode === "reduce"}
-            onClick={() => onModeChange("reduce")}
-            accent="brand.goldLine"
-          >
-            Reduce
-          </ModeButton>
+            <ModeButton
+              id={`${idPrefix}-mode-solve`}
+              pressed={mode === "solve"}
+              onClick={() => onModeChange("solve")}
+              accent="brand.line"
+            >
+              Solve
+            </ModeButton>
+            <ModeButton
+              id={`${idPrefix}-mode-reduce`}
+              pressed={mode === "reduce"}
+              onClick={() => onModeChange("reduce")}
+              accent="brand.goldLine"
+            >
+              Reduce
+            </ModeButton>
+          </Box>
         </Box>
 
         {mode === "solve" && solver && (
-          <Box
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: "6px 8px",
-              minWidth: 0,
-            }}
-          >
+          <Box sx={selectSlotSx}>
             <TaggedSelect
               id={`${idPrefix}-solver`}
               label="Solver"
               hue="blue"
-              labelPlacement="row"
-              boxSx={{ width: DROPDOWN_WIDTH, maxWidth: "100%" }}
+              boxSx={{ width: "100%" }}
               {...solver}
             />
           </Box>
         )}
 
         {mode === "reduce" && target && reduction && (
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: `auto minmax(0, ${DROPDOWN_WIDTH}px)`,
-              alignItems: "center",
-              gap: 1,
-              flex: "0 1 auto",
-              minWidth: 0,
-            }}
-          >
-            <TaggedSelect
-              id={`${idPrefix}-target`}
-              label="To"
-              hue="violet"
-              labelPlacement="row"
-              {...target}
-            />
-            <TaggedSelect
-              id={`${idPrefix}-reduction`}
-              label="Using"
-              hue="violet"
-              labelPlacement="row"
-              {...reduction}
-            />
-          </Box>
+          <>
+            <Box sx={{ ...selectSlotSx, flexBasis: 240 }}>
+              <TaggedSelect
+                id={`${idPrefix}-target`}
+                label="Target"
+                hue="violet"
+                boxSx={{ width: "100%" }}
+                {...target}
+              />
+            </Box>
+            <Box sx={selectSlotSx}>
+              <TaggedSelect
+                id={`${idPrefix}-reduction`}
+                label="Reduction"
+                hue="violet"
+                boxSx={{ width: "100%" }}
+                {...reduction}
+              />
+            </Box>
+          </>
         )}
 
-        <CompactLineBreak />
-        <Box
-          id={`${idPrefix}-run`}
-          component="button"
-          type="button"
-          onClick={onRun}
-          disabled={runDisabled}
-          sx={{
-            width: SHARED_CONTROL_WIDTH,
-            flex: "none",
-            ml: "auto",
-            minHeight: 44,
-            px: 2,
-            border: "none",
-            borderRadius: "10px",
-            backgroundColor: runFill,
-            color: "brand.onFill",
-            fontFamily: "inherit",
-            fontSize: "0.9375rem",
-            fontWeight: 700,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 1.25,
-            cursor: "pointer",
-            "&:disabled": {
-              cursor: "not-allowed",
-              backgroundColor: "surface.track",
-              color: "text.secondary",
-            },
-            [COMPACT_MEDIA]: { ml: 0 },
-          }}
-        >
-          <PlayArrowIcon aria-hidden="true" sx={{ fontSize: 18 }} />
-          {runLabel}
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, minWidth: 0 }}>
+          <RunControls
+            id={`${idPrefix}-run`}
+            label={run.label}
+            onRun={run.onRun}
+            disabled={run.disabled}
+            hint={run.hint}
+            running={run.running}
+            onCancel={run.onCancel}
+            chip={run.chip}
+          />
         </Box>
       </Box>
 
+      {run.busy && (
+        <BusyLine id={`${idPrefix}-run-busy`} text={run.busy.text} startedAt={run.busy.startedAt} />
+      )}
+      <RunFailureBox id={`${idPrefix}-run-failure`} failure={run.failure} onRetry={run.onRetry} />
       {status}
+      {children}
     </Box>
   );
 }

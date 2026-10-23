@@ -70,12 +70,15 @@ function labelsOf(facetKey, keys) {
 
 // --- Solver -------------------------------------------------------------------------------
 
-/** The solver's type and complexity bucket. */
-export function solverTags(solver) {
-  return tagsFrom([
-    backendEnumLabel("solverType", solver.solverTypeName),
-    backendEnumLabel("solverComplexity", solver.complexityBucketName),
-  ]);
+/**
+ * #279 stage 2: the tags inside the Execute section's solver dropdowns: the complexity bucket
+ * only, as board F has it. Board F also tags each solver Exact or Heuristic; Redux doesn't say
+ * which yet (ReduxISU/Redux#877, lib/answers.js solverGuarantee), so that tag is left out rather
+ * than guessed. Its label belongs in data/taxonomy.js when it comes. The solver's type stays on
+ * its info card.
+ */
+export function solverRunTags(solver) {
+  return tagsFrom([backendEnumLabel("solverComplexity", solver.complexityBucketName)]);
 }
 
 /** @returns {Card} */

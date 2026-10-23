@@ -18,7 +18,7 @@
 // (booleanSatisfiability: clauses of literals) and it has reductions for Reduce mode.
 
 import { expect, test } from "./fixtures";
-import { expandPane, gotoProblemDetail, showPane } from "./helpers";
+import { chooseReduceTarget, expandPane, gotoProblemDetail, showPane } from "./helpers";
 
 const PROBLEM = "3SAT";
 const NOT_RUN = "Not run yet. Showing the default picture of the instance.";
@@ -203,7 +203,7 @@ test("typed text survives hiding its pane, and the layout survives a reload", as
   await expect(page.locator("#workbench-details-expand")).toHaveAttribute("aria-expanded", "false");
 });
 
-test("after Run, the answer shows in Execute under Run, and the layout stays as it was", async ({
+test("after Solve, the answer shows in Execute under Solve, and the layout stays as it was", async ({
   page,
 }) => {
   await answerCompute(page);
@@ -212,7 +212,7 @@ test("after Run, the answer shows in Execute under Run, and the layout stays as 
   const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
   const showing = page.locator("#workbench-showing");
   await expect(showing).toHaveText(NOT_RUN);
-  await expect(page.locator("#workbench-result-empty")).toBeVisible();
+  await expect(page.locator("#workbench-result-answer")).toHaveCount(0);
 
   await page.locator("#workbench-run").click();
 
@@ -220,8 +220,8 @@ test("after Run, the answer shows in Execute under Run, and the layout stays as 
   await expect(page.locator(REGIONS.execute).locator("#workbench-result-answer")).toHaveText(
     ANSWER,
   );
-  await expect(page.locator("#workbench-run")).toHaveText("Run solve again");
-  // Nothing opened, closed or got a dot: the result is right under Run.
+  await expect(page.locator("#workbench-run")).toHaveText("Solve");
+  // Nothing opened, closed or got a dot: the result is right under Solve.
   for (const key of LAYOUT_KEYS) {
     await expect(toggle(page, key)).toHaveAttribute("aria-expanded", "true");
   }
@@ -261,7 +261,9 @@ test("editing the instance after a run resets the picture to the base instance",
 
   // The result in Execute says its answer is for the old instance.
   await showPane(page, "execute", { expect });
-  await expect(page.locator(REGIONS.execute)).toContainText("The instance changed since this run.");
+  await expect(page.locator(REGIONS.execute)).toContainText(
+    "The instance changed after the last solve.",
+  );
 });
 
 test("an instance Redux cannot read gets a red dot on Instance and an error under the field", async ({
@@ -301,39 +303,41 @@ test("an instance Redux cannot read gets a red dot on Instance and an error unde
     "Clause 2 has no literals.",
   );
 
-  // With the Instance pane hidden, it shows under Run instead.
+  // With the Instance pane hidden, it shows under Solve instead.
   await toggle(page, "instance").click();
   await expect(page.locator(REGIONS.execute).locator("#workbench-instance-error")).toContainText(
     "Clause 2 has no literals.",
   );
 });
 
-test("Reduce mode shows To and Using, and Run builds the target picture", async ({ page }) => {
+test("Reduce mode shows Target and Reduction, and Reduce builds the target picture", async ({
+  page,
+}) => {
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   await page.locator("#workbench-mode-reduce").click();
   await expect(page.locator("#workbench-mode-reduce")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#workbench-solver-button")).toHaveCount(0);
-  const target = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
+  const target = await chooseReduceTarget(page, /^Clique(?!\s*Cover)/, { expect });
   const reduction = ((await page.locator("#workbench-reduction-value").textContent()) ?? "").trim();
   expect(target).not.toBe("");
   expect(reduction).not.toBe("");
 
-  // The two closed dropdowns line up at one width.
+  // #279 stage 2: the two closed dropdowns sit on one row, Target first.
   const toBox = await page.locator("#workbench-target-button").boundingBox();
   const usingBox = await page.locator("#workbench-reduction-button").boundingBox();
-  expect(Math.abs(toBox.x - usingBox.x)).toBeLessThan(2);
-  expect(Math.abs(toBox.width - usingBox.width)).toBeLessThan(2);
+  expect(Math.abs(toBox.y - usingBox.y)).toBeLessThan(2);
+  expect(toBox.x).toBeLessThan(usingBox.x);
 
   await expect(page.locator("#workbench-target-picture")).toContainText(
-    `Press Run to build the ${target} instance from this one.`,
+    `Press Reduce to build the ${target} instance from this one.`,
   );
-  await expect(page.locator("#workbench-run")).toHaveText("Run reduction");
+  await expect(page.locator("#workbench-run")).toHaveText("Reduce");
 
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-showing")).toHaveText(
-    `${PROBLEM} → ${target} (${reduction})`,
+    `${PROBLEM} → ${target} (${reduction}), built`,
   );
   await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
     "data-picture-kind",
