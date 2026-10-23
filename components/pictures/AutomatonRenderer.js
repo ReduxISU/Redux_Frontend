@@ -22,12 +22,31 @@
 // focusing or tapping a state traces where it can go: its arrows out in the trace color, and
 // everything it can't reach in one move faded by color. The diagram opens fitted to its box and
 // zooms and pans with DiagramZoom.js.
+//
+// #250: the reader can move any state, Garbage included, bend any arrow and turn a loop around
+// its state (diagramEdits.js), freely. The arrows keep the bow or side the layout chose, plus
+// the reader's bend; the entry arrow and the fall into Garbage follow the states they join.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
 import { paletteVars } from "../theme";
-import { GARBAGE_HEIGHT, layoutAutomaton, STATE_RADIUS } from "./automatonLayout";
+import {
+  automatonArrows,
+  entryArrow,
+  GARBAGE_HEIGHT,
+  layoutAutomaton,
+  STATE_RADIUS,
+} from "./automatonLayout";
 import DiagramZoom from "./DiagramZoom";
+import {
+  angleTowards,
+  EdgeHandles,
+  editedPositions,
+  makeEditor,
+  nodeDragProps,
+  offsetAlongNormal,
+  useDiagramEdits,
+} from "./diagramEdits";
 import { outlineDistance } from "./graphLayout";
 import {
   edgeLook,
@@ -93,6 +112,91 @@ export function garbageFall(payload) {
     }
   }
   return null;
+}
+
+/**
+ * The arrow drawn from the state a DFA fell from into Garbage, from where the states and Garbage
+ * are now (#250: the reader may have moved them). A straight line when nothing is in the way;
+ * otherwise the line bends (a quadratic curve through a control point pushed sideways off the
+ * midpoint) until it clears every other state and arrow label, so neither hides the arrow or its
+ * symbol. Bends that would leave the drawing (`box`) are not used; with no clear bend, the line
+ * stays straight.
+ */
+function fallArrowFor(fallMove, states, arrows, garbage, box) {
+  if (!fallMove || !garbage) return null;
+  const from = states.find((state) => state.id === fallMove.from);
+  if (!from) return null;
+  const to = garbage;
+  const blockers = [
+    ...states
+      .filter((state) => state.id !== from.id)
+      .map((state) => ({
+        x: state.x,
+        y: state.y,
+        r: Math.max(state.width / 2, STATE_RADIUS) + 16,
+      })),
+    ...arrows.map((arrow) => ({
+      x: arrow.label.x,
+      y: arrow.label.y,
+      r: (arrow.text.length * 8 + 12) / 2 + 14,
+    })),
+  ];
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const nx = -dy / length;
+  const ny = dx / length;
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  const at = (control, t) => ({
+    x: (1 - t) ** 2 * from.x + 2 * (1 - t) * t * control.x + t ** 2 * to.x,
+    y: (1 - t) ** 2 * from.y + 2 * (1 - t) * t * control.y + t ** 2 * to.y,
+  });
+  const inside = (point) =>
+    point.x >= box.minX + 8 &&
+    point.x <= box.minX + box.width - 8 &&
+    point.y >= box.minY + 8 &&
+    point.y <= box.minY + box.height - 8;
+  const clears = (control) => {
+    for (let t = 0.1; t <= 0.9; t += 0.05) {
+      const point = at(control, t);
+      if (!inside(point)) return false;
+      if (blockers.some((b) => Math.hypot(point.x - b.x, point.y - b.y) < b.r)) return false;
+    }
+    return true;
+  };
+  let control = mid;
+  for (const bend of [0, 50, -50, 100, -100, 150, -150, 200, -200, 260, -260]) {
+    const candidate = { x: mid.x + nx * bend, y: mid.y + ny * bend };
+    if (clears(candidate)) {
+      control = candidate;
+      break;
+    }
+  }
+  // Leave `from` towards the control point and reach Garbage from it.
+  const unit = (x, y) => {
+    const l = Math.hypot(x, y) || 1;
+    return { x: x / l, y: y / l };
+  };
+  const out = unit(control.x - from.x, control.y - from.y);
+  const into = unit(to.x - control.x, to.y - control.y);
+  const startGap = outlineDistance(out.x, out.y, from.width, STATE_RADIUS) + CURRENT_GAP + 2;
+  const endGap = outlineDistance(-into.x, -into.y, to.width, GARBAGE_HEIGHT / 2) + 2;
+  const start = { x: from.x + out.x * startGap, y: from.y + out.y * startGap };
+  const tip = { x: to.x - into.x * endGap, y: to.y - into.y * endGap };
+  const size = 11;
+  const back = { x: tip.x - into.x * size, y: tip.y - into.y * size };
+  const side = { x: -into.y * size * 0.5, y: into.x * size * 0.5 };
+  const end = { x: tip.x - into.x * size * 0.6, y: tip.y - into.y * size * 0.6 };
+  const r = (value) => Math.round(value * 10) / 10;
+  const straight = control === mid;
+  return {
+    path: straight
+      ? `M${r(start.x)},${r(start.y)} L${r(end.x)},${r(end.y)}`
+      : `M${r(start.x)},${r(start.y)} Q${r(control.x)},${r(control.y)} ${r(end.x)},${r(end.y)}`,
+    arrow: `${r(tip.x)},${r(tip.y)} ${r(back.x + side.x)},${r(back.y + side.y)} ${r(back.x - side.x)},${r(back.y - side.y)}`,
+    label: straight ? { x: (start.x + tip.x) / 2, y: (start.y + tip.y) / 2 } : at(control, 0.5),
+    bent: !straight,
+  };
 }
 
 /** The "current state" ring: an outline CURRENT_GAP outside a body `width` wide, `radius` high. */
@@ -366,8 +470,17 @@ function PathPicker({ id, runs }) {
  * @param {Object} props.frame The frame to draw.
  * @param {number|null} props.frameIndex The step, or null before Run.
  * @param {Object|null} [props.runs] An NFA's paths to follow instead (see the header).
+ * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
  */
-export default function AutomatonRenderer({ idPrefix, name, payload, frame, frameIndex, runs }) {
+export default function AutomatonRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  frameIndex,
+  runs,
+  layoutKey = null,
+}) {
   const layout = useMemo(() => layoutAutomaton(payload), [payload]);
   const labels = useMemo(
     () => new Map(layout.states.map((state) => [state.id, state.label])),
@@ -392,6 +505,37 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
   const traced = pointedAt !== null && labels.has(pointedAt) ? pointedAt : null;
   const near = traced ? new Set([traced, ...links.get(traced).out.map((arrow) => arrow.b)]) : null;
   const tracesGarbage = traced !== null && links.get(traced).missing.length > 0;
+
+  // The reader's moves: states and Garbage where they were dragged, the arrows reshaped to match.
+  const edits = useDiagramEdits([layoutKey ?? payload]);
+  const pos = editedPositions(layout.positions, edits.nodes);
+  const states = layout.states.map((state) => ({ ...state, ...pos.get(state.id) }));
+  const arrows = automatonArrows(layout.graph, pos, edits.bends, edits.loops);
+  const start = layout.start ? entryArrow(states.find((state) => state.start) ?? null) : null;
+  const garbageAt =
+    layout.garbage && edits.nodes[layout.garbage.id]
+      ? { ...layout.garbage, ...edits.nodes[layout.garbage.id] }
+      : layout.garbage;
+  const editor = makeEditor({
+    edits,
+    nodeAt: (id) =>
+      garbageAt && id === garbageAt.id ? { x: garbageAt.x, y: garbageAt.y } : (pos.get(id) ?? null),
+    moveNode: (id, point) => edits.setNode(id, point),
+    dragEdge: (id, point) => {
+      const index = layout.graph.transitions.findIndex((transition) => transition.id === id);
+      if (index < 0) return;
+      const transition = layout.graph.transitions[index];
+      const choice = layout.graph.choices[index];
+      const a = pos.get(transition.a);
+      const b = pos.get(transition.b);
+      if (choice.loop) {
+        edits.setLoop(id, angleTowards(a, point));
+      } else {
+        // The layout bows to the left of travel, the opposite of offsetAlongNormal's side.
+        edits.setBend(id, -offsetAlongNormal(a, b, point) - choice.offset);
+      }
+    },
+  });
 
   const kind = payload?.kind === "nfa" ? "nfa" : "dfa";
   const input = (Array.isArray(payload?.input) ? payload.input : []).map(String);
@@ -418,86 +562,7 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
   // step that falls and the Done step after it), so the reason stays on screen.
   const fallMove = useMemo(() => garbageFall(payload), [payload]);
   const fall = inGarbage && fallMove && labels.has(fallMove.from) ? fallMove : null;
-  const fallArrow = useMemo(() => {
-    if (!fallMove || !layout.garbage) return null;
-    const from = layout.states.find((state) => state.id === fallMove.from);
-    if (!from) return null;
-    const to = layout.garbage;
-    // A straight line when nothing is in the way; otherwise the line bends (a quadratic curve
-    // through a control point pushed sideways off the midpoint) until it clears every other
-    // state and arrow label, so neither hides the arrow or its symbol. Bends that would leave
-    // the drawing are not used; with no clear bend, the line stays straight.
-    const blockers = [
-      ...layout.states
-        .filter((state) => state.id !== from.id)
-        .map((state) => ({
-          x: state.x,
-          y: state.y,
-          r: Math.max(state.width / 2, STATE_RADIUS) + 16,
-        })),
-      ...layout.arrows.map((arrow) => ({
-        x: arrow.label.x,
-        y: arrow.label.y,
-        r: (arrow.text.length * 8 + 12) / 2 + 14,
-      })),
-    ];
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const length = Math.hypot(dx, dy) || 1;
-    const nx = -dy / length;
-    const ny = dx / length;
-    const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-    const at = (control, t) => ({
-      x: (1 - t) ** 2 * from.x + 2 * (1 - t) * t * control.x + t ** 2 * to.x,
-      y: (1 - t) ** 2 * from.y + 2 * (1 - t) * t * control.y + t ** 2 * to.y,
-    });
-    const inside = (point) =>
-      point.x >= layout.minX + 8 &&
-      point.x <= layout.minX + layout.width - 8 &&
-      point.y >= layout.minY + 8 &&
-      point.y <= layout.minY + layout.height - 8;
-    const clears = (control) => {
-      for (let t = 0.1; t <= 0.9; t += 0.05) {
-        const point = at(control, t);
-        if (!inside(point)) return false;
-        if (blockers.some((b) => Math.hypot(point.x - b.x, point.y - b.y) < b.r)) return false;
-      }
-      return true;
-    };
-    let control = mid;
-    for (const bend of [0, 50, -50, 100, -100, 150, -150, 200, -200, 260, -260]) {
-      const candidate = { x: mid.x + nx * bend, y: mid.y + ny * bend };
-      if (clears(candidate)) {
-        control = candidate;
-        break;
-      }
-    }
-    // Leave `from` towards the control point and reach Garbage from it.
-    const unit = (x, y) => {
-      const l = Math.hypot(x, y) || 1;
-      return { x: x / l, y: y / l };
-    };
-    const out = unit(control.x - from.x, control.y - from.y);
-    const into = unit(to.x - control.x, to.y - control.y);
-    const startGap = outlineDistance(out.x, out.y, from.width, STATE_RADIUS) + CURRENT_GAP + 2;
-    const endGap = outlineDistance(-into.x, -into.y, to.width, GARBAGE_HEIGHT / 2) + 2;
-    const start = { x: from.x + out.x * startGap, y: from.y + out.y * startGap };
-    const tip = { x: to.x - into.x * endGap, y: to.y - into.y * endGap };
-    const size = 11;
-    const back = { x: tip.x - into.x * size, y: tip.y - into.y * size };
-    const side = { x: -into.y * size * 0.5, y: into.x * size * 0.5 };
-    const end = { x: tip.x - into.x * size * 0.6, y: tip.y - into.y * size * 0.6 };
-    const r = (value) => Math.round(value * 10) / 10;
-    const straight = control === mid;
-    return {
-      path: straight
-        ? `M${r(start.x)},${r(start.y)} L${r(end.x)},${r(end.y)}`
-        : `M${r(start.x)},${r(start.y)} Q${r(control.x)},${r(control.y)} ${r(end.x)},${r(end.y)}`,
-      arrow: `${r(tip.x)},${r(tip.y)} ${r(back.x + side.x)},${r(back.y + side.y)} ${r(back.x - side.x)},${r(back.y - side.y)}`,
-      label: straight ? { x: (start.x + tip.x) / 2, y: (start.y + tip.y) / 2 } : at(control, 0.5),
-      bent: !straight,
-    };
-  }, [fallMove, layout]);
+  const fallArrow = fallArrowFor(fallMove, states, arrows, garbageAt, layout);
   // The symbol the run got stuck on: the one it fell into Garbage on, or, on a failed Done step,
   // the one no active state had a move for.
   let stuck = null;
@@ -521,10 +586,11 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
         label={label}
         drawing={layout}
         resetOn={[payload]}
+        editor={editor}
         toolbar={runs && runs.options.length > 0 ? <PathPicker id={idPrefix} runs={runs} /> : null}
       >
         <g data-layer="edges">
-          {layout.arrows.map((arrow) => {
+          {arrows.map((arrow) => {
             const state = stateOf(frame?.edges, arrow.id);
             const out = traced !== null && arrow.a === traced;
             const faint = traced !== null && !out;
@@ -557,11 +623,13 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
             );
           })}
         </g>
+        <EdgeHandles edges={arrows.map((arrow) => ({ id: arrow.id, d: arrow.path }))} />
         <g data-layer="labels">
-          {layout.arrows.map((arrow) => (
+          {arrows.map((arrow) => (
             <StatePill
               key={arrow.id}
               forId={arrow.id}
+              dragId={arrow.id}
               testId="arrow-label"
               x={arrow.label.x}
               y={arrow.label.y}
@@ -572,15 +640,10 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
             />
           ))}
         </g>
-        {layout.start && (
+        {start && (
           <g data-start-arrow="" pointerEvents="none">
-            <path
-              d={layout.start.path}
-              fill="none"
-              stroke={paletteVars.text.primary}
-              strokeWidth={1.8}
-            />
-            <polygon points={layout.start.arrow} fill={paletteVars.text.primary} />
+            <path d={start.path} fill="none" stroke={paletteVars.text.primary} strokeWidth={1.8} />
+            <polygon points={start.arrow} fill={paletteVars.text.primary} />
           </g>
         )}
         {fall && fallArrow && (
@@ -609,7 +672,7 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
           </g>
         )}
         <g data-layer="nodes">
-          {layout.states.map((node) => {
+          {states.map((node) => {
             const state = stateOf(frame?.nodes, node.id);
             const look = nodeLook(state);
             const faint = near !== null && !near.has(node.id);
@@ -644,6 +707,7 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
               <g
                 key={node.id}
                 data-node-id={node.id}
+                {...nodeDragProps(node.id)}
                 data-state={state}
                 data-start={node.start ? "true" : undefined}
                 data-accepting={node.accepting ? "true" : undefined}
@@ -712,9 +776,9 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
               </g>
             );
           })}
-          {layout.garbage &&
+          {garbageAt &&
             (() => {
-              const garbage = layout.garbage;
+              const garbage = garbageAt;
               const red = pictureStateStyle("Rejected");
               const stated = garbageState !== "Background";
               const isActive = running && active.has(garbage.id);
@@ -731,7 +795,8 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
                 (move) => `${labels.get(move.state) ?? move.state} on ${move.symbol}`,
               );
               const parts = [
-                `${garbage.label} state: a missing move leads here and the input is rejected`,
+                `${garbage.label} state`,
+                "a missing move leads here and the input is rejected",
               ];
               if (stated) parts.push(pictureStateStyle(garbageState).legend);
               if (isActive) parts.push("active: the machine is here");
@@ -740,12 +805,17 @@ export default function AutomatonRenderer({ idPrefix, name, payload, frame, fram
               return (
                 <g
                   data-node-id={garbage.id}
+                  {...nodeDragProps(garbage.id)}
                   data-garbage=""
                   data-state={garbageState}
                   data-active={isActive ? "true" : undefined}
                   data-look={lit ? "entered" : "idle"}
                   data-traced={traced ? (faint ? "faint" : "trace") : undefined}
-                  role="img"
+                  // #250: focusable like a state, so the arrow keys can move it too.
+                  data-focusable=""
+                  tabIndex={0}
+                  role="group"
+                  aria-roledescription="state"
                   aria-label={parts.join(", ")}
                   style={faint ? { filter: FAINT_FILTER } : undefined}
                 >

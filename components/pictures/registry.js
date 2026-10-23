@@ -22,6 +22,11 @@
 //      Draw with React-owned SVG inside DiagramZoom.js (DiagramSvg.js with fit, zoom and pan;
 //      or plain HTML when the picture is text, as the Table is), take every color from
 //      pictureStates.js's pictureStateStyle(), and give every focusable piece an aria-label.
+//      A node-link picture also gets `layoutKey` (the instance and visualization drawn) and
+//      lets the reader move its nodes and bend its edges (#250): keep the changes with
+//      diagramEdits.js's useDiagramEdits([layoutKey ?? payload]), draw every node and edge
+//      from the edited positions, mark them with nodeDragProps / edgeDragProps, and pass
+//      DiagramZoom an `editor` (makeEditor) with the type's own limits.
 //   2. Add it to PICTURE_RENDERERS below under the exact `type` Redux sends.
 //   3. If the picture draws annotations that are not states (group colors, order badges,
 //      missing edges), export a function (payload, frames) => [{key, text, swatch}] from the
@@ -44,6 +49,7 @@ import AutomatonRenderer, { automatonAnnotations, automatonRuns } from "./Automa
 import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
 import FlowNetworkRenderer, { flowAnnotations } from "./FlowNetworkRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
+import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
 
@@ -53,6 +59,7 @@ export const PICTURE_RENDERERS = {
   BipartiteGraph: BipartiteGraphRenderer,
   FlowNetwork: FlowNetworkRenderer,
   Graph: GraphRenderer,
+  GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
   Table: TableRenderer,
 };
@@ -63,6 +70,7 @@ const PICTURE_ANNOTATIONS = {
   BipartiteGraph: bipartiteAnnotations,
   FlowNetwork: flowAnnotations,
   Graph: graphAnnotations,
+  GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
 };
 

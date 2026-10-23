@@ -195,9 +195,10 @@ export function Badge({ x, y, text, testId }) {
 
 /**
  * A weight (or a parallel edge's list of weights) on a pill at (x, y). A chosen edge's tag
- * takes the edge's state color, so the answer's weights stand out.
+ * takes the edge's state color, so the answer's weights stand out. With `dragId` (#250) the tag
+ * is a handle for bending its edge.
  */
-export function WeightTag({ x, y, text, state, faint }) {
+export function WeightTag({ x, y, text, state, faint, dragId }) {
   const value = String(text);
   const width = value.length * 7.4 + 12;
   const style = pictureStateStyle(state);
@@ -205,7 +206,8 @@ export function WeightTag({ x, y, text, state, faint }) {
   return (
     <g
       data-weight={value}
-      pointerEvents="none"
+      data-drag-edge={dragId}
+      pointerEvents={dragId ? undefined : "none"}
       style={faint ? { filter: FAINT_FILTER } : undefined}
     >
       <rect
@@ -239,6 +241,7 @@ export function WeightTag({ x, y, text, state, faint }) {
  * A short text on a pill at (x, y): an Automaton arrow's symbols, a Flow Network edge's
  * flow / capacity. A stated piece's pill takes its state's fill and label color, a traced one the
  * trace color, and a faint one fades by color. `forId` names the piece it labels (`data-for`).
+ * With `dragId` (#250) the pill is a handle for bending its arrow or edge.
  */
 export function StatePill({
   forId,
@@ -251,6 +254,7 @@ export function StatePill({
   testId,
   charWidth = 8,
   size = 12.5,
+  dragId,
 }) {
   const value = String(text);
   const width = value.length * charWidth + 12;
@@ -268,7 +272,8 @@ export function StatePill({
     <g
       {...{ [`data-${testId}`]: value }}
       data-for={forId}
-      pointerEvents="none"
+      data-drag-edge={dragId}
+      pointerEvents={dragId ? undefined : "none"}
       style={faint ? { filter: FAINT_FILTER } : undefined}
     >
       <rect
@@ -301,10 +306,11 @@ export function StatePill({
 /**
  * The geometry of an edge from a to b: a straight line between the two outlines, or, when
  * `bend` is set (one of a directed pair a>b, b>a), a curve bowed to one side so the pair don't
- * overlap. Returns the SVG path, the point to put a weight tag on, and, for a directed edge,
+ * overlap. `extra` (#250) bows it further by hand: drawing units along the normal (-dy, dx),
+ * either side. Returns the SVG path, the point to put a weight tag on, and, for a directed edge,
  * the arrowhead's polygon at b.
  */
-export function edgeGeometry(a, b, widthA, widthB, { directed = false, bend = 0 } = {}) {
+export function edgeGeometry(a, b, widthA, widthB, { directed = false, bend = 0, extra = 0 } = {}) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const length = Math.hypot(dx, dy) || 1;
@@ -313,7 +319,7 @@ export function edgeGeometry(a, b, widthA, widthB, { directed = false, bend = 0 
   // Normal, for the bow.
   const nx = -uy;
   const ny = ux;
-  const offset = bend * Math.min(36, length / 4);
+  const offset = autoBow(a, b, bend) + extra;
   const mid = { x: (a.x + b.x) / 2 + nx * offset, y: (a.y + b.y) / 2 + ny * offset };
   // A quadratic through `mid` at t = 0.5 has its control point at 2*mid - (a+b)/2. The curve
   // leaves a and reaches b along the lines to the control point, so the ends meet the outlines
@@ -357,6 +363,11 @@ export function edgeGeometry(a, b, widthA, widthB, { directed = false, bend = 0 
         : path.replace(/ [^ ]+$/, ` ${round(lineEnd.x)},${round(lineEnd.y)}`);
   }
   return { path, label, arrow };
+}
+
+/** The bow edgeGeometry gives one of a directed pair (`bend` 1) from a to b, before any by hand. */
+export function autoBow(a, b, bend) {
+  return bend * Math.min(36, (Math.hypot(b.x - a.x, b.y - a.y) || 1) / 4);
 }
 
 function round(value) {
