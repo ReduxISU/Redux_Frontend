@@ -56,7 +56,9 @@
 //   - Which format the picture comes in (#199): the run's picture and the default picture are
 //     asked for through lib/pictureRequest.js, so a picture type with a format=frames renderer
 //     (components/pictures/registry.js) is drawn by it, with the step controls walking its
-//     frames and each step's caption under it, and every other type keeps its old renderer.
+//     frames and each step's caption in Algorithm Steps (and under the picture in full screen,
+//     never on it: components/workbench/VisualizationPane.js), and every other type keeps its old
+//     renderer.
 //   - One run, every picture (#252): Solve asks ProblemProvider/visualizeRun for the solver's run
 //     and every picture of it (lib/pictureRequest.js), so switching the Visualization Type after
 //     Solve asks for nothing and stays on the same moment of the run (lib/runSteps.js). A picture
@@ -2185,7 +2187,16 @@ export default function Workbench({ problem }) {
       : null;
   // Algorithm Steps is closed until a run gives it steps, then opens by itself, unless the viewer
   // opened or closed it (kept until Reset layout).
-  const hasSteps = Boolean(steps) && (Boolean(reduceView) || steps.frameCount > 1);
+  // A one-step run with a caption opens it too: the caption is there now (#279), not on the
+  // picture.
+  const hasSteps =
+    Boolean(steps) &&
+    (Boolean(reduceView) ||
+      steps.frameCount > 1 ||
+      (sourceContent.kind === "picture" &&
+        sourceContent.showCaption &&
+        typeof sourceContent.frame?.caption === "string" &&
+        sourceContent.frame.caption !== ""));
   const stepsOpen = layout.stepsOpen ?? hasSteps;
   let stepsEmpty;
   if (mode === "solve") {

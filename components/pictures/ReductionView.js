@@ -50,6 +50,11 @@
 // then a row with the Visualization Type, the zoom buttons and Full screen, then the picture at
 // the frames' shared height, so the two pictures share their top and bottom lines.
 // The phase bar is the Algorithm Steps timeline, Build ── Solve ── Map back.
+//
+// #279: the step's caption (its phase and place in it, what happened, the gadgets it made, the
+// verdict) is ReductionStepCaption, which the Visualization pane draws with the step controls,
+// in Algorithm Steps and under the picture in full screen (components/workbench/
+// VisualizationPane.js). It used to sit under the two pictures, and full screen didn't show it.
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -272,7 +277,6 @@ function ReductionPane({
             frameIndex={frameIndex}
             frameCount={frames.length}
             frames={frames}
-            showCaption={false}
             highlightIds={highlightIds}
             gadgetColors={gadgetColors}
             boxSoFar
@@ -442,12 +446,44 @@ function StepGadgets({ id, frame, gadgets, describe, colors }) {
   );
 }
 
+/** How each side's pieces read in words, by id, for the gadget lists and the link line. */
+function usePieceNames(view) {
+  const { source, target } = view;
+  return useMemo(() => {
+    const sourceName = pieceNamer(source.payload);
+    const targetName = pieceNamer(target.payload);
+    // A "Rule says no" pair (#239) is not in the payload: it reads by its two ends.
+    const pairs = new Map();
+    for (const viewFrame of view.frames) {
+      for (const pair of Array.isArray(viewFrame.target?.skipped) ? viewFrame.target.skipped : []) {
+        if (typeof pair?.id === "string") pairs.set(pair.id, pair);
+      }
+    }
+    return {
+      source: (id) => gadgetIdName(id, sourceName, null),
+      target: (id) => {
+        const pair = pairs.get(id);
+        if (pair) return `unjoined pair ${targetName(pair.a)}–${targetName(pair.b)}`;
+        return gadgetIdName(id, targetName, null);
+      },
+    };
+  }, [view, source.payload, target.payload]);
+}
+
+/** Color mode's colors (#239): by piece on each side, and by gadget for the lists. */
+function useGadgetColors(gadgets, colorMode) {
+  return useMemo(
+    () => (colorMode === "color" ? gadgetColorMap(gadgets, GADGET_PALETTE) : null),
+    [colorMode, gadgets],
+  );
+}
+
 function capitalize(text) {
   return text ? `${text[0].toUpperCase()}${text.slice(1)}` : text;
 }
 
 /** The step's caption: its phase and place in it, what happened, and the verdict at the end. */
-function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors }) {
+function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors, live }) {
   const frame = frames[frameIndex];
   if (!frame) return null;
   const phase = REDUCTION_PHASES.find((entry) => entry.key === frame.phase);
@@ -458,7 +494,7 @@ function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors })
   return (
     <Box
       id={id}
-      aria-live="polite"
+      aria-live={live}
       data-phase={frame.phase}
       data-event={frame.event ?? ""}
       sx={{
@@ -511,6 +547,36 @@ function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors })
   );
 }
 
+/**
+ * The caption of a reduction run's step, drawn by the Visualization pane with the step controls
+ * (#279), on the same view, step and Highlight Gadgets choice as the pictures.
+ * @param {{id: string, view: Object, frameIndex: number, colorMode?: "plain"|"color",
+ *   live?: "polite"|"off"}} props `live` is "off" for the copy a full-screen picture covers.
+ */
+export function ReductionStepCaption({
+  id,
+  view,
+  frameIndex,
+  colorMode = "plain",
+  live = "polite",
+}) {
+  const names = usePieceNames(view);
+  const colors = useGadgetColors(view.gadgets, colorMode);
+  const describe = (gadget) => describeGadget(gadget, names, GADGET_EMPTY_SIDE).sentence;
+  const index = Math.min(Math.max(frameIndex, 0), view.frames.length - 1);
+  return (
+    <ReductionCaption
+      id={id}
+      frames={view.frames}
+      frameIndex={index}
+      gadgets={view.gadgets}
+      describe={describe}
+      colors={colors?.byGadget ?? null}
+      live={live}
+    />
+  );
+}
+
 function listNames(ids, nameOf, limit = 6) {
   const names = [...ids].map(nameOf);
   if (names.length <= limit) return names.join(", ");
@@ -554,31 +620,8 @@ export default function ReductionView({
     () => view.frames.map((frame) => paneFrame(frame, "target", target.type)),
     [view, target.type],
   );
-  const names = useMemo(() => {
-    const sourceName = pieceNamer(source.payload);
-    const targetName = pieceNamer(target.payload);
-    // A "Rule says no" pair (#239) is not in the payload: it reads by its two ends.
-    const pairs = new Map();
-    for (const viewFrame of view.frames) {
-      for (const pair of Array.isArray(viewFrame.target?.skipped) ? viewFrame.target.skipped : []) {
-        if (typeof pair?.id === "string") pairs.set(pair.id, pair);
-      }
-    }
-    return {
-      source: (id) => gadgetIdName(id, sourceName, null),
-      target: (id) => {
-        const pair = pairs.get(id);
-        if (pair) return `unjoined pair ${targetName(pair.a)}–${targetName(pair.b)}`;
-        return gadgetIdName(id, targetName, null);
-      },
-    };
-  }, [view, source.payload, target.payload]);
-  const describe = (gadget) => describeGadget(gadget, names, GADGET_EMPTY_SIDE).sentence;
-  // Color mode's colors (#239): by piece on each side, and by gadget for the lists.
-  const colors = useMemo(
-    () => (colorMode === "color" ? gadgetColorMap(gadgets, GADGET_PALETTE) : null),
-    [colorMode, gadgets],
-  );
+  const names = usePieceNames(view);
+  const colors = useGadgetColors(gadgets, colorMode);
   // A side whose picture draws none of its gadgets' pieces (a Search Tree) can't show links.
   const linkable = useMemo(
     () => ({ source: sideLinkable(view, "source"), target: sideLinkable(view, "target") }),
@@ -748,16 +791,6 @@ export default function ReductionView({
             {readout}
           </Box>
         </Box>
-      )}
-      {!loading && (
-        <ReductionCaption
-          id={`${idPrefix}-caption`}
-          frames={view.frames}
-          frameIndex={index}
-          gadgets={gadgets}
-          describe={describe}
-          colors={colors?.byGadget ?? null}
-        />
       )}
     </Box>
   );

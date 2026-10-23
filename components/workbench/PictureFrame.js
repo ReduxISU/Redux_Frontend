@@ -24,7 +24,9 @@
 // page, as before. A picture drawn by an older renderer has no zoom buttons.
 //
 // Full screen lays the frame over the whole window, with the step timeline (`timeline`, the
-// Algorithm Steps controls) at its bottom; "Exit full screen" or Escape puts it back. Nothing in a
+// Algorithm Steps controls and the step's caption) at its bottom, under the picture, never on
+// it (#279); "Exit full screen" or Escape puts it back. A frame tells FullScreenContext when it
+// is in full screen, so the Visualization pane can quiet the covered copy of the caption. Nothing in a
 // picture can be selected as text (user-select: none), so a drag pans rather than painting a
 // highlight.
 //
@@ -34,7 +36,7 @@
 // first (#279 stage 1).
 
 import Box from "@mui/material/Box";
-import { createContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { COMPACT_MEDIA, WORKSPACE_NARROW } from "./layout";
 
 /** A picture's height: about 62% of the window's, never under 360 px or over 680 px. */
@@ -59,6 +61,12 @@ const VIEW_COMPACT_SIDE_PADDING = VIEW_PADDING - SECTION_COMPACT_PADDING - 1;
  * (null until it mounts). Null outside a frame, where DiagramZoom keeps its own toolbar.
  */
 export const PictureToolsContext = createContext(null);
+
+/**
+ * Set by the Visualization pane: called with true while one of its frames is in full screen, and
+ * false when it leaves.
+ */
+export const FullScreenContext = createContext(null);
 
 /** The grid two frames sit on, side by side; stacked, source first, in a narrow pane. */
 export const pictureGridSx = {
@@ -120,8 +128,8 @@ function FullScreenIcon({ exit }) {
  * @param {boolean} [props.inGrid] One of two frames on pictureGridSx.
  * @param {boolean} [props.tools] False for a frame with no picture in it yet (the target before a
  *   build): no zoom slot and no Full screen.
- * @param {import("react").ReactNode} [props.timeline] The step controls shown at the bottom of
- *   the frame in full screen.
+ * @param {import("react").ReactNode} [props.timeline] The step controls and the step's caption,
+ *   shown at the bottom of the frame in full screen.
  * @param {"center"|"stretch"} [props.align] How the picture's content sits: a picture fills the
  *   frame (stretch); a message is centred.
  * @param {import("react").ReactNode} props.children The picture.
@@ -143,6 +151,13 @@ export default function PictureFrame({
   const [fullScreen, setFullScreen] = useState(false);
   const [slot, setSlot] = useState(null);
   const on = fullScreen && tools;
+  const reportFullScreen = useContext(FullScreenContext);
+
+  useEffect(() => {
+    if (!on || !reportFullScreen) return undefined;
+    reportFullScreen(true);
+    return () => reportFullScreen(false);
+  }, [on, reportFullScreen]);
 
   // Escape leaves full screen (unless something inside already used it, an open dropdown), and
   // the page behind does not scroll while the frame covers it.
