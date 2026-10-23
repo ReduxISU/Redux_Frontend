@@ -88,6 +88,19 @@
 //     target before a build, Algorithm Steps opening by itself once a run gives it steps (unless
 //     the viewer closed it, hooks/useWorkbenchLayout.js), and a solved source showing its answer
 //     in Reduce mode while no Reduction View is on screen.
+//   - A randomized solver's seed (#295, ReduxISU/Redux#932): its run (visualizeRun, a frames
+//     picture, or the Reduction View's solve phase) reports the seed it ran with, shown with the
+//     result as "Seed: 12345" with Run again with this seed, which asks for the same run again
+//     with `seed` set, so the steps come out the same. A plain Solve lets Redux pick a new seed
+//     each time. The seed and its button show only while the run is of this instance and the
+//     solver picked now (the result's own rule); a solver with no seed, or a backend older than
+//     #932, shows neither. Picking another picture of a Reduction View after a seeded solve asks
+//     with that seed, so the new picture draws the same run. Solve's answer is visualizeRun's own
+//     `answer` when it has one, so the answer line and Algorithm Steps are one run (and Solve
+//     makes one request, not two); ProblemProvider/solve answers only when visualizeRun can't.
+//     Solve via reduction still asks ProblemProvider/solve for the target's answer: the
+//     Reduction View carries no answer of its own, so for a randomized target solver that answer
+//     can be another draw than the view's solve phase.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -841,8 +854,9 @@ export default function Workbench({ problem }) {
         sourceVisualization: source,
         targetVisualization: target,
         // #279 stage 2: once the target is solved, the view shows that solver's run; before,
-        // only its Build phase.
+        // only its Build phase. #295: with the seed it ran with, so it is the same run.
         solver: solved?.solverClassName ?? null,
+        seed: solved?.view?.seed ?? null,
         signal,
       });
       return {
@@ -884,21 +898,36 @@ export default function Workbench({ problem }) {
     return runId;
   }
 
-  /** Solve: Solve mode's button and Reduce mode's Solve directly, the same run. */
-  function handleSolve() {
+  /**
+   * Solve: Solve mode's button and Reduce mode's Solve directly, the same run. `seed` (#295)
+   * repeats a randomized solver's run; anything else (a click event) lets Redux pick one.
+   */
+  function handleSolve(seed = null) {
     if (solveDisabled) return;
+    const runSeed = Number.isSafeInteger(seed) ? seed : null;
     const runInstance = instanceToRun();
     if (runInstance === null) return;
     const runId = beginRun("solve", runInstance);
     const solver = selectedSolver;
     const visualization = selectedViz;
+    const oneRun = Boolean(visualization) && drawsFromRun(visualization);
+    // #295: the answer comes from the same run as the steps. When visualizeRun answers, its
+    // `answer` is the result (one request, and the answer is the run Algorithm Steps walks);
+    // ProblemProvider/solve is asked only when there is no such answer: no visualization, a
+    // backend without visualizeRun, a list or frames picture (neither carries the answer), a
+    // failed visualizeRun, or a run that timed out.
+    let shareRun = () => {};
+    const sharedRun = oneRun
+      ? new Promise((resolve) => {
+          shareRun = resolve;
+        })
+      : Promise.resolve(null);
     solveRun.start(async (signal) => {
-      const output = await requestSolvedInstance(
-        REDUX_API_BASE_URL,
-        solver.className,
-        runInstance,
-        signal,
-      );
+      const run = await sharedRun;
+      const output =
+        typeof run?.answer === "string" && !run.timedOut
+          ? run.answer
+          : await requestSolvedInstance(REDUX_API_BASE_URL, solver.className, runInstance, signal);
       return {
         output,
         solverName: solver.name,
@@ -909,26 +938,42 @@ export default function Workbench({ problem }) {
       };
     });
     if (!visualization) return;
-    const oneRun = drawsFromRun(visualization);
     pictureRun.start(async (signal) => {
-      const ran = { solverName: solver.name, instance: runInstance, runId };
+      const ran = {
+        solverName: solver.name,
+        solverClassName: solver.className,
+        instance: runInstance,
+        runId,
+      };
       // #252: one run and every picture of it, when the backend has visualizeRun.
       if (oneRun) {
-        const run = await requestRunPictures({
-          instance: runInstance,
-          solver: solver.className,
-          signal,
-        });
-        if (run) return { run, ...ran };
+        let run = null;
+        try {
+          run = await requestRunPictures({
+            instance: runInstance,
+            solver: solver.className,
+            seed: runSeed,
+            signal,
+          });
+        } finally {
+          shareRun(run);
+        }
+        if (run) return { run, seed: run.seed, ...ran };
       }
       // #199: {format, frames} plus, for a format=frames picture, its type and payload.
       const picture = await requestPicture({
         visualization,
         instance: runInstance,
         solver: solver.className,
+        seed: runSeed,
         signal,
       });
-      return { ...picture, vizClassName: visualization.className, ...ran };
+      return {
+        ...picture,
+        seed: picture.seed ?? null,
+        vizClassName: visualization.className,
+        ...ran,
+      };
     });
   }
 
@@ -1043,8 +1088,12 @@ export default function Workbench({ problem }) {
   const chainDisabled =
     Boolean(chainHint) || isRunning || (!buildFresh && (instanceBlocked || !canReduce));
 
-  /** Solve via reduction: the whole chain, from where the build on screen leaves it. */
-  async function handleSolveViaReduction() {
+  /**
+   * Solve via reduction: the whole chain, from where the build on screen leaves it. `seed` (#295)
+   * repeats a randomized target solver's run on the build on screen; anything else (a click
+   * event) lets Redux pick one.
+   */
+  async function handleSolveViaReduction(seed = null) {
     if (chainDisabled) return;
     const solver = targetSolver;
     if (buildFresh) {
@@ -1058,6 +1107,7 @@ export default function Workbench({ problem }) {
               targetVisualization: switchedView.view.target.visualization ?? null,
             }
           : reduceResult.pictures,
+        Number.isSafeInteger(seed) ? seed : null,
       );
       return;
     }
@@ -1069,8 +1119,11 @@ export default function Workbench({ problem }) {
     solveTarget(build, solver, build.pictures);
   }
 
-  /** Solves the target instance `build` made with `solver` (the chain's second step). */
-  function solveTarget(build, solver, pictures) {
+  /**
+   * Solves the target instance `build` made with `solver` (the chain's second step), its view
+   * with `seed` when one is given (#295).
+   */
+  function solveTarget(build, solver, pictures, seed = null) {
     viewSwitch.reset();
     setSwitchedView(null);
     setSwitchNote(null);
@@ -1083,6 +1136,7 @@ export default function Workbench({ problem }) {
             instance: build.instance,
             ...pictures,
             solver: solver.className,
+            seed,
             signal,
           }).catch((error) => {
             if (error?.name === "AbortError") throw error;
@@ -1654,6 +1708,19 @@ export default function Workbench({ problem }) {
       : null;
 
   const solveFailure = runFailure(solveRun);
+  // #295: the seed the last Solve's run reported, with Run again with this seed, while that run
+  // is of this instance and the solver picked now.
+  const solveSeed =
+    !isRunning &&
+    pictureRunCurrent &&
+    Number.isSafeInteger(pictureResult.seed) &&
+    pictureResult.solverClassName === (selectedSolver?.className ?? null)
+      ? {
+          seed: pictureResult.seed,
+          onRerun: () => handleSolve(pictureResult.seed),
+          disabled: solveDisabled,
+        }
+      : null;
   // The solve's chip and its result line, shared by Solve mode's row and the source cell.
   const solveChip = runChip(solving ? { ...solveRun, isRunning: true } : solveRun, {
     current: solveCurrent,
@@ -1803,6 +1870,7 @@ export default function Workbench({ problem }) {
                 : `${solveResult.solverName} found no ${sourceName} answer`,
               answer: sourceAnswer,
               elapsedMs: solveRun.kept.elapsedMs,
+              seed: solveSeed,
             }
           : null,
       changed: directChanged,
@@ -1875,6 +1943,14 @@ export default function Workbench({ problem }) {
           : `${targetResult.solverName} found no ${targetLabel} answer`,
         answer: targetAnswer,
         elapsedMs: targetRun.kept.elapsedMs,
+        // #295: the seed the view's solve phase ran with, to run the same steps again.
+        seed: Number.isSafeInteger(targetResult.view?.seed)
+          ? {
+              seed: targetResult.view.seed,
+              onRerun: () => handleSolveViaReduction(targetResult.view.seed),
+              disabled: chainDisabled,
+            }
+          : null,
       };
     } else {
       solveStep.state = "waiting";
@@ -2467,6 +2543,7 @@ export default function Workbench({ problem }) {
                     found: answerFound(solveResult.output),
                     answer: sourceAnswer,
                     elapsedMs: solveRun.kept.elapsedMs,
+                    seed: solveSeed,
                   }
                 : null
             }
