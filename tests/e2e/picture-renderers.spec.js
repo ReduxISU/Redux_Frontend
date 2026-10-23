@@ -1203,7 +1203,8 @@ const BIPARTITE_CASES = [
     capture: EXACT_COVER_BIPARTITE_FRAMES,
   },
   {
-    problem: "Hitting Set",
+    // ReduxISU/Redux#742 renamed Hitting Set to Karp's Exact Hitting Set.
+    problem: "Exact Hitting Set",
     viz: "HittingSetDefaultVisualization",
     capture: HITTING_SET_BIPARTITE_FRAMES,
   },
