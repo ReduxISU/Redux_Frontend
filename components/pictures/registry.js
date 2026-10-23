@@ -30,11 +30,17 @@
 //   4. Only if the type keeps instance data in its frames rather than its payload (the Table's
 //      cell text): add a function (payload, frames) => frame to PICTURE_PLAIN_FRAMES below that
 //      keeps that data and drops every state and step annotation.
-//   5. Capture a payload from the live API into tests/e2e/picture-payloads.js and cover it in
+//   5. Only if the payload carries other runs a reader can step instead of the solver's (an
+//      NFA's paths, #204): add a function (payload) => [{id, label, accepted?, frames}] to
+//      PICTURE_RUNS below. During a run the renderer then gets `runs` ({options, value,
+//      onChange}; value null is the solver's own frames) to draw a picker with, and the step
+//      controls, the caption and the Legend follow the chosen run's frames.
+//   6. Capture a payload from the live API into tests/e2e/picture-payloads.js and cover it in
 //      tests/e2e/picture-renderers.spec.js.
 // Nothing else changes: the request, the fallback, the step controls, the caption line and the
 // Legend all key off this table.
 
+import AutomatonRenderer, { automatonAnnotations, automatonRuns } from "./AutomatonRenderer";
 import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
@@ -42,6 +48,7 @@ import TableRenderer, { tablePlainFrame } from "./TableRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
 export const PICTURE_RENDERERS = {
+  Automaton: AutomatonRenderer,
   BipartiteGraph: BipartiteGraphRenderer,
   Graph: GraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
@@ -50,6 +57,7 @@ export const PICTURE_RENDERERS = {
 
 /** Picture type -> the Legend entries for its annotations (see step 3 above). */
 const PICTURE_ANNOTATIONS = {
+  Automaton: automatonAnnotations,
   BipartiteGraph: bipartiteAnnotations,
   Graph: graphAnnotations,
   LayeredGraph: layeredAnnotations,
@@ -58,6 +66,11 @@ const PICTURE_ANNOTATIONS = {
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
 const PICTURE_PLAIN_FRAMES = {
   Table: tablePlainFrame,
+};
+
+/** Picture type -> the other runs its payload offers (see step 5 above). */
+const PICTURE_RUNS = {
+  Automaton: automatonRuns,
 };
 
 /**
@@ -87,4 +100,15 @@ export function pictureAnnotations(type, payload, frames) {
 /** True when this site draws `type` from a format=frames response. */
 export function hasPictureRenderer(type) {
   return typeof type === "string" && Object.hasOwn(PICTURE_RENDERERS, type);
+}
+
+/**
+ * The other runs a picture's payload offers to step instead of the solver's (an NFA's paths).
+ * @param {string} type The response's picture type.
+ * @param {Object|null} payload The response's static part.
+ * @returns {Array<{id: string, label: string, accepted?: boolean, frames: Object[]}>}
+ */
+export function pictureRuns(type, payload) {
+  const runs = Object.hasOwn(PICTURE_RUNS, type) ? PICTURE_RUNS[type] : null;
+  return runs ? runs(payload) : [];
 }
