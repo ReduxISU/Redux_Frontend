@@ -37,12 +37,14 @@
 
 import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
+import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
 export const PICTURE_RENDERERS = {
   BipartiteGraph: BipartiteGraphRenderer,
   Graph: GraphRenderer,
+  LayeredGraph: LayeredGraphRenderer,
   Table: TableRenderer,
 };
 
@@ -50,6 +52,7 @@ export const PICTURE_RENDERERS = {
 const PICTURE_ANNOTATIONS = {
   BipartiteGraph: bipartiteAnnotations,
   Graph: graphAnnotations,
+  LayeredGraph: layeredAnnotations,
 };
 
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
