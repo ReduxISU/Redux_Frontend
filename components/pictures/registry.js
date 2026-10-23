@@ -35,17 +35,20 @@
 // Nothing else changes: the request, the fallback, the step controls, the caption line and the
 // Legend all key off this table.
 
+import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
 export const PICTURE_RENDERERS = {
+  BipartiteGraph: BipartiteGraphRenderer,
   Graph: GraphRenderer,
   Table: TableRenderer,
 };
 
 /** Picture type -> the Legend entries for its annotations (see step 3 above). */
 const PICTURE_ANNOTATIONS = {
+  BipartiteGraph: bipartiteAnnotations,
   Graph: graphAnnotations,
 };
 
