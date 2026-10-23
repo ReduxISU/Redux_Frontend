@@ -3318,7 +3318,9 @@ test("Drag: an Automaton state moves with its arrows, Garbage moves too, and the
   await expect(automatonState(page, "q:2")).toHaveAttribute("aria-pressed", "true");
   await automatonState(page, "q:2").click();
 
-  // Another visualization (drawn from the same capture here) starts from the layout again.
+  // Another visualization (drawn from the same capture here) starts from the layout again, and
+  // switching back finds this one's moves as they were left (#252); Reset layout clears them.
+  const edited = await centresOf(page, scope);
   const listbox = page.locator("#workbench-source-type-listbox");
   await page.locator("#workbench-source-type-button").click();
   await listbox.locator('[role="option"][aria-selected="false"]').first().click();
@@ -3326,6 +3328,9 @@ test("Drag: an Automaton state moves with its arrows, Garbage moves too, and the
   await expect.poll(() => centresOf(page, scope)).toEqual(before);
   await page.locator("#workbench-source-type-button").click();
   await listbox.locator('[role="option"][aria-selected="false"]').first().click();
+  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeEnabled();
+  await expect.poll(() => centresOf(page, scope)).toEqual(edited);
+  await page.locator(`${AUTOMATON}-layout-reset`).click();
   await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeDisabled();
   await mouseDrag(page, automatonState(page, "garbage"), -120, 0);
   const garbageMoved = await drawnCentre(automatonState(page, "garbage"));

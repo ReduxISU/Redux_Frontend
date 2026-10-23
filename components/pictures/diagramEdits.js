@@ -19,14 +19,28 @@
 // when `resetOn` changes (the renderer passes the instance and visualization, and the Graph its
 // Force / Circle choice) or on Reset layout (DiagramZoom.js's button).
 //
+// #252: they belong to the instance and visualization (the renderer's `layoutKey`, resetOn's
+// first entry), not to the renderer on screen. Switching the Visualization Type unmounts the
+// renderer, or hands it another key, so each key's changes are kept here for the page's life
+// and come back when the same picture (with the same resetOn) is drawn again.
+//
 // The gestures themselves (drag, long-press on touch, arrow keys) are DiagramZoom.js's: a piece
 // is draggable when it carries `data-drag-node` or `data-drag-edge` (see dragProps below), and
 // the renderer hands DiagramZoom an `editor` (makeEditor) that says where a node is and applies
 // its picture type's limits.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const EMPTY = { nodes: {}, bends: {}, loops: {} };
+
+// layoutKey -> {resetOn, edits}: each picture's changes, while it is not on screen (#252).
+const keptEdits = new Map();
+
+/** The changes kept for `resetOn`, or none (a picture with no layoutKey keeps nothing). */
+function keptFor(resetOn) {
+  const kept = typeof resetOn[0] === "string" ? keptEdits.get(resetOn[0]) : undefined;
+  return kept && sameKeys(kept.resetOn, resetOn) ? kept.edits : EMPTY;
+}
 
 function sameKeys(a, b) {
   return a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
@@ -39,17 +53,24 @@ function sameKeys(a, b) {
  *   setNode: Function, setBend: Function, setLoop: Function, reset: Function}}
  */
 export function useDiagramEdits(resetOn) {
-  const [edits, setEdits] = useState(EMPTY);
+  const [edits, setEdits] = useState(() => keptFor(resetOn));
   const [editsFor, setEditsFor] = useState(resetOn);
-  // React's "adjust state when a prop changes" pattern: a new instance or layout starts afresh.
+  // React's "adjust state when a prop changes" pattern: a new instance or layout starts afresh,
+  // or where it was left if it was drawn before.
   if (!sameKeys(editsFor, resetOn)) {
     setEditsFor(resetOn);
-    setEdits(EMPTY);
+    setEdits(keptFor(resetOn));
   }
   const edited =
     Object.keys(edits.nodes).length > 0 ||
     Object.keys(edits.bends).length > 0 ||
     Object.keys(edits.loops).length > 0;
+  const key = typeof editsFor[0] === "string" ? editsFor[0] : null;
+  useEffect(() => {
+    if (key === null) return;
+    if (edited) keptEdits.set(key, { resetOn: editsFor, edits });
+    else keptEdits.delete(key);
+  }, [key, editsFor, edits, edited]);
   return {
     ...edits,
     edited,
