@@ -49,6 +49,7 @@
 
 import AutomatonRenderer, { automatonAnnotations, automatonRuns } from "./AutomatonRenderer";
 import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
+import BoardRenderer, { boardAnnotations } from "./BoardRenderer";
 import FlowNetworkRenderer, { flowAnnotations } from "./FlowNetworkRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
@@ -61,6 +62,7 @@ import TableRenderer, { tablePlainFrame } from "./TableRenderer";
 export const PICTURE_RENDERERS = {
   Automaton: AutomatonRenderer,
   BipartiteGraph: BipartiteGraphRenderer,
+  Board: BoardRenderer,
   FlowNetwork: FlowNetworkRenderer,
   Graph: GraphRenderer,
   GroupedGraph: GroupedGraphRenderer,
@@ -74,6 +76,7 @@ export const PICTURE_RENDERERS = {
 const PICTURE_ANNOTATIONS = {
   Automaton: automatonAnnotations,
   BipartiteGraph: bipartiteAnnotations,
+  Board: boardAnnotations,
   FlowNetwork: flowAnnotations,
   Graph: graphAnnotations,
   GroupedGraph: groupedGraphAnnotations,
