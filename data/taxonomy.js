@@ -548,6 +548,7 @@ export const PICTURE_TYPE_LABELS = {
   Board: "Board",
   CodeTree: "Code Tree",
   FlowNetwork: "Flow Network",
+  Formula: "Formula",
   Geometry: "Geometry",
   Graph: "Graph",
   GroupedGraph: "Grouped Graph",

@@ -31,6 +31,11 @@ export const PICTURE_TYPE_INFO = {
     draws: "A directed, weighted graph from a source to a sink.",
     bestFor: "Seeing which edges a cut or a flow uses",
   },
+  Formula: {
+    draws:
+      "The formula as it is written: a box per clause, its literals joined by OR, the boxes joined by AND.",
+    bestFor: "Reading a SAT formula the way a textbook writes it, literal by literal",
+  },
   Geometry: {
     draws: "Points with their coordinates.",
     bestFor: "Problems about points in the plane",
