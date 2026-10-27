@@ -108,6 +108,7 @@ const ALLOWED_ENDPOINTS = new Map([
   ["Navigation/ReductionCosts", ["GET", "HEAD"]],
   ["Navigation/SolverTypes", ["GET", "HEAD"]],
   ["Navigation/SolverComplexityBuckets", ["GET", "HEAD"]],
+  ["Navigation/ProblemVariants", ["GET", "HEAD"]],
   ["ProblemProvider/solve", ["POST"]],
   ["ProblemProvider/verify", ["POST"]],
   ["ProblemProvider/visualize", ["POST"]],
