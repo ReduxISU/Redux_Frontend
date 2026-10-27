@@ -49,7 +49,8 @@
 // and rejected (a generic decision-problem answer sentence).
 
 import { useEffect, useState } from "react";
-import { mergeSupplementalTags, mergeVisualStyle } from "../data/mergeSupplementalTags";
+import { mergeProblemInfoTags, mergeVisualStyle } from "../data/mergeSupplementalTags";
+import { tagList } from "../data/tagList";
 import {
   REDUCTION_COST_MAP,
   REDUCTION_TYPE_MAP,
@@ -79,26 +80,42 @@ function slugify(name) {
 // human-readable solverName ("Clique Brute Force Solver") the UI shows.
 //
 // #229: the raw backend fields the workbench's Solver dropdown tags and info card read are
-// carried too: `description` (solverDefinition), `solverTypeName` and `complexityBucketName`
+// carried too: `description` (solverDefinition), `solverTypeNames` and `complexityBucketName`
 // (the backend's own enum members, labelled through data/taxonomy.js's backendEnumLabel),
 // and `timeComplexity` / `spaceComplexity` (see normalizeComplexity). No solver declares
 // `spaceComplexity` yet, so it is null today.
+//
+// #299: a solver can carry several solver types (`solverTypes`, ReduxISU/Redux#946), so
+// `types` (option keys) and `solverTypeNames` (raw members) are lists, read through
+// data/tagList.js.
 function buildSolvers(solverClassNames, info) {
   return (solverClassNames ?? []).map((className) => {
     const solverInfo = info[className] ?? {};
+    const solverTypeNames = tagList(solverInfo, "solverTypes", "solverType");
     return {
       className,
       name: solverInfo.solverName ?? className,
-      type: SOLVER_TYPE_MAP[solverInfo.solverType],
+      types: mappedKeys(solverTypeNames, SOLVER_TYPE_MAP),
       complexityBucket: SOLVER_COMPLEXITY_MAP[solverInfo.complexityBucket],
       bigO: solverInfo.complexity || undefined,
       description: solverInfo.solverDefinition || "",
-      solverTypeName: solverInfo.solverType ?? null,
+      solverTypeNames,
       complexityBucketName: solverInfo.complexityBucket ?? null,
       timeComplexity: normalizeComplexity(solverInfo.timeComplexity),
       spaceComplexity: normalizeComplexity(solverInfo.spaceComplexity),
     };
   });
+}
+
+/**
+ * #299: a raw backend tag list's option keys through one of data/taxonomy.js's translation
+ * maps, in the list's order, with unmapped members ("Unclassified") and repeats dropped.
+ * @param {string[]} names
+ * @param {Object} map e.g. SOLVER_TYPE_MAP.
+ * @returns {string[]}
+ */
+function mappedKeys(names, map) {
+  return Array.from(new Set(names.map((name) => map[name]).filter(Boolean)));
 }
 
 /**
@@ -136,6 +153,10 @@ function normalizeComplexity(value) {
 // answer when that endpoint exists; T40 found some deployments don't have it yet, so
 // this falls back to the same field read off `allInfo`, matching what Redux_GUI's own
 // hook already does for the same gap.
+//
+// #299: this is the one place the single `visualizationType` is still read rather than the
+// `visualizationTypes` list (ReduxISU/Redux#946). It picks the renderer, which needs exactly
+// one value, and the list's first entry is that same value, so nothing changes here.
 function buildVisualizations(visualizationClassNames, info, visualizationTypesByInstance) {
   return (visualizationClassNames ?? []).map((className) => {
     const visualizationInfo = info[className] ?? {};
@@ -220,6 +241,8 @@ function buildReductions(
   for (const [fromCode, toMap] of Object.entries(reductionGraph)) {
     for (const [toCode, edges] of Object.entries(toMap)) {
       for (const edge of edges) {
+        // #299: every reduction type the edge lists (data/tagList.js).
+        const reductionTypeNames = tagList(edge, "reductionTypes", "reductionType");
         if (fromCode === problemCode) {
           const [targetVisualization] = buildVisualizations(
             visualizationsByProblem[toCode],
@@ -229,7 +252,7 @@ function buildReductions(
           to.push({
             target: codeToName.get(toCode) ?? toCode,
             cost: REDUCTION_COST_MAP[edge.cost],
-            type: REDUCTION_TYPE_MAP[edge.reductionType],
+            types: mappedKeys(reductionTypeNames, REDUCTION_TYPE_MAP),
             className: edge.className,
             // The reduction's own declared display name (IReduction.reductionName, e.g.
             // "Karp Reduction: Vertex Cover to Set Cover") -- same `?? className`
@@ -240,11 +263,12 @@ function buildReductions(
             name: edge.reductionName ?? edge.className,
             targetVisualization: targetVisualization ?? null,
             // #229: what the Using and To dropdowns' tags and info cards read. The raw enum
-            // members (labelled through data/taxonomy.js's backendEnumLabel); `bigO` is the
-            // reduction's own declared cost ("O(n^2), n = 3 * |SAT3.clauses| ..."), which
-            // only /info carries; `description` is its reductionDefinition.
+            // members (labelled through data/taxonomy.js's backendEnumLabel; #299: every
+            // reduction type, as a list); `bigO` is the reduction's own declared cost
+            // ("O(n^2), n = 3 * |SAT3.clauses| ..."), which only /info carries;
+            // `description` is its reductionDefinition.
             costName: edge.cost ?? null,
-            reductionTypeName: edge.reductionType ?? null,
+            reductionTypeNames,
             complexityBucketName:
               edge.complexityBucket ?? info[edge.className]?.complexityBucket ?? null,
             bigO: info[edge.className]?.complexity || "",
@@ -259,7 +283,7 @@ function buildReductions(
           from.push({
             source: codeToName.get(fromCode) ?? fromCode,
             cost: REDUCTION_COST_MAP[edge.cost],
-            type: REDUCTION_TYPE_MAP[edge.reductionType],
+            types: mappedKeys(reductionTypeNames, REDUCTION_TYPE_MAP),
           });
         }
       }
@@ -272,18 +296,19 @@ function buildReductions(
 /**
  * #229: the facts the To dropdown's tags and info card show about a reduction's target
  * problem: its one-line definition and its complexity class and problem type, resolved the
- * same way as this problem's own title-row tags (mergeSupplementalTags), so the two can never
- * disagree.
+ * same way as this problem's own title-row tags (mergeProblemInfoTags), so the two can never
+ * disagree. #299: plus its Decision / Optimization variant, every tag in each list.
  */
 function buildTargetProblem(problemCode, info, codeToName) {
   const problemInfo = info[problemCode] ?? {};
   const name = codeToName.get(problemCode) ?? problemCode;
-  const tags = mergeSupplementalTags(name, { complexityClass: problemInfo.complexityClass });
+  const tags = mergeProblemInfoTags(name, problemInfo);
   return {
     name,
     description: problemInfo.problemDefinition || "",
     complexityClass: tags.complexityClass,
     problemType: tags.problemType,
+    problemVariant: tags.problemVariant,
   };
 }
 
@@ -299,15 +324,13 @@ function buildProblem(problemCode, info, batches, codeToName) {
 
   const contributors = Array.isArray(problemInfo.contributors) ? problemInfo.contributors : [];
 
-  // Only the badge row (pages/[problem].js's H1 complexity/problem-type
-  // chips) reads `tags`, and only these two facets -- same real-value-then-
-  // overlay-then-Unclassified precedence useCatalogIndex.js uses for the
-  // whole catalog, called here with just this one problem's own
-  // complexityClass so the detail page's badges can never disagree with the
-  // card grid's for the same problem.
-  const tags = mergeSupplementalTags(problemInfo.problemName ?? problemCode, {
-    complexityClass: problemInfo.complexityClass,
-  });
+  // Only the badge row (pages/[problem].js's H1 complexity/problem-type/
+  // variant chips) reads `tags` -- same real-value-then-overlay-then-
+  // Unclassified precedence useCatalogIndex.js uses for the whole catalog
+  // (mergeProblemInfoTags, #299), called here with just this one problem's
+  // own info so the detail page's badges can never disagree with the card
+  // grid's for the same problem.
+  const tags = mergeProblemInfoTags(problemInfo.problemName ?? problemCode, problemInfo);
 
   return {
     name: problemInfo.problemName ?? problemCode,

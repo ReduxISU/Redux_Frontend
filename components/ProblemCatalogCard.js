@@ -109,7 +109,9 @@ const EMPTY_SET = new Set();
 // its own facetKey (theme.js's per-facet chip variants, #70) -- so a facet
 // outside this base list can reuse the exact same TagRow with no extra
 // mapping.
-const BASE_BADGE_FACET_KEYS = ["complexityClass", "problemType"];
+// #299: plus the Decision / Optimization variant, which also describes the problem itself.
+// A backend with no `problemVariants` gives no variant tags, and TagRow draws nothing.
+const BASE_BADGE_FACET_KEYS = ["complexityClass", "problemType", "problemVariant"];
 
 // T58 (#133): the two always-visible labeled rows, in display order. Label
 // and empty-state text are UI copy (a section caption and a "nothing here"
