@@ -4,6 +4,11 @@
 // narrows results, a filter narrows results and updates counts, filters
 // across two categories narrow rather than widen, and chips + "Clear all."
 //
+// Also checks the cards' "Visualizations:" row: it names each visualization's
+// picture type (data/taxonomy.js's derivePictureTypeOption), so a card with
+// the green complete check always has at least one there, and a type this
+// site has no label for still shows, as Unclassified.
+//
 // Every count used below is read off the live page (helpers.js), never
 // written as a literal -- the done-when is explicit that a test asserting a
 // specific catalog size breaks the day someone adds a problem.
@@ -114,4 +119,62 @@ test("chips appear for active filters, and Clear all empties everything", async 
   await expect(removeButton).toHaveCount(0);
   await expect(page.locator(`#${option.id}`)).not.toBeChecked();
   await expect(page.locator("#home-result-count")).toContainText(String(catalogSize));
+});
+
+test("every complete card names at least one visualization picture type", async ({ page }) => {
+  await gotoHomeAndWaitForLoad(page, { expect });
+
+  const completeCards = page.locator('a[id^="problem-card-"]');
+  await expect(completeCards.first()).toBeVisible();
+  const withoutPictureType = await completeCards.evaluateAll((cards) =>
+    cards
+      .filter((card) => !card.querySelector('[id*="-tag-visualizationType-"]'))
+      .map((card) => card.getAttribute("aria-label")),
+  );
+  expect(withoutPictureType).toEqual([]);
+});
+
+test("a visualization type the site has no label for still shows, as Unclassified", async ({
+  page,
+}) => {
+  // One handwritten stand-in visualization on every problem, with a picture type and a legacy
+  // type neither of data/taxonomy.js's maps knows. Every problem comes from allProblems, not
+  // allVisualizations' own keys: a backend can leave a problem with no visualization out of
+  // allVisualizations altogether (CSharpAPI does).
+  const HANDWRITTEN_VIZ = "E2eHandwrittenVisualization";
+  await page.route(/\/api\/redux\/Navigation\/Batch\/allVisualizations$/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const allProblemsUrl = route
+      .request()
+      .url()
+      .replace(/allVisualizations$/, "allProblems");
+    const problemCodes = await (await page.request.get(allProblemsUrl)).json();
+    for (const problemCode of problemCodes) {
+      body[problemCode] = [...(body[problemCode] ?? []), HANDWRITTEN_VIZ];
+    }
+    await route.fulfill({ response, json: body });
+  });
+  await page.route(/\/api\/redux\/Navigation\/Batch\/allInfo$/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body[HANDWRITTEN_VIZ] = {
+      visualizationName: "Handwritten (test stand-in)",
+      visualizationType: "E2eHandwrittenType",
+      pictureType: "E2eHandwrittenPicture",
+    };
+    await route.fulfill({ response, json: body });
+  });
+
+  await gotoHomeAndWaitForLoad(page, { expect });
+
+  const catalogSize = await readResultCount(page);
+  await expect(page.locator('[id$="-tag-visualizationType-unclassified"]')).toHaveCount(
+    catalogSize,
+  );
+  await expect(page.locator('[id^="problem-card-"]').getByText("No visualizations")).toHaveCount(0);
+  const unclassified = (await readFacetOptions(page)).find(
+    (option) => option.facetKey === "visualizationType" && option.optionKey === "unclassified",
+  );
+  expect(unclassified?.count).toBe(catalogSize);
 });
