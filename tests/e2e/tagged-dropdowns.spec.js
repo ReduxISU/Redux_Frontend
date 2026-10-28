@@ -204,7 +204,9 @@ test("the closed box shows the chosen option's tags, and every option shows its 
 
   await solverButton(page).click();
   const optionTags = await page.locator("#workbench-solver-option-0-tags > span").allTextContents();
-  expect(optionTags).toEqual(closed);
+  // The open list has room for more (TaggedSelect's listTags): it starts with the closed box's
+  // tags, in order, and may list more after them.
+  expect(optionTags.slice(0, closed.length)).toEqual(closed);
 
   // The name gives way before the tags: the tags keep their full width.
   const tagsFit = await page
