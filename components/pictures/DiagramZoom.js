@@ -50,10 +50,12 @@
 // to reach the scale the picture's text reads at (a wide search tree on a phone).
 
 import Box from "@mui/material/Box";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { COMPACT_MEDIA } from "../workbench/layout";
 import DiagramSvg from "./DiagramSvg";
 import { visuallyHiddenSx } from "./pictureSx";
+import { ZoomControlsSlot } from "./zoomControlsSlot";
 
 /** The furthest a diagram zooms in, as a multiple of fit. */
 export const MAX_ZOOM = 4;
@@ -336,6 +338,7 @@ export default function DiagramZoom({
   children,
 }) {
   const svgRef = useRef(null);
+  const slot = useContext(ZoomControlsSlot);
   // The picture area's size in CSS px, measured (null until it is).
   const areaRef = useRef(null);
   const [area, setArea] = useState(null);
@@ -686,84 +689,92 @@ export default function DiagramZoom({
   const h = box.height / view.k;
   const percent = Math.round(view.k * 100);
 
+  // #303: the Zoom group, on the workbench's header row when it gives a slot (zoomControlsSlot.js).
+  const zoomGroup = (
+    <Box
+      role="group"
+      aria-label="Zoom"
+      sx={{
+        display: "inline-flex",
+        border: "1px solid",
+        borderColor: "border.main",
+        borderRadius: "8px",
+        overflow: "hidden",
+      }}
+    >
+      <Box
+        component="button"
+        type="button"
+        id={`${idPrefix}-zoom-out`}
+        aria-label="Zoom out"
+        disabled={!zoomed}
+        onClick={() => zoomBy(1 / BUTTON_STEP)}
+        sx={zoomButtonSx}
+      >
+        −
+      </Box>
+      <Box
+        component="button"
+        type="button"
+        id={`${idPrefix}-zoom-in`}
+        aria-label="Zoom in"
+        disabled={view.k >= box.maxZoom - 0.001}
+        onClick={() => zoomBy(BUTTON_STEP)}
+        sx={zoomButtonSx}
+      >
+        +
+      </Box>
+      <Box
+        component="button"
+        type="button"
+        id={`${idPrefix}-zoom-reset`}
+        aria-label={`Fit the whole diagram (now ${percent}%)`}
+        disabled={!zoomed}
+        onClick={() => setStored(FIT)}
+        sx={zoomButtonSx}
+      >
+        Fit
+      </Box>
+      {editor && (
+        <Box
+          component="button"
+          type="button"
+          id={`${idPrefix}-layout-reset`}
+          aria-label="Reset layout: put every moved node and bent edge back"
+          disabled={!editor.edited}
+          onClick={() => {
+            editor.reset();
+            setAnnouncement("Layout reset.");
+          }}
+          sx={zoomButtonSx}
+        >
+          Reset layout
+        </Box>
+      )}
+    </Box>
+  );
+
   return (
     <Box
       id={`${idPrefix}-zoom`}
       data-zoom={view.k.toFixed(2)}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1.5 }}
     >
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 1,
-        }}
-      >
+      {slot && createPortal(zoomGroup, slot)}
+      {(!slot || toolbar) && (
         <Box
-          role="group"
-          aria-label="Zoom"
           sx={{
-            display: "inline-flex",
-            border: "1px solid",
-            borderColor: "border.main",
-            borderRadius: "8px",
-            overflow: "hidden",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
           }}
         >
-          <Box
-            component="button"
-            type="button"
-            id={`${idPrefix}-zoom-out`}
-            aria-label="Zoom out"
-            disabled={!zoomed}
-            onClick={() => zoomBy(1 / BUTTON_STEP)}
-            sx={zoomButtonSx}
-          >
-            −
-          </Box>
-          <Box
-            component="button"
-            type="button"
-            id={`${idPrefix}-zoom-in`}
-            aria-label="Zoom in"
-            disabled={view.k >= box.maxZoom - 0.001}
-            onClick={() => zoomBy(BUTTON_STEP)}
-            sx={zoomButtonSx}
-          >
-            +
-          </Box>
-          <Box
-            component="button"
-            type="button"
-            id={`${idPrefix}-zoom-reset`}
-            aria-label={`Fit the whole diagram (now ${percent}%)`}
-            disabled={!zoomed}
-            onClick={() => setStored(FIT)}
-            sx={zoomButtonSx}
-          >
-            Fit
-          </Box>
-          {editor && (
-            <Box
-              component="button"
-              type="button"
-              id={`${idPrefix}-layout-reset`}
-              aria-label="Reset layout: put every moved node and bent edge back"
-              disabled={!editor.edited}
-              onClick={() => {
-                editor.reset();
-                setAnnouncement("Layout reset.");
-              }}
-              sx={zoomButtonSx}
-            >
-              Reset layout
-            </Box>
-          )}
+          {!slot && zoomGroup}
+          {toolbar}
         </Box>
-        {toolbar}
-      </Box>
+      )}
       <Box
         ref={areaRef}
         id={`${idPrefix}-area`}
