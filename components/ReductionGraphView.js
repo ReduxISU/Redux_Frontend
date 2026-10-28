@@ -40,6 +40,7 @@
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
 import { useRouter } from "next/router";
 import { useId, useMemo, useState } from "react";
+import { tagList } from "../data/tagList";
 import {
   computeEdgePath,
   computeSelfLoopPath,
@@ -118,7 +119,8 @@ function wrapLabel(name) {
 function edgeTooltip(link) {
   const parts = [link.className];
   if (link.cost) parts.push(`${link.cost} cost`);
-  if (link.reductionType) parts.push(link.reductionType);
+  // #299: every reduction type the edge lists, in the backend's order.
+  parts.push(...link.reductionTypes);
   return `${link.source.id ?? link.source} → ${link.target.id ?? link.target}: ${parts.join(", ")}`;
 }
 
@@ -281,7 +283,7 @@ export default function ReductionGraphView({
             directed: true,
             className: edge.className,
             cost: edge.cost,
-            reductionType: edge.reductionType,
+            reductionTypes: tagList(edge, "reductionTypes", "reductionType"),
           });
         });
       }

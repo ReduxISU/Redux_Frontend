@@ -46,7 +46,7 @@ import ErrorBanner from "./ErrorBanner";
 import { isProblemComplete } from "./StatusIcon";
 
 // Same badge order pages/[problem].js's own H1 badge row uses.
-const BADGE_FACET_KEYS = ["complexityClass", "problemType"];
+const BADGE_FACET_KEYS = ["complexityClass", "problemType", "problemVariant"];
 
 function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-");

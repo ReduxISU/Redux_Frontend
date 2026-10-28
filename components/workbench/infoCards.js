@@ -62,6 +62,19 @@ function complexityFact(label, complexity, missingNote) {
   return { label, value: bigO(complexity.function), note, mono: true };
 }
 
+/**
+ * #299: the labels of every raw backend member in one tag list (a solver's `solverTypeNames`,
+ * a reduction's `reductionTypeNames`), in the backend's order, "Unclassified" dropped.
+ */
+function enumLabelsOf(facetKey, memberNames) {
+  return (memberNames ?? []).map((name) => backendEnumLabel(facetKey, name)).filter(Boolean);
+}
+
+/** A fact's value: every label, comma-separated, or NOT_DECLARED when there are none. */
+function listValue(labels) {
+  return labels.length > 0 ? labels.join(", ") : NOT_DECLARED;
+}
+
 function labelsOf(facetKey, keys) {
   return (keys ?? [])
     .filter((key) => key && key !== UNCLASSIFIED)
@@ -70,10 +83,18 @@ function labelsOf(facetKey, keys) {
 
 // --- Solver -------------------------------------------------------------------------------
 
-/** The solver's type and complexity bucket. */
+/**
+ * The solver's types (#299: every one it lists). The complexity bucket stays on the solver's
+ * info card, so the dropdown's tags say what kind of algorithm each solver is.
+ */
 export function solverTags(solver) {
+  return tagsFrom(enumLabelsOf("solverType", solver.solverTypeNames));
+}
+
+/** The open list has room for more: the solver's types, then its complexity bucket. */
+export function solverListTags(solver) {
   return tagsFrom([
-    backendEnumLabel("solverType", solver.solverTypeName),
+    ...enumLabelsOf("solverType", solver.solverTypeNames),
     backendEnumLabel("solverComplexity", solver.complexityBucketName),
   ]);
 }
@@ -95,10 +116,7 @@ export function solverCard(solver) {
         label: "Bucket",
         value: backendEnumLabel("solverComplexity", solver.complexityBucketName) ?? NOT_DECLARED,
       },
-      {
-        label: "Type",
-        value: backendEnumLabel("solverType", solver.solverTypeName) ?? NOT_DECLARED,
-      },
+      { label: "Type", value: listValue(enumLabelsOf("solverType", solver.solverTypeNames)) },
     ],
   };
 }
@@ -114,23 +132,26 @@ export function targetTags(targetProblem) {
 export function targetCard(name, targetProblem) {
   const classes = labelsOf("complexityClass", targetProblem?.complexityClass);
   const types = labelsOf("problemType", targetProblem?.problemType);
+  // #299: Decision / Optimization, from the target's `problemVariants`.
+  const variants = labelsOf("problemVariant", targetProblem?.problemVariant);
   return {
     title: name,
     kind: "Target problem",
     description: targetProblem?.description ?? "",
     facts: [
-      { label: "Class", value: classes.length > 0 ? classes.join(", ") : NOT_DECLARED },
-      { label: "Type", value: types.length > 0 ? types.join(", ") : NOT_DECLARED },
+      { label: "Class", value: listValue(classes) },
+      { label: "Type", value: listValue(types) },
+      { label: "Variant", value: listValue(variants) },
     ],
   };
 }
 
 // --- Reduction (the Using dropdown) -------------------------------------------------------
 
-/** The reduction's type and cost. */
+/** The reduction's types (#299: every one it lists) and cost. */
 export function reductionTags(reduction) {
   return tagsFrom([
-    backendEnumLabel("reductionType", reduction.reductionTypeName),
+    ...enumLabelsOf("reductionType", reduction.reductionTypeNames),
     backendEnumLabel("reductionCost", reduction.costName),
   ]);
 }
@@ -153,7 +174,7 @@ export function reductionCard(reduction, sourceName) {
       cost,
       {
         label: "Type",
-        value: backendEnumLabel("reductionType", reduction.reductionTypeName) ?? NOT_DECLARED,
+        value: listValue(enumLabelsOf("reductionType", reduction.reductionTypeNames)),
       },
       {
         label: "Bucket",

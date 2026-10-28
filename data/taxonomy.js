@@ -27,7 +27,8 @@ export const UNCLASSIFIED = "Unclassified";
 
 // The eight sidebar facets (#6, 2026-09-01: the mockup's ninth group, a
 // separate "Quantum Complexity Class" facet, was merged into Complexity
-// Class — see that facet's entry below). Every facet here is a Home sidebar
+// Class — see that facet's entry below; #299 later added Problem Variant,
+// the backend's Decision / Optimization split). Every facet here is a Home sidebar
 // filter; there are no detail-page-only facets in the ratified design
 // (ARCHITECTURE.md "The taxonomy gap").
 export const TAXONOMY = [
@@ -53,6 +54,28 @@ export const TAXONOMY = [
       { key: "automataAndLanguages", label: "Automata and Languages" },
       { key: "programOptimization", label: "Program Optimization" },
       { key: "miscellaneous", label: "Miscellaneous" },
+    ],
+  },
+  {
+    key: "problemVariant",
+    // #299: whether a problem asks a yes/no question (Decision) or for the
+    // best answer (Optimization), from each problem's `problemVariants`
+    // (ReduxISU/Redux#946). A problem can be both.
+    label: "Problem Variant",
+    // The one facet color no other facet uses.
+    accentColor: "magenta",
+    sidebar: true,
+    multiValued: true,
+    // The sidebar lists only what the backend's Navigation/ProblemVariants
+    // returns, never the `options` below: a backend from before #946 has
+    // neither the endpoint nor the field, and "Decision (0)" /
+    // "Optimization (0)" there would read as "no such problems" rather than
+    // "not known". The `options` are still the label lookup for the chips.
+    // See hooks/useCatalogFilters.js's facetOptionList.
+    backendOptionsOnly: true,
+    options: [
+      { key: "decision", label: "Decision" },
+      { key: "optimization", label: "Optimization" },
     ],
   },
   {
@@ -111,9 +134,11 @@ export const TAXONOMY = [
       { key: "exact", label: "Exact" },
       { key: "heuristic", label: "Heuristic" },
       { key: "approximation", label: "Approximation" },
-      // No backend source for these three — they legitimately show (0)
-      // until the backend adds matching SolverType values or per-solver
-      // overlay tagging exists. That's correct behavior, not a bug.
+      // Randomized has had a backend source since ReduxISU/Redux#946's
+      // `Stochastic` (SOLVER_TYPE_MAP below, #299). No backend source for
+      // the other two — they legitimately show (0) until the backend adds
+      // matching SolverType values or per-solver overlay tagging exists.
+      // That's correct behavior, not a bug.
       { key: "randomized", label: "Randomized" },
       { key: "numerical", label: "Numerical" },
       { key: "automatedReasoning", label: "Automated Reasoning" },
@@ -259,6 +284,11 @@ export const SOLVER_TYPE_MAP = {
   DepthFirstSearch: "exact",
   Backtracking: "exact",
   Constructive: "exact",
+  // #299: added to the backend enum with ReduxISU/Redux#946. A parameterized
+  // (fixed-parameter) algorithm still gives the exact answer; a stochastic
+  // one is the "Randomized" option's first real backend source.
+  Parameterized: "exact",
+  Stochastic: "randomized",
   // Not yet hand-tagged by the backend curator — no Solver Type tag.
   Unclassified: undefined,
 };
@@ -516,6 +546,23 @@ export function buildOptionsFromBackendNames(facetKey, backendMemberNames) {
   }
 
   return options;
+}
+
+/**
+ * #299: the option keys an item's raw backend tag list (data/tagList.js's
+ * tagList()) stands for, keyed exactly the way the sidebar keys the same
+ * facet's live options (buildOptionsFromBackendNames above), so a card's
+ * chip and the sidebar checkbox for the same tag can never disagree.
+ * "Unclassified" is dropped, and so is a repeat. Used for the problem-level
+ * lists (`problemTypes`, `problemVariants`); solver and reduction types still
+ * go through SOLVER_TYPE_MAP / REDUCTION_TYPE_MAP per entry.
+ *
+ * @param {string} facetKey One of TAXONOMY's facet keys.
+ * @param {string[]} memberNames Raw backend member names, e.g. ["Decision"].
+ * @returns {string[]} e.g. ["decision"].
+ */
+export function backendOptionKeys(facetKey, memberNames) {
+  return buildOptionsFromBackendNames(facetKey, memberNames).map((option) => option.key);
 }
 
 /**

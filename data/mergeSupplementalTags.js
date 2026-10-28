@@ -34,7 +34,8 @@
 // Same three-step precedence, same file, because both are the same seam.
 
 import { SUPPLEMENTAL_TAGS, SUPPLEMENTAL_VISUAL_STYLE } from "./supplementalTags";
-import { deriveComplexityClasses, UNCLASSIFIED } from "./taxonomy";
+import { tagList } from "./tagList";
+import { backendOptionKeys, deriveComplexityClasses, UNCLASSIFIED } from "./taxonomy";
 
 function firstNonEmptyArray(...arrays) {
   for (const array of arrays) {
@@ -64,7 +65,7 @@ function firstDefined(...values) {
  *
  * @param {string} problemName Exact real problem name (SUPPLEMENTAL_TAGS's key shape).
  * @param {Object} [realTags] Whatever the backend already provides for this problem.
- * @param {string[]} [realTags.problemType] Real Problem Type value(s), if the backend has the field.
+ * @param {string[]} [realTags.problemType] Real Problem Type option key(s), every tag the backend lists (mergeProblemInfoTags below reads them).
  * @param {string} [realTags.computationalModel] Real Computational Model value, if the backend has the field.
  * @param {string} [realTags.complexityClass] The single raw backend `ComplexityClass` enum value (`deriveComplexityClasses`'s `backendComplexityClass` argument) -- always real when present; there is no overlay for the classical half.
  * @returns {{problemType: string[], computationalModel: string, complexityClass: string[]}}
@@ -87,6 +88,35 @@ export function mergeSupplementalTags(problemName, realTags = {}) {
     derivedComplexityClass.length > 0 ? derivedComplexityClass : [UNCLASSIFIED];
 
   return { problemType, computationalModel, complexityClass };
+}
+
+/**
+ * #299: one problem's problem-level tags straight from its `info` entry
+ * (Navigation/Batch/allInfo or ProblemProvider/info): mergeSupplementalTags()
+ * above, fed every tag in the problem's `problemTypes` list (data/tagList.js;
+ * the old single `problemType` on a backend from before ReduxISU/Redux#946),
+ * plus `problemVariant`, the Decision / Optimization keys from
+ * `problemVariants`. A backend with no `problemVariants` gives `[]`, so the
+ * card shows no variant chip rather than a guessed one, and a problem whose
+ * types are all "Unclassified" still falls back to the overlay. The catalog
+ * (hooks/useCatalogIndex.js) and the problem page (hooks/useProblemDetail.js)
+ * both call this, so the two can never disagree.
+ *
+ * @param {string} problemName Exact real problem name (SUPPLEMENTAL_TAGS's key shape).
+ * @param {Object} [problemInfo] The problem's `info` entry.
+ * @returns {{problemType: string[], problemVariant: string[], computationalModel: string, complexityClass: string[]}}
+ */
+export function mergeProblemInfoTags(problemName, problemInfo = {}) {
+  return {
+    ...mergeSupplementalTags(problemName, {
+      problemType: backendOptionKeys(
+        "problemType",
+        tagList(problemInfo, "problemTypes", "problemType"),
+      ),
+      complexityClass: problemInfo.complexityClass,
+    }),
+    problemVariant: backendOptionKeys("problemVariant", tagList(problemInfo, "problemVariants")),
+  };
 }
 
 /**

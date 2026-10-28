@@ -449,11 +449,17 @@ export default function SolversSection({
                       >
                         {solver.name}
                       </Typography>
-                      <Chip
-                        size="small"
-                        variant="solverTypeOutlined"
-                        label={optionLabel("solverType", solver.type)}
-                      />
+                      {/* #299: one chip per solver type the solver lists. */}
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {(solver.types ?? []).map((typeKey) => (
+                          <Chip
+                            key={typeKey}
+                            size="small"
+                            variant="solverTypeOutlined"
+                            label={optionLabel("solverType", typeKey)}
+                          />
+                        ))}
+                      </Box>
                     </Box>
                   </Box>
                 );
