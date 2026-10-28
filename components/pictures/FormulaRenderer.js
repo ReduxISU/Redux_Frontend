@@ -41,9 +41,6 @@
 // ExpressionFormula below, laid out by formulaExpression.js; a flat CNF / DNF payload is drawn by
 // FlatFormula exactly as before. The strip shows each variable's value by its type: T / F, or
 // "= n" for a number (an `int` variable), headed VALUES when any variable holds a number.
-//
-// #279 stage 3: plain until answered. Before Run (the plain frame, `frameIndex` null) the variable
-// strip is left out: it holds values only a run gives. Its room stays, so nothing moves at step 1.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
@@ -403,7 +400,6 @@ function FlatFormula({
   name,
   payload,
   frame,
-  frameIndex = null,
   highlightIds,
   gadgetColors,
 }) {
@@ -663,21 +659,19 @@ function FlatFormula({
           })}
         </g>
         {/* The variable strip: its ASSIGNMENT head is part of it, so it moves with the chips. */}
-        {frameIndex !== null && (
-          <VariableStrip
-            idPrefix={idPrefix}
-            layout={layout}
-            frame={frame}
-            chipState={(variable) =>
-              hasChipStates
-                ? stateOf(frame.variables, variable.id)
-                : derivedChipState(frame, variable.id, layout.literals)
-            }
-            traceOf={traceOf}
-            traceProps={traceProps}
-            gadgetOf={gadgetOf}
-          />
-        )}
+        <VariableStrip
+          idPrefix={idPrefix}
+          layout={layout}
+          frame={frame}
+          chipState={(variable) =>
+            hasChipStates
+              ? stateOf(frame.variables, variable.id)
+              : derivedChipState(frame, variable.id, layout.literals)
+          }
+          traceOf={traceOf}
+          traceProps={traceProps}
+          gadgetOf={gadgetOf}
+        />
       </DiagramZoom>
     </Box>
   );
@@ -1052,23 +1046,21 @@ function ExpressionFormula({
             );
           })}
         </g>
-        {frameIndex !== null && (
-          <VariableStrip
-            idPrefix={idPrefix}
-            layout={layout}
-            frame={frame}
-            chipState={(variable) =>
-              hasChipStates
-                ? withFocus(stateOf(frame.variables, variable.id), variable.id)
-                : focus.has(variable.id)
-                  ? "ElementHighlight"
-                  : "Background"
-            }
-            traceOf={traceOf}
-            traceProps={traceProps}
-            gadgetOf={gadgetOf}
-          />
-        )}
+        <VariableStrip
+          idPrefix={idPrefix}
+          layout={layout}
+          frame={frame}
+          chipState={(variable) =>
+            hasChipStates
+              ? withFocus(stateOf(frame.variables, variable.id), variable.id)
+              : focus.has(variable.id)
+                ? "ElementHighlight"
+                : "Background"
+          }
+          traceOf={traceOf}
+          traceProps={traceProps}
+          gadgetOf={gadgetOf}
+        />
       </DiagramZoom>
     </Box>
   );

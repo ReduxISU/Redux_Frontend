@@ -8312,6 +8312,13 @@ async function openFormula(page, problem, capture) {
   await expect(page.locator(`${FORMULA}-formula`)).toBeVisible();
 }
 
+/** Presses Run and waits for the run's last step, so the strip holds the run's values. */
+async function runFormula(page, capture) {
+  await page.locator("#workbench-run").click();
+  const count = capture.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+}
+
 /** Frame `index`'s states, piece by piece: literals, clauses and chips (absent = Background). */
 async function expectFormulaStates(page, capture, index) {
   const frame = capture.frames[index];
@@ -8984,7 +8991,8 @@ test("Formula: 0-1 ILP's constraints are stacked rows, ≤ over sums and negatio
   await expect(legendBody(page)).toContainText(
     "Each box is a constraint, joined by ∧, one per line. Every constraint must hold.",
   );
-  await expect(root.locator('[data-strip="values"]')).toHaveCount(0);
+  // Before Run the strip is there, every value still unset (–).
+  await expect(root.locator("[data-strip]")).toHaveCount(1);
   expect(await strayFormulaTexts(page)).toEqual([]);
   expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
 });
