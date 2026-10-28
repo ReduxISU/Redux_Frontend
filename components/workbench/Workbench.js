@@ -1,11 +1,22 @@
 // components/workbench/Workbench.js
 //
 // #229 stage 1 (stage 2 added the tagged dropdowns and info cards, components/workbench/
-// TaggedSelect.js and infoCards.js): the problem page as a workbench with the picture at the center. A rail of
-// panel buttons on the left (Details, Instance, Result), one panel open at a time beside the
-// picture, the command bar above the picture and the picture pane under it. Replaces the old
-// page's five draggable sections (components/ProblemDetailLayout.js, retired here); the
-// drag-to-reorder and section layout are dropped on purpose by #229.
+// TaggedSelect.js and infoCards.js): the problem page as a workbench with the picture at the
+// center. Replaced the old page's five draggable sections (components/ProblemDetailLayout.js).
+//
+// #303 stage 1 (Board G): one centered column, one card, top to bottom:
+//   1. the instance editor, always visible (./panels/InstancePanel.js);
+//   2. the picture pane (./VisualizationPane.js): the Showing line, the Picture menu, zoom and
+//      Full screen on one header row, the picture, then the algorithm's steps;
+//   3. the task bar (./CommandBar.js): the Solve / Reduce / Verify tabs, the task's menus and
+//      its main button;
+//   4. the results, listed under the bar (./panels/ResultPanel.js).
+// #229's rail and its Details / Instance / Result panels are gone: the problem's details moved
+// to the (i) card after the title (pages/[problem].js), the instance to the editor, and the
+// result to the list. Full screen shows only the picture(s) and the steps (Escape or Exit full
+// screen leaves it). Verify is its own tab; Solve's "Check it in Verify" opens it and checks
+// the answer there. Stage 1 keeps Reduce's and Verify's #229 behavior inside this shell; stage
+// 2 of #303 builds Reduce's stepper and stage 4 Verify's own checks.
 //
 // What this component owns, and why here:
 //   - The one instance value. Every part of the page reads it, and editing it anywhere
@@ -64,7 +75,7 @@
 
 import Box from "@mui/material/Box";
 import { useRouter } from "next/router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { VISUALIZATION_TYPE_MAP } from "../../data/visualizationTypes";
 import { CHECK_SOURCE, CHECK_TARGET, useCertificateCheck } from "../../hooks/useCertificateCheck";
 import {
@@ -114,21 +125,19 @@ import {
   visualizationCard,
   visualizationTags,
 } from "./infoCards";
-import { COMPACT_MEDIA, cardSx, PANEL_WIDTH } from "./layout";
-import DetailsPanel from "./panels/DetailsPanel";
+import { COMPACT_MEDIA, PHONE_MEDIA, secondaryButtonSx } from "./layout";
 import InstancePanel from "./panels/InstancePanel";
 import ResultPanel from "./panels/ResultPanel";
-import Rail from "./Rail";
+import VerifyBox from "./panels/VerifyBox";
 import VisualizationPane from "./VisualizationPane";
 
 const ID = "workbench";
-const PANEL_ID = `${ID}-panel`;
-const PANEL_TITLES = { details: "Details", instance: "Instance", result: "Result & Verify" };
 const INSTANCE_URL_DEBOUNCE_MS = 400;
 const NOT_RUN_TEXT = "Not run yet. Showing the default picture of the instance.";
 const ARROW = "→";
 
-// #229 stage 3: drawing a certificate on the picture. Before any Run, Check is meant to draw
+// #229 stage 3: drawing a certificate on the picture. #303: until it is supported, "Show where
+// it fails" is not shown at all (it used to show disabled with this reason). Before any Run, Check is meant to draw
 // the certificate right away; after a Run, a well-formed but invalid one offers "Show where it
 // fails". No Redux endpoint draws a given certificate yet: ProblemProvider/visualize only draws
 // a solver's own answer, and ProblemProvider/verify answers a bare True or False with nothing
@@ -263,9 +272,14 @@ export default function Workbench({ problem }) {
   const reductions = problem.reductions?.to ?? [];
   const targets = [...new Set(reductions.map((reduction) => reduction.target))];
 
-  // --- Selections and panels ------------------------------------------------------------
-  const [panel, setPanel] = useState("details");
-  const [mode, setMode] = useState("solve");
+  // --- Selections ------------------------------------------------------------------------
+  // #303: the tab on now. Verify draws what Solve draws (the instance, or Solve's run), so
+  // everything below that tells Solve from Reduce reads `mode`, Verify counting as Solve.
+  const [task, setTask] = useState("solve");
+  const mode = task === "reduce" ? "reduce" : "solve";
+  // #303: the workspace shows only the picture(s) and the steps.
+  const [fullScreen, setFullScreen] = useState(false);
+  const exitRef = useRef(null);
   const [instance, setInstance] = useState(() =>
     typeof router.query.instance === "string"
       ? router.query.instance
@@ -277,7 +291,6 @@ export default function Workbench({ problem }) {
   const [vizIndex, setVizIndex] = useState(() => findIndexByName(visualizations, router.query.viz));
   const [targetName, setTargetName] = useState(targets[0] ?? null);
   const [reductionClassName, setReductionClassName] = useState(reductions[0]?.className ?? null);
-  const [resultNew, setResultNew] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [serializeError, setSerializeError] = useState(null);
   const [lastRun, setLastRun] = useState(null);
@@ -435,11 +448,6 @@ export default function Workbench({ problem }) {
     }
   }
 
-  // The Result dot only means "a run finished while you were not looking".
-  if (resultNew && panel === "result") {
-    setResultNew(false);
-  }
-
   // --- Default picture and on-picture edits ---------------------------------------------
   const defaultPicture = useDefaultPicture({
     visualization: selectedViz,
@@ -526,22 +534,27 @@ export default function Workbench({ problem }) {
     router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
   }, [instanceParam, solverParam, vizParam, router]);
 
+  // --- Full screen (#303) ----------------------------------------------------------------
+  // Going in moves focus to Exit full screen and stops the page scrolling under the overlay;
+  // coming out puts focus back on the Full screen button.
+  const wasFullRef = useRef(false);
+  useLayoutEffect(() => {
+    if (fullScreen) {
+      exitRef.current?.focus();
+    } else if (wasFullRef.current) {
+      document.getElementById(`${ID}-full-screen`)?.focus();
+    }
+    wasFullRef.current = fullScreen;
+    if (!fullScreen) return undefined;
+    const root = document.documentElement;
+    const previous = root.style.overflow;
+    root.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = previous;
+    };
+  }, [fullScreen]);
+
   // --- Handlers --------------------------------------------------------------------------
-  function togglePanel(key) {
-    setPanel((current) => (current === key ? null : key));
-  }
-
-  function closePanel() {
-    const closing = panel;
-    setPanel(null);
-    if (closing) document.getElementById(`${ID}-rail-${closing}`)?.focus();
-  }
-
-  function openInstancePanel() {
-    setPanel("instance");
-    requestAnimationFrame(() => document.getElementById(`${ID}-instance-full-instance`)?.focus());
-  }
-
   function selectTarget(name) {
     setTargetName(name);
     setReductionClassName(
@@ -606,7 +619,9 @@ export default function Workbench({ problem }) {
   const typedSeed = seedShown ? parseSeed(seedText) : null;
   const seedInvalid = Number.isNaN(typedSeed);
   // Everything that stops a Run but the Seed box's text (Run again with this seed brings its own).
+  // (Verify has no Run: its Check is the Verify box's own.)
   const runBlocked =
+    task === "verify" ||
     !hasInstance ||
     Boolean(instanceError) ||
     isRunning ||
@@ -808,15 +823,16 @@ export default function Workbench({ problem }) {
     const checkTargetAfter = mode === "reduce" && Boolean(selectedReduction?.targetVerifier);
     finished.then(() => {
       if (!succeeded || runIdRef.current !== runId) return;
-      setResultNew(true);
       if (checkTargetAfter) verify.setCheckOn(CHECK_TARGET);
     });
   }
 
-  // --- Verify This Answer and Map a solution across ----------------------------------------
+  // --- Check it in Verify and Map a solution across ---------------------------------------
+  // #303: Check it in Verify opens the Verify tab and checks the run's answer there.
   function handleVerifyAnswer() {
     if (!solveCurrent) return;
     verify.check(asCertificate(solveResult.output), CHECK_SOURCE);
+    setTask("verify");
   }
 
   const mapSolver = solvers[mapSolverIndex] ?? null;
@@ -905,8 +921,8 @@ export default function Workbench({ problem }) {
     // After a Run, only a well-formed but invalid certificate offers to show where it fails;
     // a valid one gets the verdict alone (the picture already shows a correct answer). A new
     // Check is a new verdict, so it starts with the overlay off.
-    if (pictureRan && checked.valid === false) {
-      const on = CERTIFICATE_DRAWING_SUPPORTED && overlayFor === checked.id;
+    if (CERTIFICATE_DRAWING_SUPPORTED && pictureRan && checked.valid === false) {
+      const on = overlayFor === checked.id;
       button = {
         id: `${ID}-verdict-overlay`,
         label: on
@@ -915,8 +931,6 @@ export default function Workbench({ problem }) {
             : "Back to the reduction"
           : "Show where it fails",
         pressed: on,
-        disabled: !CERTIFICATE_DRAWING_SUPPORTED,
-        reason: CERTIFICATE_DRAWING_SUPPORTED ? "" : CERTIFICATE_DRAWING_REASON,
         onClick: () => setOverlayFor(on ? null : checked.id),
       };
     }
@@ -926,17 +940,14 @@ export default function Workbench({ problem }) {
   // --- What the command bar and picture pane show ------------------------------------------
   const solveRan = Boolean(solveResult);
   const reduceRan = Boolean(reduceResult);
+  // #303: Board G's button names.
   const runLabel =
-    mode === "solve"
-      ? solveRan
-        ? "Run solve again"
-        : "Run solve"
-      : reduceRan
-        ? "Run reduction again"
-        : "Run reduction";
+    mode === "solve" ? (solveRan ? "Solve again" : "Solve") : reduceRan ? "Reduce again" : "Reduce";
 
   let modeNote = "";
-  if (mode === "solve") {
+  if (task === "verify") {
+    modeNote = "";
+  } else if (mode === "solve") {
     if (solvers.length === 0) modeNote = "No solvers are declared for this problem yet.";
     else if (!canSolve)
       modeNote = "This solver cannot be run: the catalog did not say which backend solver it is.";
@@ -948,9 +959,9 @@ export default function Workbench({ problem }) {
     modeNote =
       "A reduction carries a solver's answer across, and this problem has no solver to run.";
   } else if (reductionViewWorth(selectedReduction?.className)) {
-    modeNote = `Run builds the ${selectedReduction.target} instance step by step, solves it, and maps its answer back to this one.`;
+    modeNote = `Reduce builds the ${selectedReduction.target} instance step by step, solves it, and maps its answer back to this one.`;
   } else {
-    modeNote = `Run solves the instance with ${selectedSolver.name} first, then carries the answer across.`;
+    modeNote = `Reduce solves the instance with ${selectedSolver.name} first, then carries the answer across.`;
   }
 
   let showing;
@@ -1044,7 +1055,7 @@ export default function Workbench({ problem }) {
   } else if (!hasInstance) {
     sourceContent = {
       kind: "message",
-      text: "There is no instance to draw. Press Edit to write one.",
+      text: "There is no instance to draw. Write one in the Instance box above.",
     };
   } else if (defaultPicture.status === "done") {
     sourceContent = { kind: "message", text: "Redux returned no picture for this instance." };
@@ -1052,7 +1063,7 @@ export default function Workbench({ problem }) {
     sourceContent = {
       kind: "message",
       tone: "error",
-      text: "The instance has a problem, so it can't be drawn. Press Edit next to the instance to fix it.",
+      text: "The instance has a problem, so it can't be drawn. Fix it in the Instance box above.",
     };
   } else if (defaultPicture.status === "failed") {
     sourceContent = {
@@ -1104,12 +1115,12 @@ export default function Workbench({ problem }) {
       content = {
         kind: "message",
         tone: "error",
-        text: "The reduction did not run. The reason is shown under the command bar.",
+        text: "The reduction did not run. The reason is shown under the Reduce button.",
       };
     } else {
       content = {
         kind: "message",
-        text: `Press Run to build the ${targetLabel} instance from this one.`,
+        text: `Press Reduce to build the ${targetLabel} instance from this one.`,
       };
     }
     // #912: before a Run that draws a Reduction View, the target's picture can be picked
@@ -1240,7 +1251,7 @@ export default function Workbench({ problem }) {
       tone: "warning",
     };
   } else if (instanceError) {
-    // The error itself is shown under the command bar (or in the Instance panel).
+    // The error itself is shown under the instance editor.
     note = null;
   } else if (verdictLine && !pictureRan && checked.valid !== null && selectedViz) {
     // Before any Run the certificate would be drawn on the picture right away.
@@ -1389,21 +1400,9 @@ export default function Workbench({ problem }) {
     pictureRun.cancel();
   }
 
+  // (The instance's own error shows under the instance editor, always on screen.)
   const status = (
     <>
-      {instanceError && panel !== "instance" && (
-        <Box id={`${ID}-instance-error`} sx={{ fontSize: "0.8125rem", color: "error.light" }}>
-          <Box component="span" sx={{ fontWeight: 700 }}>
-            {instanceError.headline}.
-          </Box>{" "}
-          {instanceError.detail}
-          {instanceError.expected && (
-            <Box component="span" sx={{ display: "block", mt: 0.5 }}>
-              Expected: {instanceError.expected}
-            </Box>
-          )}
-        </Box>
-      )}
       {modeNote && (
         <Box id={`${ID}-mode-note`} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
           {modeNote}
@@ -1454,13 +1453,11 @@ export default function Workbench({ problem }) {
       targetLockReason = `Run the reduction first: checking against ${reduceTargetName} needs the target instance it builds.`;
   }
 
-  // --- Rail dots ---------------------------------------------------------------------------
-  // Only a Run sets the Result dot. A Check or a mapping happens with the panel open, so
-  // neither adds one.
-  const accentLine = mode === "solve" ? "brand.line" : "brand.goldLine";
-  const dots = {
-    instance: instanceError ? { label: "The instance has errors", color: "status.err" } : null,
-    result: resultNew && panel !== "result" ? { label: "New result", color: accentLine } : null,
+  const verifyProps = {
+    verify,
+    sourceName: problem.name,
+    targetName: reduceTargetName,
+    targetLockReason,
   };
 
   // #295: the seed the last Solve's run reported, with Run again with this seed, while that run
@@ -1552,307 +1549,241 @@ export default function Workbench({ problem }) {
     };
   }
 
+  const resultPanel = (
+    <ResultPanel
+      idPrefix={`${ID}-result`}
+      problem={problem}
+      mode={mode}
+      instance={instance}
+      solveResult={solveSummary}
+      reduceResult={reduceSummary}
+      onVerifyAnswer={handleVerifyAnswer}
+      showVerify={mode === "reduce"}
+      map={
+        mode === "reduce" && reduceSummary
+          ? {
+              select:
+                solvers.length > 0
+                  ? {
+                      value: String(mapSolverIndex),
+                      options: solvers.map((solver, index) => ({
+                        value: String(index),
+                        label: solver.name,
+                        tags: solverTags(solver),
+                        listTags: solverListTags(solver),
+                        card: solverCard(solver),
+                      })),
+                      onChange: (value) => setMapSolverIndex(Number(value)),
+                    }
+                  : null,
+              onMap: handleMap,
+              disabled: mapDisabled,
+              hint: mapHint,
+              request: mapRun,
+              announcement: mapAnnouncement,
+              mapped: mapCurrent ? mapResult : null,
+              onVerifyMapped: verify.targetLocked ? null : handleVerifyMapped,
+            }
+          : null
+      }
+      verifyProps={verifyProps}
+      gadgets={
+        reduceGadgets.length > 0
+          ? {
+              runId: reduceResult.runId,
+              gadgets: reduceGadgets,
+              sourceFrame: sourceContent.kind === "frame" ? sourceContent.frame : null,
+              targetFrame: reducedTargetFrame(reduceResult),
+              namers: gadgetNamers,
+              colors: gadgetRowColors,
+              activeIndex: activeGadget ? gadgetHighlight.index : null,
+              onHighlight: handleGadgetHighlight,
+            }
+          : null
+      }
+    />
+  );
+
+  // #303: what full screen hides stays mounted, so a half-typed certificate or an open
+  // Legend survives going in and out.
+  const hiddenInFull = fullScreen ? { display: "none" } : {};
+
   return (
     <Box
       id={ID}
+      component="section"
+      aria-label={fullScreen ? `${problem.name}, full screen` : "Workspace"}
+      data-full-screen={fullScreen ? "true" : undefined}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && fullScreen && !event.defaultPrevented) {
+          setFullScreen(false);
+        }
+      }}
       sx={{
+        backgroundColor: "surface.main",
+        border: "1px solid",
+        borderColor: "border.soft",
+        borderRadius: "18px",
+        boxSizing: "border-box",
+        minWidth: 0,
         display: "flex",
-        alignItems: "stretch",
-        gap: 2,
+        flexDirection: "column",
+        gap: 3,
+        p: "28px",
+        [COMPACT_MEDIA]: { p: 2.5, gap: 2.5 },
+        [PHONE_MEDIA]: { p: 1.5, gap: 2, borderRadius: "14px" },
+        ...(fullScreen
+          ? {
+              position: "fixed",
+              inset: 0,
+              zIndex: "modal",
+              borderRadius: 0,
+              border: "none",
+              overflow: "auto",
+              p: "20px 28px",
+              gap: 2.25,
+              [COMPACT_MEDIA]: { p: 2, gap: 2 },
+              [PHONE_MEDIA]: { p: 1.5, gap: 1.5, borderRadius: 0 },
+            }
+          : {}),
       }}
     >
-      <Rail
+      {fullScreen && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1.5,
+          }}
+        >
+          <Box component="h2" sx={{ m: 0, fontSize: "1rem", fontWeight: 700 }}>
+            {problem.name}
+          </Box>
+          <Box
+            id={`${ID}-full-exit`}
+            ref={exitRef}
+            component="button"
+            type="button"
+            onClick={() => setFullScreen(false)}
+            sx={secondaryButtonSx}
+          >
+            Exit full screen
+          </Box>
+        </Box>
+      )}
+
+      <Box sx={hiddenInFull}>
+        <InstancePanel
+          idPrefix={`${ID}-instance`}
+          problem={problem}
+          instance={instance}
+          onInstanceChange={setInstance}
+          instanceError={instanceError}
+        />
+      </Box>
+
+      <VisualizationPane
         idPrefix={ID}
-        openPanel={panel}
-        onToggle={togglePanel}
-        panelId={PANEL_ID}
-        dots={dots}
-        accentLine={accentLine}
+        showing={showing}
+        showingIsError={Boolean(instanceError)}
+        verdict={verdictLine}
+        stack={false}
+        source={{
+          title: `Source: ${problem.name}`,
+          type: vizTypeControl,
+          content: sourceContent,
+        }}
+        target={target}
+        steps={
+          showingRunPicture
+            ? {
+                frameCount: runFrames.length,
+                currentStep,
+                onStepChange: setCurrentStep,
+              }
+            : reduceView && !switching
+              ? {
+                  frameCount: reduceView.frames.length,
+                  currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
+                  onStepChange: setReduceStep,
+                }
+              : null
+        }
+        reduction={reductionPane}
+        note={note}
+        legendFrames={legendFrames}
+        legendStates={legendStates}
+        legendAnnotations={legendAnnotations}
+        fullScreen={{ on: fullScreen, onToggle: () => setFullScreen((on) => !on) }}
       />
 
-      <Box
-        sx={{
-          flex: "1 1 auto",
-          minWidth: 0,
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "flex-start",
-          gap: 2,
-        }}
-      >
-        <Box
-          component="section"
-          id={PANEL_ID}
-          aria-labelledby={`${PANEL_ID}-heading`}
-          hidden={!panel}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") closePanel();
-          }}
-          sx={{
-            ...cardSx,
-            display: panel ? "flex" : "none",
-            flex: `0 0 ${PANEL_WIDTH}px`,
-            minWidth: 0,
-            boxSizing: "border-box",
-            px: 2,
-            pt: "14px",
-            pb: "18px",
-            flexDirection: "column",
-            gap: 1.5,
-            [COMPACT_MEDIA]: {
-              position: "fixed",
-              left: 0,
-              right: 0,
-              mx: "auto",
-              maxWidth: 720,
-              bottom: 72,
-              zIndex: 19,
-              maxHeight: "70vh",
-              overflow: "auto",
-              borderRadius: "14px 14px 0 0",
-              flexBasis: "auto",
-              boxShadow: 8,
-            },
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 1,
-            }}
-          >
-            <Box
-              component="h2"
-              id={`${PANEL_ID}-heading`}
-              sx={{ m: 0, fontSize: "1.125rem", fontWeight: 700 }}
-            >
-              {panel ? PANEL_TITLES[panel] : ""}
-            </Box>
-            <Box
-              id={`${PANEL_ID}-close`}
-              component="button"
-              type="button"
-              aria-label="Close panel"
-              onClick={closePanel}
-              sx={{
-                width: 44,
-                height: 44,
-                flex: "none",
-                borderRadius: "8px",
-                border: "1px solid",
-                borderColor: "border.main",
-                backgroundColor: "surface.raised",
-                color: "text.primary",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                fontSize: "1.25rem",
-                lineHeight: 1,
-              }}
-            >
-              <Box
-                component="svg"
-                aria-hidden="true"
-                viewBox="0 0 14 14"
-                sx={{ width: 14, height: 14 }}
-              >
-                <path
-                  d="M3 3l8 8M11 3l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </Box>
-            </Box>
-          </Box>
-          {/* Every panel stays mounted while hidden, so a half-typed certificate or a
-              verdict survives closing and reopening the panel. */}
-          <Box id={`${PANEL_ID}-details`} sx={{ display: panel === "details" ? "block" : "none" }}>
-            <DetailsPanel problem={problem} />
-          </Box>
-          <Box
-            id={`${PANEL_ID}-instance`}
-            sx={{ display: panel === "instance" ? "block" : "none" }}
-          >
-            <InstancePanel
-              idPrefix={`${ID}-instance`}
-              problem={problem}
-              instance={instance}
-              onInstanceChange={setInstance}
-              instanceError={instanceError}
-            />
-          </Box>
-          <Box id={`${PANEL_ID}-result`} sx={{ display: panel === "result" ? "block" : "none" }}>
-            <ResultPanel
-              idPrefix={`${ID}-result`}
-              problem={problem}
-              mode={mode}
-              instance={instance}
-              solveResult={solveSummary}
-              reduceResult={reduceSummary}
-              onVerifyAnswer={handleVerifyAnswer}
-              map={
-                mode === "reduce" && reduceSummary
-                  ? {
-                      select:
-                        solvers.length > 0
-                          ? {
-                              value: String(mapSolverIndex),
-                              options: solvers.map((solver, index) => ({
-                                value: String(index),
-                                label: solver.name,
-                                tags: solverTags(solver),
-                                listTags: solverListTags(solver),
-                                card: solverCard(solver),
-                              })),
-                              onChange: (value) => setMapSolverIndex(Number(value)),
-                            }
-                          : null,
-                      onMap: handleMap,
-                      disabled: mapDisabled,
-                      hint: mapHint,
-                      request: mapRun,
-                      announcement: mapAnnouncement,
-                      mapped: mapCurrent ? mapResult : null,
-                      onVerifyMapped: verify.targetLocked ? null : handleVerifyMapped,
-                    }
-                  : null
-              }
-              verifyProps={{
-                verify,
-                sourceName: problem.name,
-                targetName: reduceTargetName,
-                targetLockReason,
-              }}
-              gadgets={
-                reduceGadgets.length > 0
-                  ? {
-                      runId: reduceResult.runId,
-                      gadgets: reduceGadgets,
-                      sourceFrame: sourceContent.kind === "frame" ? sourceContent.frame : null,
-                      targetFrame: reducedTargetFrame(reduceResult),
-                      namers: gadgetNamers,
-                      colors: gadgetRowColors,
-                      activeIndex: activeGadget ? gadgetHighlight.index : null,
-                      onHighlight: handleGadgetHighlight,
-                    }
-                  : null
-              }
-            />
-          </Box>
-        </Box>
+      <Box sx={{ display: fullScreen ? "none" : "flex", flexDirection: "column", gap: 2.5 }}>
+        <CommandBar
+          idPrefix={ID}
+          task={task}
+          onTaskChange={setTask}
+          solver={
+            solvers.length > 0
+              ? {
+                  value: String(solverIndex),
+                  options: solvers.map((solver, index) => ({
+                    value: String(index),
+                    label: solver.name,
+                    tags: solverTags(solver),
+                    listTags: solverListTags(solver),
+                    card: solverCard(solver),
+                  })),
+                  onChange: (value) => setSolverIndex(Number(value)),
+                }
+              : null
+          }
+          target={
+            targets.length > 0
+              ? {
+                  value: targetName ?? targets[0],
+                  options: targets.map((name) => {
+                    const targetProblem = reductions.find(
+                      (reduction) => reduction.target === name,
+                    )?.targetProblem;
+                    return {
+                      value: name,
+                      label: name,
+                      tags: targetTags(targetProblem),
+                      card: targetCard(name, targetProblem),
+                    };
+                  }),
+                  onChange: selectTarget,
+                }
+              : null
+          }
+          reduction={
+            reductionsForTarget.length > 0
+              ? {
+                  value: selectedReduction.className,
+                  options: reductionsForTarget.map((reduction) => ({
+                    value: reduction.className,
+                    label: reduction.name,
+                    tags: reductionTags(reduction),
+                    card: reductionCard(reduction, problem.name),
+                  })),
+                  onChange: setReductionClassName,
+                }
+              : null
+          }
+          seed={seedShown ? { value: seedText, onChange: setSeedText, invalid: seedInvalid } : null}
+          runLabel={runLabel}
+          runDisabled={runDisabled}
+          onRun={handleRun}
+          verify={<VerifyBox idPrefix={`${ID}-result-verify`} mode="solve" {...verifyProps} />}
+          status={status}
+        />
 
-        <Box
-          sx={{
-            flex: "999 1 560px",
-            minWidth: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: 1.5,
-          }}
-        >
-          <CommandBar
-            idPrefix={ID}
-            instance={instance}
-            instanceHasError={Boolean(instanceError)}
-            onEdit={openInstancePanel}
-            mode={mode}
-            onModeChange={setMode}
-            solver={
-              solvers.length > 0
-                ? {
-                    value: String(solverIndex),
-                    options: solvers.map((solver, index) => ({
-                      value: String(index),
-                      label: solver.name,
-                      tags: solverTags(solver),
-                      listTags: solverListTags(solver),
-                      card: solverCard(solver),
-                    })),
-                    onChange: (value) => setSolverIndex(Number(value)),
-                  }
-                : null
-            }
-            target={
-              targets.length > 0
-                ? {
-                    value: targetName ?? targets[0],
-                    options: targets.map((name) => {
-                      const targetProblem = reductions.find(
-                        (reduction) => reduction.target === name,
-                      )?.targetProblem;
-                      return {
-                        value: name,
-                        label: name,
-                        tags: targetTags(targetProblem),
-                        card: targetCard(name, targetProblem),
-                      };
-                    }),
-                    onChange: selectTarget,
-                  }
-                : null
-            }
-            reduction={
-              reductionsForTarget.length > 0
-                ? {
-                    value: selectedReduction.className,
-                    options: reductionsForTarget.map((reduction) => ({
-                      value: reduction.className,
-                      label: reduction.name,
-                      tags: reductionTags(reduction),
-                      card: reductionCard(reduction, problem.name),
-                    })),
-                    onChange: setReductionClassName,
-                  }
-                : null
-            }
-            seed={
-              seedShown ? { value: seedText, onChange: setSeedText, invalid: seedInvalid } : null
-            }
-            runLabel={runLabel}
-            runDisabled={runDisabled}
-            onRun={handleRun}
-            status={status}
-          />
-
-          <VisualizationPane
-            idPrefix={ID}
-            showing={showing}
-            showingIsError={Boolean(instanceError)}
-            verdict={verdictLine}
-            stack={Boolean(panel)}
-            source={{
-              title: mode === "solve" ? `${problem.name} instance` : `Source: ${problem.name}`,
-              type: vizTypeControl,
-              content: sourceContent,
-            }}
-            target={target}
-            steps={
-              showingRunPicture
-                ? {
-                    frameCount: runFrames.length,
-                    currentStep,
-                    onStepChange: setCurrentStep,
-                  }
-                : reduceView && !switching
-                  ? {
-                      frameCount: reduceView.frames.length,
-                      currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
-                      onStepChange: setReduceStep,
-                    }
-                  : null
-            }
-            reduction={reductionPane}
-            note={note}
-            legendFrames={legendFrames}
-            legendStates={legendStates}
-            legendAnnotations={legendAnnotations}
-          />
-        </Box>
+        {task !== "verify" && (
+          <Box component="section" aria-label="Results" id={`${ID}-results`}>
+            {resultPanel}
+          </Box>
+        )}
       </Box>
     </Box>
   );

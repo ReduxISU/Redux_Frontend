@@ -1,44 +1,50 @@
 // components/workbench/CommandBar.js
 //
-// #229: the bar above the picture with everything needed to run: the instance (with Edit,
-// which opens the Instance panel), the Solve | Reduce switch, the Solver dropdown or the To
-// and Using dropdowns, and Run on the right. Instance errors and the run's own status show
-// under it.
+// #303 (Board G): the task bar under the picture and its steps. From the left: the Solve /
+// Reduce / Verify tabs, then the menus for the task on now, then its main button:
+//   - Solve: the Algorithm dropdown with its (i) on its right, then, for a randomized solver
+//     only, the Seed box (#295), then Solve;
+//   - Reduce: the Reduce to and Reduction dropdowns, then Reduce (stage 2 of #303 turns this
+//     into the Reduce, Solve, Verify stepper);
+//   - Verify: the Verify box (./panels/VerifyBox.js), which has its own Check button.
+// The run's status (the note on what the button will do, the run's ComputeStatus) shows under
+// the row. The results list follows the bar (Workbench.js).
 //
-// Stage 1 of #229 kept the instance simple on purpose: it shows as one line of text,
-// truncated. Labeled pieces per part are stage 5. The dropdowns are the tagged listboxes of
-// stage 2 (./TaggedSelect.js), each with its tags and info card.
+// Replaces #229's command bar above the picture. The instance moved to its own always-visible
+// editor at the top of the workspace (./panels/InstancePanel.js), so the bar no longer shows it.
 //
-// #295: for a randomized solver (ReduxISU/Redux#932), Solve mode has a Seed box between the
-// Solver dropdown and Run: blank lets Redux pick a new seed each Run, a number repeats that run
-// exactly. It takes digits only. Workbench.js decides when it shows and what Run sends.
+// The tabs are pressed toggle buttons in a labelled group, as the mockup has them, not an ARIA
+// tablist: the bar's controls change with the task, but the picture, the steps and the results
+// above and below it are shared, so there is no one tab panel to point at.
 //
-// On phones and tablets (COMPACT_MEDIA) the bar is not sticky (it never is: it scrolls with
-// the page so the picture gets the screen), and Edit and Run drop to their own lines on the
-// left.
+// #295: the Seed box takes digits only: blank lets Redux pick a new seed each Run, a number
+// repeats that run exactly. Workbench.js decides when it shows and what Run sends.
 
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import Box from "@mui/material/Box";
 import { visuallyHiddenSx } from "../pictures/pictureSx";
-import {
-  COMPACT_MEDIA,
-  cardSx,
-  controlLabelSx,
-  DROPDOWN_WIDTH,
-  MONO_FONT,
-  SHARED_CONTROL_WIDTH,
-  secondaryButtonSx,
-} from "./layout";
+import { controlLabelSx, PHONE_MEDIA } from "./layout";
 import TaggedSelect from "./TaggedSelect";
 
+const TASKS = [
+  { key: "solve", label: "Solve" },
+  { key: "reduce", label: "Reduce" },
+  { key: "verify", label: "Verify" },
+];
+
+/** A dropdown's width in the bar: grows to fill the row, up to the mockup's 460px. */
+const fieldSx = { flex: "1 1 260px", minWidth: 0, maxWidth: 460 };
+
 /**
- * The Seed box (#295): a label and a digits-only text input.
+ * The Seed box (#295): a label above a digits-only text input.
  * @param {{id: string, value: string, onChange: (text: string) => void, invalid?: boolean}} props
  */
-function SeedInput({ id, value, onChange, invalid }) {
+export function SeedInput({ id, value, onChange, invalid }) {
   const hintId = `${id}-hint`;
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}>
+    <Box
+      id={`${id}-field`}
+      sx={{ display: "flex", flexDirection: "column", gap: 0.5, width: 132, flex: "none" }}
+    >
       <Box component="label" htmlFor={id} sx={controlLabelSx}>
         Seed
       </Box>
@@ -55,7 +61,7 @@ function SeedInput({ id, value, onChange, invalid }) {
         aria-describedby={hintId}
         aria-invalid={invalid || undefined}
         sx={{
-          width: 128,
+          width: "100%",
           minHeight: 44,
           boxSizing: "border-box",
           px: 1.25,
@@ -77,17 +83,7 @@ function SeedInput({ id, value, onChange, invalid }) {
   );
 }
 
-// Forces the next item onto its own line, only on phones and tablets.
-function CompactLineBreak() {
-  return (
-    <Box
-      aria-hidden="true"
-      sx={{ display: "none", [COMPACT_MEDIA]: { display: "block", flexBasis: "100%", height: 0 } }}
-    />
-  );
-}
-
-function ModeButton({ id, pressed, onClick, accent, children }) {
+function TaskButton({ id, pressed, onClick, children }) {
   return (
     <Box
       id={id}
@@ -97,17 +93,18 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
       onClick={onClick}
       sx={{
         minHeight: 44,
-        px: "14px",
+        px: 2,
         borderRadius: "8px",
-        border: pressed ? "2px solid" : "1px solid",
-        borderColor: pressed ? accent : "border.main",
-        backgroundColor: pressed ? "surface.raised" : "transparent",
-        color: "text.primary",
+        border: "1px solid",
+        borderColor: pressed ? "brand.softLine" : "transparent",
+        backgroundColor: pressed ? "brand.soft" : "transparent",
+        color: pressed ? "brand.onSoft" : "text.primary",
         fontFamily: "inherit",
         fontSize: "0.9375rem",
         fontWeight: 700,
         cursor: "pointer",
-        "&:hover": { backgroundColor: "surface.raised" },
+        "&:hover": { backgroundColor: pressed ? "brand.softHover" : "surface.raised2" },
+        [PHONE_MEDIA]: { flex: "1 1 0", px: 1 },
       }}
     >
       {children}
@@ -118,33 +115,28 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
- * @param {string} props.instance The instance text.
- * @param {boolean} props.instanceHasError Draws the instance box's border red.
- * @param {() => void} props.onEdit Opens the Instance panel.
- * @param {"solve"|"reduce"} props.mode
- * @param {(mode: "solve"|"reduce") => void} props.onModeChange
+ * @param {"solve"|"reduce"|"verify"} props.task The tab on now.
+ * @param {(task: "solve"|"reduce"|"verify") => void} props.onTaskChange
  * @param {{value: string, options: {value: string, label: string, tags: Array, card: Object}[],
- *   onChange: Function}|null} props.solver The Solver dropdown (options as TaggedSelect
+ *   onChange: Function}|null} props.solver The Algorithm dropdown (options as TaggedSelect
  *   takes them), or null when the problem declares no solver.
- * @param {{value: string, options: Array, onChange: Function}|null} props.target The To
- *   dropdown, or null when the problem has no reductions.
+ * @param {{value: string, options: Array, onChange: Function}|null} props.target The Reduce
+ *   to dropdown, or null when the problem has no reductions.
  * @param {{value: string, options: Array, onChange: Function}|null} props.reduction The
- *   Using dropdown.
+ *   Reduction dropdown.
  * @param {{value: string, onChange: (text: string) => void, invalid: boolean}|null} props.seed
- *   The Seed box (#295), Solve mode only, or null to hide it (a solver that isn't randomized).
- * @param {string} props.runLabel "Run solve", "Run reduction again", ...
+ *   The Seed box (#295), Solve only, or null to hide it (a solver that isn't randomized).
+ * @param {string} props.runLabel "Solve", "Reduce again", ...
  * @param {boolean} props.runDisabled
  * @param {() => void} props.onRun
- * @param {import("react").ReactNode} props.status Rendered under the bar: the instance error,
- *   a note on what Run will do (or why it can't), and the run's ComputeStatus.
+ * @param {import("react").ReactNode} props.verify The Verify box, shown in Verify.
+ * @param {import("react").ReactNode} props.status Rendered under the row: a note on what the
+ *   button will do (or why it can't) and the run's ComputeStatus.
  */
 export default function CommandBar({
   idPrefix,
-  instance,
-  instanceHasError,
-  onEdit,
-  mode,
-  onModeChange,
+  task,
+  onTaskChange,
   solver,
   target,
   reduction,
@@ -152,215 +144,128 @@ export default function CommandBar({
   runLabel,
   runDisabled,
   onRun,
+  verify,
   status,
 }) {
-  const instanceLabelId = `${idPrefix}-instance-label`;
-
   return (
     <Box
       component="section"
-      aria-label="Run"
+      aria-label="Task"
       id={`${idPrefix}-command-bar`}
+      data-task={task}
       sx={{
-        ...cardSx,
-        p: 1.5,
+        borderTop: "1px solid",
+        borderColor: "border.soft",
+        pt: "22px",
         display: "flex",
         flexDirection: "column",
-        gap: "10px",
-        [COMPACT_MEDIA]: { gap: 1.5 },
+        gap: 1.75,
       }}
     >
       <Box
         sx={{
           display: "flex",
-          alignItems: "flex-start",
-          gap: "10px",
-          [COMPACT_MEDIA]: { flexWrap: "wrap", rowGap: 1.5 },
-        }}
-      >
-        <Box
-          component="span"
-          id={instanceLabelId}
-          sx={{
-            flex: "none",
-            pt: 1.5,
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "text.secondary",
-          }}
-        >
-          Instance
-        </Box>
-        <Box
-          id={`${idPrefix}-instance-text`}
-          role="group"
-          aria-labelledby={instanceLabelId}
-          title={instance}
-          sx={{
-            flex: "1 1 auto",
-            minWidth: 0,
-            minHeight: 44,
-            boxSizing: "border-box",
-            display: "flex",
-            alignItems: "center",
-            px: 1.5,
-            borderRadius: "8px",
-            backgroundColor: "surface.input",
-            border: "1px solid",
-            borderColor: instanceHasError ? "status.err" : "border.main",
-          }}
-        >
-          <Box
-            component="span"
-            sx={{
-              fontFamily: MONO_FONT,
-              fontSize: "0.8125rem",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              color: instance ? "text.primary" : "text.secondary",
-            }}
-          >
-            {instance || "No instance yet. Press Edit to write one."}
-          </Box>
-        </Box>
-        <CompactLineBreak />
-        <Box
-          id={`${idPrefix}-edit-instance`}
-          component="button"
-          type="button"
-          onClick={onEdit}
-          sx={{
-            ...secondaryButtonSx,
-            width: SHARED_CONTROL_WIDTH,
-            flex: "none",
-            alignSelf: "stretch",
-          }}
-        >
-          Edit
-        </Box>
-      </Box>
-
-      <Box
-        sx={{
-          display: "flex",
           flexWrap: "wrap",
-          alignItems: "flex-start",
-          gap: "10px 12px",
-          [COMPACT_MEDIA]: { rowGap: 1.5 },
+          alignItems: "flex-end",
+          gap: "14px 16px",
         }}
       >
-        <Box role="group" aria-label="Mode" sx={{ display: "flex", gap: 0.5, flex: "none" }}>
-          <ModeButton
-            id={`${idPrefix}-mode-solve`}
-            pressed={mode === "solve"}
-            onClick={() => onModeChange("solve")}
-            accent="brand.line"
-          >
-            Solve
-          </ModeButton>
-          <ModeButton
-            id={`${idPrefix}-mode-reduce`}
-            pressed={mode === "reduce"}
-            onClick={() => onModeChange("reduce")}
-            accent="brand.goldLine"
-          >
-            Reduce
-          </ModeButton>
+        <Box
+          role="group"
+          aria-label="Task"
+          id={`${idPrefix}-tasks`}
+          sx={{
+            display: "flex",
+            gap: 0.5,
+            p: 0.5,
+            borderRadius: "12px",
+            backgroundColor: "surface.raised",
+            flex: "none",
+            [PHONE_MEDIA]: { flex: "1 1 100%" },
+          }}
+        >
+          {TASKS.map(({ key, label }) => (
+            <TaskButton
+              key={key}
+              id={`${idPrefix}-mode-${key}`}
+              pressed={task === key}
+              onClick={() => onTaskChange(key)}
+            >
+              {label}
+            </TaskButton>
+          ))}
         </Box>
 
-        {mode === "solve" && solver && (
-          <Box
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: "6px 8px",
-              minWidth: 0,
-            }}
-          >
-            <TaggedSelect
-              id={`${idPrefix}-solver`}
-              label="Solver"
-              hue="blue"
-              labelPlacement="row"
-              boxSx={{ width: DROPDOWN_WIDTH, maxWidth: "100%" }}
-              {...solver}
-            />
-            {seed && <SeedInput id={`${idPrefix}-seed`} {...seed} />}
-          </Box>
+        {task === "solve" && solver && (
+          <TaggedSelect
+            id={`${idPrefix}-solver`}
+            label="Algorithm"
+            hue="blue"
+            infoPlacement="box"
+            boxSx={fieldSx}
+            {...solver}
+          />
         )}
+        {task === "solve" && seed && <SeedInput id={`${idPrefix}-seed`} {...seed} />}
 
-        {mode === "reduce" && target && reduction && (
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: `auto minmax(0, ${DROPDOWN_WIDTH}px)`,
-              alignItems: "center",
-              gap: 1,
-              flex: "0 1 auto",
-              minWidth: 0,
-            }}
-          >
+        {task === "reduce" && target && reduction && (
+          <>
             <TaggedSelect
               id={`${idPrefix}-target`}
-              label="To"
+              label="Reduce to"
               hue="violet"
-              labelPlacement="row"
+              infoPlacement="box"
+              boxSx={{ ...fieldSx, flexBasis: 220 }}
               {...target}
             />
             <TaggedSelect
               id={`${idPrefix}-reduction`}
-              label="Using"
+              label="Reduction"
               hue="violet"
-              labelPlacement="row"
+              infoPlacement="box"
+              boxSx={{ ...fieldSx, flexBasis: 320 }}
               {...reduction}
             />
-          </Box>
+          </>
         )}
 
-        <CompactLineBreak />
-        <Box
-          id={`${idPrefix}-run`}
-          component="button"
-          type="button"
-          onClick={onRun}
-          disabled={runDisabled}
-          sx={{
-            width: SHARED_CONTROL_WIDTH,
-            flex: "none",
-            ml: "auto",
-            minHeight: 44,
-            px: 2,
-            // #280: the soft primary style in both modes (Solve and Reduce).
-            border: "1px solid",
-            borderColor: "brand.softLine",
-            borderRadius: "10px",
-            backgroundColor: "brand.soft",
-            color: "brand.onSoft",
-            fontFamily: "inherit",
-            fontSize: "0.9375rem",
-            fontWeight: 700,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 1.25,
-            cursor: "pointer",
-            "&:hover:not(:disabled)": { backgroundColor: "brand.softHover" },
-            "&:disabled": {
-              cursor: "not-allowed",
-              borderColor: "transparent",
-              backgroundColor: "surface.track",
-              color: "text.secondary",
-            },
-            [COMPACT_MEDIA]: { ml: 0 },
-          }}
-        >
-          <PlayArrowIcon aria-hidden="true" sx={{ fontSize: 18 }} />
-          {runLabel}
-        </Box>
+        {task !== "verify" && (
+          <Box
+            id={`${idPrefix}-run`}
+            component="button"
+            type="button"
+            onClick={onRun}
+            disabled={runDisabled}
+            sx={{
+              flex: "none",
+              minHeight: 44,
+              px: "26px",
+              border: "1px solid",
+              borderColor: "brand.softLine",
+              borderRadius: "10px",
+              backgroundColor: "brand.soft",
+              color: "brand.onSoft",
+              fontFamily: "inherit",
+              fontSize: "0.9375rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              "&:hover:not(:disabled)": { backgroundColor: "brand.softHover" },
+              "&:disabled": {
+                cursor: "not-allowed",
+                borderColor: "border.main",
+                borderStyle: "dashed",
+                backgroundColor: "surface.track",
+                color: "text.secondary",
+              },
+              [PHONE_MEDIA]: { flex: "1 1 100%" },
+            }}
+          >
+            {runLabel}
+          </Box>
+        )}
       </Box>
 
+      {task === "verify" && verify}
       {status}
     </Box>
   );

@@ -17,6 +17,12 @@
 //   - Gadgets (Reduce mode, stage 4, ./GadgetsSection.js): what the reduction built for each
 //     piece of the source, at the bottom of the reduction's result; hidden when it lists none.
 //
+// #303 (Board G): the results are listed under the task bar, no longer in a panel. Solve's
+// answer ends with "Check it in Verify" at the far right of its row, which opens the Verify tab
+// and checks the answer there; the Verify box itself moved to that tab (CommandBar.js), so the
+// Solve results leave it out (`showVerify`). Reduce keeps it under its results until stage 4
+// of #303 builds Reduce's own checks.
+//
 // Time is the round trip this browser measured, network included, and is labelled that way:
 // Redux reports no running time of its own for a solve (#95).
 
@@ -87,6 +93,16 @@ function CodeBlock({ id, label, children, maxHeight }) {
   );
 }
 
+/** A result row: its text on the left, its action button pushed to the far right (#303). */
+const actionRowSx = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: "8px 12px",
+  minWidth: 0,
+};
+const actionButtonSx = { ...secondaryButtonSx, ml: "auto", flex: "none" };
+
 /**
  * The seed a randomized solver's run reported, and Run again with this seed (#295).
  * @param {{id: string, seed: {seed: number, onRerun: () => void, disabled?: boolean}|null}} props
@@ -147,6 +163,8 @@ export function SeedLine({ id, seed }) {
  *   sourceFrame, targetFrame, namers?, colors?, activeIndex, onHighlight}`, everything
  *   ./GadgetsSection.js takes
  *   except its idPrefix. `runId` remounts the section per run, so a new run starts it closed.
+ * @param {boolean} [props.showVerify] Ends the results with the Verify box (#303: Reduce only;
+ *   Solve's Verify box is in the Verify tab).
  */
 export default function ResultPanel({
   idPrefix,
@@ -159,6 +177,7 @@ export default function ResultPanel({
   map,
   verifyProps,
   gadgets,
+  showVerify = true,
 }) {
   const result = mode === "solve" ? solveResult : reduceResult;
   const changed = Boolean(result) && result.instance !== instance;
@@ -168,7 +187,9 @@ export default function ResultPanel({
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
       {!result && (
         <Typography id={`${idPrefix}-empty`} sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
-          No run yet: press Run for {mode === "solve" ? "an answer." : "the target instance."}
+          {mode === "solve"
+            ? "No run yet: press Solve for an answer."
+            : "No run yet: press Reduce for the target instance."}
         </Typography>
       )}
 
@@ -193,20 +214,22 @@ export default function ResultPanel({
           <CodeBlock id={`${idPrefix}-answer`} label="Answer (certificate)">
             {solveAnswer || "The solver returned an empty answer."}
           </CodeBlock>
-          <SeedLine id={`${idPrefix}-seed`} seed={solveResult.seed ?? null} />
-          <Box
-            id={`${idPrefix}-verify-answer`}
-            component="button"
-            type="button"
-            disabled={!solveAnswer || changed}
-            onClick={onVerifyAnswer}
-            sx={{ ...secondaryButtonSx, alignSelf: "flex-start" }}
-          >
-            Verify This Answer
+          <Box sx={actionRowSx}>
+            <SeedLine id={`${idPrefix}-seed`} seed={solveResult.seed ?? null} />
+            <Box
+              id={`${idPrefix}-verify-answer`}
+              component="button"
+              type="button"
+              disabled={!solveAnswer || changed}
+              onClick={onVerifyAnswer}
+              sx={actionButtonSx}
+            >
+              Check it in Verify
+            </Box>
           </Box>
           {changed && (
             <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              Verify This Answer checks against the instance the answer is for, so it waits for a
+              Check it in Verify checks against the instance the answer is for, so it waits for a
               new run.
             </Typography>
           )}
@@ -321,15 +344,17 @@ export default function ResultPanel({
                   >
                     {map.mapped.certificate || "The mapping returned an empty certificate."}
                   </Box>
-                  <Box
-                    id={`${idPrefix}-verify-mapped`}
-                    component="button"
-                    type="button"
-                    disabled={!map.mapped.certificate || !map.onVerifyMapped}
-                    onClick={map.onVerifyMapped}
-                    sx={{ ...secondaryButtonSx, alignSelf: "flex-start" }}
-                  >
-                    Verify This Answer
+                  <Box sx={actionRowSx}>
+                    <Box
+                      id={`${idPrefix}-verify-mapped`}
+                      component="button"
+                      type="button"
+                      disabled={!map.mapped.certificate || !map.onVerifyMapped}
+                      onClick={map.onVerifyMapped}
+                      sx={actionButtonSx}
+                    >
+                      Verify This Answer
+                    </Box>
                   </Box>
                 </Box>
               )}
@@ -352,7 +377,7 @@ export default function ResultPanel({
         </Box>
       )}
 
-      <VerifyBox idPrefix={`${idPrefix}-verify`} mode={mode} {...verifyProps} />
+      {showVerify && <VerifyBox idPrefix={`${idPrefix}-verify`} mode={mode} {...verifyProps} />}
     </Box>
   );
 }
