@@ -77,6 +77,7 @@ import { buildOptionsFromBackendNames, optionLabel, TAXONOMY } from "../data/tax
 // array up generically instead of a six-way if/else.
 const BACKEND_BACKED_FACET_ENUM_KEYS = {
   problemType: "problemType",
+  problemVariant: "problemVariant",
   complexityClass: "complexityClass",
   reductionType: "reductionType",
   reductionCost: "reductionCost",
@@ -185,8 +186,13 @@ function optionSatisfiesSelection(facetKey, optionKey, selectedOptions) {
 // A problem matches a facet's active selection if ANY selected option is
 // present in its tag value for that facet — whether that tag value is one
 // array (OR across the array) or a single string (plain equality). A facet
-// with nothing selected imposes no constraint.
-function matchesSelectedFacets(tags, selected) {
+// with nothing selected imposes no constraint. #299: since a solver, a
+// reduction or a problem can carry several tags from one category
+// (ReduxISU/Redux#946), those arrays now hold every one of them, so a
+// Greedy + Approximation solver's problem matches either checkbox.
+//
+// Exported for tests/unit/ only.
+export function matchesSelectedFacets(tags, selected) {
   for (const facet of TAXONOMY) {
     const selectedOptions = selected[facet.key];
     if (!selectedOptions || selectedOptions.size === 0) {
@@ -213,6 +219,11 @@ function matchesSelectedFacets(tags, selected) {
 // the "never regress to blank just because a fetch is in flight" rule this
 // task's instructions call for; it costs nothing on facets that were never
 // going to change (the fallback IS today's exact behavior).
+//
+// #299: a facet marked `backendOptionsOnly` (Problem Variant) has no such
+// fallback: with no live list (a backend from before ReduxISU/Redux#946, or
+// the fetch still in flight) it lists nothing, and FacetSidebar shows its
+// "No values available" line. See data/taxonomy.js's facet comment for why.
 function facetOptionList(facet, enumCatalog) {
   const enumCatalogKey = BACKEND_BACKED_FACET_ENUM_KEYS[facet.key];
   if (enumCatalogKey) {
@@ -221,7 +232,7 @@ function facetOptionList(facet, enumCatalog) {
       return buildOptionsFromBackendNames(facet.key, backendMemberNames);
     }
   }
-  return facet.options;
+  return facet.backendOptionsOnly ? [] : facet.options;
 }
 
 // Per-option counts across the whole index (not just the filtered results —
@@ -230,7 +241,9 @@ function facetOptionList(facet, enumCatalog) {
 // the same optionSatisfiesSelection expansion matchesSelectedFacets does —
 // a single-option Set here — so "NP (n)" always names exactly how many
 // results checking that box actually returns, never fewer.
-function buildFacetOptions(index, enumCatalog) {
+//
+// Exported for tests/unit/ only.
+export function buildFacetOptions(index, enumCatalog) {
   const facetOptions = {};
   for (const facet of TAXONOMY) {
     facetOptions[facet.key] = facetOptionList(facet, enumCatalog).map((option) => {
@@ -315,6 +328,7 @@ export function useCatalogFilters(
     [
       index,
       enumCatalog.problemType,
+      enumCatalog.problemVariant,
       enumCatalog.complexityClass,
       enumCatalog.reductionType,
       enumCatalog.reductionCost,

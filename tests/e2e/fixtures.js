@@ -35,8 +35,23 @@ import { test as base, expect } from "@playwright/test";
 
 const API_PATH_PATTERN = /\/api\//;
 
+// #299: Navigation/ProblemVariants (ReduxISU/Redux#946), the Problem Variant facet's options.
+const PROBLEM_VARIANTS_REQUEST = /\/api\/redux\/Navigation\/ProblemVariants$/;
+
 function isApiRequest(url) {
   return API_PATH_PATTERN.test(new URL(url).pathname);
+}
+
+/**
+ * A backend from before ReduxISU/Redux#946 has no Navigation/ProblemVariants and answers it 404
+ * (or 405). hooks/useEnumCatalog.js takes that as "no variants known", and the Problem Variant
+ * facet lists nothing. That answer is the fallback working, not a quiet failure.
+ */
+function isProblemVariantsMissing(response) {
+  return (
+    PROBLEM_VARIANTS_REQUEST.test(new URL(response.url()).pathname) &&
+    [404, 405].includes(response.status())
+  );
 }
 
 export const test = base.extend({
@@ -64,7 +79,7 @@ export const test = base.extend({
     };
 
     const onResponse = (response) => {
-      if (isApiRequest(response.url()) && !response.ok()) {
+      if (isApiRequest(response.url()) && !response.ok() && !isProblemVariantsMissing(response)) {
         failures.push(
           `${response.request().method()} ${response.url()} -- responded ${response.status()}`,
         );

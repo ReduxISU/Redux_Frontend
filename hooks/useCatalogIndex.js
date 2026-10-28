@@ -44,16 +44,23 @@
 // Where each facet's value actually comes from
 // -----------------------------------------------------------------------
 // problemType, computationalModel, complexityClass — resolved by
-// mergeSupplementalTags(problemName, { complexityClass }) (T22/#31): prefers
+// mergeSupplementalTags() (T22/#31), through mergeProblemInfoTags(): prefers
 // a real backend value, falls back to the data/supplementalTags.js overlay,
-// falls back to Unclassified. Only complexityClass has a real backend value
-// today (the live backend has no problemType/computationalModel field yet —
-// confirmed against the live payload, not assumed).
+// falls back to Unclassified. complexityClass always has a real backend
+// value; problemType does once the backend sends `problemTypes`
+// (ReduxISU/Redux#946, every tag in the list, #299); computationalModel has
+// no backend field yet.
+//
+// problemVariant — #299: the Decision / Optimization keys from the problem's
+// own `problemVariants` list (#946), through the same mergeProblemInfoTags().
+// Empty on a backend from before #946, which has no such field.
 //
 // solverType, solverComplexity — aggregated across every solver the problem
 // declares (Navigation/Batch/allSolvers), reading each solver's own
 // Navigation/Batch/allInfo entry (`solverType`, `complexityBucket`) through
-// SOLVER_TYPE_MAP / SOLVER_COMPLEXITY_MAP.
+// SOLVER_TYPE_MAP / SOLVER_COMPLEXITY_MAP. #299: every entry of a solver's
+// `solverTypes` list counts (data/tagList.js), so a Greedy + Approximation
+// solver tags its problem with both.
 //
 // visualizationType — aggregated across every visualization the problem
 // declares (Navigation/Batch/allVisualizations), through
@@ -75,7 +82,8 @@
 // "T23's backend-value translation step should be written against the
 // post-#396 shape... there is no reason to write it against a shape already
 // known to be temporary") — it reads `edge.reductionType` through
-// REDUCTION_TYPE_MAP. Flagged prominently: queried the live production
+// REDUCTION_TYPE_MAP (#299: every entry of the edge's `reductionTypes` list,
+// via data/tagList.js). Flagged prominently: queried the live production
 // Navigation/Reductions endpoint directly while building this hook, and its
 // edges do not yet carry a reductionType field at all (only className,
 // endpoint, inputType, outputType, fromComplexity, toComplexity, cost) —
@@ -90,7 +98,8 @@
 // endpoint actually grows it. See this task's handback summary.
 
 import { useEffect, useState } from "react";
-import { mergeSupplementalTags, mergeVisualStyle } from "../data/mergeSupplementalTags";
+import { mergeProblemInfoTags, mergeVisualStyle } from "../data/mergeSupplementalTags";
+import { tagList } from "../data/tagList";
 import {
   REDUCTION_COST_MAP,
   REDUCTION_TYPE_MAP,
@@ -187,16 +196,21 @@ function buildProblemTags(
   const problemInfo = info[problemCode] ?? {};
   const problemName = problemInfo.problemName ?? problemCode;
 
-  const { problemType, computationalModel, complexityClass } = mergeSupplementalTags(problemName, {
-    complexityClass: problemInfo.complexityClass,
-  });
+  const { problemType, problemVariant, computationalModel, complexityClass } = mergeProblemInfoTags(
+    problemName,
+    problemInfo,
+  );
 
+  // #299: every solver type a solver lists counts toward the problem's tags,
+  // not just its first (data/tagList.js).
   const solverType = new Set();
   const solverComplexity = new Set();
   for (const solverClassName of solversByProblem[problemCode] ?? []) {
     const solverInfo = info[solverClassName];
-    const mappedType = SOLVER_TYPE_MAP[solverInfo?.solverType];
-    if (mappedType) solverType.add(mappedType);
+    for (const typeName of tagList(solverInfo, "solverTypes", "solverType")) {
+      const mappedType = SOLVER_TYPE_MAP[typeName];
+      if (mappedType) solverType.add(mappedType);
+    }
     const mappedComplexity = SOLVER_COMPLEXITY_MAP[solverInfo?.complexityBucket];
     if (mappedComplexity) solverComplexity.add(mappedComplexity);
   }
@@ -212,14 +226,17 @@ function buildProblemTags(
   for (const edge of reductionEdgesByProblem.get(problemCode) ?? []) {
     const mappedCost = REDUCTION_COST_MAP[edge.cost];
     if (mappedCost) reductionCost.add(mappedCost);
-    const mappedType = REDUCTION_TYPE_MAP[edge.reductionType];
-    if (mappedType) reductionType.add(mappedType);
+    for (const typeName of tagList(edge, "reductionTypes", "reductionType")) {
+      const mappedType = REDUCTION_TYPE_MAP[typeName];
+      if (mappedType) reductionType.add(mappedType);
+    }
   }
 
   return {
     problemName,
     tags: {
       problemType,
+      problemVariant,
       computationalModel,
       complexityClass,
       solverType: Array.from(solverType),
