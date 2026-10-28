@@ -9,21 +9,73 @@
 // truncated. Labeled pieces per part are stage 5. The dropdowns are the tagged listboxes of
 // stage 2 (./TaggedSelect.js), each with its tags and info card.
 //
+// #295: for a randomized solver (ReduxISU/Redux#932), Solve mode has a Seed box between the
+// Solver dropdown and Run: blank lets Redux pick a new seed each Run, a number repeats that run
+// exactly. It takes digits only. Workbench.js decides when it shows and what Run sends.
+//
 // On phones and tablets (COMPACT_MEDIA) the bar is not sticky (it never is: it scrolls with
 // the page so the picture gets the screen), and Edit and Run drop to their own lines on the
 // left.
 
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import Box from "@mui/material/Box";
+import { visuallyHiddenSx } from "../pictures/pictureSx";
 import {
   COMPACT_MEDIA,
   cardSx,
+  controlLabelSx,
   DROPDOWN_WIDTH,
   MONO_FONT,
   SHARED_CONTROL_WIDTH,
   secondaryButtonSx,
 } from "./layout";
 import TaggedSelect from "./TaggedSelect";
+
+/**
+ * The Seed box (#295): a label and a digits-only text input.
+ * @param {{id: string, value: string, onChange: (text: string) => void, invalid?: boolean}} props
+ */
+function SeedInput({ id, value, onChange, invalid }) {
+  const hintId = `${id}-hint`;
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}>
+      <Box component="label" htmlFor={id} sx={controlLabelSx}>
+        Seed
+      </Box>
+      <Box
+        component="input"
+        id={id}
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        autoComplete="off"
+        placeholder="Random"
+        value={value}
+        onChange={(event) => onChange(event.target.value.replace(/\D/g, ""))}
+        aria-describedby={hintId}
+        aria-invalid={invalid || undefined}
+        sx={{
+          width: 128,
+          minHeight: 44,
+          boxSizing: "border-box",
+          px: 1.25,
+          backgroundColor: "surface.input",
+          color: "text.primary",
+          border: "1px solid",
+          borderColor: invalid ? "status.err" : "border.main",
+          borderRadius: "8px",
+          fontFamily: "inherit",
+          fontSize: "0.9375rem",
+          fontVariantNumeric: "tabular-nums",
+          "&::placeholder": { color: "text.secondary", opacity: 1 },
+        }}
+      />
+      <Box component="span" id={hintId} sx={visuallyHiddenSx}>
+        Leave blank for a new random run; a number repeats that run exactly.
+      </Box>
+    </Box>
+  );
+}
 
 // Forces the next item onto its own line, only on phones and tablets.
 function CompactLineBreak() {
@@ -78,6 +130,8 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
  *   dropdown, or null when the problem has no reductions.
  * @param {{value: string, options: Array, onChange: Function}|null} props.reduction The
  *   Using dropdown.
+ * @param {{value: string, onChange: (text: string) => void, invalid: boolean}|null} props.seed
+ *   The Seed box (#295), Solve mode only, or null to hide it (a solver that isn't randomized).
  * @param {string} props.runLabel "Run solve", "Run reduction again", ...
  * @param {boolean} props.runDisabled
  * @param {() => void} props.onRun
@@ -95,6 +149,7 @@ export default function CommandBar({
   solver,
   target,
   reduction,
+  seed,
   runLabel,
   runDisabled,
   onRun,
@@ -234,6 +289,7 @@ export default function CommandBar({
               boxSx={{ width: DROPDOWN_WIDTH, maxWidth: "100%" }}
               {...solver}
             />
+            {seed && <SeedInput id={`${idPrefix}-seed`} {...seed} />}
           </Box>
         )}
 
