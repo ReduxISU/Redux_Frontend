@@ -135,7 +135,6 @@ function ModeButton({ id, pressed, onClick, accent, children }) {
  * @param {string} props.runLabel "Run solve", "Run reduction again", ...
  * @param {boolean} props.runDisabled
  * @param {() => void} props.onRun
- * @param {string} props.runFill The Run button's fill (orange for Solve, gold for Reduce).
  * @param {import("react").ReactNode} props.status Rendered under the bar: the instance error,
  *   a note on what Run will do (or why it can't), and the run's ComputeStatus.
  */
@@ -153,7 +152,6 @@ export default function CommandBar({
   runLabel,
   runDisabled,
   onRun,
-  runFill,
   status,
 }) {
   const instanceLabelId = `${idPrefix}-instance-label`;
@@ -334,10 +332,12 @@ export default function CommandBar({
             ml: "auto",
             minHeight: 44,
             px: 2,
-            border: "none",
+            // #280: the soft primary style in both modes (Solve and Reduce).
+            border: "1px solid",
+            borderColor: "brand.softLine",
             borderRadius: "10px",
-            backgroundColor: runFill,
-            color: "brand.onFill",
+            backgroundColor: "brand.soft",
+            color: "brand.onSoft",
             fontFamily: "inherit",
             fontSize: "0.9375rem",
             fontWeight: 700,
@@ -346,8 +346,10 @@ export default function CommandBar({
             justifyContent: "center",
             gap: 1.25,
             cursor: "pointer",
+            "&:hover:not(:disabled)": { backgroundColor: "brand.softHover" },
             "&:disabled": {
               cursor: "not-allowed",
+              borderColor: "transparent",
               backgroundColor: "surface.track",
               color: "text.secondary",
             },

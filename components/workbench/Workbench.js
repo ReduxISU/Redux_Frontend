@@ -1816,7 +1816,6 @@ export default function Workbench({ problem }) {
             runLabel={runLabel}
             runDisabled={runDisabled}
             onRun={handleRun}
-            runFill={mode === "solve" ? "brand.fill" : "brand.gold"}
             status={status}
           />
 
