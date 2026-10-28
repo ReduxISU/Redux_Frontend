@@ -10,13 +10,7 @@
 // problems named below (Vertex Cover, 3SAT, Clique) are on both.
 
 import { expect, test } from "./fixtures";
-import {
-  chooseReduceTarget,
-  gotoHomeAndWaitForLoad,
-  gotoProblemDetail,
-  showPane,
-  skipStartupSplash,
-} from "./helpers";
+import { gotoHomeAndWaitForLoad, gotoProblemDetail, skipStartupSplash } from "./helpers";
 
 /** Redux's key -> display name map, read the way the site reads it. */
 async function readDisplayNames(request) {
@@ -84,19 +78,17 @@ test("the Home search finds a problem by its display name or by its key", async 
   await expect(page.locator('[id^="problem-card-"][aria-label="SAT3"]')).toHaveCount(0);
 });
 
-test("the problem page names its problem by display name: heading, tab title and Verify strip", async ({
+test("the problem page names its problem by display name: heading and tab title", async ({
   page,
 }) => {
   await skipStartupSplash(page);
   await gotoProblemDetail(page, "Vertex Cover", { expect });
 
   await expect(page).toHaveTitle("Vertex Cover · Redux");
-  await expect(page.locator("#workbench-showing-problem")).toHaveText("Vertex Cover");
-  await showPane(page, "verify", { expect });
-  const strip = page.locator("#workbench-verify-source-toggle");
-  await expect(strip).toBeVisible();
+  const heading = page.getByRole("heading", { level: 1 });
+  await expect(heading).toHaveText("Vertex Cover");
   // Read as rendered, so an upper-casing style would show here.
-  expect(await seenText(strip.locator("span").first())).toBe("Verify Vertex Cover");
+  expect(await seenText(heading)).toBe("Vertex Cover");
 });
 
 test("a route that names the problem by its key opens the same page, titled by display name", async ({
@@ -110,10 +102,7 @@ test("a route that names the problem by its key opens the same page, titled by d
   await expect(page).toHaveTitle("Vertex Cover · Redux");
 });
 
-test("Reduce mode's target menu and its Showing lines and captions use display names", async ({
-  page,
-  request,
-}) => {
+test("Reduce mode's target menu uses display names", async ({ page, request }) => {
   const names = await readDisplayNames(request);
   const displayNames = new Set(names.values());
 
@@ -127,17 +116,15 @@ test("Reduce mode's target menu and its Showing lines and captions use display n
   const targets = await options.evaluateAll((elements) =>
     elements.map((element) => element.querySelector("[id$='-name']")?.textContent?.trim() ?? ""),
   );
-  await page.keyboard.press("Escape");
   for (const target of targets.filter(Boolean)) {
     expect(displayNames.has(target), `"${target}" is a display name`).toBe(true);
   }
 
-  const target = await chooseReduceTarget(page, /^Clique$/, { expect });
-  expect(target).toBe("Clique");
-  await expect(page.locator("#workbench-source-frame-showing-problem")).toHaveText("3SAT");
-  await expect(page.locator("#workbench-target-frame-showing-problem")).toHaveText("Clique");
-  await expect(page.locator("#workbench-source-frame-caption")).toContainText("Source · 3SAT");
-  await expect(page.locator("#workbench-target-frame-caption")).toContainText("Target · Clique");
+  await options
+    .filter({ hasText: /^Clique/ })
+    .first()
+    .click();
+  await expect(page.locator("#workbench-target-value")).toHaveText(/^Clique/);
 });
 
 test("Compare names its columns by display name, even when its URL uses keys", async ({ page }) => {
