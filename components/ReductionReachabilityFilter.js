@@ -32,6 +32,8 @@ import Box from "@mui/material/Box";
 import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import { useMemo } from "react";
+import { problemOptionFilter } from "../lib/problemNames";
 import { thinScrollbarSx } from "./theme";
 
 const SOURCE_INPUT_ID = "reachability-source-input";
@@ -44,6 +46,8 @@ const ANY_HOPS_ID = "reachability-mode-any-hops";
  * @param {string[]} props.problemNames Every real problem name currently in
  *   the catalog index (useCatalogIndex()'s `index` keys), used as the
  *   picker's option list.
+ * @param {Map<string, string>} [props.codeToName] #279: problem key -> display name
+ *   (useCatalogIndex()'s `codeToName`), so typing a key finds its problem.
  * @param {string|null} props.source Selected source problem name, or null
  *   when no reachability filter is active.
  * @param {"oneHop"|"anyHops"} props.mode
@@ -55,17 +59,21 @@ const ANY_HOPS_ID = "reachability-mode-any-hops";
  */
 export default function ReductionReachabilityFilter({
   problemNames,
+  codeToName,
   source,
   mode,
   onSourceChange,
   onModeChange,
   loading = false,
 }) {
+  // #279: the picker finds a problem by its key too ("SAT3" -> 3SAT).
+  const filterProblems = useMemo(() => problemOptionFilter(codeToName), [codeToName]);
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <Autocomplete
         id={SOURCE_INPUT_ID}
         options={problemNames}
+        filterOptions={filterProblems}
         value={source}
         onChange={(_event, next) => onSourceChange(next)}
         disabled={loading}
