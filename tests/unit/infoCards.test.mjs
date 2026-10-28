@@ -10,6 +10,7 @@ import {
   reductionCard,
   reductionTags,
   solverCard,
+  solverListTags,
   solverTags,
   targetCard,
 } from "../../components/workbench/infoCards.js";
@@ -28,10 +29,17 @@ describe("solver", () => {
     spaceComplexity: null,
   };
 
-  test("tags every solver type, then the bucket", () => {
+  test("the open list tags every solver type, then the bucket", () => {
+    assert.deepEqual(
+      solverListTags(solver).map((tag) => tag.label),
+      ["Greedy", "Approximation", "Polynomial"],
+    );
+  });
+
+  test("tags every solver type and not the bucket", () => {
     assert.deepEqual(
       solverTags(solver).map((tag) => tag.label),
-      ["Greedy", "Approximation", "Polynomial"],
+      ["Greedy", "Approximation"],
     );
   });
 

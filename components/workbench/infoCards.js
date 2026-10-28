@@ -83,8 +83,16 @@ function labelsOf(facetKey, keys) {
 
 // --- Solver -------------------------------------------------------------------------------
 
-/** The solver's types (#299: every one it lists) and complexity bucket. */
+/**
+ * The solver's types (#299: every one it lists). The complexity bucket stays on the solver's
+ * info card, so the dropdown's tags say what kind of algorithm each solver is.
+ */
 export function solverTags(solver) {
+  return tagsFrom(enumLabelsOf("solverType", solver.solverTypeNames));
+}
+
+/** The open list has room for more: the solver's types, then its complexity bucket. */
+export function solverListTags(solver) {
   return tagsFrom([
     ...enumLabelsOf("solverType", solver.solverTypeNames),
     backendEnumLabel("solverComplexity", solver.complexityBucketName),
