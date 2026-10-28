@@ -46,6 +46,18 @@
 //     panes use), and a source picture picked before Run is used when the view can draw it. The
 //     dropdown shows what Redux says it drew, so a backend that ignores the choice (older than
 //     #912) gets a fixed dropdown naming the default.
+//   - A randomized solver's seed (#295, ReduxISU/Redux#932), Solve mode only for now: its run
+//     (visualizeRun, or a frames picture) reports the seed it ran with, shown in the Result
+//     panel as "Seed: 12345" with Run again with this seed, which asks for the same run again
+//     with `seed` set, so the steps come out the same. For a randomized solver (one declaring
+//     the "Stochastic" type) the command bar has a Seed box: blank lets Redux pick a new seed
+//     each Run, a number repeats that run. Run again with this seed puts its seed in the box.
+//     The box keeps its text for the page's life and is not in the URL; it is ignored while
+//     hidden. The seed and its button show only while the run is of this instance and the
+//     solver picked now; a solver with no seed, or a backend older than #932, shows neither.
+//     Solve's answer is visualizeRun's own `answer` when it has one, so the answer and the steps
+//     are one run (and Run makes one request, not two); ProblemProvider/solve answers only when
+//     visualizeRun can't. Reduce mode sends no seed yet.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -83,6 +95,7 @@ import {
   requestReduction,
   requestSolvedInstance,
 } from "../../lib/redux";
+import { isRandomizedSolver, MAX_SEED, parseSeed } from "../../lib/runSeed";
 import { frameAtPosition, framePosition, RUN_END } from "../../lib/runSteps";
 import ComputeStatus from "../detail/ComputeStatus";
 import { GADGET_PALETTE } from "../pictures/gadgetRings";
@@ -277,6 +290,8 @@ export default function Workbench({ problem }) {
   // target's is kept per target problem.
   const [sourceViewPick, setSourceViewPick] = useState(null);
   const [targetViewPicks, setTargetViewPicks] = useState({});
+  // #295: the Seed box's text, kept for the page's life (not in the URL).
+  const [seedText, setSeedText] = useState("");
 
   const selectedSolver = solvers[solverIndex] ?? null;
   const selectedViz = visualizations[vizIndex] ?? null;
@@ -585,14 +600,26 @@ export default function Workbench({ problem }) {
   const hasInstance = instance.trim() !== "";
   const canSolve = Boolean(selectedSolver?.className);
   const canReduce = canSolve && Boolean(selectedReduction?.className);
-  const runDisabled =
+  // #295: the Seed box shows for a randomized solver in Solve mode; hidden, it is ignored.
+  const seedShown = mode === "solve" && isRandomizedSolver(selectedSolver);
+  const typedSeed = seedShown ? parseSeed(seedText) : null;
+  const seedInvalid = Number.isNaN(typedSeed);
+  // Everything that stops a Run but the Seed box's text (Run again with this seed brings its own).
+  const runBlocked =
     !hasInstance ||
     Boolean(instanceError) ||
     isRunning ||
     (mode === "solve" ? !canSolve : !canReduce);
+  const runDisabled = runBlocked || seedInvalid;
 
-  function handleRun() {
-    if (runDisabled) return;
+  /**
+   * Run. `seed` (#295) repeats a randomized solver's run in Solve mode; anything else (a click
+   * event) takes the Seed box's number, or lets Redux pick one when the box is blank or hidden.
+   */
+  function handleRun(seed = null) {
+    const givenSeed = mode === "solve" && Number.isSafeInteger(seed) ? seed : null;
+    if (givenSeed === null ? runDisabled : runBlocked) return;
+    const runSeed = givenSeed ?? typedSeed;
     setSerializeError(null);
     let runInstance = instance;
     const serialized = edits.serialize();
@@ -617,37 +644,69 @@ export default function Workbench({ problem }) {
     let finished;
     if (mode === "solve") {
       const visualization = selectedViz;
+      const oneRun = drawsFromRun(visualization);
+      // #295: the answer comes from the same run as the steps. When visualizeRun answers, its
+      // `answer` is the result (one request, and the answer is the run the steps walk);
+      // ProblemProvider/solve is asked only when there is no such answer: no visualization, a
+      // backend without visualizeRun, a list or frames picture (neither carries the answer), a
+      // failed visualizeRun, or a run that timed out.
+      let shareRun = () => {};
+      const sharedRun = oneRun
+        ? new Promise((resolve) => {
+            shareRun = resolve;
+          })
+        : Promise.resolve(null);
       const answer = solveRun.start(async (signal) => {
-        const output = await requestSolvedInstance(
-          REDUX_API_BASE_URL,
-          solver.className,
-          runInstance,
-          signal,
-        );
+        const run = await sharedRun;
+        const output =
+          typeof run?.answer === "string" && !run.timedOut
+            ? run.answer
+            : await requestSolvedInstance(
+                REDUX_API_BASE_URL,
+                solver.className,
+                runInstance,
+                signal,
+              );
         succeeded = true;
         return { output, solverName: solver.name, instance: runInstance, runId };
       });
-      const oneRun = drawsFromRun(visualization);
       const picture = visualization
         ? pictureRun.start(async (signal) => {
-            const ran = { solverName: solver.name, instance: runInstance, runId };
+            const ran = {
+              solverName: solver.name,
+              solverClassName: solver.className,
+              instance: runInstance,
+              runId,
+            };
             // #252: one run and every picture of it, when the backend has visualizeRun.
             if (oneRun) {
-              const run = await requestRunPictures({
-                instance: runInstance,
-                solver: solver.className,
-                signal,
-              });
-              if (run) return { run, ...ran };
+              let run = null;
+              try {
+                run = await requestRunPictures({
+                  instance: runInstance,
+                  solver: solver.className,
+                  seed: runSeed,
+                  signal,
+                });
+              } finally {
+                shareRun(run);
+              }
+              if (run) return { run, seed: run.seed, ...ran };
             }
             // #199: {format, frames} plus, for a format=frames picture, its type and payload.
             const picture = await requestPicture({
               visualization,
               instance: runInstance,
               solver: solver.className,
+              seed: runSeed,
               signal,
             });
-            return { ...picture, vizClassName: visualization.className, ...ran };
+            return {
+              ...picture,
+              seed: picture.seed ?? null,
+              vizClassName: visualization.className,
+              ...ran,
+            };
           })
         : Promise.resolve();
       finished = Promise.all([answer, picture]);
@@ -880,6 +939,8 @@ export default function Workbench({ problem }) {
     if (solvers.length === 0) modeNote = "No solvers are declared for this problem yet.";
     else if (!canSolve)
       modeNote = "This solver cannot be run: the catalog did not say which backend solver it is.";
+    else if (seedInvalid)
+      modeNote = `A seed is a whole number up to ${MAX_SEED}. Leave it blank for a random run.`;
   } else if (reductions.length === 0) {
     modeNote = `No reductions from ${problem.name} are declared yet.`;
   } else if (!canSolve) {
@@ -1401,6 +1462,24 @@ export default function Workbench({ problem }) {
     result: resultNew && panel !== "result" ? { label: "New result", color: accentLine } : null,
   };
 
+  // #295: the seed the last Solve's run reported, with Run again with this seed, while that run
+  // is of this instance and the solver picked now.
+  const solveSeed =
+    mode === "solve" &&
+    !isRunning &&
+    pictureRunCurrent &&
+    Number.isSafeInteger(pictureResult.seed) &&
+    pictureResult.solverClassName === (selectedSolver?.className ?? null)
+      ? {
+          seed: pictureResult.seed,
+          onRerun: () => {
+            setSeedText(String(pictureResult.seed));
+            handleRun(pictureResult.seed);
+          },
+          disabled: runBlocked,
+        }
+      : null;
+
   // The picture the Result panel counts steps from: the chosen visualization's, of this run.
   const countedPicture = pictureResult?.run
     ? (pictureResult.run.pictures[selectedViz?.className] ?? null)
@@ -1411,6 +1490,7 @@ export default function Workbench({ problem }) {
         output: solveResult.output,
         elapsedMs: solveRun.elapsedMs,
         instance: solveResult.instance,
+        seed: solveSeed,
         // An old flat list is [base, ...steps, solved]; a format=frames run is one frame per
         // step, its last one the solved picture (#199).
         stepCount:
@@ -1726,6 +1806,9 @@ export default function Workbench({ problem }) {
                     onChange: setReductionClassName,
                   }
                 : null
+            }
+            seed={
+              seedShown ? { value: seedText, onChange: setSeedText, invalid: seedInvalid } : null
             }
             runLabel={runLabel}
             runDisabled={runDisabled}
