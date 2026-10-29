@@ -2309,7 +2309,7 @@ export default function Workbench({ problem }) {
     <Box
       id={`${ID}-checks`}
       sx={{
-        flex: "1 1 560px",
+        flex: "none",
         minWidth: 0,
         display: "flex",
         flexWrap: "wrap",
