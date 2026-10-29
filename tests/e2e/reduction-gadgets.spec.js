@@ -295,7 +295,6 @@ for (const [type, capture] of Object.entries(PICTURES)) {
     // Color: every drawn piece has a mark of its own id, on both sides, in a palette color.
     await marksButton(page, "color").click();
     await expect(marksButton(page, "color")).toHaveAttribute("aria-pressed", "true");
-    await page.locator("#workbench-panel-close").click();
     for (const side of ["source", "target"]) {
       const marked = new Set(
         await rings(page, side).evaluateAll((marks) =>
@@ -540,7 +539,6 @@ test("a Search Tree pane says gadget links can't be shown there, and fits the tr
   const view = SAT_TO_3SAT_SEARCH_TREE_VIEW;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, () => view);
-  await page.locator("#workbench-panel-close").click();
   await toStep(page, 0);
   await expect(page.locator(`${VIEW}-target-note`)).toContainText(
     "Gadget links can't be shown on this picture",

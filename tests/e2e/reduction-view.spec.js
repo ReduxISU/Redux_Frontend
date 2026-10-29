@@ -150,7 +150,6 @@ for (const key of Object.keys(CASES)) {
     const { view } = CASES[key];
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, key);
-    await page.locator("#workbench-panel-close").click();
 
     await expect(pane(page, "source")).toHaveAttribute(
       "data-picture-type",
@@ -283,7 +282,6 @@ for (const key of ["satTo3sat", "sat3ToClique", "subsetSumToPartition"]) {
     const { view } = CASES[key];
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, key);
-    await page.locator("#workbench-panel-close").click();
     await toStep(page, 0);
     // #274: the run now opens on its last step, and the pointer left over a piece would ring it
     // (a hover link), so it is moved off the pictures before anything is measured.
@@ -326,7 +324,6 @@ test("the Packing panes' texts never meet a line or a marker, at each phase's fi
 }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "subsetSumToPartition");
-  await page.locator("#workbench-panel-close").click();
   for (const phase of ["build", "solve", "map"]) {
     await phaseButton(page, phase).click();
     for (const side of ["source", "target"]) {
@@ -359,7 +356,6 @@ test("pointing at a source piece marks what it became on the target, and the oth
   const { view } = CASES.sat3ToClique;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "sat3ToClique");
-  await page.locator("#workbench-panel-close").click();
   await phaseButton(page, "solve").click();
   await expect(readout(page)).toHaveAttribute("data-linked", "false");
 
@@ -403,7 +399,6 @@ test("a tap pins a link, keyboard focus links too, and Escape clears it", async 
   const { view } = CASES.coloringToCliqueCover;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "coloringToCliqueCover");
-  await page.locator("#workbench-panel-close").click();
   await phaseButton(page, "map").click();
 
   // Tap (click) a node of the source graph: the link stays once the pointer leaves.
@@ -459,8 +454,6 @@ for (const scheme of ["light", "dark"]) {
       await page.setViewportSize({ width, height: 900 });
       for (const key of ["satTo3sat", "coloringToCliqueCover"]) {
         await openView(page, key);
-        const close = page.locator("#workbench-panel-close");
-        if (await close.isVisible()) await close.click();
         const source = await pane(page, "source").boundingBox();
         const target = await pane(page, "target").boundingBox();
         expect(target.y).toBeGreaterThan(source.y + source.height);

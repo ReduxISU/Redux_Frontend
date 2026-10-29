@@ -190,15 +190,30 @@ export async function gotoProblemDetail(page, problemName, { expect }) {
 }
 
 /**
- * #229: opens one workbench panel ("details", "instance" or "result") from the rail, if it
- * isn't already open, and confirms the rail button reports it open.
+ * #229 opened one workbench panel ("details", "instance" or "result") from the rail. #303
+ * (Board G) has no panels: the instance editor and the results are always on the page, and the
+ * problem's details are the title's (i) card. So this brings the part into view and confirms it
+ * shows: "instance" the editor, "result" the results list (Solve or Reduce), "verify" the Verify
+ * tab's box (pressing the tab), and "details" the (i) card (pressing the (i)).
  */
 export async function openPanel(page, panelKey, { expect }) {
-  const button = page.locator(`#workbench-rail-${panelKey}`);
-  if ((await button.getAttribute("aria-expanded")) !== "true") {
-    await button.click();
+  if (panelKey === "verify") {
+    await page.locator("#workbench-mode-verify").click();
+    await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#workbench-result-verify")).toBeVisible();
+    return;
   }
-  await expect(button).toHaveAttribute("aria-expanded", "true");
+  if (panelKey === "details") {
+    const card = page.locator("#problem-info-card");
+    if (!(await card.isVisible())) await page.locator("#problem-info-button").click();
+    await expect(card).toBeVisible();
+    return;
+  }
+  const part = page.locator(
+    panelKey === "instance" ? "#workbench-instance-full-instance" : "#workbench-results",
+  );
+  await part.scrollIntoViewIfNeeded();
+  await expect(part).toBeVisible();
 }
 
 /**

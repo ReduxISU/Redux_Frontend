@@ -59,6 +59,24 @@ function useKeepInViewport(ref, active, contentKey) {
   return shift;
 }
 
+/**
+ * #303: whether a card meant to open above its anchor has room there, below the sticky site
+ * banner (NavBar's `data-site-banner`) and the top of the window. Without room it drops below.
+ */
+function useRoomAbove(anchorRef, cardRef, active, contentKey) {
+  const [above, setAbove] = useState(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: contentKey re-measures new content
+  useLayoutEffect(() => {
+    if (!active || !anchorRef.current || !cardRef.current) return;
+    const banner = document.querySelector("[data-site-banner]");
+    const bannerBottom = banner ? Math.max(0, banner.getBoundingClientRect().bottom) : 0;
+    const anchorTop = anchorRef.current.getBoundingClientRect().top;
+    const height = cardRef.current.offsetHeight;
+    setAbove(anchorTop - 2 - height >= bannerBottom + VIEWPORT_MARGIN);
+  }, [active, anchorRef, cardRef, contentKey]);
+  return above;
+}
+
 /** One tag pill in a tag hue (the theme's `tag.*` tokens: blue, violet, cyan, ...). */
 function Tag({ label, hue }) {
   const colors = paletteVars.tag[hue] ?? paletteVars.facet.fallback;
@@ -212,8 +230,12 @@ export function InfoCard({ card, id, role, hidden, sx, cardRef, ...rest }) {
 /**
  * The (i) after a dropdown's label. Shows the current choice's card on mouse hover, on
  * keyboard focus, or on a tap or click (which toggles it). Escape closes it.
+ * #303: also the (i) after the problem's title. `placement="above"` opens the card above the
+ * button, dropping below when the sticky banner or the window's top would cut it off; it is
+ * nudged sideways to stay inside the window either way. `inline` drops the negative margins
+ * that tuck the 44px target in beside a label, for a button standing on its own in a row.
  */
-function InfoButton({ id, card, align }) {
+export function InfoButton({ id, card, align, placement = "below", inline = false }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -222,6 +244,7 @@ function InfoButton({ id, card, align }) {
   const cardRef = useRef(null);
   const open = (hovered || focused || pinned) && !dismissed;
   const shift = useKeepInViewport(cardRef, open, card.title);
+  const above = useRoomAbove(wrapperRef, cardRef, open && placement === "above", card.title);
   const cardId = `${id}-card`;
 
   useEffect(() => {
@@ -283,7 +306,7 @@ function InfoButton({ id, card, align }) {
         sx={{
           width: 44,
           height: 44,
-          m: "-12px -8px -12px -4px",
+          m: inline ? 0 : "-12px -8px -12px -4px",
           p: 0,
           display: "flex",
           alignItems: "center",
@@ -313,8 +336,11 @@ function InfoButton({ id, card, align }) {
         card={card}
         hidden={!open}
         cardRef={cardRef}
+        data-placement={placement === "above" && above ? "above" : "below"}
         sx={{
-          top: "calc(100% + 2px)",
+          ...(placement === "above" && above
+            ? { bottom: "calc(100% + 2px)" }
+            : { top: "calc(100% + 2px)" }),
           ...(align === "right" ? { right: 0 } : { left: 0 }),
           translate: `${shift}px`,
         }}
@@ -342,6 +368,8 @@ function InfoButton({ id, card, align }) {
  *   cell of a parent grid or flex row: the label and box are returned as siblings), "stack"
  *   puts it above.
  * @param {Object} [props.boxSx] Extra `sx` for the box's wrapper (its width).
+ * @param {"label"|"box"} [props.infoPlacement] Where the (i) goes: after the label (the
+ *   default), or after the box, on its right (#303, Board G's task menus).
  */
 export default function TaggedSelect({
   id: idProp,
@@ -353,6 +381,7 @@ export default function TaggedSelect({
   align = "left",
   labelPlacement = "stack",
   boxSx,
+  infoPlacement = "label",
 }) {
   const autoId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const id = idProp ?? `tagged-select-${autoId}`;
@@ -512,8 +541,13 @@ export default function TaggedSelect({
       <Box component="label" id={labelId} htmlFor={buttonId} sx={controlLabelSx}>
         {label}
       </Box>
-      {selected?.card && <InfoButton id={`${id}-info`} card={selected.card} align={align} />}
+      {selected?.card && infoPlacement === "label" && (
+        <InfoButton id={`${id}-info`} card={selected.card} align={align} />
+      )}
     </Box>
+  );
+  const infoAfterBox = selected?.card && infoPlacement === "box" && (
+    <InfoButton id={`${id}-info`} card={selected.card} align="right" inline />
   );
 
   const box = (
@@ -740,18 +774,26 @@ export default function TaggedSelect({
     </Box>
   );
 
+  const boxWithInfo = infoAfterBox ? (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+      <Box sx={{ flex: "1 1 auto", minWidth: 0 }}>{box}</Box>
+      {infoAfterBox}
+    </Box>
+  ) : (
+    box
+  );
   if (labelPlacement === "row") {
     return (
       <>
         {labelRow}
-        {box}
+        {boxWithInfo}
       </>
     );
   }
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, minWidth: 0, ...boxSx }}>
       {labelRow}
-      {box}
+      {boxWithInfo}
     </Box>
   );
 }

@@ -43,17 +43,19 @@
 //
 // #217: a renderer may also pass `follow`, the box of the piece a step is about (a search tree's
 // node), and the box of what leads to it (`path`: the tree's path from the root down to that
-// node). Zoomed in, a new step whose piece is out of the window pans the window to frame its
-// path, so a reader stepping through a big picture on a phone zooms once and keeps the step in
+// node). Zoomed in, a new step whose piece is out of the window, or whose path the window could
+// hold but cuts, pans the window to frame its path, so a reader stepping through a big picture on a phone zooms once and keeps the step in
 // view. At fit everything is in view, so it does nothing there: every picture opens at fit.
 // With `readableScale` too, zooming in goes on past MAX_ZOOM times fit when that is not enough
 // to reach the scale the picture's text reads at (a wide search tree on a phone).
 
 import Box from "@mui/material/Box";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { COMPACT_MEDIA } from "../workbench/layout";
 import DiagramSvg from "./DiagramSvg";
 import { visuallyHiddenSx } from "./pictureSx";
+import { ZoomControlsSlot } from "./zoomControlsSlot";
 
 /** The furthest a diagram zooms in, as a multiple of fit. */
 export const MAX_ZOOM = 4;
@@ -267,6 +269,18 @@ function viewFraming(k, box, drawing, follow) {
   );
 }
 
+/**
+ * #217: whether a new step should pan the zoomed window: its piece is outside it, or its path is
+ * only partly in it though the window could hold the whole path.
+ */
+function needsFraming(view, box, follow) {
+  if (!inWindow(view, box, follow)) return true;
+  const path = follow.path;
+  if (!path) return false;
+  const holds = path.width <= box.width / view.k && path.height <= box.height / view.k;
+  return holds && !inWindow(view, box, path);
+}
+
 /** Whether `piece` (a box in drawing units) is wholly inside the window of `view`. */
 function inWindow(view, box, piece) {
   const left = box.minX + view.x;
@@ -317,8 +331,9 @@ const zoomButtonSx = {
  * @param {{key: string, x: number, y: number, width: number, height: number}|null}
  *   [props.follow] A box to keep in view while zoomed in (#217: the node a search tree's step
  *   is about), with `path`, the box of what leads to it (the path from the root). When its key
- *   changes and the box is outside the zoomed window, the window pans to frame the path (see
- *   viewFraming); at fit everything is in view already.
+ *   changes and the box is outside the zoomed window, or the window could hold the whole path
+ *   but cuts it, the window pans to frame the path (see viewFraming); at fit everything is in
+ *   view already.
  * @param {number|null} [props.readableScale] The scale (CSS px per drawing unit) the picture's
  *   text reads at (#217). Zooming in reaches READABLE_MAX_ZOOM times it, when that is further
  *   than MAX_ZOOM times fit. The picture still opens at fit.
@@ -336,6 +351,7 @@ export default function DiagramZoom({
   children,
 }) {
   const svgRef = useRef(null);
+  const slot = useContext(ZoomControlsSlot);
   // The picture area's size in CSS px, measured (null until it is).
   const areaRef = useRef(null);
   const [area, setArea] = useState(null);
@@ -386,7 +402,7 @@ export default function DiagramZoom({
   const [followedKey, setFollowedKey] = useState(followKey);
   if (followKey !== followedKey) {
     setFollowedKey(followKey);
-    if (follow && !resetting && view.k > 1.001 && !inWindow(view, box, follow)) {
+    if (follow && !resetting && view.k > 1.001 && needsFraming(view, box, follow)) {
       setStored(viewFraming(view.k, box, drawing, follow));
     }
   }
@@ -686,84 +702,92 @@ export default function DiagramZoom({
   const h = box.height / view.k;
   const percent = Math.round(view.k * 100);
 
+  // #303: the Zoom group, on the workbench's header row when it gives a slot (zoomControlsSlot.js).
+  const zoomGroup = (
+    <Box
+      role="group"
+      aria-label="Zoom"
+      sx={{
+        display: "inline-flex",
+        border: "1px solid",
+        borderColor: "border.main",
+        borderRadius: "8px",
+        overflow: "hidden",
+      }}
+    >
+      <Box
+        component="button"
+        type="button"
+        id={`${idPrefix}-zoom-out`}
+        aria-label="Zoom out"
+        disabled={!zoomed}
+        onClick={() => zoomBy(1 / BUTTON_STEP)}
+        sx={zoomButtonSx}
+      >
+        −
+      </Box>
+      <Box
+        component="button"
+        type="button"
+        id={`${idPrefix}-zoom-in`}
+        aria-label="Zoom in"
+        disabled={view.k >= box.maxZoom - 0.001}
+        onClick={() => zoomBy(BUTTON_STEP)}
+        sx={zoomButtonSx}
+      >
+        +
+      </Box>
+      <Box
+        component="button"
+        type="button"
+        id={`${idPrefix}-zoom-reset`}
+        aria-label={`Fit the whole diagram (now ${percent}%)`}
+        disabled={!zoomed}
+        onClick={() => setStored(FIT)}
+        sx={zoomButtonSx}
+      >
+        Fit
+      </Box>
+      {editor && (
+        <Box
+          component="button"
+          type="button"
+          id={`${idPrefix}-layout-reset`}
+          aria-label="Reset layout: put every moved node and bent edge back"
+          disabled={!editor.edited}
+          onClick={() => {
+            editor.reset();
+            setAnnouncement("Layout reset.");
+          }}
+          sx={zoomButtonSx}
+        >
+          Reset layout
+        </Box>
+      )}
+    </Box>
+  );
+
   return (
     <Box
       id={`${idPrefix}-zoom`}
       data-zoom={view.k.toFixed(2)}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1.5 }}
     >
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 1,
-        }}
-      >
+      {slot && createPortal(zoomGroup, slot)}
+      {(!slot || toolbar) && (
         <Box
-          role="group"
-          aria-label="Zoom"
           sx={{
-            display: "inline-flex",
-            border: "1px solid",
-            borderColor: "border.main",
-            borderRadius: "8px",
-            overflow: "hidden",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
           }}
         >
-          <Box
-            component="button"
-            type="button"
-            id={`${idPrefix}-zoom-out`}
-            aria-label="Zoom out"
-            disabled={!zoomed}
-            onClick={() => zoomBy(1 / BUTTON_STEP)}
-            sx={zoomButtonSx}
-          >
-            −
-          </Box>
-          <Box
-            component="button"
-            type="button"
-            id={`${idPrefix}-zoom-in`}
-            aria-label="Zoom in"
-            disabled={view.k >= box.maxZoom - 0.001}
-            onClick={() => zoomBy(BUTTON_STEP)}
-            sx={zoomButtonSx}
-          >
-            +
-          </Box>
-          <Box
-            component="button"
-            type="button"
-            id={`${idPrefix}-zoom-reset`}
-            aria-label={`Fit the whole diagram (now ${percent}%)`}
-            disabled={!zoomed}
-            onClick={() => setStored(FIT)}
-            sx={zoomButtonSx}
-          >
-            Fit
-          </Box>
-          {editor && (
-            <Box
-              component="button"
-              type="button"
-              id={`${idPrefix}-layout-reset`}
-              aria-label="Reset layout: put every moved node and bent edge back"
-              disabled={!editor.edited}
-              onClick={() => {
-                editor.reset();
-                setAnnouncement("Layout reset.");
-              }}
-              sx={zoomButtonSx}
-            >
-              Reset layout
-            </Box>
-          )}
+          {!slot && zoomGroup}
+          {toolbar}
         </Box>
-        {toolbar}
-      </Box>
+      )}
       <Box
         ref={areaRef}
         id={`${idPrefix}-area`}

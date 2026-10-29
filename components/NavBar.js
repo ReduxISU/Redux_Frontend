@@ -135,12 +135,16 @@ function ThemeToggle() {
   );
 }
 
-function IsuLogo() {
+/**
+ * The ISU logo, one image per theme. `idPrefix` names its images (`-isu-logo-dark`, ...), so
+ * #303's page footer can show it too; `sx` is for its wrapper.
+ */
+export function IsuLogo({ idPrefix = "navbar", sx }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+    <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0, ...sx }}>
       {[
-        { scheme: "dark", src: "/ISULogo-Dark.png", id: "navbar-isu-logo-dark" },
-        { scheme: "light", src: "/ISULogo-Light.png", id: "navbar-isu-logo-light" },
+        { scheme: "dark", src: "/ISULogo-Dark.png", id: `${idPrefix}-isu-logo-dark` },
+        { scheme: "light", src: "/ISULogo-Light.png", id: `${idPrefix}-isu-logo-light` },
       ].map(({ scheme, src, id }) => (
         <Box key={scheme} component="span" sx={onlyInSx(scheme, "block")}>
           <Box
@@ -166,7 +170,15 @@ const NAV_LINKS = [
   { id: "navbar-contribute-link", href: "/contribute", label: "Contribute" },
 ];
 
-export default function NavBar() {
+/**
+ * @param {Object} props
+ * @param {boolean} [props.sticky] #303: the banner stays at the top of the window while the
+ *   page scrolls (the problem page). Cards that open upwards drop below it rather than under
+ *   it (TaggedSelect.js reads `data-site-banner`).
+ * @param {boolean} [props.logoInFooter] #303: on phones the ISU logo leaves the banner for the
+ *   page's footer, so the banner keeps the menu and the theme switch on one short row.
+ */
+export default function NavBar({ sticky = false, logoInFooter = false }) {
   const router = useRouter();
   const [menuAnchor, setMenuAnchor] = useState(null);
   const menuOpen = Boolean(menuAnchor);
@@ -175,7 +187,9 @@ export default function NavBar() {
   return (
     <Box
       component="header"
+      data-site-banner=""
       sx={{
+        ...(sticky ? { position: "sticky", top: 0, zIndex: "appBar" } : {}),
         display: "flex",
         alignItems: "center",
         gap: { xs: 1.5, sm: 3 },
@@ -284,7 +298,7 @@ export default function NavBar() {
         })}
       </Menu>
       <ThemeToggle />
-      <IsuLogo />
+      <IsuLogo sx={logoInFooter ? { display: { xs: "none", sm: "flex" } } : undefined} />
     </Box>
   );
 }

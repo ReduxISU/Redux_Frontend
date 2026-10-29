@@ -81,6 +81,38 @@ function labelsOf(facetKey, keys) {
     .map((key) => optionLabel(facetKey, key));
 }
 
+// --- Problem (the title's (i), #303) -------------------------------------------------------
+
+/**
+ * The problem's own card: its description, its tags (the same ones the title row shows) and
+ * what its instances and answers are. Replaces #229's Details panel.
+ * @returns {Card}
+ */
+export function problemCard(problem) {
+  const overview = problem.overview ?? {};
+  const tags = problem.tags ?? {};
+  return {
+    title: problem.name,
+    kind: "Problem",
+    description: problem.oneLiner ?? "",
+    facts: [
+      { label: "Class", value: listValue(labelsOf("complexityClass", tags.complexityClass)) },
+      { label: "Type", value: listValue(labelsOf("problemType", tags.problemType)) },
+      { label: "Variant", value: listValue(labelsOf("problemVariant", tags.problemVariant)) },
+      {
+        label: "Input",
+        value: overview.inputDescription ?? overview.input ?? NOT_DECLARED,
+      },
+      {
+        label: "Output",
+        value: overview.outputDescription ?? overview.output ?? NOT_DECLARED,
+      },
+      { label: "Source", value: overview.source ?? NOT_DECLARED },
+      { label: "Authors", value: overview.contributedBy ?? NOT_DECLARED },
+    ],
+  };
+}
+
 // --- Solver -------------------------------------------------------------------------------
 
 /**

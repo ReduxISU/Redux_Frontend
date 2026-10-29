@@ -204,7 +204,9 @@ test("the closed box shows the chosen option's tags, and every option shows its 
 
   await solverButton(page).click();
   const optionTags = await page.locator("#workbench-solver-option-0-tags > span").allTextContents();
-  expect(optionTags).toEqual(closed);
+  // The open list has room for more (TaggedSelect's listTags): it starts with the closed box's
+  // tags, in order, and may list more after them.
+  expect(optionTags.slice(0, closed.length)).toEqual(closed);
 
   // The name gives way before the tags: the tags keep their full width.
   const tagsFit = await page
@@ -254,8 +256,8 @@ test("the (i) card shows on keyboard focus and on a tap, as a tooltip the button
   await expect(card).toHaveAttribute("role", "tooltip");
   await expect(card).toBeHidden();
 
-  // Keyboard focus (Tab onto it from the control before it) shows it.
-  await page.locator("#workbench-mode-reduce").focus();
+  // Keyboard focus (Tab onto it from the dropdown before it, #303) shows it.
+  await page.locator("#workbench-solver-button").focus();
   await page.keyboard.press("Tab");
   await expect(info).toBeFocused();
   await expect(card).toBeVisible();

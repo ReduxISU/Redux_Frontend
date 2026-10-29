@@ -14,18 +14,29 @@
 // (components/pictures/ReductionView.js) instead, and its phase bar sits above the step controls.
 // Each of its pictures keeps its Visualization Type dropdown at its top right (#912).
 //
+// #303 (Board G): one picture (Solve and Verify) gets a header row: the Showing line on the
+// left, and on the right the Picture menu (the Visualization Type dropdown, renamed as the
+// mockup has it), the picture's zoom buttons (DiagramZoom.js renders them into this row through
+// ../pictures/zoomControlsSlot.js) and Full screen, all on one line where the width allows. In
+// Reduce the Showing line stays above the two pictures, with Full screen at its right, and each
+// picture keeps its own zoom buttons. The steps come straight under the picture(s), then the
+// note and the Legend. Full screen (Workbench.js) keeps the header row, the picture(s) and the
+// steps, and hides the rest: the note, the verdict and the Legend.
+//
 // The pictures themselves come from the renderers: a format=frames picture through
 // components/pictures/PictureCanvas.js (#199), every other one through the older
 // VisualizationCanvas. This file only lays them out.
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
+import { useState } from "react";
 import StepScrubber from "../detail/StepScrubber";
 import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import PictureCanvas from "../pictures/PictureCanvas";
 import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
+import { ZoomControlsSlot } from "../pictures/zoomControlsSlot";
 import Legend from "./Legend";
-import { COMPACT_MEDIA, cardSx, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
+import { COMPACT_MEDIA, PHONE_MEDIA, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
 import TaggedSelect from "./TaggedSelect";
 
 const PICTURE_MIN_HEIGHT = 440;
@@ -33,20 +44,135 @@ const PICTURE_MIN_HEIGHT = 440;
 /**
  * The Visualization Type label and dropdown at a picture's top right, its list opening
  * aligned to the right edge. With a single choice it still shows (so every picture says what
- * type it is, with its tags and info card) but cannot be opened.
+ * type it is, with its tags and info card) but cannot be opened. #303: labelled "Picture", as
+ * Board G has it; `inline` puts the label beside the box, on the header row.
  */
-function VisualizationTypeControl({ id, options, value, onChange }) {
+function VisualizationTypeControl({ id, options, value, onChange, inline = false }) {
   return (
     <TaggedSelect
       id={id}
-      label="Visualization Type"
+      label="Picture"
       hue="cyan"
       align="right"
       options={options}
       value={value}
       onChange={options.length > 1 ? onChange : undefined}
-      boxSx={{ width: SHARED_CONTROL_WIDTH, flex: "none", [COMPACT_MEDIA]: { width: "100%" } }}
+      labelPlacement={inline ? "row" : "stack"}
+      boxSx={
+        inline
+          ? { flex: "0 1 300px", minWidth: 200, [PHONE_MEDIA]: { flex: "1 1 200px" } }
+          : { width: SHARED_CONTROL_WIDTH, flex: "none", [COMPACT_MEDIA]: { width: "100%" } }
+      }
     />
+  );
+}
+
+/** The Showing line: what drew the picture. */
+function ShowingLine({ id, text, isError }) {
+  return (
+    <Box
+      component="p"
+      sx={{
+        m: 0,
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "baseline",
+        gap: "4px 10px",
+        fontSize: "0.875rem",
+        minWidth: 0,
+      }}
+    >
+      <Box component="span" sx={{ fontWeight: 600, color: "text.secondary" }}>
+        Showing
+      </Box>
+      <Box
+        component="span"
+        id={id}
+        aria-live="polite"
+        sx={{ fontWeight: 700, color: isError ? "error.light" : "text.primary" }}
+      >
+        {text}
+      </Box>
+    </Box>
+  );
+}
+
+/** Full screen on and off (#303): the four-corners icon, a 44px target. */
+function FullScreenButton({ id, on, onToggle }) {
+  return (
+    <Box
+      id={id}
+      component="button"
+      type="button"
+      aria-label={on ? "Exit full screen" : "Full screen"}
+      aria-pressed={on}
+      onClick={onToggle}
+      sx={{
+        ...secondaryButtonSx,
+        width: 44,
+        px: 0,
+        flex: "none",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <svg
+        aria-hidden="true"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path
+          d={
+            on ? "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" : "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"
+          }
+        />
+      </svg>
+    </Box>
+  );
+}
+
+/** The verdict of the last check (#229 stage 3), under the header row. */
+function VerdictLine({ verdict }) {
+  return (
+    <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 10px" }}>
+      <Box
+        component="span"
+        id={verdict.id}
+        role="status"
+        data-valid={String(verdict.valid)}
+        sx={{
+          fontSize: "0.875rem",
+          fontWeight: 600,
+          color:
+            verdict.valid === true
+              ? "success.light"
+              : verdict.valid === false
+                ? "error.light"
+                : "text.primary",
+        }}
+      >
+        {verdict.text}
+      </Box>
+      {verdict.button && (
+        <Box
+          id={verdict.button.id}
+          component="button"
+          type="button"
+          aria-pressed={verdict.button.pressed}
+          onClick={verdict.button.onClick}
+          sx={{ ...secondaryButtonSx, px: 1.5, ml: "auto" }}
+        >
+          {verdict.button.label}
+        </Box>
+      )}
+    </Box>
   );
 }
 
@@ -210,17 +336,17 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  * @param {string} props.showing The Showing line's text.
  * @param {boolean} [props.showingIsError] Draws the Showing text in the error color.
  * @param {{id: string, text: string, valid: boolean|null, button: {id: string, label: string,
- *   pressed: boolean, disabled: boolean, reason: string, onClick: Function}|null}|null}
- *   [props.verdict] Verify's verdict, at the right of the Showing line (#229 stage 3), with
- *   the "Show where it fails" / "Back to ..." button when it has one.
- * @param {boolean} props.stack Stack the source and target pictures (a panel is open).
+ *   pressed: boolean, onClick: Function}|null}|null} [props.verdict] Verify's verdict (#229
+ *   stage 3), under the header row, with the "Show where it fails" / "Back to ..." button when
+ *   it has one (none until Redux can draw a certificate).
+ * @param {boolean} props.stack Stack the source and target pictures.
  * @param {{title: string, type: {options: Array, value: string, onChange?: Function}|null,
- *   content: PictureContent}} props.source The (only, in Solve mode) picture.
+ *   content: PictureContent}} props.source The (only, in Solve and Verify) picture.
  * @param {{title: string, type: {options: Array, value: string}|null,
- *   content: PictureContent}|null} props.target The reduction's target picture, Reduce mode only.
+ *   content: PictureContent}|null} props.target The reduction's target picture, Reduce only.
  * @param {{frameCount: number, currentStep: number, onStepChange: Function}|null} props.steps
- * @param {{text: string, tone: "muted"|"warning"|"error"}|null} props.note The line shown in
- *   place of the step controls.
+ * @param {{text: string, tone: "muted"|"warning"|"error"}|null} props.note The line shown
+ *   under the pictures when there are no steps to explain them.
  * @param {Object[]} props.legendFrames Every frame on screen, for the Legend.
  * @param {Set<string>|null} [props.legendStates] The picture states a format=frames picture
  *   uses (#199), for the Legend.
@@ -229,8 +355,10 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  * @param {{view: Object, activeGadget: Object|null, runId: number, loading?: string|null,
  *   types?: {source: Object|null, target: Object|null}}|null} [props.reduction] A Reduction
  *   View to draw in place of `source` and `target` (#215); `steps` walk its frames. `types` are
- *   its sides' Visualization Type dropdowns (ReduxISU/Redux#912), shaped as `source.type`;
- *   `loading` is said in place of the pictures while another picture is drawn.
+ *   its sides' Picture dropdowns (ReduxISU/Redux#912), shaped as `source.type`; `loading` is
+ *   said in place of the pictures while another picture is drawn.
+ * @param {{on: boolean, onToggle: () => void}} props.fullScreen #303: whether the workspace
+ *   shows only the picture(s) and the steps, and the button that switches it.
  */
 export default function VisualizationPane({
   idPrefix,
@@ -246,7 +374,11 @@ export default function VisualizationPane({
   legendStates,
   legendAnnotations,
   reduction = null,
+  fullScreen,
 }) {
+  // #303: the row DiagramZoom.js puts a single picture's zoom buttons on.
+  const [zoomSlot, setZoomSlot] = useState(null);
+  const single = !reduction && !target;
   const basis = target && stack ? "100%" : "380px";
   const noteColor =
     note?.tone === "error"
@@ -254,156 +386,145 @@ export default function VisualizationPane({
       : note?.tone === "warning"
         ? "viz.orange"
         : "text.secondary";
+  const fullButton = (
+    <FullScreenButton
+      id={`${idPrefix}-full-screen`}
+      on={fullScreen.on}
+      onToggle={fullScreen.onToggle}
+    />
+  );
+  const showingLine = (
+    <ShowingLine id={`${idPrefix}-showing`} text={showing} isError={showingIsError} />
+  );
 
   return (
     <Box
       component="section"
       aria-label="Visualization"
       id={`${idPrefix}-pane`}
-      sx={{ ...cardSx, p: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}
+      sx={{ display: "flex", flexDirection: "column", gap: "14px", minWidth: 0 }}
     >
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "baseline",
-          gap: "4px 10px",
-          fontSize: "0.875rem",
-        }}
-      >
+      {single ? (
         <Box
-          component="span"
-          sx={{
-            fontSize: "0.75rem",
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "text.secondary",
-          }}
+          component="figure"
+          id={`${idPrefix}-figure`}
+          sx={{ m: 0, display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
         >
-          Showing
-        </Box>
-        <Box
-          component="span"
-          id={`${idPrefix}-showing`}
-          aria-live="polite"
-          sx={{ fontWeight: 600, color: showingIsError ? "error.light" : "text.primary" }}
-        >
-          {showing}
-        </Box>
-        {verdict && (
           <Box
-            component="span"
+            id={`${idPrefix}-picture-header`}
             sx={{
-              ml: "auto",
-              display: "inline-flex",
+              display: "flex",
               flexWrap: "wrap",
               alignItems: "center",
-              gap: "6px 10px",
+              justifyContent: "space-between",
+              gap: "8px 12px",
             }}
           >
+            <Box sx={{ flex: "1 1 240px", minWidth: 0 }}>{showingLine}</Box>
             <Box
-              component="span"
-              id={verdict.id}
-              role="status"
-              data-valid={String(verdict.valid)}
+              id={`${idPrefix}-picture-controls`}
               sx={{
-                fontWeight: 600,
-                color:
-                  verdict.valid === true
-                    ? "success.light"
-                    : verdict.valid === false
-                      ? "error.light"
-                      : "text.primary",
+                flex: "0 1 auto",
+                minWidth: 0,
+                display: "flex",
+                flexWrap: "nowrap",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                gap: "6px 8px",
+                [COMPACT_MEDIA]: { flexWrap: "wrap", justifyContent: "flex-start" },
               }}
             >
-              {verdict.text}
+              {source.type && (
+                <VisualizationTypeControl id={`${idPrefix}-source-type`} inline {...source.type} />
+              )}
+              <Box
+                ref={setZoomSlot}
+                id={`${idPrefix}-zoom-slot`}
+                sx={{
+                  display: "flex",
+                  flex: "none",
+                  alignItems: "center",
+                  whiteSpace: "nowrap",
+                  "&:empty": { display: "none" },
+                }}
+              />
+              {fullButton}
             </Box>
-            {verdict.button && (
-              <>
-                <Box
-                  id={verdict.button.id}
-                  component="button"
-                  type="button"
-                  aria-pressed={verdict.button.pressed}
-                  disabled={verdict.button.disabled}
-                  aria-describedby={
-                    verdict.button.reason ? `${verdict.button.id}-reason` : undefined
-                  }
-                  onClick={verdict.button.onClick}
-                  sx={{ ...secondaryButtonSx, px: 1.5 }}
-                >
-                  {verdict.button.label}
-                </Box>
-                {verdict.button.reason && (
-                  <Box
-                    component="span"
-                    id={`${verdict.button.id}-reason`}
-                    sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-                  >
-                    {verdict.button.reason}
-                  </Box>
-                )}
-              </>
-            )}
           </Box>
-        )}
-      </Box>
-
-      {reduction ? (
-        <ReductionView
-          // A new run, or another picture on either side, starts with nothing pointed at.
-          key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
-          idPrefix={`${idPrefix}-reduction`}
-          view={reduction.view}
-          frameIndex={steps?.currentStep ?? 0}
-          stack={stack}
-          activeGadget={reduction.activeGadget}
-          loading={reduction.loading ?? null}
-          colorMode={reduction.colorMode ?? "plain"}
-          onColorMode={reduction.onColorMode ?? null}
-          typeControls={{
-            source: reduction.types?.source && (
-              <VisualizationTypeControl
-                id={`${idPrefix}-source-type`}
-                {...reduction.types.source}
-              />
-            ),
-            target: reduction.types?.target && (
-              <VisualizationTypeControl
-                id={`${idPrefix}-target-type`}
-                {...reduction.types.target}
-              />
-            ),
-          }}
-        />
-      ) : (
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
-          <PictureColumn
-            idPrefix={`${idPrefix}-source`}
-            title={source.title}
-            basis={basis}
-            content={source.content}
-            typeControl={
-              source.type && (
-                <VisualizationTypeControl id={`${idPrefix}-source-type`} {...source.type} />
-              )
-            }
-          />
-          {target && (
-            <PictureColumn
-              idPrefix={`${idPrefix}-target`}
-              title={target.title}
-              basis={basis}
-              content={target.content}
-              typeControl={
-                target.type && (
-                  <VisualizationTypeControl id={`${idPrefix}-target-type`} {...target.type} />
-                )
-              }
-            />
-          )}
+          {!fullScreen.on && verdict && <VerdictLine verdict={verdict} />}
+          <ZoomControlsSlot.Provider value={zoomSlot}>
+            <PictureBox idPrefix={`${idPrefix}-source`} content={source.content} />
+          </ZoomControlsSlot.Provider>
         </Box>
+      ) : (
+        <>
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "8px 16px",
+            }}
+          >
+            {showingLine}
+            {fullButton}
+          </Box>
+          {!fullScreen.on && verdict && <VerdictLine verdict={verdict} />}
+          {reduction ? (
+            <ReductionView
+              // A new run, or another picture on either side, starts with nothing pointed at.
+              key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
+              idPrefix={`${idPrefix}-reduction`}
+              view={reduction.view}
+              frameIndex={steps?.currentStep ?? 0}
+              stack={stack}
+              activeGadget={reduction.activeGadget}
+              loading={reduction.loading ?? null}
+              colorMode={reduction.colorMode ?? "plain"}
+              onColorMode={reduction.onColorMode ?? null}
+              typeControls={{
+                source: reduction.types?.source && (
+                  <VisualizationTypeControl
+                    id={`${idPrefix}-source-type`}
+                    {...reduction.types.source}
+                  />
+                ),
+                target: reduction.types?.target && (
+                  <VisualizationTypeControl
+                    id={`${idPrefix}-target-type`}
+                    {...reduction.types.target}
+                  />
+                ),
+              }}
+            />
+          ) : (
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
+              <PictureColumn
+                idPrefix={`${idPrefix}-source`}
+                title={source.title}
+                basis={basis}
+                content={source.content}
+                typeControl={
+                  source.type && (
+                    <VisualizationTypeControl id={`${idPrefix}-source-type`} {...source.type} />
+                  )
+                }
+              />
+              <PictureColumn
+                idPrefix={`${idPrefix}-target`}
+                title={target.title}
+                basis={basis}
+                content={target.content}
+                typeControl={
+                  target.type && (
+                    <VisualizationTypeControl id={`${idPrefix}-target-type`} {...target.type} />
+                  )
+                }
+              />
+            </Box>
+          )}
+        </>
       )}
 
       {reduction && steps && (
@@ -422,13 +543,13 @@ export default function VisualizationPane({
           onStepChange={steps.onStepChange}
         />
       )}
-      {note && (
+      {note && !fullScreen.on && (
         <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.875rem", color: noteColor }}>
           {note.text}
         </Box>
       )}
 
-      {(legendFrames.some(Boolean) || legendStates) && (
+      {(legendFrames.some(Boolean) || legendStates) && !fullScreen.on && (
         <Legend
           idPrefix={`${idPrefix}-legend`}
           frames={legendFrames}

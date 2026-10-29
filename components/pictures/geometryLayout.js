@@ -17,10 +17,11 @@
 // point's dashed line, or a bold axis): the first of eight places round the point that is clear
 // (right and above, then right and below, and so on), else in the first clear gap round it
 // (every 15 degrees, near first, then further out), and the least crowded place if none is
-// clear. The lines are every frame's at once, so a label holds still while the steps walk (it
-// may move once, when Run brings the lines). Each corner of an answer first keeps a spot for
-// its order badge (above left unless something is in the way there), so a badge never covers
-// a label or sits on a line.
+// clear. The labels with the fewest clear places go first, so one with room to spare never takes
+// a hemmed-in one's only gap. The lines are every frame's at once, so a label holds still while
+// the steps walk (it may move once, when Run brings the lines). Each corner of an answer first
+// keeps a spot for its order badge (above left unless something is in the way there), so a
+// badge never covers a label or sits on a line.
 //
 // The drawing is as wide as its box (between MIN_WIDTH and WIDTH), so on a phone its text is
 // drawn at its own size, not shrunk to fit.
@@ -193,7 +194,7 @@ const BADGE_WAYS = [
  * above, right and below, right, left, left and below, above, below and left and above, close
  * by; then, so a label can find the gap between the lines that leave its point, every 15
  * degrees round it (from straight right, counterclockwise on the screen), close by, then a
- * little further out each time, up to four times as far.
+ * little further out each time, up to six times as far.
  */
 function labelPlaces(x, y, w) {
   const h = LABEL_HEIGHT;
@@ -208,7 +209,7 @@ function labelPlaces(x, y, w) {
     { x0: x - w / 2, y0: y + d + 1 },
     { x0: x - d - w, y0: y - d - h + 2 },
   ];
-  for (const reach of [1, 2, 3, 4]) {
+  for (const reach of [1, 2, 3, 4, 5, 6]) {
     for (let degrees = 0; degrees < 360; degrees += 15) {
       const angle = (degrees * Math.PI) / 180;
       const cos = Math.cos(angle);
@@ -412,10 +413,17 @@ export function layoutGeometry(payload, width = WIDTH, frames = []) {
     point.badge = { x: spot.x, y: spot.y };
     if (corners.has(point.id)) blocked.push(spot);
   }
-  for (const point of points) {
-    const w = point.id.length * LABEL_SIZE * CHAR + 2;
-    const places = labelPlaces(point.px, point.py, w);
-    const cost = (place) => crowding(place, -1, (line) => lengthInside(line, place, LINE_PAD));
+  const cost = (place) => crowding(place, -1, (line) => lengthInside(line, place, LINE_PAD));
+  // The labels with the fewest clear places (before any label is placed) go first, so a label
+  // with room to spare never takes the only gap a hemmed-in one has.
+  const labelling = points
+    .map((point) => {
+      const w = point.id.length * LABEL_SIZE * CHAR + 2;
+      const places = labelPlaces(point.px, point.py, w);
+      return { point, w, places, clear: places.filter((place) => cost(place) === 0).length };
+    })
+    .sort((a, b) => a.clear - b.clear || a.point.index - b.point.index);
+  for (const { point, w, places } of labelling) {
     const chosen =
       places.find((place) => cost(place) === 0) ??
       places.reduce((best, place) => (cost(place) < cost(best) ? place : best));

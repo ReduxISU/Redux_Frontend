@@ -3,8 +3,8 @@
 // #295 (ReduxISU/Redux#932): a randomized solver's run reports the seed it ran with, and the
 // Result panel shows it with the answer ("Seed: 4242") with Run again with this seed, which asks
 // for the same run with `seed` set and puts the seed in the command bar's Seed box. The Seed box
-// shows only for a randomized solver (one declaring the "Stochastic" type), between the Solver
-// dropdown's info button and Run: blank sends no seed, so Redux picks a new one each time, and a
+// shows only for a randomized solver (one declaring the "Stochastic" type), between the
+// Algorithm dropdown's info button and Run: blank sends no seed, so Redux picks a new one each time, and a
 // number is sent as `seed`. Nothing shows when the run reports no seed (a solver that isn't
 // randomized, or a backend older than #932), and the seed goes once the instance or the solver
 // changes. Solve's answer is the run's own answer (visualizeRun's `answer`), so it is the run the
@@ -251,8 +251,9 @@ test("Solve's answer is the run's own answer, so it matches the steps, and Run a
   await openPanel(page, "result", { expect });
   await expect(page.locator("#workbench-result-answer")).toHaveText(SAT3_PPZ_ONE_RUN.answer);
   expect(asked).toEqual({ runs: 1, solves: 0 });
-  // Verify This Answer checks that answer.
+  // Check it in Verify checks that answer, in the Verify tab.
   await page.locator("#workbench-result-verify-answer").click();
+  await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#workbench-result-verify-certificate")).toHaveValue(
     SAT3_PPZ_ONE_RUN.answer,
   );
