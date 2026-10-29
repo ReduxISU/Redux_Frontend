@@ -27,7 +27,7 @@ import {
   SAT3_FORMULA_FRAMES,
   SAT3_TO_ILP_FORMULA_VIEW,
 } from "./formula-payloads";
-import { openPanel } from "./helpers";
+import { openPanel, reduceAndSolve, rerunReduction } from "./helpers";
 import { EXACT_COVER_RECURSIVE_NESTED_FRAMES } from "./nested-set-payloads";
 import {
   CLIQUE_GRAPH_FRAMES,
@@ -112,11 +112,14 @@ async function openReduce(page, instance = SAT3_TO_CLIQUE_VIEW.source.instance) 
   await expect(page.locator("#workbench-target-value")).toHaveText(target);
 }
 
-/** Answers reductionView with `answer()` (read on every request), opens the page and runs it. */
+/**
+ * Answers reductionView with `answer()` (read on every request), opens the page and runs it:
+ * Reduce, then Solve (#303 stage 2), so the view walks every phase.
+ */
 async function openView(page, answer) {
   await page.route(REDUCTION_VIEW_REQUEST, (route) => route.fulfill({ json: answer() }));
   await openReduce(page);
-  await page.locator("#workbench-run").click();
+  await reduceAndSolve(page, { expect });
   await expect(page.locator(VIEW)).toBeVisible();
   // The pointer off the pictures, so nothing is hovered by where Run's button was.
   await page.mouse.move(1, 1);
@@ -254,7 +257,7 @@ for (const [type, capture] of Object.entries(PICTURES)) {
     await toStep(page, 2);
     ids = await drawnPieceIds(page, "source");
     expect(ids.length, `${type} draws pieces with ids`).toBeGreaterThan(0);
-    await page.locator("#workbench-run").click();
+    await rerunReduction(page, { expect });
     await expect(page.locator(`${VIEW}-marks-row`)).toBeVisible();
     await page.mouse.move(1, 1);
     await toStep(page, 2);
@@ -351,7 +354,7 @@ for (const scheme of ["light", "dark"]) {
     // Kept for the next visit.
     await page.reload();
     await page.locator("#workbench-mode-reduce").click();
-    await page.locator("#workbench-run").click();
+    await reduceAndSolve(page, { expect });
     await expect(page.locator(VIEW)).toBeVisible();
     await expect(page.locator(`${VIEW}-marks-row`)).toHaveAttribute("data-gadget-marks", "color");
     await expect(rings(page, "target").first()).toBeVisible();
@@ -605,7 +608,7 @@ test("Exact Cover to Subset Sum and 3SAT to 0-1 ILP: a Gadgets row marks a set's
   ).toBeVisible();
 
   view = SAT3_TO_ILP_VIEW;
-  await page.locator("#workbench-run").click();
+  await rerunReduction(page, { expect });
   await expect(pane(page, "target")).toHaveAttribute("data-picture-type", "Table");
   await page.locator("#workbench-phases-map").click();
   await openPanel(page, "result", { expect });

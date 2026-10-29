@@ -9,7 +9,8 @@
 // randomized, or a backend older than #932), and the seed goes once the instance or the solver
 // changes. Solve's answer is the run's own answer (visualizeRun's `answer`), so it is the run the
 // steps show, and Run asks once; ProblemProvider/solve answers only without one (no
-// visualizeRun, or a run that timed out). Solve mode only: Reduce mode sends no seed yet.
+// visualizeRun, or a run that timed out). Solve mode here; Reduce's Solve stage sends one
+// too (#303 stage 2, board-g.spec.js).
 //
 // CI's backend has no seeds yet, so every compute request is answered here from the 3SAT runs
 // in tests/e2e/run-payloads.js, with a seed added. The catalog comes from the real backend;

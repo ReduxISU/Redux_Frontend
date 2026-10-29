@@ -13,7 +13,7 @@
 
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { drawnCollisions, openPanel } from "./helpers";
+import { drawnCollisions, openPanel, reduceAgain, reduceAndSolve } from "./helpers";
 import {
   COLORING_TO_CLIQUE_COVER_VIEW,
   SAT_TO_3SAT_VIEW,
@@ -53,6 +53,8 @@ const CASES = {
 
 const VIEW = "#workbench-reduction";
 const pane = (page, side) => page.locator(`${VIEW}-${side}`);
+// The pane's header, picture and note (#303 stage 2): its zoom buttons sit in the header.
+const paneSection = (page, side) => page.locator(`${VIEW}-${side}-pane`);
 const zoomOf = (page, side) => pane(page, side).locator("[data-zoom]");
 const svgOf = (page, side) => pane(page, side).locator('svg[id$="-svg"]');
 const readout = (page) => page.locator(`${VIEW}-link`);
@@ -81,7 +83,8 @@ async function openReduce(page, problem, instance, target) {
 }
 
 /**
- * Answers reductionView with the capture, opens its page and runs it. Returns the list of
+ * Answers reductionView with the capture, opens its page and runs it (Reduce, then Solve: #303
+ * stage 2), so the view walks every phase. Returns the list of
  * reductionView requests the page made, so a test can count them.
  */
 async function openView(page, key) {
@@ -92,9 +95,22 @@ async function openView(page, key) {
     return route.fulfill({ json: view });
   });
   await openReduce(page, problem, instance ?? view.source.instance, target);
-  await page.locator("#workbench-run").click();
+  await reduceAndSolve(page, { expect });
   await expect(page.locator(VIEW)).toBeVisible();
   return asked;
+}
+
+/**
+ * The same pieces at the same centres, to within a pixel: a centre on a half pixel can round
+ * either way by float noise alone, so whole-pixel rounding isn't compared.
+ */
+function expectSameCentres(actual, expected, label) {
+  expect(Object.keys(actual).sort(), label).toEqual(Object.keys(expected).sort());
+  for (const [name, [x, y]] of Object.entries(expected)) {
+    const [ax, ay] = actual[name];
+    expect(Math.abs(ax - x), `${label}: ${name} x`).toBeLessThan(1);
+    expect(Math.abs(ay - y), `${label}: ${name} y`).toBeLessThan(1);
+  }
 }
 
 /** The step controls to `index` (0-based), by the slider's keyboard. */
@@ -122,10 +138,7 @@ function pieceCentres(page, side) {
         .filter((attribute) => attribute.name.endsWith("-id"))
         .map((attribute) => `${attribute.name}=${attribute.value}`)
         .join(" ");
-      centres[name] = [
-        Math.round(box.x + box.width / 2 - origin.x),
-        Math.round(box.y + box.height / 2 - origin.y),
-      ];
+      centres[name] = [box.x + box.width / 2 - origin.x, box.y + box.height / 2 - origin.y];
     }
     return centres;
   });
@@ -159,11 +172,13 @@ for (const key of Object.keys(CASES)) {
       "data-picture-type",
       view.target.picture.type,
     );
+    // Each pane's label row (#303 stage 2): the problem, then the answer mapped back onto the
+    // source and the Algorithm that solved the target.
     await expect(page.locator(`${VIEW}-source-title`)).toHaveText(
-      `${view.source.problem} · the instance you gave`,
+      `Problem ${view.source.problem} Answer mapped back from ${view.target.problem}`,
     );
     await expect(page.locator(`${VIEW}-target-title`)).toHaveText(
-      `${view.target.problem} · built by the reduction`,
+      new RegExp(`^Problem ${view.target.problem} Algorithm \\S`),
     );
     for (const side of ["source", "target"]) {
       await expect(zoomOf(page, side)).toHaveAttribute("data-zoom", "1.00");
@@ -305,11 +320,15 @@ for (const key of ["satTo3sat", "sat3ToClique", "subsetSumToPartition"]) {
     for (let index = 1; index < view.frames.length; index += 1) {
       await nextStep(page).click();
       await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(index));
-      expect(await pieceCentres(page, "source"), `source at step ${index + 1}`).toEqual(
+      expectSameCentres(
+        await pieceCentres(page, "source"),
         start.source,
+        `source at step ${index + 1}`,
       );
-      expect(await pieceCentres(page, "target"), `target at step ${index + 1}`).toEqual(
+      expectSameCentres(
+        await pieceCentres(page, "target"),
         start.target,
+        `target at step ${index + 1}`,
       );
       expect(await panes()).toEqual(start.panes);
       for (const side of ["source", "target"]) {
@@ -463,7 +482,7 @@ for (const scheme of ["light", "dark"]) {
         expect(scroll).toBeLessThanOrEqual(0);
         for (const side of ["source", "target"]) {
           await expect(zoomOf(page, side)).toHaveAttribute("data-zoom", "1.00");
-          const zoomIn = pane(page, side).locator('[id$="-zoom-in"]');
+          const zoomIn = paneSection(page, side).locator('[id$="-zoom-in"]');
           for (let press = 0; press < 4; press += 1) {
             if ((await smallestText(page, side)) >= PHONE_TEXT_PX) break;
             await zoomIn.click();
@@ -523,7 +542,7 @@ for (const [status, body] of [
     await openReduce(page, "3SAT", SAT3.instance, /^Clique(?!\s*Cover)/);
     await expect(page.locator("#workbench-mode-note")).toContainText("step by step");
     for (let run = 0; run < 2; run += 1) {
-      await page.locator("#workbench-run").click();
+      await reduceAgain(page, { expect });
       await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
         "data-picture-kind",
         "frame",
@@ -533,6 +552,8 @@ for (const [status, body] of [
       await expect(page.locator("#workbench-run")).toBeEnabled();
     }
     expect(asked).toBe(1);
+    // The Reduce stage's note says what its button now does (the bar moved on to Solve).
+    await page.locator("#workbench-stage-reduce").click();
     await expect(page.locator("#workbench-mode-note")).toContainText("carries the answer across");
     await openPanel(page, "result", { expect });
     await expect(page.locator("#workbench-result-carried")).toBeVisible();
@@ -549,12 +570,12 @@ test("an instance reductionView can't read falls back for that Run only", async 
       : route.fulfill({ json: SAT3_TO_CLIQUE_VIEW });
   });
   await openReduce(page, "3SAT", SAT3.instance, /^Clique(?!\s*Cover)/);
-  await page.locator("#workbench-run").click();
+  await reduceAgain(page, { expect });
   await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
     "data-picture-kind",
     "frame",
   );
-  await page.locator("#workbench-run").click();
+  await reduceAgain(page, { expect });
   await expect(page.locator(VIEW)).toBeVisible();
   expect(asked).toBe(2);
 });
