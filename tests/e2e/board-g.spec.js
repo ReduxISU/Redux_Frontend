@@ -431,11 +431,8 @@ for (const width of [320, 390]) {
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 
     await expect(page.locator("#navbar-menu-button")).toBeVisible();
-    await expect(page.locator("header[data-site-banner] img")).toHaveCount(2);
-    for (const img of await page.locator("header[data-site-banner] img").all()) {
-      await expect(img).toBeHidden();
-    }
-    await expect(page.locator("#problem-footer")).toBeVisible();
+    await expect(page.locator("header[data-site-banner] img")).toHaveCount(0);
+    await expect(page.locator("#site-footer img:visible")).toHaveCount(1);
     // Every task button is a 44px target.
     for (const task of ["solve", "reduce", "verify"]) {
       const box = await boxOf(page, `#workbench-mode-${task}`);

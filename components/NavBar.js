@@ -27,9 +27,10 @@
 // wrapped onto two or three lines at phone width. The desktop links keep their
 // ids; the menu items get a `-menu` suffix so ids stay unique.
 //
-// #156: the right end of the bar holds the theme toggle and, at the far right, the ISU
-// Computer Science logo. Both have a dark and a light version rendered together, with the
-// inactive one hidden by the color-scheme CSS selector (theme.applyStyles), so the server
+// #156: the right end of the bar holds the theme toggle. It and the ISU Computer Science logo
+// (exported here as IsuLogo; #303 moved it from the banner to every page's footer,
+// SiteFooter.js) each have a dark and a light version rendered together, with the inactive one
+// hidden by the color-scheme CSS selector (theme.applyStyles), so the server
 // render and the first paint already match the theme the visitor sees: no hydration
 // mismatch and no flash of the wrong logo or label. The toggle shows what it switches TO
 // (sun + "Light" while dark, moon + "Dark" while light) and its accessible name says the
@@ -136,10 +137,10 @@ function ThemeToggle() {
 }
 
 /**
- * The ISU logo, one image per theme. `idPrefix` names its images (`-isu-logo-dark`, ...), so
- * #303's page footer can show it too; `sx` is for its wrapper.
+ * The ISU logo, one image per theme. `idPrefix` names its images (`-isu-logo-dark`, ...);
+ * `sx` is for its wrapper. #303: it lives in the page footer (SiteFooter.js), not the banner.
  */
-export function IsuLogo({ idPrefix = "navbar", sx }) {
+export function IsuLogo({ idPrefix = "site-footer", sx }) {
   return (
     <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0, ...sx }}>
       {[
@@ -175,10 +176,8 @@ const NAV_LINKS = [
  * @param {boolean} [props.sticky] #303: the banner stays at the top of the window while the
  *   page scrolls (the problem page). Cards that open upwards drop below it rather than under
  *   it (TaggedSelect.js reads `data-site-banner`).
- * @param {boolean} [props.logoInFooter] #303: on phones the ISU logo leaves the banner for the
- *   page's footer, so the banner keeps the menu and the theme switch on one short row.
  */
-export default function NavBar({ sticky = false, logoInFooter = false }) {
+export default function NavBar({ sticky = false }) {
   const router = useRouter();
   const [menuAnchor, setMenuAnchor] = useState(null);
   const menuOpen = Boolean(menuAnchor);
@@ -298,7 +297,6 @@ export default function NavBar({ sticky = false, logoInFooter = false }) {
         })}
       </Menu>
       <ThemeToggle />
-      <IsuLogo sx={logoInFooter ? { display: { xs: "none", sm: "flex" } } : undefined} />
     </Box>
   );
 }
