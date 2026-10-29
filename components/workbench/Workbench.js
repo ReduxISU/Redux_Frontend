@@ -13,8 +13,9 @@
 //   4. the results, listed under the bar (./panels/ResultPanel.js).
 // #229's rail and its Details / Instance / Result panels are gone: the problem's details moved
 // to the (i) card after the title (pages/[problem].js), the instance to the editor, and the
-// result to the list. Full screen shows only the picture(s) and the steps (Escape or Exit full
-// screen leaves it). Verify is its own tab; Solve's "Check it in Verify" opens it and checks
+// result to the list. Full screen shows only the picture(s) and the steps (Escape, or the Full
+// screen button that went in, now saying "Exit full screen", leaves it; #305: there is no second
+// exit button). Verify is its own tab; Solve's "Check it in Verify" opens it and checks
 // the answer there.
 //
 // #303 stage 2: Reduce is a Reduce -> Solve -> Verify stepper (CommandBar.js), each stage with
@@ -329,7 +330,6 @@ export default function Workbench({ problem }) {
   // and phase buttons render into (../pictures/secondarySlots.js).
   const [gadgetControlsSlot, setGadgetControlsSlot] = useState(null);
   const [phasesSlot, setPhasesSlot] = useState(null);
-  const exitRef = useRef(null);
   // The Full screen button that went in, so coming out puts focus back on it.
   const fullFromRef = useRef(null);
   // #303 stage 2: the Reduce stage whose menus the bar shows, when one was picked in the stepper
@@ -712,12 +712,17 @@ export default function Workbench({ problem }) {
   }, [instanceParam, solverParam, vizParam, router]);
 
   // --- Full screen (#303) ----------------------------------------------------------------
-  // Going in moves focus to Exit full screen and stops the page scrolling under the overlay;
-  // coming out puts focus back on the Full screen button that went in.
+  // Going in keeps focus on the Full screen button that went in (#305: it is the way out, now
+  // saying "Exit full screen") and stops the page scrolling under the overlay; coming out puts
+  // focus back on that button.
   const wasFullRef = useRef(false);
   useLayoutEffect(() => {
     if (fullScreen) {
-      exitRef.current?.focus();
+      document
+        .getElementById(
+          fullScreen === "all" ? `${ID}-full-screen` : `${ID}-${fullScreen}-full-screen`,
+        )
+        ?.focus();
     } else if (wasFullRef.current) {
       document.getElementById(fullFromRef.current ?? `${ID}-full-screen`)?.focus();
     }
@@ -2434,32 +2439,14 @@ export default function Workbench({ problem }) {
           : {}),
       }}
     >
+      {/* #305: only the title; the way out is the Full screen button that went in (and Escape). */}
       {fullScreen && (
         <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 1.5,
-          }}
+          component="h2"
+          id={`${ID}-full-title`}
+          sx={{ m: 0, fontSize: "1rem", fontWeight: 700 }}
         >
-          <Box
-            component="h2"
-            id={`${ID}-full-title`}
-            sx={{ m: 0, fontSize: "1rem", fontWeight: 700 }}
-          >
-            {fullTitle}
-          </Box>
-          <Box
-            id={`${ID}-full-exit`}
-            ref={exitRef}
-            component="button"
-            type="button"
-            onClick={() => setFullScreen(null)}
-            sx={secondaryButtonSx}
-          >
-            Exit full screen
-          </Box>
+          {fullTitle}
         </Box>
       )}
 

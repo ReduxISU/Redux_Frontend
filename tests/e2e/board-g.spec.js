@@ -167,8 +167,12 @@ test("full screen shows only the picture and the steps, and Escape leaves it", a
   await expect(fullButton).toHaveAttribute("aria-pressed", "false");
   await fullButton.click();
   await expect(page.locator("#workbench")).toHaveAttribute("data-full-screen", "true");
-  await expect(page.locator("#workbench-full-exit")).toBeFocused();
+  // #305: the button that went in is the one way out, focused and saying so in words.
+  await expect(fullButton).toBeFocused();
   await expect(fullButton).toHaveAttribute("aria-pressed", "true");
+  await expect(fullButton).toHaveText("Exit full screen");
+  await expect(page.locator("#workbench-full-exit")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Exit full screen", exact: true })).toHaveCount(1);
 
   // Covers the window, banner included.
   const card = await boxOf(page, "#workbench");
@@ -733,7 +737,10 @@ test("each pane's Full screen shows that picture alone with the steps; Reduce's 
   await page.locator("#workbench-source-full-screen").click();
   await expect(page.locator("#workbench-reduction-source")).toBeVisible();
   await expect(page.locator("#workbench-reduction-target")).toBeHidden();
-  await page.locator("#workbench-full-exit").click();
+  // #305: that pane's button is the one way out.
+  await expect(page.getByRole("button", { name: "Exit full screen", exact: true })).toHaveCount(1);
+  await page.locator("#workbench-source-full-screen").click();
+  await expect(page.locator("#workbench")).not.toHaveAttribute("data-full-screen", "true");
 
   // Both pictures with the arrow, and the steps.
   await page.locator("#workbench-full-screen").click();
@@ -744,8 +751,47 @@ test("each pane's Full screen shows that picture alone with the steps; Reduce's 
   await expect(page.locator("#workbench-reduction-panes-arrow")).toBeVisible();
   await expect(page.locator("#workbench-steps-slider")).toBeVisible();
   for (const hidden of hiddenInFull) await expect(page.locator(hidden)).toBeHidden();
+  await expect(page.getByRole("button", { name: "Exit full screen", exact: true })).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.locator("#workbench-full-screen")).toBeFocused();
+});
+
+test("#305: on a phone every full screen has one Exit full screen button, labelled and on screen", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const exits = page.getByRole("button", { name: "Exit full screen", exact: true });
+  /** Goes in with `id`, finds the one way out on screen, and leaves with it. */
+  async function oneWayOut(id) {
+    await page.locator(id).click();
+    await expect(page.locator("#workbench")).toHaveAttribute("data-full-screen", "true");
+    await expect(exits).toHaveCount(1);
+    const exit = page.locator(id);
+    await expect(exit).toHaveAttribute("aria-label", "Exit full screen");
+    await expect(exit).toHaveText("Exit full screen");
+    await expect(exit).toBeInViewport();
+    const box = await boxOf(page, id);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+    await exit.click();
+    await expect(page.locator("#workbench")).not.toHaveAttribute("data-full-screen", "true");
+  }
+
+  // Solve, then Verify: the one picture.
+  await openSat3(page);
+  await solve(page);
+  await oneWayOut("#workbench-full-screen");
+  await page.locator("#workbench-mode-verify").click();
+  await oneWayOut("#workbench-full-screen");
+
+  // Reduce: both pictures, then each pane alone.
+  await openSatReduce(page, { width: 390 });
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  await oneWayOut("#workbench-full-screen");
+  await oneWayOut("#workbench-source-full-screen");
+  await oneWayOut("#workbench-target-full-screen");
 });
 
 test("Reduce's Verify stage checks both answers, prefilled from Solve, and says whether they agree", async ({

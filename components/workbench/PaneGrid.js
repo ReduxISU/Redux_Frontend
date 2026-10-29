@@ -26,12 +26,14 @@ const ARROW_PATH = "M2 12h30M24 4l8 8-8 8";
 
 /**
  * Full screen on and off (#303): the four-corners icon, a 44px target. `text` adds the words
- * beside the icon (Reduce's both-pictures button, as the mockup has it).
+ * beside the icon (Reduce's both-pictures button, as the mockup has it). #305: while on, every
+ * one says "Exit full screen" in words too, since it is full screen's only way out (with Escape).
  * @param {{id: string, on: boolean, onToggle: () => void, label?: string, text?: boolean}} props
  *   `label` is the button's accessible name while it is off.
  */
 export function FullScreenButton({ id, on, onToggle, label = "Full screen", text = false }) {
   const name = on ? "Exit full screen" : label;
+  const words = text || on;
   return (
     <Box
       id={id}
@@ -42,7 +44,7 @@ export function FullScreenButton({ id, on, onToggle, label = "Full screen", text
       onClick={onToggle}
       sx={{
         ...secondaryButtonSx,
-        ...(text ? { px: 1.5, gap: 1 } : { width: 44, px: 0 }),
+        ...(words ? { px: 1.5, gap: 1 } : { width: 44, px: 0 }),
         flex: "none",
         display: "flex",
         alignItems: "center",
@@ -66,8 +68,8 @@ export function FullScreenButton({ id, on, onToggle, label = "Full screen", text
           }
         />
       </svg>
-      {text && (
-        <Box component="span" aria-hidden="true">
+      {words && (
+        <Box component="span" aria-hidden="true" sx={{ whiteSpace: "nowrap" }}>
           {on ? "Exit full screen" : "Full screen"}
         </Box>
       )}
