@@ -3770,11 +3770,11 @@ for (const [key, capture] of Object.entries(TREE_CASES)) {
       `The search tree of this ${capture.payload.problem} instance grows from the solver's choices, step by step.`,
     );
     await expect(page.locator(`${TREE}-svg`)).toHaveCount(0);
-    // Nothing here can be dragged (#250 leaves the tree alone).
-    // The help under it offers no move (#303).
-    await expect(page.locator(`${TREE}-zoom-help`)).not.toContainText("move it");
 
     await runToFrame(page, capture, 0);
+    // Nothing here can be dragged (#250 leaves the tree alone): the help under it offers no
+    // move (#303).
+    await expect(page.locator(`${TREE}-zoom-help`)).not.toContainText("move it");
     await expectTreeFrame(page, capture, 0);
     for (let index = 1; index < capture.frames.length; index += 1) {
       await page.locator("#workbench-steps-next").click();
@@ -4226,7 +4226,8 @@ for (const width of [390, 1280]) {
       );
       await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
       await expect(page.locator(`${TREE}-zoom-reset`)).toBeDisabled();
-      await expect(page.locator(`${TREE}-zoom-out`)).toBeDisabled();
+      // #303: fit is not the floor any more; the tree can still zoom out past it.
+      await expect(page.locator(`${TREE}-zoom-out`)).toBeEnabled();
       await expectFits(page, `${TREE}-svg`);
     }
   });
