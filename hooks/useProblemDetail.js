@@ -182,27 +182,37 @@ function buildVisualizations(visualizationClassNames, info, visualizationTypesBy
 }
 
 // Generic "Default Verifier" naming convention (ARCHITECTURE.md's Naming
-// convention section) -- a problem can declare more than one verifier class,
-// but the detail page shows exactly one, so this always takes the first.
+// convention section) -- a problem can declare more than one verifier class.
+// `verifier` is the first (what the old detail sections and the catalog read);
+// #303 stage 4: `verifiers` lists every one, for the workbench's Verifier menus.
 function buildVerifier(verifierClassNames, info, problemInfo) {
-  const [firstVerifierClassName] = verifierClassNames ?? [];
-  if (!firstVerifierClassName) return null;
+  return buildVerifiers(verifierClassNames, info, problemInfo)[0] ?? null;
+}
 
-  const verifierInfo = info[firstVerifierClassName] ?? {};
+function buildVerifiers(verifierClassNames, info, problemInfo) {
+  return (verifierClassNames ?? [])
+    .filter(Boolean)
+    .map((className) => describeVerifier(className, info, problemInfo));
+}
+
+function describeVerifier(className, info, problemInfo) {
+  const verifierInfo = info[className] ?? {};
   return {
     // Same reason as buildSolvers' className: ProblemProvider/verify is
     // keyed by the verifier class name (T37/#95).
-    className: firstVerifierClassName,
+    className,
     // The verifier's own declared display name (IVerifier.verifierName,
     // e.g. "Default SAT Verifier") -- same `?? className` fallback as
     // buildSolvers/buildVisualizations use for their own name fields.
     // Distinct from this section's title, which the ratified naming
     // convention (see this file's own header) always keeps as the generic
     // "Verifier" regardless of which verifier class is shown.
-    name: verifierInfo.verifierName ?? firstVerifierClassName,
+    name: verifierInfo.verifierName ?? className,
     certificateDescription: verifierInfo.verifierDefinition ?? "",
     certificateFormat: problemInfo.certificateFormat || "",
     exampleCertificate: verifierInfo.certificate || undefined,
+    // #303 stage 4: who wrote it, for its info card.
+    contributors: Array.isArray(verifierInfo.contributors) ? verifierInfo.contributors : [],
   };
 }
 
@@ -283,6 +293,8 @@ function buildReductions(
             // #229 stage 3: Verify's "Check against: target" checks with the target
             // problem's own verifier, against the instance the reduction built.
             targetVerifier: buildVerifier(verifiersByProblem?.[toCode], info, info[toCode] ?? {}),
+            // #303 stage 4: every verifier of the target, for Reduce's Verify stage.
+            targetVerifiers: buildVerifiers(verifiersByProblem?.[toCode], info, info[toCode] ?? {}),
             // #303 stage 2: the target problem's solvers, for Reduce's Solve step.
             targetSolvers: buildSolvers(solversByProblem?.[toCode], info),
           });
@@ -377,6 +389,7 @@ function buildProblem(problemCode, info, batches, codeToName) {
       visualizationTypesByInstance,
     ),
     verifier: buildVerifier(verifiersByProblem[problemCode], info, problemInfo),
+    verifiers: buildVerifiers(verifiersByProblem[problemCode], info, problemInfo),
     reductions: buildReductions(
       problemCode,
       reductionGraph,

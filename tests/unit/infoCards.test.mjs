@@ -13,6 +13,7 @@ import {
   solverListTags,
   solverTags,
   targetCard,
+  verifierCard,
 } from "../../components/workbench/infoCards.js";
 
 function fact(card, label) {
@@ -94,5 +95,24 @@ describe("target problem", () => {
     const card = targetCard("Max Cut", { complexityClass: ["npHard"], problemType: [] });
     assert.equal(fact(card, "Variant"), NOT_DECLARED);
     assert.equal(fact(card, "Type"), NOT_DECLARED);
+  });
+});
+
+describe("verifier", () => {
+  test("its card names the certificate format and the authors, or says they are not declared", () => {
+    const verifier = {
+      name: "3SAT Solution Verifier",
+      certificateDescription: "Checks that every clause has a true literal.",
+      certificateFormat: "Comma-separated variable:Boolean pairs.",
+      contributors: ["Kaden Marchetti", "Ada Lovelace"],
+    };
+    const card = verifierCard(verifier);
+    assert.equal(card.kind, "Verifier");
+    assert.equal(card.title, "3SAT Solution Verifier");
+    assert.equal(fact(card, "Certificate"), "Comma-separated variable:Boolean pairs.");
+    assert.equal(fact(card, "Authors"), "Kaden Marchetti, Ada Lovelace");
+    const bare = verifierCard({ name: "V", certificateFormat: "", contributors: [] });
+    assert.equal(fact(bare, "Certificate"), NOT_DECLARED);
+    assert.equal(fact(bare, "Authors"), NOT_DECLARED);
   });
 });
