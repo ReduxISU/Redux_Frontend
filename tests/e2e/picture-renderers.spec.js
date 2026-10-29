@@ -531,13 +531,17 @@ async function openPicture(page, problem, capture) {
 }
 
 /**
- * Presses Run and goes to frame `index` (0-based). A run opens on its last frame, the finished
- * result; this goes back to the first (the slider's Home key) and steps forward from there.
+ * Presses Run (unless the run is already done) and goes to frame `index` (0-based). A run opens on
+ * its last frame, the finished result; this goes back to the first (the slider's Home key) and steps forward from there.
  */
 async function runToFrame(page, capture, index) {
-  await page.locator("#workbench-run").click();
+  // #303: once this run is done, Solve says Solved and does nothing; its run is already shown.
+  const run = page.locator("#workbench-run");
   const count = capture.frames.length;
-  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+  if ((await run.getAttribute("aria-disabled")) !== "true") {
+    await run.click();
+    await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+  }
   await toFirstStep(page);
   for (let step = 0; step < index; step += 1) {
     await page.locator("#workbench-steps-next").click();
