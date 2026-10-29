@@ -25,6 +25,13 @@
 //     target picture that lacks the pieces the build adds (buildReveal "whole") is shown whole
 //     during Build, with a line saying so.
 //
+// #303 stage 2 (Board G): the two panes are laid out by ../workbench/PaneGrid.js, as Reduce's
+// panes are before a view arrives: each with its label row, its Picture menu, its own zoom
+// buttons and Full screen, the header rows lined up across both, an arrow between them, stacked
+// at 900 px and narrower. `only` shows one pane alone (its Full screen). Reduce's first step
+// passes a view cut to its Build frames (lib/reductionView.js buildOnlyView); Solve and Map back
+// come with the Solve step.
+//
 // The build and fade marks are data attributes set on the renderers' own elements after React
 // draws them (and again whenever a renderer adds elements of its own, through a
 // MutationObserver), styled by this component's stylesheet. React never sets those attributes, so
@@ -62,6 +69,7 @@ import {
 } from "../../lib/reductionView";
 import { paletteVars } from "../theme";
 import { COMPACT_MEDIA } from "../workbench/layout";
+import { PaneGrid, PaneSection } from "../workbench/PaneGrid";
 import { GADGET_PALETTE } from "./gadgetRings";
 import { FAINT_FILTER, PictureToggle } from "./graphPieces";
 import PictureCanvas from "./PictureCanvas";
@@ -151,14 +159,24 @@ function markPieces(root, hidden, hot) {
 }
 
 /**
- * One side of the view: its title and its picture, drawn by the picture type's own renderer,
- * with the build and link marks on top.
+ * One side of the view: its header (label row, Picture menu, zoom, Full screen; #303 stage 2,
+ * ../workbench/PaneGrid.js) and its picture, drawn by the picture type's own renderer, with the
+ * build and link marks on top.
  */
+/** A pane's label row with its Problem part naming `problem`, the problem the view drew. */
+function namedParts(parts, problem) {
+  const named = { k: "Problem", v: problem };
+  if (!parts) return [named];
+  return parts.map((part) => (part.k === "Problem" ? named : part));
+}
+
 function ReductionPane({
   idPrefix,
   which,
-  title,
+  parts,
   typeControl,
+  full,
+  paneHidden,
   loading,
   note,
   type,
@@ -200,41 +218,21 @@ function ReductionPane({
   };
 
   return (
-    <Box
-      component="section"
-      aria-labelledby={`${idPrefix}-title`}
-      sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
+    <PaneSection
+      id={idPrefix}
+      which={which}
+      parts={parts}
+      typeControl={typeControl}
+      full={full}
+      hidden={paneHidden}
+      note={
+        note && !loading ? (
+          <Box component="span" id={`${idPrefix}-note`}>
+            {note}
+          </Box>
+        ) : null
+      }
     >
-      {/* The title wraps beside the dropdown rather than pushing it to a line of its own, so
-          both panes' headers are the dropdown's height and the pictures line up side by side. */}
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "nowrap",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          gap: 1,
-          [COMPACT_MEDIA]: { flexWrap: "wrap" },
-        }}
-      >
-        <Box
-          component="h3"
-          id={`${idPrefix}-title`}
-          sx={{
-            m: 0,
-            minWidth: 0,
-            pb: typeControl ? 1.25 : 0,
-            fontSize: "0.75rem",
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "text.secondary",
-          }}
-        >
-          {title}
-        </Box>
-        {typeControl}
-      </Box>
       {loading ? (
         <Box
           id={idPrefix}
@@ -304,12 +302,7 @@ function ReductionPane({
           />
         </Box>
       )}
-      {note && !loading && (
-        <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
-          {note}
-        </Box>
-      )}
-    </Box>
+    </PaneSection>
   );
 }
 
@@ -537,7 +530,12 @@ function listNames(ids, nameOf, limit = 6) {
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {ReturnType<typeof import("../../lib/reductionView").normalizeReductionView>} props.view
  * @param {number} props.frameIndex The step on screen.
- * @param {boolean} props.stack Stack the two pictures (a panel is open beside the pane).
+ * @param {{source?: Array<{k: string, v: string}>, target?: Array<{k: string, v: string}>}}
+ *   [props.labels] #303 stage 2: each pane's label row (../workbench/PaneGrid.js); left out,
+ *   "PROBLEM <name>". Its Problem part names the problem the view drew.
+ * @param {{source?: Object|null, target?: Object|null}} [props.full] Each pane's own Full
+ *   screen button (`{id, on, onToggle}`).
+ * @param {"source"|"target"|null} [props.only] The pane on full screen alone.
  * @param {{sourceIds: string[], targetIds: string[]}|null} [props.activeGadget] The gadget a
  *   Gadgets row in the Result panel is pointing at, drawn when no piece is.
  * @param {{source?: import("react").ReactNode, target?: import("react").ReactNode}} [props.typeControls]
@@ -552,9 +550,11 @@ export default function ReductionView({
   idPrefix,
   view,
   frameIndex,
-  stack,
   activeGadget = null,
   typeControls = {},
+  labels = {},
+  full = {},
+  only = null,
   loading = null,
   colorMode = "plain",
   onColorMode = null,
@@ -701,66 +701,54 @@ export default function ReductionView({
       data-build-reveal={target.buildReveal}
       sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
     >
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: stack ? "minmax(0, 1fr)" : "minmax(0, 1fr) auto minmax(0, 1fr)",
-          alignItems: "stretch",
-          gap: "10px",
-          [COMPACT_MEDIA]: { gridTemplateColumns: "minmax(0, 1fr)" },
-        }}
-      >
-        <ReductionPane
-          idPrefix={`${idPrefix}-source`}
-          which="source"
-          title={`${source.problem} · the instance you gave`}
-          typeControl={typeControls.source ?? null}
-          loading={loading}
-          type={source.type}
-          payload={source.payload}
-          name={source.problem}
-          frame={sourceFrames[index]}
-          frames={sourceFrames}
-          frameIndex={index}
-          note={loading ? null : linkNote("source")}
-          hidden={noneHidden}
-          hot={link ? link.source : null}
-          gadgetColors={colors?.source}
-          onPoint={point}
-        />
-        <Box
-          aria-hidden="true"
-          sx={{
-            alignSelf: "center",
-            justifySelf: "center",
-            fontSize: "1.5rem",
-            lineHeight: 1,
-            color: "text.secondary",
-            transform: stack ? "rotate(90deg)" : "none",
-            [COMPACT_MEDIA]: { transform: "rotate(90deg)" },
-          }}
-        >
-          {ARROW}
-        </Box>
-        <ReductionPane
-          idPrefix={`${idPrefix}-target`}
-          which="target"
-          title={`${target.problem} · built by the reduction`}
-          typeControl={typeControls.target ?? null}
-          loading={loading}
-          note={joinNotes(targetNote, linkNote("target"))}
-          type={target.type}
-          payload={target.payload}
-          name={target.problem}
-          frame={targetFrames[index]}
-          frames={targetFrames}
-          frameIndex={index}
-          hidden={hiddenTarget}
-          hot={link ? link.target : null}
-          gadgetColors={colors?.target}
-          onPoint={point}
-        />
-      </Box>
+      <PaneGrid
+        id={`${idPrefix}-panes`}
+        only={only}
+        source={
+          <ReductionPane
+            idPrefix={`${idPrefix}-source`}
+            which="source"
+            parts={namedParts(labels.source, source.problem)}
+            typeControl={typeControls.source ?? null}
+            full={full.source ?? null}
+            paneHidden={only === "target"}
+            loading={loading}
+            type={source.type}
+            payload={source.payload}
+            name={source.problem}
+            frame={sourceFrames[index]}
+            frames={sourceFrames}
+            frameIndex={index}
+            note={loading ? null : linkNote("source")}
+            hidden={noneHidden}
+            hot={link ? link.source : null}
+            gadgetColors={colors?.source}
+            onPoint={point}
+          />
+        }
+        target={
+          <ReductionPane
+            idPrefix={`${idPrefix}-target`}
+            which="target"
+            parts={namedParts(labels.target, target.problem)}
+            typeControl={typeControls.target ?? null}
+            full={full.target ?? null}
+            paneHidden={only === "source"}
+            loading={loading}
+            note={joinNotes(targetNote, linkNote("target"))}
+            type={target.type}
+            payload={target.payload}
+            name={target.problem}
+            frame={targetFrames[index]}
+            frames={targetFrames}
+            frameIndex={index}
+            hidden={hiddenTarget}
+            hot={link ? link.target : null}
+            gadgetColors={colors?.target}
+            onPoint={point}
+          />
+        }
+      />
       {!loading && (
         <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px" }}>
           {gadgets.length > 0 && onColorMode && (

@@ -187,13 +187,16 @@ test("Reduce shows Reduce to and Reduction, and Reduce builds the target picture
   expect(target).not.toBe("");
   expect(reduction).not.toBe("");
 
-  // The two closed dropdowns sit on one row, after the tabs and before Reduce.
+  // The two closed dropdowns sit on one row after the tabs; Reduce is on the stepper's row
+  // under them (#303 stage 2).
   const toBox = await page.locator("#workbench-target-button").boundingBox();
   const usingBox = await page.locator("#workbench-reduction-button").boundingBox();
   const runBox = await page.locator("#workbench-run").boundingBox();
+  const stagesBox = await page.locator("#workbench-stages").boundingBox();
   expect(Math.abs(toBox.y - usingBox.y)).toBeLessThan(2);
   expect(usingBox.x).toBeGreaterThan(toBox.x + toBox.width);
-  expect(runBox.x).toBeGreaterThan(usingBox.x + usingBox.width);
+  expect(runBox.y).toBeGreaterThan(usingBox.y + usingBox.height - 1);
+  expect(runBox.x).toBeGreaterThan(stagesBox.x + stagesBox.width);
 
   await expect(page.locator("#workbench-target-picture")).toContainText(
     `Press Reduce to build the ${target} instance from this one.`,
@@ -208,7 +211,10 @@ test("Reduce shows Reduce to and Reduction, and Reduce builds the target picture
     "data-picture-kind",
     "frame",
   );
-  await expect(page.locator("#workbench-run")).toHaveText("Reduce again");
+  // The stepper moves on to Solve; back on Reduce, the button rebuilds.
+  await expect(page.locator("#workbench-run")).toHaveText(`Solve through ${target}`);
+  await page.locator("#workbench-stage-reduce").click();
+  await expect(page.locator("#workbench-run")).toHaveText("Rebuild");
 
   await openPanel(page, "result", { expect });
   await expect(page.locator("#workbench-result-reduce")).toContainText(reduction);

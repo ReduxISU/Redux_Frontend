@@ -10,6 +10,9 @@ export const COMPACT_MEDIA = "@media (max-width:1024px)";
 /** #303: phones (MUI's xs): the ISU logo moves to the footer, and every row stacks. */
 export const PHONE_MEDIA = "@media (max-width:599.95px)";
 
+/** #303 stage 2: Reduce's two pictures stack, source first, at this width and below. */
+export const PANES_STACK_MEDIA = "@media (max-width:900px)";
+
 /** #303: Board G's centered column, at its widest. */
 export const COLUMN_MAX_WIDTH = 1520;
 

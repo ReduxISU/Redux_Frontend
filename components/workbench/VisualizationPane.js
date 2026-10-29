@@ -23,6 +23,12 @@
 // note and the Legend. Full screen (Workbench.js) keeps the header row, the picture(s) and the
 // steps, and hides the rest: the note, the verdict and the Legend.
 //
+// #303 stage 2: Reduce's two pictures are ./PaneGrid.js's panes, before a Reduction View and in
+// it: each pane has its label row, its own Picture menu, zoom buttons and Full screen (that
+// pane alone, with the steps), the header rows lined up across both, and an arrow between them.
+// The Showing line is a line of its own above them, with Full screen for both pictures at its
+// right.
+//
 // The pictures themselves come from the renderers: a format=frames picture through
 // components/pictures/PictureCanvas.js (#199), every other one through the older
 // VisualizationCanvas. This file only lays them out.
@@ -37,6 +43,7 @@ import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
 import { ZoomControlsSlot } from "../pictures/zoomControlsSlot";
 import Legend from "./Legend";
 import { COMPACT_MEDIA, PHONE_MEDIA, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
+import { FullScreenButton, PaneGrid, PaneSection } from "./PaneGrid";
 import TaggedSelect from "./TaggedSelect";
 
 const PICTURE_MIN_HEIGHT = 440;
@@ -93,47 +100,6 @@ function ShowingLine({ id, text, isError }) {
       >
         {text}
       </Box>
-    </Box>
-  );
-}
-
-/** Full screen on and off (#303): the four-corners icon, a 44px target. */
-function FullScreenButton({ id, on, onToggle }) {
-  return (
-    <Box
-      id={id}
-      component="button"
-      type="button"
-      aria-label={on ? "Exit full screen" : "Full screen"}
-      aria-pressed={on}
-      onClick={onToggle}
-      sx={{
-        ...secondaryButtonSx,
-        width: 44,
-        px: 0,
-        flex: "none",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <svg
-        aria-hidden="true"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path
-          d={
-            on ? "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" : "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"
-          }
-        />
-      </svg>
     </Box>
   );
 }
@@ -301,35 +267,6 @@ function PictureBox({ idPrefix, content }) {
   );
 }
 
-function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
-  return (
-    <Box
-      sx={{
-        flex: `1 1 ${basis}`,
-        minWidth: 0,
-        display: "flex",
-        flexDirection: "column",
-        gap: 1,
-        [COMPACT_MEDIA]: { flexBasis: "380px" },
-      }}
-    >
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          gap: 1,
-        }}
-      >
-        <Box sx={{ fontWeight: 600, pb: 1.25 }}>{title}</Box>
-        {typeControl}
-      </Box>
-      <PictureBox idPrefix={idPrefix} content={content} />
-    </Box>
-  );
-}
-
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
@@ -339,10 +276,10 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  *   pressed: boolean, onClick: Function}|null}|null} [props.verdict] Verify's verdict (#229
  *   stage 3), under the header row, with the "Show where it fails" / "Back to ..." button when
  *   it has one (none until Redux can draw a certificate).
- * @param {boolean} props.stack Stack the source and target pictures.
- * @param {{title: string, type: {options: Array, value: string, onChange?: Function}|null,
- *   content: PictureContent}} props.source The (only, in Solve and Verify) picture.
- * @param {{title: string, type: {options: Array, value: string}|null,
+ * @param {{parts?: Array<{k: string, v: string}>, type: {options: Array, value: string,
+ *   onChange?: Function}|null, content: PictureContent}} props.source The (only, in Solve and
+ *   Verify) picture. `parts` is its pane's label row in Reduce (./PaneGrid.js).
+ * @param {{parts: Array<{k: string, v: string}>, type: {options: Array, value: string}|null,
  *   content: PictureContent}|null} props.target The reduction's target picture, Reduce only.
  * @param {{frameCount: number, currentStep: number, onStepChange: Function}|null} props.steps
  * @param {{text: string, tone: "muted"|"warning"|"error"}|null} props.note The line shown
@@ -357,15 +294,16 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  *   View to draw in place of `source` and `target` (#215); `steps` walk its frames. `types` are
  *   its sides' Picture dropdowns (ReduxISU/Redux#912), shaped as `source.type`; `loading` is
  *   said in place of the pictures while another picture is drawn.
- * @param {{on: boolean, onToggle: () => void}} props.fullScreen #303: whether the workspace
- *   shows only the picture(s) and the steps, and the button that switches it.
+ * @param {{on: "all"|"source"|"target"|null, onToggle: (which: "all"|"source"|"target") =>
+ *   void}} props.fullScreen #303: what is on full screen (the workspace then shows only the
+ *   picture(s) and the steps): everything, or one of Reduce's two panes alone (stage 2), and the
+ *   buttons that switch it.
  */
 export default function VisualizationPane({
   idPrefix,
   showing,
   showingIsError,
   verdict,
-  stack,
   source,
   target,
   steps,
@@ -379,23 +317,35 @@ export default function VisualizationPane({
   // #303: the row DiagramZoom.js puts a single picture's zoom buttons on.
   const [zoomSlot, setZoomSlot] = useState(null);
   const single = !reduction && !target;
-  const basis = target && stack ? "100%" : "380px";
+  const full = fullScreen.on;
+  const only = full === "source" || full === "target" ? full : null;
   const noteColor =
     note?.tone === "error"
       ? "error.light"
       : note?.tone === "warning"
         ? "viz.orange"
         : "text.secondary";
+  // Solve's one button, or Reduce's both-pictures button beside the Showing line (stage 2).
   const fullButton = (
     <FullScreenButton
       id={`${idPrefix}-full-screen`}
-      on={fullScreen.on}
-      onToggle={fullScreen.onToggle}
+      on={full === "all"}
+      onToggle={() => fullScreen.onToggle("all")}
+      label={single ? "Full screen" : "Full screen: both pictures side by side"}
+      text={!single}
     />
   );
+  // Each Reduce pane's own button (stage 2).
+  const paneFull = (which) => ({
+    id: `${idPrefix}-${which}-full-screen`,
+    on: full === which,
+    onToggle: () => fullScreen.onToggle(which),
+  });
   const showingLine = (
     <ShowingLine id={`${idPrefix}-showing`} text={showing} isError={showingIsError} />
   );
+  const typeControl = (which, type) =>
+    type && <VisualizationTypeControl id={`${idPrefix}-${which}-type`} inline {...type} />;
 
   return (
     <Box
@@ -434,9 +384,7 @@ export default function VisualizationPane({
                 [COMPACT_MEDIA]: { flexWrap: "wrap", justifyContent: "flex-start" },
               }}
             >
-              {source.type && (
-                <VisualizationTypeControl id={`${idPrefix}-source-type`} inline {...source.type} />
-              )}
+              {typeControl("source", source.type)}
               <Box
                 ref={setZoomSlot}
                 id={`${idPrefix}-zoom-slot`}
@@ -451,14 +399,17 @@ export default function VisualizationPane({
               {fullButton}
             </Box>
           </Box>
-          {!fullScreen.on && verdict && <VerdictLine verdict={verdict} />}
+          {!full && verdict && <VerdictLine verdict={verdict} />}
           <ZoomControlsSlot.Provider value={zoomSlot}>
             <PictureBox idPrefix={`${idPrefix}-source`} content={source.content} />
           </ZoomControlsSlot.Provider>
         </Box>
       ) : (
         <>
+          {/* #303 stage 2: in Reduce the Showing line is a line of its own above the two panes,
+              with the both-pictures Full screen at its right. */}
           <Box
+            id={`${idPrefix}-showing-row`}
             sx={{
               display: "flex",
               flexWrap: "wrap",
@@ -470,7 +421,7 @@ export default function VisualizationPane({
             {showingLine}
             {fullButton}
           </Box>
-          {!fullScreen.on && verdict && <VerdictLine verdict={verdict} />}
+          {!full && verdict && <VerdictLine verdict={verdict} />}
           {reduction ? (
             <ReductionView
               // A new run, or another picture on either side, starts with nothing pointed at.
@@ -478,51 +429,47 @@ export default function VisualizationPane({
               idPrefix={`${idPrefix}-reduction`}
               view={reduction.view}
               frameIndex={steps?.currentStep ?? 0}
-              stack={stack}
               activeGadget={reduction.activeGadget}
               loading={reduction.loading ?? null}
               colorMode={reduction.colorMode ?? "plain"}
               onColorMode={reduction.onColorMode ?? null}
+              labels={{ source: source.parts, target: target?.parts }}
+              full={{ source: paneFull("source"), target: paneFull("target") }}
+              only={only}
               typeControls={{
-                source: reduction.types?.source && (
-                  <VisualizationTypeControl
-                    id={`${idPrefix}-source-type`}
-                    {...reduction.types.source}
-                  />
-                ),
-                target: reduction.types?.target && (
-                  <VisualizationTypeControl
-                    id={`${idPrefix}-target-type`}
-                    {...reduction.types.target}
-                  />
-                ),
+                source: typeControl("source", reduction.types?.source),
+                target: typeControl("target", reduction.types?.target),
               }}
             />
           ) : (
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
-              <PictureColumn
-                idPrefix={`${idPrefix}-source`}
-                title={source.title}
-                basis={basis}
-                content={source.content}
-                typeControl={
-                  source.type && (
-                    <VisualizationTypeControl id={`${idPrefix}-source-type`} {...source.type} />
-                  )
-                }
-              />
-              <PictureColumn
-                idPrefix={`${idPrefix}-target`}
-                title={target.title}
-                basis={basis}
-                content={target.content}
-                typeControl={
-                  target.type && (
-                    <VisualizationTypeControl id={`${idPrefix}-target-type`} {...target.type} />
-                  )
-                }
-              />
-            </Box>
+            <PaneGrid
+              id={`${idPrefix}-panes`}
+              only={only}
+              source={
+                <PaneSection
+                  id={`${idPrefix}-source`}
+                  which="source"
+                  parts={source.parts}
+                  full={paneFull("source")}
+                  hidden={only === "target"}
+                  typeControl={typeControl("source", source.type)}
+                >
+                  <PictureBox idPrefix={`${idPrefix}-source`} content={source.content} />
+                </PaneSection>
+              }
+              target={
+                <PaneSection
+                  id={`${idPrefix}-target`}
+                  which="target"
+                  parts={target.parts}
+                  full={paneFull("target")}
+                  hidden={only === "source"}
+                  typeControl={typeControl("target", target.type)}
+                >
+                  <PictureBox idPrefix={`${idPrefix}-target`} content={target.content} />
+                </PaneSection>
+              }
+            />
           )}
         </>
       )}
@@ -543,13 +490,13 @@ export default function VisualizationPane({
           onStepChange={steps.onStepChange}
         />
       )}
-      {note && !fullScreen.on && (
+      {note && !full && (
         <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.875rem", color: noteColor }}>
           {note.text}
         </Box>
       )}
 
-      {(legendFrames.some(Boolean) || legendStates) && !fullScreen.on && (
+      {(legendFrames.some(Boolean) || legendStates) && !full && (
         <Legend
           idPrefix={`${idPrefix}-legend`}
           frames={legendFrames}

@@ -9,6 +9,8 @@
 // its row. The (i) card after the title stays inside the window, below the sticky banner, and a
 // phone-width page never scrolls sideways.
 //
+// Stage 2 (Reduce) is at the end of this file.
+//
 // The catalog comes from the real backend, with allInfo edited so PPZ declares "Stochastic"
 // and the backtracking solver doesn't (as tests/e2e/run-seed.spec.js does); every compute
 // request is answered from the 3SAT backtracking run in tests/e2e/run-payloads.js (a capture
@@ -16,6 +18,7 @@
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, selectSolverByName } from "./helpers";
+import { SAT_TO_3SAT_VIEW } from "./reduction-payloads";
 import { SAT3_BACKTRACKING_ONE_RUN, SAT3_PPZ_ONE_RUN } from "./run-payloads";
 
 const PROBLEM = "3SAT";
@@ -289,3 +292,299 @@ for (const width of [320, 390]) {
     }
   });
 }
+
+// --- #303 stage 2: Reduce -------------------------------------------------------------------
+//
+// Reduce is a Reduce -> Solve -> Verify stepper whose menus belong to the stage shown, under two
+// panes (source, arrow, target) whose header rows line up. reductionView is answered with the
+// SAT -> 3SAT capture (./reduction-payloads.js) on SAT's page; the catalog's own 3SAT solvers fill
+// the Solve stage's Algorithm menu, WalkSAT among them declaring "Stochastic".
+
+const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
+const REDUCE_SEED = 777;
+
+async function openSatReduce(page, { width = 1280 } = {}) {
+  const asked = [];
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width, height: 1000 });
+  await page.route(REDUCTION_VIEW_REQUEST, (route) => {
+    const url = new URL(route.request().url());
+    asked.push(url);
+    const seed = url.searchParams.get("seed");
+    return route.fulfill({
+      json: url.searchParams.get("solver")
+        ? { ...SAT_TO_3SAT_VIEW, seed: seed ? Number(seed) : REDUCE_SEED }
+        : SAT_TO_3SAT_VIEW,
+    });
+  });
+  const instance = SAT_TO_3SAT_VIEW.source.instance;
+  await page.goto(`/SAT?instance=${encodeURIComponent(instance)}`);
+  await expect(page.getByRole("heading", { level: 1, name: "SAT" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await page.locator("#workbench-mode-reduce").click();
+  const current = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
+  if (!/^3SAT/.test(current)) {
+    await page.locator("#workbench-target-button").click();
+    await page
+      .locator("#workbench-target-listbox")
+      .getByRole("option")
+      .filter({ hasText: /^3SAT/ })
+      .first()
+      .click();
+  }
+  await expect(page.locator("#workbench-target-value")).toHaveText(/^3SAT/);
+  return asked;
+}
+
+const stage = (page, key) => page.locator(`#workbench-stage-${key}`);
+
+test("Reduce's stepper runs Reduce, Solve, Verify in order, each with only its own menus", async ({
+  page,
+}) => {
+  const asked = await openSatReduce(page);
+
+  // The stages in order, the later two disabled until the one before them is done.
+  const order = await page
+    .locator("#workbench-stages button")
+    .evaluateAll((buttons) => buttons.map((button) => button.id));
+  expect(order).toEqual([
+    "workbench-stage-reduce",
+    "workbench-stage-solve",
+    "workbench-stage-verify",
+  ]);
+  await expect(stage(page, "reduce")).toHaveAttribute("aria-current", "step");
+  await expect(stage(page, "solve")).toBeDisabled();
+  await expect(stage(page, "verify")).toBeDisabled();
+  // Reduce's menus only.
+  await expect(page.locator("#workbench-target-button")).toBeVisible();
+  await expect(page.locator("#workbench-reduction-button")).toBeVisible();
+  await expect(page.locator("#workbench-target-solver-button")).toHaveCount(0);
+  await expect(page.locator("#workbench-result-verify")).toHaveCount(0);
+  await expect(page.locator(RUN)).toHaveText("Reduce");
+  await expect(page.locator("#workbench-result-stages-reduce-next")).toHaveAttribute(
+    "data-stage",
+    "reduce",
+  );
+
+  // Reduce builds the target: only Build's steps, nothing solved yet.
+  await page.locator(RUN).click();
+  await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
+  await expect(stage(page, "reduce")).toHaveAttribute("data-stage-state", "done");
+  await expect(stage(page, "verify")).toBeDisabled();
+  expect(asked[0].searchParams.get("solver")).toBeNull();
+  const builds = SAT_TO_3SAT_VIEW.frames.filter((frame) => frame.phase === "build").length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${builds} of ${builds}`);
+  await expect(page.locator("#workbench-phases-solve")).toBeDisabled();
+  await expect(page.locator("#workbench-showing")).not.toContainText("solved by");
+  await expect(page.locator("#workbench-reduction-target-title")).toContainText("built");
+  // Solve's menus only: the target's Algorithm with its (i), and Solve through 3SAT.
+  await expect(page.locator("#workbench-target-button")).toHaveCount(0);
+  await expect(page.locator("#workbench-reduction-button")).toHaveCount(0);
+  await expect(page.locator("#workbench-target-solver-button")).toBeVisible();
+  await expect(page.locator("#workbench-target-solver-info-button")).toBeVisible();
+  await expect(page.locator(RUN)).toHaveText("Solve through 3SAT");
+
+  // Solve solves the target with the chosen Algorithm; the answer is mapped back to SAT.
+  const solverName = (
+    (await page.locator("#workbench-target-solver-value").textContent()) ?? ""
+  ).trim();
+  await page.locator(RUN).click();
+  await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
+  await expect(stage(page, "solve")).toHaveAttribute("data-stage-state", "done");
+  expect(asked).toHaveLength(2);
+  expect(asked[1].searchParams.get("solver")).toBeTruthy();
+  await expect(page.locator("#workbench-showing")).toContainText("solved by");
+  const frames = SAT_TO_3SAT_VIEW.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${frames} of ${frames}`);
+  await expect(page.locator("#workbench-reduction-source-title")).toContainText(
+    "mapped back from 3SAT",
+  );
+  await expect(page.locator("#workbench-reduction-target-title")).toContainText(
+    SAT_TO_3SAT_VIEW.solver,
+  );
+  expect(solverName).not.toBe("");
+  // Verify's box only: no main button, and the Check against switch, its target side unlocked.
+  await expect(page.locator("#workbench-target-solver-button")).toHaveCount(0);
+  await expect(page.locator(RUN)).toHaveCount(0);
+  await expect(page.locator("#workbench-result-verify-check-on-target")).toBeEnabled();
+
+  // The results, tagged by stage in the stepper's order, with the answer mapped back.
+  // (This route answers every Solve with a seed, so Solve has its seed row too.)
+  const rows = await page
+    .locator("#workbench-result-stages > li")
+    .evaluateAll((items) => items.map((item) => [item.id, item.dataset.stage]));
+  expect(rows).toEqual([
+    ["workbench-result-stages-reduce-done", "reduce"],
+    ["workbench-result-stages-solve-answer", "solve"],
+    ["workbench-result-stages-solve-mapped", "solve"],
+    ["workbench-result-stages-solve-seed", "solve"],
+    ["workbench-result-stages-verify-next", "verify"],
+  ]);
+  await expect(page.locator("#workbench-result-stages-solve-mapped")).toContainText(
+    `Mapped back to SAT: ${SAT_TO_3SAT_VIEW.frames.at(-1).caption}`,
+  );
+  await expect(page.locator("#workbench-result-mapped-back")).toContainText(
+    SAT_TO_3SAT_VIEW.frames.at(-1).caption,
+  );
+
+  // The stepper goes back to an earlier stage's menus; a new Reduce starts again from Solve.
+  await stage(page, "reduce").click();
+  await expect(stage(page, "reduce")).toHaveAttribute("aria-current", "step");
+  await expect(page.locator(RUN)).toHaveText("Rebuild");
+  await page.locator(RUN).click();
+  await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
+  await expect(stage(page, "verify")).toBeDisabled();
+  await expect(page.locator("#workbench-result-stages-solve-next")).toBeVisible();
+});
+
+test("a randomized target Algorithm gets the Seed box right of its dropdown, and the seed goes on the request", async ({
+  page,
+}) => {
+  const asked = await openSatReduce(page);
+  await page.locator(RUN).click();
+  await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
+  await page.locator("#workbench-target-solver-button").click();
+  await page
+    .locator("#workbench-target-solver-listbox")
+    .getByRole("option", { name: /WalkSAT/ })
+    .click();
+
+  const dropdown = await boxOf(page, "#workbench-target-solver-button");
+  const info = await boxOf(page, "#workbench-target-solver-info-button");
+  const seed = await boxOf(page, "#workbench-seed");
+  expect(dropdown.x + dropdown.width).toBeLessThanOrEqual(info.x + 1);
+  expect(info.x + info.width).toBeLessThanOrEqual(seed.x);
+  expect(sameLine(dropdown, seed)).toBe(true);
+
+  await page.locator("#workbench-seed").fill("31");
+  await page.locator(RUN).click();
+  await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
+  expect(asked.at(-1).searchParams.get("solver")).toMatch(/WalkSAT/);
+  expect(asked.at(-1).searchParams.get("seed")).toBe("31");
+  await expect(page.locator("#workbench-result-stages-solve-seed")).toContainText("Seed 31");
+
+  // Run again with this seed asks for the same run, from the Verify stage too.
+  const before = asked.length;
+  await page.locator("#workbench-result-stage-seed-rerun").click();
+  await expect.poll(() => asked.length).toBe(before + 1);
+  await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
+  expect(asked.at(-1).searchParams.get("seed")).toBe("31");
+
+  // A deterministic Algorithm has no Seed box.
+  await stage(page, "solve").click();
+  await page.locator("#workbench-target-solver-button").click();
+  await page
+    .locator("#workbench-target-solver-listbox")
+    .getByRole("option", { name: /Backtracking/ })
+    .first()
+    .click();
+  await expect(page.locator("#workbench-seed")).toHaveCount(0);
+});
+
+test("at desktop width the panes sit side by side with the arrow between them, and their header rows line up", async ({
+  page,
+}) => {
+  await openSatReduce(page);
+  const check = async (prefix) => {
+    const source = await boxOf(page, `${prefix}-source-pane`);
+    const arrow = await boxOf(page, `${prefix}-panes-arrow`);
+    const target = await boxOf(page, `${prefix}-target-pane`);
+    expect(arrow.x).toBeGreaterThanOrEqual(source.x + source.width);
+    expect(target.x).toBeGreaterThanOrEqual(arrow.x + arrow.width);
+    expect(Math.abs(source.y - target.y)).toBeLessThanOrEqual(1);
+    const sourceMenu = await boxOf(page, "#workbench-source-type-button");
+    const targetMenu = await boxOf(page, "#workbench-target-type-button");
+    expect(Math.abs(sourceMenu.y - targetMenu.y)).toBeLessThanOrEqual(1);
+  };
+  // Before Reduce (the default picture and the target's placeholder), and in the view.
+  await check("#workbench");
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  await check("#workbench-reduction");
+
+  // A label that wraps on one side pushes both sides' controls down together.
+  await page.locator("#workbench-reduction-source-title").evaluate((title) => {
+    const extra = document.createElement("span");
+    extra.textContent = " a long extra label part that has to wrap onto more lines".repeat(4);
+    title.append(extra);
+  });
+  const sourceTitle = await boxOf(page, "#workbench-reduction-source-title");
+  const targetTitle = await boxOf(page, "#workbench-reduction-target-title");
+  expect(sourceTitle.height).toBeGreaterThan(targetTitle.height + 10);
+  const sourceMenu = await boxOf(page, "#workbench-source-type-button");
+  const targetMenu = await boxOf(page, "#workbench-target-type-button");
+  expect(Math.abs(sourceMenu.y - targetMenu.y)).toBeLessThanOrEqual(1);
+
+  // The Showing line is a line of its own above the panes.
+  const showing = await boxOf(page, "#workbench-showing");
+  expect(showing.y + showing.height).toBeLessThanOrEqual(sourceTitle.y);
+});
+
+test("at 390 px the panes stack with the arrow pointing down between them, and nothing scrolls sideways", async ({
+  page,
+}) => {
+  await openSatReduce(page, { width: 390 });
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  const source = await boxOf(page, "#workbench-reduction-source-pane");
+  const arrow = await boxOf(page, "#workbench-reduction-panes-arrow");
+  const target = await boxOf(page, "#workbench-reduction-target-pane");
+  expect(arrow.y).toBeGreaterThanOrEqual(source.y + source.height - 1);
+  expect(target.y).toBeGreaterThanOrEqual(arrow.y + arrow.height - 1);
+  const turn = await page
+    .locator("#workbench-reduction-panes-arrow")
+    .evaluate((element) => getComputedStyle(element).transform);
+  expect(turn).not.toBe("none");
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+  for (const id of ["stage-reduce", "stage-solve", "stage-verify", "run"]) {
+    expect((await boxOf(page, `#workbench-${id}`)).height).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test("each pane's Full screen shows that picture alone with the steps; Reduce's shows both with the arrow", async ({
+  page,
+}) => {
+  await openSatReduce(page);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  const hiddenInFull = [
+    "#workbench-instance-full-instance",
+    "#workbench-command-bar",
+    RESULTS,
+    "#workbench-legend-body",
+  ];
+
+  // The target pane alone.
+  await page.locator("#workbench-target-full-screen").click();
+  await expect(page.locator("#workbench")).toHaveAttribute("data-full-screen-on", "target");
+  await expect(page.locator("#workbench-full-title")).toHaveText("3SAT");
+  await expect(page.locator("#workbench-reduction-target")).toBeVisible();
+  await expect(page.locator("#workbench-reduction-source")).toBeHidden();
+  await expect(page.locator("#workbench-reduction-panes-arrow")).toBeHidden();
+  await expect(page.locator("#workbench-steps-slider")).toBeVisible();
+  for (const hidden of hiddenInFull) await expect(page.locator(hidden)).toBeHidden();
+  const alone = await boxOf(page, "#workbench-reduction-target-pane");
+  expect(alone.width).toBeGreaterThan(1000);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#workbench")).not.toHaveAttribute("data-full-screen", "true");
+  await expect(page.locator("#workbench-target-full-screen")).toBeFocused();
+
+  // The source pane alone.
+  await page.locator("#workbench-source-full-screen").click();
+  await expect(page.locator("#workbench-reduction-source")).toBeVisible();
+  await expect(page.locator("#workbench-reduction-target")).toBeHidden();
+  await page.locator("#workbench-full-exit").click();
+
+  // Both pictures with the arrow, and the steps.
+  await page.locator("#workbench-full-screen").click();
+  await expect(page.locator("#workbench")).toHaveAttribute("data-full-screen-on", "all");
+  await expect(page.locator("#workbench-full-title")).toHaveText("SAT → 3SAT");
+  await expect(page.locator("#workbench-reduction-source")).toBeVisible();
+  await expect(page.locator("#workbench-reduction-target")).toBeVisible();
+  await expect(page.locator("#workbench-reduction-panes-arrow")).toBeVisible();
+  await expect(page.locator("#workbench-steps-slider")).toBeVisible();
+  for (const hidden of hiddenInFull) await expect(page.locator(hidden)).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#workbench-full-screen")).toBeFocused();
+});

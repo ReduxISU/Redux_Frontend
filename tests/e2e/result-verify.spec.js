@@ -256,7 +256,7 @@ test("a certificate Redux cannot read shows only its error under the box", async
   await expect(verdict(page)).toBeVisible();
 });
 
-test("in Reduce mode the target side of Check against unlocks once the reduction builds the target", async ({
+test("in Reduce mode Check against is the stepper's Verify stage, open once Reduce and Solve are done", async ({
   page,
 }) => {
   const verifyCalls = await answerCompute(page);
@@ -265,33 +265,31 @@ test("in Reduce mode the target side of Check against unlocks once the reduction
   await page.locator("#workbench-mode-reduce").click();
   const target = ((await page.locator("#workbench-target-value").textContent()) ?? "").trim();
   await openPanel(page, "result", { expect });
-
-  const sourceSide = page.locator("#workbench-result-verify-check-on-source");
-  const targetSide = page.locator("#workbench-result-verify-check-on-target");
-  await expect(sourceSide).toHaveText(PROBLEM);
-  await expect(sourceSide).toHaveAttribute("aria-pressed", "true");
-  await expect(targetSide).toHaveText(target);
-  await expect(targetSide).toBeDisabled();
-  await expect(page.locator("#workbench-result-verify-check-on-hint")).toHaveText(
-    `Run the reduction first: checking against ${target} needs the target instance it builds.`,
-  );
   await expect(page.locator("#workbench-result-empty")).toHaveText(
     "No run yet: press Reduce for the target instance.",
   );
 
-  // The source side works before the Run, like in the Verify tab.
-  await check(page, ANSWER);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is valid`,
-  );
-
+  // #303 stage 2: the check is Reduce -> Solve -> Verify's last stage, locked with no box
+  // until the target is built and solved.
+  const verifyStage = page.locator("#workbench-stage-verify");
+  await expect(verifyStage).toBeDisabled();
+  await expect(page.locator("#workbench-result-verify")).toHaveCount(0);
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
     "data-picture-kind",
     "frame",
   );
-  // The run retired the earlier verdict, unlocked the target side and switched to it.
-  await expect(verdict(page)).toHaveCount(0);
+  await expect(page.locator("#workbench-stage-solve")).toHaveAttribute("aria-current", "step");
+  await expect(verifyStage).toBeDisabled();
+  await expect(page.locator("#workbench-result-verify")).toHaveCount(0);
+  await page.locator("#workbench-run").click();
+  await expect(verifyStage).toHaveAttribute("aria-current", "step");
+
+  // The built target is unlocked and chosen.
+  const sourceSide = page.locator("#workbench-result-verify-check-on-source");
+  const targetSide = page.locator("#workbench-result-verify-check-on-target");
+  await expect(sourceSide).toHaveText(PROBLEM);
+  await expect(targetSide).toHaveText(target);
   await expect(targetSide).toBeEnabled();
   await expect(targetSide).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#workbench-result-verify-check-on-hint")).toHaveCount(0);
@@ -307,23 +305,32 @@ test("in Reduce mode the target side of Check against unlocks once the reduction
   );
   const targetCall = verifyCalls.at(-1);
   expect(targetCall.problemInstance).toBe(TARGET_INSTANCE);
-  expect(targetCall.verifier).not.toBe(verifyCalls[0].verifier);
   // The reduced picture stays, with no overlay button: Redux can't draw a certificate yet.
   await expect(page.locator("#workbench-showing")).toContainText(`${PROBLEM} → ${target}`);
   await expect(overlayButton(page)).toHaveCount(0);
 
-  // Back to the source side keeps each side's own certificate.
+  // The source side checks with the source problem's verifier.
   await sourceSide.click();
-  await expect(certificateBox(page)).toHaveValue(ANSWER);
+  await expect(sourceSide).toHaveAttribute("aria-pressed", "true");
+  await check(page, ANSWER);
+  await expect(verdict(page)).toHaveText(
+    `Verifier: your certificate on the ${PROBLEM} instance is valid`,
+  );
+  expect(verifyCalls.at(-1).verifier).not.toBe(targetCall.verifier);
+  expect(verifyCalls.at(-1).problemInstance).not.toBe(TARGET_INSTANCE);
+
+  // Each side keeps its own certificate.
   await targetSide.click();
   await expect(certificateBox(page)).toHaveValue(WRONG);
+  await sourceSide.click();
+  await expect(certificateBox(page)).toHaveValue(ANSWER);
 
-  // An instance edit locks the target side again.
+  // An instance edit locks Verify again: the stepper goes back to Reduce.
   await openPanel(page, "instance", { expect });
   await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
-  await openPanel(page, "result", { expect });
-  await expect(targetSide).toBeDisabled();
-  await expect(sourceSide).toHaveAttribute("aria-pressed", "true");
+  await expect(verifyStage).toBeDisabled();
+  await expect(page.locator("#workbench-stage-reduce")).toHaveAttribute("aria-current", "step");
+  await expect(page.locator("#workbench-result-verify")).toHaveCount(0);
 });
 
 test("Map a solution across maps an answer onto the target, and its Verify This Answer checks it there", async ({
@@ -332,7 +339,10 @@ test("Map a solution across maps an answer onto the target, and its Verify This 
   const verifyCalls = await answerCompute(page);
   const mapCalls = [];
   page.on("request", (request) => {
-    if (MAP_REQUEST.test(request.url())) mapCalls.push(new URL(request.url()));
+    // Map across only, not Solve's mapSolutionBack.
+    if (MAP_REQUEST.test(request.url()) && !/mapSolutionBack/.test(request.url())) {
+      mapCalls.push(new URL(request.url()));
+    }
   });
   await gotoProblemDetail(page, PROBLEM, { expect });
 
@@ -352,7 +362,13 @@ test("Map a solution across maps an answer onto the target, and its Verify This 
   expect(mapCalls).toHaveLength(1);
   expect(mapCalls[0].searchParams.get("solution")).toBe(ANSWER);
 
+  // Its Verify This Answer checks in the stepper's Verify stage (#303 stage 2), so it waits for
+  // Solve; Solve's own mapped-back request is not one of the Map across ones.
+  await expect(page.locator("#workbench-result-verify-mapped")).toBeDisabled();
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-stage-verify")).toBeEnabled();
   await page.locator("#workbench-result-verify-mapped").click();
+  await expect(page.locator("#workbench-stage-verify")).toHaveAttribute("aria-current", "step");
   await expect(certificateBox(page)).toHaveValue(MAPPED);
   await expect(verdict(page)).toHaveText(
     `Verifier: your certificate on the ${target} target is valid`,

@@ -12,6 +12,7 @@
 // does, and reductionView is answered from captures (./reduction-payloads.js).
 
 import { expect, test } from "./fixtures";
+import { reduceAndSolve } from "./helpers";
 import {
   SAT_FACTOR_GRAPH_TO_3SAT_VIEW,
   SAT_TO_3SAT_FACTOR_GRAPH_VIEW,
@@ -113,7 +114,7 @@ async function answerViews(page, { older = false, delays = {} } = {}) {
   return asked;
 }
 
-/** Opens SAT in Reduce mode with 3SAT chosen and runs it. */
+/** Opens SAT in Reduce mode with 3SAT chosen and runs it: Reduce, then Solve (#303 stage 2). */
 async function runSatTo3sat(page) {
   await page.goto(`/SAT?instance=${encodeURIComponent(SAT_TO_3SAT_VIEW.source.instance)}`);
   await expect(page.getByRole("heading", { level: 1, name: "SAT" })).toBeVisible({
@@ -130,7 +131,7 @@ async function runSatTo3sat(page) {
       .first()
       .click();
   }
-  await page.locator("#workbench-run").click();
+  await reduceAndSolve(page, { expect });
   await expect(page.locator(VIEW)).toBeVisible();
   await expect(page.locator(VIEW)).toHaveAttribute("data-loading", "false");
 }
@@ -293,9 +294,11 @@ test("while another picture is drawn the panes say so, and a later choice wins o
     "Sat3SearchTreeVisualization",
   );
   await expect(typeButton(page, "target")).toContainText("3SAT Search Tree");
-  // Run asked for the target's default (no pick yet), then the two picks.
+  // Reduce asked for the target's default (no pick yet), Solve for the picture Reduce drew (the
+  // view named it), then the two picks.
   expect(asked.map((request) => request.target)).toEqual([
     null,
+    "Sat3DefaultVisualization",
     "Sat3FactorGraphVisualization",
     "Sat3SearchTreeVisualization",
   ]);
@@ -338,5 +341,6 @@ test("a backend that ignores the choice gets a fixed dropdown naming what it dre
   await expect(typeButton(page, "target")).toBeDisabled();
   await expect(typeButton(page, "source")).toContainText("SAT Visualization");
   await expect(typeButton(page, "source")).toBeDisabled();
-  expect(asked).toHaveLength(1);
+  // One request for Reduce and one for Solve; none for a picture.
+  expect(asked).toHaveLength(2);
 });

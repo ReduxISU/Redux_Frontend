@@ -377,3 +377,38 @@ export function drawnCollisions(page, svgSelector) {
     return found;
   });
 }
+
+/**
+ * #303 stage 2: Reduce is a Reduce -> Solve -> Verify stepper. This presses Reduce (the target is
+ * built and the bar moves to the Solve stage), then Solve through <target> (the target is solved
+ * and its answer mapped back; the bar moves to Verify). The two are the one Run of #215's
+ * Reduction View before the stepper: afterwards the view walks Build, Solve and Map back.
+ */
+export async function reduceAndSolve(page, { expect }) {
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-stage-solve")).toHaveAttribute("aria-current", "step");
+  await expect(page.locator("#workbench-run")).toBeEnabled();
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-stage-verify")).toHaveAttribute("aria-current", "step");
+}
+
+/**
+ * #303 stage 2: back to the Reduce stage (from wherever the stepper is) and Rebuild; the bar moves
+ * to the Solve stage again. Before the stepper this was a second click on Run.
+ */
+export async function reduceAgain(page, { expect }) {
+  const reduce = page.locator("#workbench-stage-reduce");
+  if ((await reduce.getAttribute("aria-current")) !== "step") await reduce.click();
+  await expect(reduce).toHaveAttribute("aria-current", "step");
+  await expect(page.locator("#workbench-run")).toBeEnabled();
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-stage-solve")).toHaveAttribute("aria-current", "step");
+}
+
+/** reduceAgain, then Solve through the target (reduceAndSolve's second half). */
+export async function rerunReduction(page, { expect }) {
+  await reduceAgain(page, { expect });
+  await expect(page.locator("#workbench-run")).toBeEnabled();
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-stage-verify")).toHaveAttribute("aria-current", "step");
+}

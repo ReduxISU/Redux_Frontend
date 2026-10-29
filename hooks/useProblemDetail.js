@@ -235,6 +235,7 @@ function buildReductions(
   info,
   visualizationTypesByInstance,
   verifiersByProblem,
+  solversByProblem,
 ) {
   const to = [];
   const from = [];
@@ -282,6 +283,8 @@ function buildReductions(
             // #229 stage 3: Verify's "Check against: target" checks with the target
             // problem's own verifier, against the instance the reduction built.
             targetVerifier: buildVerifier(verifiersByProblem?.[toCode], info, info[toCode] ?? {}),
+            // #303 stage 2: the target problem's solvers, for Reduce's Solve step.
+            targetSolvers: buildSolvers(solversByProblem?.[toCode], info),
           });
         }
         if (toCode === problemCode) {
@@ -382,6 +385,7 @@ function buildProblem(problemCode, info, batches, codeToName) {
       info,
       visualizationTypesByInstance,
       verifiersByProblem,
+      solversByProblem,
     ),
   };
 }
