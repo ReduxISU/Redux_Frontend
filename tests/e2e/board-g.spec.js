@@ -1048,10 +1048,12 @@ test("Reduce's Picture menus are dropdowns naming each picture and its type, nev
     for (const text of texts) expect(text).not.toMatch(/\b[A-Z][a-z]+[A-Z]\w*Visualization\b/);
   };
 
-  // Before Reduce: the source's menu opens on its one picture, with its type's tag.
+  // Before Reduce: the source's menu lists 3SAT's pictures (the ones Redux lists with
+  // includePictures=true, #279), the default first, each with its type's tag.
   await expect(menu("source")).toBeEnabled();
   let options = await optionsOf("source");
-  expect(options).toEqual(["3SAT Visualization Grouped Graph"]);
+  noClassNames(options);
+  expect(options[0]).toBe("3SAT Visualization Grouped Graph");
 
   // After Reduce, both sides. Redux's catalog lists no picture for 0-1 Integer Linear
   // Programming, so its picture is named after the problem, with the Table tag Redux sent.
