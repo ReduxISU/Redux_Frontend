@@ -379,6 +379,35 @@ test("Verify: a passing and a failing answer each get a row in its tone", async 
   expect(verdicts).toEqual([RUN_CAPTURE.answer, "(x1:False,x2:False,x3:False)"]);
 });
 
+test("the answer box's placeholder is Redux's example, after Example: or e.g., without the full stop", async ({
+  page,
+}) => {
+  // #279: SAT3's format ends "Example: (...)"; N-Queens' ends "— e.g. {...}." and Max Cut's
+  // "— e.g. {...}". A format with no example gives the verifier's own example certificate.
+  const formats = {
+    SAT3: "Pairs. Example: (x1:True,x2:False,x3:True)",
+    NQUEENS: "Queen positions: {(row,col),...} — e.g. {(0,1),(1,3),(2,0),(3,2)}.",
+  };
+  await page.route(ALL_INFO_REQUEST, async (route) => {
+    const response = await route.fetch();
+    const info = await response.json();
+    for (const [code, format] of Object.entries(formats)) info[code].certificateFormat = format;
+    info.MAXCUT.certificateFormat = "Set of vertices on the S side";
+    info.MaxCutVerifier = { ...info.MaxCutVerifier, certificate: "{1,3}" };
+    await route.fulfill({ response, json: info });
+  });
+  const field = page.locator("#workbench-verify-certificate");
+  for (const [code, placeholder] of [
+    ["3SAT", "(x1:True,x2:False,x3:True)"],
+    ["NQUEENS", "{(0,1),(1,3),(2,0),(3,2)}"],
+    ["MAXCUT", "{1,3}"],
+  ]) {
+    await page.goto(`/${code}`);
+    await page.locator("#workbench-mode-verify").click();
+    await expect(field).toHaveAttribute("placeholder", placeholder);
+  }
+});
+
 test("Check it in Verify round trip: Solve's answer is checked in Verify, and Solve still shows it", async ({
   page,
 }) => {
