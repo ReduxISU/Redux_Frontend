@@ -5,7 +5,9 @@
 //   - Solve: the Algorithm dropdown with its (i) on its right, then, for a randomized solver
 //     only, the Seed box (#295), then Solve;
 //   - Reduce: the Reduce, Solve, Verify stepper (stage 2, below);
-//   - Verify: the Verify box (./panels/VerifyBox.js), which has its own Check button.
+//   - Verify (#303 stage 4): the Verifier dropdown with its (i), then Check where Solve is in
+//     Solve; the answer to check, with its format, on the row under them
+//     (./panels/VerifyBox.js VerifyTaskRow).
 // The run's status (the note on what the button will do, the run's ComputeStatus) shows under
 // the row. The results list follows the bar (Workbench.js).
 //
@@ -21,8 +23,9 @@
 //   - Reduce: Reduce to and Reduction, and Reduce (Rebuild once built);
 //   - Solve: the target's Algorithm (its (i) on its right), the Seed box right of it for a
 //     randomized solver, and Solve through <target>, which solves the TARGET instance;
-//   - Verify: the Verify box (./panels/VerifyBox.js) with its Check against switch, and no main
-//     button (the box has its own Check). Stage 4 of #303 replaces it with Reduce's own checks.
+//   - Verify (#303 stage 4): two checks side by side, the target's answer with a target verifier
+//     and the answer mapped back with one of this problem's (./panels/VerifyBox.js
+//     ReduceVerifySide), each with its own Check, and Check both as the main button.
 // A stage later in the flow stays disabled until the one before it is done; Workbench.js says
 // which stage is shown, which are done, and which can be reached.
 //
@@ -307,13 +310,16 @@ function RunButton({ id, label, disabled, onRun }) {
  *   (a solver that isn't randomized).
  * @param {{stages: Array, shown: "reduce"|"solve"|"verify", onPick: Function, busy: boolean,
  *   solver: {label: string, value: string, options: Array, onChange: Function}|null,
- *   noSolver: string, verify: import("react").ReactNode}|null} [props.stepper] #303 stage 2: Reduce's stepper (see
- *   StageList), the stage shown, the target's Algorithm dropdown for the Solve stage (null when
- *   the target declares none) and the Verify stage's box.
- * @param {string} props.runLabel "Solve", "Reduce", "Solve through Clique", ...
+ *   noSolver: string, verify: import("react").ReactNode}|null} [props.stepper] #303 stage 2:
+ *   Reduce's stepper (see StageList), the stage shown, the target's Algorithm dropdown for the
+ *   Solve stage (null when the target declares none) and the Verify stage's two checks.
+ * @param {{value: string, options: Array, onChange: Function}|null} [props.verifier] #303
+ *   stage 4: the Verify tab's Verifier dropdown (a dropdown even with one verifier), or
+ *   null when it declares none.
+ * @param {string} props.runLabel "Solve", "Reduce", "Solve through Clique", "Check", ...
  * @param {boolean} props.runDisabled
  * @param {() => void} props.onRun
- * @param {import("react").ReactNode} props.verify The Verify box, shown in Verify.
+ * @param {import("react").ReactNode} props.verify The Verify tab's row under the menus.
  * @param {import("react").ReactNode} props.status Rendered under the row: a note on what the
  *   button will do (or why it can't) and the run's ComputeStatus.
  */
@@ -326,6 +332,7 @@ export default function CommandBar({
   reduction,
   seed,
   stepper = null,
+  verifier = null,
   runLabel,
   runDisabled,
   onRun,
@@ -437,8 +444,28 @@ export default function CommandBar({
             </Box>
           ))}
         {stage === "solve" && seed && <SeedInput id={`${idPrefix}-seed`} {...seed} />}
+        {stage === "verify" && stepper.verify}
 
-        {task === "solve" && runButton}
+        {task === "verify" &&
+          (verifier ? (
+            <TaggedSelect
+              id={`${idPrefix}-verifier`}
+              label="Verifier"
+              hue="green"
+              infoPlacement="box"
+              boxSx={fieldSx}
+              {...verifier}
+            />
+          ) : (
+            <Box
+              id={`${idPrefix}-verifier-none`}
+              sx={{ fontSize: "0.875rem", color: "text.secondary", pb: 1.25 }}
+            >
+              This problem declares no verifier yet.
+            </Box>
+          ))}
+
+        {(task === "solve" || task === "verify") && runButton}
       </Box>
 
       {reducing && (
@@ -459,12 +486,11 @@ export default function CommandBar({
             onPick={stepper.onPick}
             busy={stepper.busy}
           />
-          {stage !== "verify" && runButton}
+          {runButton}
         </Box>
       )}
       {task === "reduce" && !reducing && runButton}
 
-      {stage === "verify" && stepper.verify}
       {task === "verify" && verify}
       {status}
     </Box>

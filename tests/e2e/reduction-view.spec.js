@@ -13,7 +13,15 @@
 
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { drawnCollisions, openPanel, reduceAgain, reduceAndSolve } from "./helpers";
+import {
+  answerViewCertificates,
+  drawnCollisions,
+  openPanel,
+  reduceAgain,
+  reduceAndSolve,
+  VIEW_MAPPED_ANSWER,
+  VIEW_TARGET_ANSWER,
+} from "./helpers";
 import {
   COLORING_TO_CLIQUE_COVER_VIEW,
   SAT_TO_3SAT_VIEW,
@@ -88,6 +96,7 @@ async function openReduce(page, problem, instance, target) {
  * reductionView requests the page made, so a test can count them.
  */
 async function openView(page, key) {
+  await answerViewCertificates(page);
   const { view, problem, target, instance } = CASES[key];
   const asked = [];
   await page.route(REDUCTION_VIEW_REQUEST, (route) => {
@@ -242,14 +251,14 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(page.locator(`${VIEW}-caption-verdict`)).toHaveText("Verdict: yes");
   await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames.at(-1).caption);
 
-  // The Result panel says the answer was mapped back, and by which solver.
+  // The results say the answer was mapped back (the certificate Redux mapped back), and which
+  // solver solved the target.
   await openPanel(page, "result", { expect });
-  await expect(page.locator("#workbench-result-mapped-back")).toContainText(
-    view.frames.at(-1).caption,
+  await expect(page.locator("#workbench-result-mapped-back")).toHaveText(VIEW_MAPPED_ANSWER);
+  await expect(page.locator("#workbench-result-rows-solve-answer")).toContainText(
+    `${view.solver} on the 3SAT instance`,
   );
-  await expect(page.locator("#workbench-result-reduce")).toContainText(
-    `${view.solver}, on the 3SAT target`,
-  );
+  await expect(page.locator("#workbench-result-target-answer")).toHaveText(VIEW_TARGET_ANSWER);
 });
 
 test("Build shows only what the target has built so far, and the finished target after it", async ({
@@ -556,7 +565,7 @@ for (const [status, body] of [
     await page.locator("#workbench-stage-reduce").click();
     await expect(page.locator("#workbench-mode-note")).toContainText("carries the answer across");
     await openPanel(page, "result", { expect });
-    await expect(page.locator("#workbench-result-carried")).toBeVisible();
+    await expect(page.locator("#workbench-result-rows-reduce-done")).toContainText("answer across");
   });
 }
 

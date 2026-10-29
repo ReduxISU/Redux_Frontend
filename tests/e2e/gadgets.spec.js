@@ -109,7 +109,7 @@ test("the Gadgets section is hidden when the reduction sends no gadgets", async 
     reduceBody = body;
     await reduceAgain(page, { expect });
     await expect(section(page)).toHaveCount(0);
-    await expect(page.locator("#workbench-result-reduce")).toBeVisible();
+    await expect(page.locator("#workbench-result-rows-reduce-done")).toBeVisible();
     await expect(page.locator("#workbench-run")).toBeEnabled();
 
     reduceBody = SAT3.reduce;

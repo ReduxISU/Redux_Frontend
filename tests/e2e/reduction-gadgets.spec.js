@@ -27,7 +27,7 @@ import {
   SAT3_FORMULA_FRAMES,
   SAT3_TO_ILP_FORMULA_VIEW,
 } from "./formula-payloads";
-import { openPanel, reduceAndSolve, rerunReduction } from "./helpers";
+import { answerViewCertificates, openPanel, reduceAndSolve, rerunReduction } from "./helpers";
 import { EXACT_COVER_RECURSIVE_NESTED_FRAMES } from "./nested-set-payloads";
 import {
   CLIQUE_GRAPH_FRAMES,
@@ -117,6 +117,7 @@ async function openReduce(page, instance = SAT3_TO_CLIQUE_VIEW.source.instance) 
  * Reduce, then Solve (#303 stage 2), so the view walks every phase.
  */
 async function openView(page, answer) {
+  await answerViewCertificates(page);
   await page.route(REDUCTION_VIEW_REQUEST, (route) => route.fulfill({ json: answer() }));
   await openReduce(page);
   await reduceAndSolve(page, { expect });

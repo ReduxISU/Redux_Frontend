@@ -12,7 +12,7 @@
 // does, and reductionView is answered from captures (./reduction-payloads.js).
 
 import { expect, test } from "./fixtures";
-import { reduceAndSolve } from "./helpers";
+import { answerViewCertificates, reduceAndSolve } from "./helpers";
 import {
   SAT_FACTOR_GRAPH_TO_3SAT_VIEW,
   SAT_TO_3SAT_FACTOR_GRAPH_VIEW,
@@ -91,6 +91,7 @@ async function listPictures(page) {
  * Returns the requests' query strings.
  */
 async function answerViews(page, { older = false, delays = {} } = {}) {
+  await answerViewCertificates(page);
   const asked = [];
   await page.route(REDUCTION_VIEW_REQUEST, async (route) => {
     const url = new URL(route.request().url());

@@ -17,7 +17,13 @@
 // with steps), with a seed added.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, selectSolverByName } from "./helpers";
+import {
+  answerViewCertificates,
+  gotoProblemDetail,
+  selectSolverByName,
+  VIEW_MAPPED_ANSWER,
+  VIEW_TARGET_ANSWER,
+} from "./helpers";
 import { SAT_TO_3SAT_VIEW } from "./reduction-payloads";
 import { SAT3_BACKTRACKING_ONE_RUN, SAT3_PPZ_ONE_RUN } from "./run-payloads";
 
@@ -208,28 +214,124 @@ test("a randomized solver's Seed box sits between the Algorithm (i) and Solve, a
   await expect(page.locator("#workbench-seed")).toHaveCount(0);
 });
 
-test("Check it in Verify sits at the far right of its row and opens the Verify tab", async ({
+test("Check it in Verify sits at the far right of the answer's row and opens the Verify tab", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openSat3(page);
   await solve(page);
 
-  const results = await boxOf(page, RESULTS);
+  // One row for the answer (its sentence, the answer to copy, the action at the far right),
+  // then the seed's row.
+  const rows = await page
+    .locator("#workbench-result-rows > li")
+    .evaluateAll((items) => items.map((item) => [item.id, item.dataset.tone]));
+  expect(rows).toEqual([
+    ["workbench-result-rows-answer", "ok"],
+    ["workbench-result-rows-seed", "info"],
+  ]);
+  const answerRow = await boxOf(page, "#workbench-result-rows-answer");
   const action = await boxOf(page, "#workbench-result-verify-answer");
-  const seedLine = await boxOf(page, "#workbench-result-seed");
   await expect(page.locator("#workbench-result-verify-answer")).toHaveText("Check it in Verify");
-  expect(Math.abs(results.x + results.width - (action.x + action.width))).toBeLessThan(2);
-  expect(sameLine(seedLine, action)).toBe(true);
+  expect(Math.abs(answerRow.x + answerRow.width - (action.x + action.width))).toBeLessThan(16);
+  expect(sameLine(answerRow, action)).toBe(true);
+  await expect(page.locator("#workbench-result-rows-answer")).toContainText("round trip");
 
   await page.locator("#workbench-result-verify-answer").click();
   await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#workbench-result-verify-certificate")).toHaveValue(
-    RUN_CAPTURE.answer,
+  await expect(page.locator("#workbench-verify-certificate")).toHaveValue(RUN_CAPTURE.answer);
+  // Verify's main button is Check, and its verdict is a row in the results.
+  await expect(page.locator(RUN)).toHaveText("Check");
+  await expect(page.locator("#workbench-result-rows-verdict")).toBeVisible();
+});
+
+test("Verify's task bar: the Verifier menu with its (i), Check where Solve is, the answer and its format under them", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  const solveButton = await boxOf(page, RUN);
+  await page.locator("#workbench-mode-verify").click();
+
+  // A dropdown even with one verifier, listing the backend's verifiers, with its info card.
+  const menu = page.locator("#workbench-verifier-button");
+  await expect(menu).toBeEnabled();
+  await expect(page.locator("#workbench-verifier-info-button")).toBeVisible();
+  await menu.click();
+  const options = page.locator("#workbench-verifier-listbox").getByRole("option");
+  expect(await options.count()).toBeGreaterThanOrEqual(1);
+  await expect(options.first()).toContainText("Verifier");
+  await page.keyboard.press("Escape");
+
+  const tabs = await boxOf(page, "#workbench-tasks");
+  const dropdown = await boxOf(page, "#workbench-verifier-button");
+  const info = await boxOf(page, "#workbench-verifier-info-button");
+  const check = await boxOf(page, RUN);
+  await expect(page.locator(RUN)).toHaveText("Check");
+  expect(dropdown.x).toBeGreaterThanOrEqual(tabs.x + tabs.width);
+  expect(info.x + info.width).toBeLessThanOrEqual(check.x);
+  expect(sameLine(dropdown, check)).toBe(true);
+  // Check is the main button, the same size Solve is in Solve.
+  expect(Math.round(check.height)).toBe(Math.round(solveButton.height));
+
+  // The answer to check, on the row under them, with the verifier's format under it.
+  const field = await boxOf(page, "#workbench-verify-certificate");
+  expect(field.y).toBeGreaterThan(check.y + check.height);
+  await expect(page.getByLabel("Answer to check")).toHaveCount(1);
+  await expect(page.locator("#workbench-verify-certificate-hint")).toContainText("Format:");
+  await expect(page.locator("#workbench-verify-certificate")).toHaveAttribute(
+    "aria-describedby",
+    "workbench-verify-certificate-hint",
   );
-  // Verify has no Solve button and no results list: the Verify box checks.
-  await expect(page.locator(RUN)).toHaveCount(0);
-  await expect(page.locator(RESULTS)).toHaveCount(0);
+});
+
+test("Verify: a passing and a failing answer each get a row in its tone", async ({ page }) => {
+  await openSat3(page);
+  const verdicts = [];
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    const body = route.request().postDataJSON();
+    verdicts.push(body.certificate);
+    return route.fulfill({ json: body.certificate === RUN_CAPTURE.answer ? "True" : "False" });
+  });
+  await page.locator("#workbench-mode-verify").click();
+  const row = page.locator("#workbench-result-rows-verdict");
+
+  await page.locator("#workbench-verify-certificate").fill(RUN_CAPTURE.answer);
+  await page.locator(RUN).click();
+  await expect(row).toHaveAttribute("data-tone", "ok");
+  await expect(row).toContainText("Valid:");
+  await expect(row).toContainText("accepts this answer");
+
+  await page.locator("#workbench-verify-certificate").fill("(x1:False,x2:False,x3:False)");
+  await expect(row).toHaveCount(0);
+  await page.locator(RUN).click();
+  await expect(row).toHaveAttribute("data-tone", "err");
+  await expect(row).toContainText("Not valid:");
+  await expect(row).toContainText("rejects this answer");
+  expect(verdicts).toEqual([RUN_CAPTURE.answer, "(x1:False,x2:False,x3:False)"]);
+});
+
+test("Check it in Verify round trip: Solve's answer is checked in Verify, and Solve still shows it", async ({
+  page,
+}) => {
+  await openSat3(page);
+  const verdicts = [];
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    verdicts.push(route.request().postDataJSON().certificate);
+    return route.fulfill({ json: "True" });
+  });
+  await solve(page);
+  await page.locator("#workbench-result-verify-answer").click();
+  await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#workbench-verify-certificate")).toHaveValue(RUN_CAPTURE.answer);
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveAttribute("data-tone", "ok");
+  expect(verdicts).toEqual([RUN_CAPTURE.answer]);
+  // The answer and its verdict stay with their tabs.
+  await page.locator("#workbench-mode-solve").click();
+  await expect(page.locator("#workbench-result-answer")).toHaveText(RUN_CAPTURE.answer);
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveCount(0);
+  await page.locator("#workbench-mode-verify").click();
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveAttribute("data-tone", "ok");
 });
 
 for (const width of [320, 1280]) {
@@ -303,18 +405,20 @@ for (const width of [320, 390]) {
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 const REDUCE_SEED = 777;
 
-async function openSatReduce(page, { width = 1280 } = {}) {
+async function openSatReduce(page, { width = 1280, seeded = true } = {}) {
   const asked = [];
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width, height: 1000 });
+  await answerViewCertificates(page);
   await page.route(REDUCTION_VIEW_REQUEST, (route) => {
     const url = new URL(route.request().url());
     asked.push(url);
     const seed = url.searchParams.get("seed");
     return route.fulfill({
-      json: url.searchParams.get("solver")
-        ? { ...SAT_TO_3SAT_VIEW, seed: seed ? Number(seed) : REDUCE_SEED }
-        : SAT_TO_3SAT_VIEW,
+      json:
+        url.searchParams.get("solver") && seeded
+          ? { ...SAT_TO_3SAT_VIEW, seed: seed ? Number(seed) : REDUCE_SEED }
+          : SAT_TO_3SAT_VIEW,
     });
   });
   const instance = SAT_TO_3SAT_VIEW.source.instance;
@@ -360,9 +464,9 @@ test("Reduce's stepper runs Reduce, Solve, Verify in order, each with only its o
   await expect(page.locator("#workbench-target-button")).toBeVisible();
   await expect(page.locator("#workbench-reduction-button")).toBeVisible();
   await expect(page.locator("#workbench-target-solver-button")).toHaveCount(0);
-  await expect(page.locator("#workbench-result-verify")).toHaveCount(0);
+  await expect(page.locator("#workbench-verify-target")).toHaveCount(0);
   await expect(page.locator(RUN)).toHaveText("Reduce");
-  await expect(page.locator("#workbench-result-stages-reduce-next")).toHaveAttribute(
+  await expect(page.locator("#workbench-result-rows-reduce-next")).toHaveAttribute(
     "data-stage",
     "reduce",
   );
@@ -404,28 +508,31 @@ test("Reduce's stepper runs Reduce, Solve, Verify in order, each with only its o
     SAT_TO_3SAT_VIEW.solver,
   );
   expect(solverName).not.toBe("");
-  // Verify's box only: no main button, and the Check against switch, its target side unlocked.
+  // Verify's two checks and Check both: the Solve stage's menus are gone.
   await expect(page.locator("#workbench-target-solver-button")).toHaveCount(0);
-  await expect(page.locator(RUN)).toHaveCount(0);
-  await expect(page.locator("#workbench-result-verify-check-on-target")).toBeEnabled();
+  await expect(page.locator(RUN)).toHaveText("Check both");
+  await expect(page.locator("#workbench-verify-target-verifier-button")).toBeVisible();
+  await expect(page.locator("#workbench-verify-source-verifier-button")).toBeVisible();
 
   // The results, tagged by stage in the stepper's order, with the answer mapped back.
-  // (This route answers every Solve with a seed, so Solve has its seed row too.)
+  // (This route answers every Solve with a seed, so Solve has its seed row too; the seeded
+  // run's certificates come from visualizeRun, which this suite answers 404, so they stay
+  // the view's captions.)
   const rows = await page
-    .locator("#workbench-result-stages > li")
+    .locator("#workbench-result-rows > li")
     .evaluateAll((items) => items.map((item) => [item.id, item.dataset.stage]));
   expect(rows).toEqual([
-    ["workbench-result-stages-reduce-done", "reduce"],
-    ["workbench-result-stages-solve-answer", "solve"],
-    ["workbench-result-stages-solve-mapped", "solve"],
-    ["workbench-result-stages-solve-seed", "solve"],
-    ["workbench-result-stages-verify-next", "verify"],
+    ["workbench-result-rows-reduce-done", "reduce"],
+    ["workbench-result-rows-solve-answer", "solve"],
+    ["workbench-result-rows-solve-mapped", "solve"],
+    ["workbench-result-rows-solve-seed", "solve"],
+    ["workbench-result-rows-verify-next", "verify"],
   ]);
-  await expect(page.locator("#workbench-result-stages-solve-mapped")).toContainText(
+  await expect(page.locator("#workbench-result-rows-solve-mapped")).toContainText(
     `Mapped back to SAT: ${SAT_TO_3SAT_VIEW.frames.at(-1).caption}`,
   );
-  await expect(page.locator("#workbench-result-mapped-back")).toContainText(
-    SAT_TO_3SAT_VIEW.frames.at(-1).caption,
+  await expect(page.locator("#workbench-result-target-instance")).toHaveText(
+    SAT_TO_3SAT_VIEW.target.instance,
   );
 
   // The stepper goes back to an earlier stage's menus; a new Reduce starts again from Solve.
@@ -435,7 +542,7 @@ test("Reduce's stepper runs Reduce, Solve, Verify in order, each with only its o
   await page.locator(RUN).click();
   await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
   await expect(stage(page, "verify")).toBeDisabled();
-  await expect(page.locator("#workbench-result-stages-solve-next")).toBeVisible();
+  await expect(page.locator("#workbench-result-rows-solve-next")).toBeVisible();
 });
 
 test("a randomized target Algorithm gets the Seed box right of its dropdown, and the seed goes on the request", async ({
@@ -462,7 +569,7 @@ test("a randomized target Algorithm gets the Seed box right of its dropdown, and
   await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
   expect(asked.at(-1).searchParams.get("solver")).toMatch(/WalkSAT/);
   expect(asked.at(-1).searchParams.get("seed")).toBe("31");
-  const seedRow = page.locator("#workbench-result-stages-solve-seed");
+  const seedRow = page.locator("#workbench-result-rows-solve-seed");
   await expect(seedRow).toContainText("Seed 31 made this run.");
   await expect(seedRow.locator("button")).toHaveCount(0);
 
@@ -593,4 +700,90 @@ test("each pane's Full screen shows that picture alone with the steps; Reduce's 
   for (const hidden of hiddenInFull) await expect(page.locator(hidden)).toBeHidden();
   await page.keyboard.press("Escape");
   await expect(page.locator("#workbench-full-screen")).toBeFocused();
+});
+
+test("Reduce's Verify stage checks both answers, prefilled from Solve, and says whether they agree", async ({
+  page,
+}) => {
+  await openSatReduce(page, { seeded: false });
+  const calls = [];
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    const url = new URL(route.request().url());
+    const body = route.request().postDataJSON();
+    calls.push({ verifier: url.searchParams.get("verifier"), ...body });
+    const valid = [VIEW_TARGET_ANSWER, VIEW_MAPPED_ANSWER].includes(body.certificate);
+    return route.fulfill({ json: valid ? "True" : "False" });
+  });
+  await page.locator(RUN).click();
+  await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
+  await page.locator(RUN).click();
+  await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
+
+  // Each side: its Verifier menu, its answer prefilled from the Solve stage, and Check.
+  const targetBox = page.locator("#workbench-verify-target-certificate");
+  const sourceBox = page.locator("#workbench-verify-source-certificate");
+  await expect(targetBox).toHaveValue(VIEW_TARGET_ANSWER);
+  await expect(sourceBox).toHaveValue(VIEW_MAPPED_ANSWER);
+  await expect(page.locator("#workbench-verify-target-verifier-info-button")).toBeVisible();
+  await expect(page.locator("#workbench-verify-source-verifier-info-button")).toBeVisible();
+  await expect(page.locator("#workbench-verify-target-check")).toBeEnabled();
+  await expect(page.locator("#workbench-verify-source-check")).toBeEnabled();
+
+  // Check both runs both checks: the target's answer against the built instance, the mapped-back
+  // one against this instance, each a Verify row, then the row saying they agree.
+  await page.locator(RUN).click();
+  const targetRow = page.locator("#workbench-result-rows-verify-target");
+  const sourceRow = page.locator("#workbench-result-rows-verify-source");
+  const agree = page.locator("#workbench-result-rows-verify-agree");
+  await expect(targetRow).toHaveAttribute("data-tone", "ok");
+  await expect(sourceRow).toHaveAttribute("data-tone", "ok");
+  await expect(agree).toHaveAttribute("data-tone", "ok");
+  await expect(agree).toContainText("Both checks pass");
+  for (const row of [targetRow, sourceRow, agree]) {
+    await expect(row).toHaveAttribute("data-stage", "verify");
+  }
+  expect(calls).toHaveLength(2);
+  const targetCall = calls.find((call) => call.certificate === VIEW_TARGET_ANSWER);
+  const sourceCall = calls.find((call) => call.certificate === VIEW_MAPPED_ANSWER);
+  expect(targetCall.problemInstance).toBe(SAT_TO_3SAT_VIEW.target.instance);
+  expect(sourceCall.problemInstance).toBe(SAT_TO_3SAT_VIEW.source.instance);
+  expect(targetCall.verifier).not.toBe(sourceCall.verifier);
+  await expect(stage(page, "verify")).toHaveAttribute("data-stage-state", "done");
+
+  // An edited answer is checked as typed, and a failing one makes the checks disagree.
+  await sourceBox.fill("(x1:False)");
+  await expect(sourceRow).toHaveCount(0);
+  await page.locator("#workbench-verify-source-check").click();
+  await expect(sourceRow).toHaveAttribute("data-tone", "err");
+  await expect(agree).toHaveAttribute("data-tone", "err");
+  await expect(agree).toContainText("The checks disagree");
+
+  // Nothing is said twice: the mapped-back answer appears once in the results.
+  const results = (await page.locator(RESULTS).textContent()) ?? "";
+  expect(results.split(VIEW_MAPPED_ANSWER)).toHaveLength(2);
+  expect(results.split(VIEW_TARGET_ANSWER)).toHaveLength(2);
+  expect(results).not.toContain("finished in");
+  await expect(page.locator("#workbench-result-map")).toHaveCount(0);
+});
+
+test("at 390 px the results, in every task, never scroll sideways", async ({ page }) => {
+  await openSatReduce(page, { width: 390, seeded: false });
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) =>
+    route.fulfill({ json: "True" }),
+  );
+  await page.locator(RUN).click();
+  await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
+  await page.locator(RUN).click();
+  await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verify-agree")).toBeVisible();
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+  const results = await boxOf(page, RESULTS);
+  expect(results.x + results.width).toBeLessThanOrEqual(390);
+
+  await page.locator("#workbench-mode-verify").click();
+  await page.locator("#workbench-verify-certificate").fill("(x1:True,x2:False)");
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verdict")).toBeVisible();
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 });

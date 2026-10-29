@@ -256,9 +256,7 @@ test("Solve's answer is the run's own answer, so it matches the steps, and Run a
   // Check it in Verify checks that answer, in the Verify tab.
   await page.locator("#workbench-result-verify-answer").click();
   await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#workbench-result-verify-certificate")).toHaveValue(
-    SAT3_PPZ_ONE_RUN.answer,
-  );
+  await expect(page.locator("#workbench-verify-certificate")).toHaveValue(SAT3_PPZ_ONE_RUN.answer);
 });
 
 test("a backend without visualizeRun gets the answer from solve", async ({ page }) => {

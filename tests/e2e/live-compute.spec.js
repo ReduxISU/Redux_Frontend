@@ -89,11 +89,12 @@ const RUN_CANCEL = "#workbench-solve-cancel-button";
 const RUN_FAILURE = "#workbench-solve-failure";
 const RUN_OUTPUT = "#workbench-result-answer";
 const INSTANCE_INPUT = "#workbench-instance-full-instance";
-const CERTIFICATE_INPUT = "#workbench-result-verify-certificate";
-const VERIFY_BUTTON = "#workbench-result-verify-check";
-const VERIFY_STATUS = "#workbench-result-verify-check-status";
-const VERIFY_FAILURE = "#workbench-result-verify-check-failure";
-const VERDICT_BANNER = "#workbench-result-verify-verdict";
+const CERTIFICATE_INPUT = "#workbench-verify-certificate";
+// #303 stage 4: Verify's Check is the task bar's main button, and the verdict a result row.
+const VERIFY_BUTTON = "#workbench-run";
+const VERIFY_STATUS = "#workbench-verify-check-status";
+const VERIFY_FAILURE = "#workbench-verify-check-failure";
+const VERDICT_BANNER = "#workbench-result-rows-verdict";
 
 // Regexes rather than Playwright glob strings: both compute requests carry
 // a query string (`?solver=...`, `?verifier=...`) and a glob's `*` does not
@@ -187,7 +188,7 @@ test("a certificate produced by a live Run verifies against the instance it was 
 
   const verdict = page.locator(VERDICT_BANNER);
   await expect(verdict).toBeVisible({ timeout: 30_000 });
-  await expect(verdict).toContainText("Valid certificate");
+  await expect(verdict).toContainText("Valid:");
   await expect(page.locator(VERIFY_STATUS)).toContainText("Certificate accepted");
 });
 
@@ -216,7 +217,7 @@ test("Verify reports Redux's rejection of a wrong certificate rather than decidi
 
   const verdict = page.locator(VERDICT_BANNER);
   await expect(verdict).toBeVisible({ timeout: 30_000 });
-  await expect(verdict).toContainText("Not a valid certificate");
+  await expect(verdict).toContainText("Not valid:");
   await expect(page.locator(VERIFY_STATUS)).toContainText("Certificate rejected");
 });
 

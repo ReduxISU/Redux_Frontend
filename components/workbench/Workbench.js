@@ -15,15 +15,21 @@
 // to the (i) card after the title (pages/[problem].js), the instance to the editor, and the
 // result to the list. Full screen shows only the picture(s) and the steps (Escape or Exit full
 // screen leaves it). Verify is its own tab; Solve's "Check it in Verify" opens it and checks
-// the answer there. Stage 4 of #303 builds Verify's own checks.
+// the answer there.
 //
 // #303 stage 2: Reduce is a Reduce -> Solve -> Verify stepper (CommandBar.js), each stage with
 // its own menus. Reduce builds the target (the Reduction View's Build frames, or the older
 // requests), Solve runs a target Algorithm on what was built and maps its answer back to this
-// instance (handleSolveTarget), and Verify hosts the Verify box with its Check against switch.
+// instance (handleSolveTarget), and Verify checks both answers (stage 4, below).
 // The two pictures sit side by side with an arrow between them (PaneGrid.js), each with its own
 // header, Picture menu, zoom and Full screen; Full screen beside the Showing line shows both.
 // The results under the bar are tagged by stage.
+//
+// #303 stage 4: Verify. The Verify tab checks a certificate against this instance with the
+// chosen Verifier (Check is its main button), and Reduce's Verify stage checks the target's
+// answer against the instance the reduction built and the answer mapped back against this one,
+// both prefilled from the Solve stage and editable, then says whether the two checks agree. The
+// results are one list of rows in every task (./panels/ResultPanel.js), each fact said once.
 //
 // What this component owns, and why here:
 //   - The one instance value. Every part of the page reads it, and editing it anywhere
@@ -84,7 +90,7 @@ import Box from "@mui/material/Box";
 import { useRouter } from "next/router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { VISUALIZATION_TYPE_MAP } from "../../data/visualizationTypes";
-import { CHECK_SOURCE, CHECK_TARGET, useCertificateCheck } from "../../hooks/useCertificateCheck";
+import { canCheck, useCertificateCheck, verdictMatches } from "../../hooks/useCertificateCheck";
 import {
   COMPUTE_CANCELLED,
   COMPUTE_DONE,
@@ -132,13 +138,14 @@ import {
   solverTags,
   targetCard,
   targetTags,
+  verifierCard,
   visualizationCard,
   visualizationTags,
 } from "./infoCards";
 import { COMPACT_MEDIA, PHONE_MEDIA, secondaryButtonSx } from "./layout";
 import InstancePanel from "./panels/InstancePanel";
-import ResultPanel from "./panels/ResultPanel";
-import VerifyBox from "./panels/VerifyBox";
+import ResultPanel, { SeedText } from "./panels/ResultPanel";
+import { ReduceVerifySide, unreadableFailure, VerifyTaskRow } from "./panels/VerifyBox";
 import VisualizationPane from "./VisualizationPane";
 
 const ID = "workbench";
@@ -413,42 +420,124 @@ export default function Workbench({ problem }) {
   const switching =
     Boolean(reduceView) && viewSwitch.isRunning && switchPending?.runId === reduceResult.runId;
 
-  // --- Verify (#229 stage 3) --------------------------------------------------------------
-  // The target side is the reduction's target problem, checked against the instance the
-  // reduction built; it has an instance (and so unlocks) only while that run is current.
-  const reduceTargetName = reduceCurrent
-    ? reduceResult.targetName
-    : (selectedReduction?.target ?? targetName ?? null);
+  // --- Verify (#303 stage 4) ---------------------------------------------------------------
+  // Three checks, each its own request (hooks/useCertificateCheck.js): the Verify tab's, against
+  // this instance, and Reduce's Verify stage's two, the target's answer against the instance the
+  // reduction built and the answer mapped back against this instance. The tab and Reduce's
+  // second check share this problem's Verifier pick; the target's is kept per target problem.
+  const verifiers = problem.verifiers ?? (problem.verifier ? [problem.verifier] : []);
+  const [sourceVerifierPick, setSourceVerifierPick] = useState(null);
+  const sourceVerifier =
+    verifiers.find((verifier) => verifier.className === sourceVerifierPick) ?? verifiers[0] ?? null;
+  const [targetVerifierPicks, setTargetVerifierPicks] = useState({});
+  const targetVerifiers =
+    selectedReduction?.targetVerifiers ??
+    (selectedReduction?.targetVerifier ? [selectedReduction.targetVerifier] : []);
+  const targetVerifier =
+    targetVerifiers.find(
+      (verifier) => verifier.className === targetVerifierPicks[selectedReduction?.target],
+    ) ??
+    targetVerifiers[0] ??
+    null;
+  const verifyCheck = useCertificateCheck();
+  const targetCheck = useCertificateCheck();
+  const sourceCheck = useCertificateCheck();
+
+  // The Verify tab's certificate, kept for the page's life; its verdict counts while it is of
+  // this instance, this certificate and the same mode and run (a new Run retires it).
+  const [verifyCertificate, setVerifyCertificate] = useState(
+    () => verifiers[0]?.exampleCertificate ?? "",
+  );
   const verifyContext = `${mode}:${lastRun?.id ?? 0}`;
-  const verify = useCertificateCheck({
-    source: {
-      name: problem.name,
-      label: `${problem.name} instance`,
-      verifier: problem.verifier ?? null,
-      instance,
-    },
-    target:
-      mode === "reduce" && reduceTargetName
-        ? {
-            name: reduceTargetName,
-            label: `${reduceTargetName} target`,
-            verifier: reduceCurrent
-              ? reduceResult.targetVerifier
-              : (selectedReduction?.targetVerifier ?? null),
-            instance: reduceCurrent ? reduceResult.targetInstance : null,
-          }
-        : null,
+  const verifySpec = {
+    verifier: sourceVerifier,
+    instance,
+    certificate: verifyCertificate,
+    label: `${problem.name} instance`,
     context: verifyContext,
+  };
+  const verifyVerdict = verdictMatches(verifyCheck.verdict, verifySpec)
+    ? verifyCheck.verdict
+    : null;
+
+  // Reduce's two certificates start as the Solve stage's answers (the target's, and the one
+  // mapped back) and can be edited; a new Solve fills them again.
+  const [reduceCertificates, setReduceCertificates] = useState({
+    solveId: null,
+    target: "",
+    source: "",
   });
+  const typedForSolve = solveId !== null && reduceCertificates.solveId === solveId;
+  const targetCertificate = typedForSolve
+    ? reduceCertificates.target
+    : targetSolveCurrent
+      ? (targetSolveResult.targetCertificate ?? "")
+      : "";
+  const mappedCertificate = typedForSolve
+    ? reduceCertificates.source
+    : targetSolveCurrent
+      ? (targetSolveResult.mappedCertificate ?? "")
+      : "";
+  function setReduceCertificate(side, text) {
+    setReduceCertificates({
+      solveId,
+      target: targetCertificate,
+      source: mappedCertificate,
+      [side]: text,
+    });
+  }
+  const builtTargetName = reduceCurrent
+    ? reduceResult.targetName
+    : (selectedReduction?.target ?? "");
+  const reduceVerifyContext = `reduce:${reduceCurrent ? reduceResult.runId : 0}:${solveId ?? 0}`;
+  const targetSpec = {
+    verifier: targetVerifier,
+    instance: reduceCurrent ? (reduceResult.targetInstance ?? null) : null,
+    certificate: targetCertificate,
+    label: "instance the reduction built",
+    context: reduceVerifyContext,
+  };
+  const sourceSpec = {
+    verifier: sourceVerifier,
+    instance,
+    certificate: mappedCertificate,
+    label: `${problem.name} instance`,
+    context: reduceVerifyContext,
+  };
+  const targetVerdict =
+    targetSolveCurrent && verdictMatches(targetCheck.verdict, targetSpec)
+      ? targetCheck.verdict
+      : null;
+  const sourceVerdict =
+    targetSolveCurrent && verdictMatches(sourceCheck.verdict, sourceSpec)
+      ? sourceCheck.verdict
+      : null;
 
   // Which verdict (by its id) has "Show where it fails" switched on.
   const [overlayFor, setOverlayFor] = useState(null);
 
   // --- Map a solution across (#229 stage 3) -----------------------------------------------
+  // #303 stage 4: from Reduce's Verify stage, it fills the target's certificate with a source
+  // answer (from the Solve tab's Algorithm) mapped onto the target.
   const mapRun = useComputeRequest({ subject: "certificate" });
-  const [mapSolverIndex, setMapSolverIndex] = useState(solverIndex);
   const mapResult = mapRun.status === COMPUTE_DONE ? mapRun.result : null;
-  const mapCurrent = Boolean(mapResult) && reduceCurrent && mapResult.runId === reduceResult.runId;
+  const mapCurrent =
+    Boolean(mapResult) &&
+    reduceCurrent &&
+    mapResult.runId === reduceResult.runId &&
+    mapResult.solveId === solveId;
+  // A new mapped certificate goes into the target's box once, when it lands.
+  const [mapLanded, setMapLanded] = useState(mapRun.result);
+  if (mapLanded !== mapRun.result) {
+    setMapLanded(mapRun.result);
+    if (mapCurrent) {
+      setReduceCertificates({
+        solveId,
+        target: mapResult.certificate,
+        source: mappedCertificate,
+      });
+    }
+  }
 
   // Which of the picture's other runs the steps follow (#204: an NFA's one path), by id; null
   // is the run's own frames.
@@ -700,7 +789,11 @@ export default function Workbench({ problem }) {
   const reduceStages = [
     { key: "reduce", label: "Reduce", done: reduceCurrent },
     { key: "solve", label: "Solve", done: targetSolveCurrent },
-    { key: "verify", label: "Verify", done: false },
+    {
+      key: "verify",
+      label: "Verify",
+      done: Boolean(targetVerdict) && (Boolean(sourceVerdict) || !mappedCertificate),
+    },
   ].map((stage) => ({
     key: stage.key,
     label: stage.label,
@@ -760,13 +853,11 @@ export default function Workbench({ problem }) {
     runIdRef.current += 1;
     const runId = runIdRef.current;
     setLastRun({ id: runId, mode, instance: runInstance });
-    let succeeded = false;
     const solver = selectedSolver;
 
     // A new Run draws with the pictures picked so far; a switch still on its way is dropped.
     viewSwitch.reset();
     setSwitchNote(null);
-    let finished;
     if (mode === "solve") {
       const visualization = selectedViz;
       const oneRun = drawsFromRun(visualization);
@@ -781,7 +872,7 @@ export default function Workbench({ problem }) {
             shareRun = resolve;
           })
         : Promise.resolve(null);
-      const answer = solveRun.start(async (signal) => {
+      solveRun.start(async (signal) => {
         const run = await sharedRun;
         const output =
           typeof run?.answer === "string" && !run.timedOut
@@ -792,49 +883,47 @@ export default function Workbench({ problem }) {
                 runInstance,
                 signal,
               );
-        succeeded = true;
         return { output, solverName: solver.name, instance: runInstance, runId };
       });
-      const picture = visualization
-        ? pictureRun.start(async (signal) => {
-            const ran = {
-              solverName: solver.name,
-              solverClassName: solver.className,
-              instance: runInstance,
-              runId,
-            };
-            // #252: one run and every picture of it, when the backend has visualizeRun.
-            if (oneRun) {
-              let run = null;
-              try {
-                run = await requestRunPictures({
-                  instance: runInstance,
-                  solver: solver.className,
-                  seed: runSeed,
-                  signal,
-                });
-              } finally {
-                shareRun(run);
-              }
-              if (run) return { run, seed: run.seed, ...ran };
+      if (visualization) {
+        pictureRun.start(async (signal) => {
+          const ran = {
+            solverName: solver.name,
+            solverClassName: solver.className,
+            instance: runInstance,
+            runId,
+          };
+          // #252: one run and every picture of it, when the backend has visualizeRun.
+          if (oneRun) {
+            let run = null;
+            try {
+              run = await requestRunPictures({
+                instance: runInstance,
+                solver: solver.className,
+                seed: runSeed,
+                signal,
+              });
+            } finally {
+              shareRun(run);
             }
-            // #199: {format, frames} plus, for a format=frames picture, its type and payload.
-            const picture = await requestPicture({
-              visualization,
-              instance: runInstance,
-              solver: solver.className,
-              seed: runSeed,
-              signal,
-            });
-            return {
-              ...picture,
-              seed: picture.seed ?? null,
-              vizClassName: visualization.className,
-              ...ran,
-            };
-          })
-        : Promise.resolve();
-      finished = Promise.all([answer, picture]);
+            if (run) return { run, seed: run.seed, ...ran };
+          }
+          // #199: {format, frames} plus, for a format=frames picture, its type and payload.
+          const picture = await requestPicture({
+            visualization,
+            instance: runInstance,
+            solver: solver.className,
+            seed: runSeed,
+            signal,
+          });
+          return {
+            ...picture,
+            seed: picture.seed ?? null,
+            vizClassName: visualization.className,
+            ...ran,
+          };
+        });
+      }
     } else {
       // #303 stage 2: a new build starts the stepper again from Solve.
       targetSolveRun.reset();
@@ -844,7 +933,7 @@ export default function Workbench({ problem }) {
         sourceVisualization: sourceViewPicture,
         targetVisualization: targetViewPicture(reduction),
       };
-      finished = reduceRun.start(async (signal) => {
+      reduceRun.start(async (signal) => {
         const ran = {
           reductionClassName: reduction.className,
           reductionName: reduction.name,
@@ -864,7 +953,6 @@ export default function Workbench({ problem }) {
           signal,
         });
         if (view) {
-          succeeded = true;
           return {
             ...ran,
             view,
@@ -919,7 +1007,6 @@ export default function Workbench({ problem }) {
           signal,
         );
         const built = await builtReduction;
-        succeeded = true;
         return {
           ...ran,
           view: null,
@@ -933,13 +1020,6 @@ export default function Workbench({ problem }) {
         };
       });
     }
-    // After a reduction, Verify checks against the target it built (the mockup's default),
-    // when the target problem has a verifier to check with.
-    const checkTargetAfter = mode === "reduce" && Boolean(selectedReduction?.targetVerifier);
-    finished.then(() => {
-      if (!succeeded || runIdRef.current !== runId) return;
-      if (checkTargetAfter) verify.setCheckOn(CHECK_TARGET);
-    });
   }
 
   /**
@@ -983,6 +1063,7 @@ export default function Workbench({ problem }) {
       if (view) {
         const fields = viewRunFields(view);
         const solveFrames = view.frames.filter((frame) => frame.phase === "solve");
+        const certificates = await viewCertificates(run, view, solver, signal);
         return {
           ...ran,
           view,
@@ -991,6 +1072,7 @@ export default function Workbench({ problem }) {
           answer: solveFrames.at(-1)?.caption ?? "",
           mappedBack: fields.mappedBack,
           mapNote: null,
+          ...certificates,
         };
       }
       const targetInstance = run.targetInstance ?? run.view?.target.instance ?? null;
@@ -1028,19 +1110,90 @@ export default function Workbench({ problem }) {
         answer,
         mappedBack,
         mapNote,
+        targetCertificate: answer,
+        mappedCertificate: mappedBack?.text ?? null,
       };
     });
   }
 
-  // --- Check it in Verify and Map a solution across ---------------------------------------
+  /**
+   * #303 stage 4: the certificates behind a Reduction View's Solve, for Verify to check. The view
+   * says what its solver found only in captions, so the target's answer is asked for again: from
+   * ProblemProvider/solve, or for a randomized solver from visualizeRun with the view's seed (the
+   * same run); ProblemProvider/mapSolutionBack then maps it back. Either may be missing (null):
+   * Verify's boxes then start empty, to be typed in.
+   */
+  async function viewCertificates(run, view, solver, signal) {
+    const targetInstance = view.target.instance ?? run.targetInstance ?? null;
+    const none = { targetCertificate: null, mappedCertificate: null };
+    if (!targetInstance) return none;
+    let targetCertificate = null;
+    try {
+      if (Number.isSafeInteger(view.seed)) {
+        const seeded = await requestRunPictures({
+          instance: targetInstance,
+          solver: solver.className,
+          seed: view.seed,
+          signal,
+        });
+        if (typeof seeded?.answer === "string" && !seeded.timedOut) {
+          targetCertificate = seeded.answer;
+        }
+      } else {
+        targetCertificate = asCertificate(
+          await requestSolvedInstance(REDUX_API_BASE_URL, solver.className, targetInstance, signal),
+        );
+      }
+      if (!targetCertificate) return none;
+      const mapped = asCertificate(
+        await requestMappedSolutionBack(
+          REDUX_API_BASE_URL,
+          run.reductionClassName,
+          run.instance,
+          targetCertificate,
+          signal,
+        ),
+      );
+      return { targetCertificate, mappedCertificate: mapped };
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      return { targetCertificate, mappedCertificate: null };
+    }
+  }
+
+  // --- Checks (#303 stage 4) ---------------------------------------------------------------
+  /** The Verify tab's Check: the certificate in its box, or `certificate` put there first. */
+  function handleVerifyCheck(certificate = verifyCertificate) {
+    if (certificate !== verifyCertificate) setVerifyCertificate(certificate);
+    verifyCheck.check({ ...verifySpec, certificate });
+  }
+
   // #303: Check it in Verify opens the Verify tab and checks the run's answer there.
+  const solveAnswer = solveCurrent ? asCertificate(solveResult.output) : "";
   function handleVerifyAnswer() {
-    if (!solveCurrent) return;
-    verify.check(asCertificate(solveResult.output), CHECK_SOURCE);
+    if (!solveAnswer) return;
+    handleVerifyCheck(solveAnswer);
     setTask("verify");
   }
 
-  const mapSolver = solvers[mapSolverIndex] ?? null;
+  const canCheckTarget = canCheck(targetSpec) && !targetCheck.request.isRunning;
+  const canCheckSource = canCheck(sourceSpec) && !sourceCheck.request.isRunning;
+  function checkTarget() {
+    if (canCheckTarget) targetCheck.check(targetSpec);
+  }
+  function checkSource() {
+    if (canCheckSource) sourceCheck.check(sourceSpec);
+  }
+  /** Reduce's Verify stage's main button: both checks, each that can run. */
+  function checkBoth() {
+    checkTarget();
+    checkSource();
+  }
+
+  // Map a solution across, from Reduce's Verify stage: the Solve tab's Algorithm answers this
+  // instance (or, on the older requests, Reduce's own answer is reused) and the answer is mapped
+  // onto the target (ProblemProvider/mapSolution).
+  const mapSolver = selectedSolver;
   const mapReuses = reduceCurrent && mapSolver?.className === reduceResult.solverClassName;
   const mapDisabled =
     !reduceCurrent || !mapSolver?.className || mapRun.isRunning || reduceRun.isRunning;
@@ -1050,6 +1203,7 @@ export default function Workbench({ problem }) {
     const run = reduceResult;
     const solver = mapSolver;
     const reuse = mapReuses;
+    const forSolve = solveId;
     mapRun.start(async (signal) => {
       const answer = reuse
         ? run.certificate
@@ -1068,30 +1222,25 @@ export default function Workbench({ problem }) {
         solverName: solver.name,
         reused: reuse,
         runId: run.runId,
+        solveId: forSolve,
       };
     });
   }
 
-  // The check is shown in the stepper's Verify stage (#303 stage 2), so it waits for Solve.
-  function handleVerifyMapped() {
-    if (!mapCurrent || verify.targetLocked || !reduceReach.verify) return;
-    setReduceStagePick("verify");
-    verify.check(mapResult.certificate, CHECK_TARGET);
-  }
-
   let mapHint = "";
-  if (!reduceCurrent) {
-    mapHint = reduceRun.isRunning
-      ? "Waiting for the reduction to build the target instance."
-      : "The instance changed. Run the reduction again to map an answer onto the new target.";
+  // Once the Solve tab's Algorithm changes, the hint says what Map across would do now.
+  if (mapCurrent && mapResult.solverName === mapSolver?.name) {
+    mapHint = `Filled in from ${mapResult.solverName}'s ${problem.name} answer${
+      mapResult.reused ? " in this run" : ", solved just now"
+    }, mapped onto the ${builtTargetName} instance.`;
   } else if (!mapSolver) {
-    mapHint = `${problem.name} has no solver to produce an answer to map.`;
+    mapHint = `${problem.name} has no algorithm to produce an answer to map.`;
   } else if (!mapSolver.className) {
-    mapHint = "This solver cannot be run: the catalog did not say which backend solver it is.";
+    mapHint = "This algorithm cannot be run: the catalog did not say which backend solver it is.";
   } else if (mapReuses) {
     mapHint = `Uses ${mapSolver.name}'s answer from this run. Nothing new runs.`;
   } else {
-    mapHint = `There's no ${mapSolver.name} answer from this run, so this solves the ${problem.name} instance first. That's the expensive step.`;
+    mapHint = `Solves this ${problem.name} instance with ${mapSolver.name} (the Solve tab's Algorithm) first, then maps the answer onto the ${builtTargetName} instance.`;
   }
   let mapAnnouncement = "";
   if (mapRun.status === COMPUTE_RUNNING) mapAnnouncement = "Mapping the answer across.";
@@ -1102,24 +1251,14 @@ export default function Workbench({ problem }) {
   else if (mapRun.status === COMPUTE_CANCELLED) mapAnnouncement = "Mapping cancelled.";
 
   // --- The verdict on the Showing line ------------------------------------------------------
-  // A check never touches the picture's own state (the run, its current step). Its verdict
-  // shows only while it still describes what is on screen: the same mode and run, and the
-  // instance it was checked against. A new Run or an instance edit retires it.
-  const checked = verify.verdict;
-  const checkedSideInstance =
-    checked?.side === CHECK_TARGET
-      ? reduceCurrent
-        ? reduceResult.targetInstance
-        : null
-      : instance;
-  const verdictCurrent =
-    Boolean(checked) &&
-    checked.context === verifyContext &&
-    checked.instance === checkedSideInstance;
+  // The Verify tab's verdict, while it still describes what is on screen: the same mode and
+  // run, instance and certificate. A check never touches the picture's own state (the run, its
+  // current step); a new Run or an instance edit retires it.
+  const checked = mode === "solve" ? verifyVerdict : null;
   // Whether the picture holds a run's answer worth protecting (solved, or reduced).
   const pictureRan = mode === "solve" ? showingRunPicture : reduceCurrent;
   let verdictLine = null;
-  if (verdictCurrent) {
+  if (checked) {
     const text =
       checked.valid === null
         ? `Verifier: Redux answered "${checked.text}" for your certificate on the ${checked.label}`
@@ -1132,11 +1271,7 @@ export default function Workbench({ problem }) {
       const on = overlayFor === checked.id;
       button = {
         id: `${ID}-verdict-overlay`,
-        label: on
-          ? mode === "solve"
-            ? "Back to the solver's answer"
-            : "Back to the reduction"
-          : "Show where it fails",
+        label: on ? "Back to the solver's answer" : "Show where it fails",
         pressed: on,
         onClick: () => setOverlayFor(on ? null : checked.id),
       };
@@ -1153,11 +1288,35 @@ export default function Workbench({ problem }) {
   if (mode === "solve") runLabel = solveRan ? "Solve again" : "Solve";
   else if (reduceStage === "solve")
     runLabel = targetSolveCurrent ? "Solve again" : `Solve through ${targetLabel}`;
+  else if (reduceStage === "verify")
+    runLabel = targetVerdict || sourceVerdict ? "Check both again" : "Check both";
   else runLabel = reduceRan ? "Rebuild" : "Reduce";
+  // #303 stage 4: Verify's main button is Check, and Reduce's Verify stage's Check both.
+  let mainButton = { label: runLabel, disabled: runDisabled, onRun: handleRun };
+  if (task === "verify") {
+    mainButton = {
+      label: "Check",
+      disabled: !canCheck(verifySpec) || verifyCheck.request.isRunning,
+      onRun: () => handleVerifyCheck(),
+    };
+  } else if (mode === "reduce" && reduceStage === "verify") {
+    mainButton = {
+      label: runLabel,
+      disabled: !canCheckTarget && !canCheckSource,
+      onRun: checkBoth,
+    };
+  }
 
   let modeNote = "";
   if (task === "verify") {
-    modeNote = "";
+    if (!sourceVerifier) modeNote = "";
+    else if (!sourceVerifier.className)
+      modeNote =
+        "This verifier cannot be run: the catalog did not say which backend verifier it is.";
+    else if (!hasInstance)
+      modeNote = "There is no instance to check against. Write one in the Instance box above.";
+    else if (verifyCertificate.trim() === "")
+      modeNote = "Type an answer to check, then press Check. Checking needs no solver.";
   } else if (mode === "solve") {
     if (solvers.length === 0) modeNote = "No solvers are declared for this problem yet.";
     else if (!canSolve)
@@ -1639,6 +1798,23 @@ export default function Workbench({ problem }) {
     targetSolveAnnouncement = "Run cancelled.";
   }
 
+  /** What a check's live region says: running, its verdict, or why it did not check. */
+  function checkAnnouncement(check) {
+    const { request, verdict } = check;
+    if (request.status === COMPUTE_RUNNING) return "Checking this certificate.";
+    if (verdict) {
+      if (verdict.valid === true)
+        return `Certificate accepted. It is valid for the ${verdict.label}.`;
+      if (verdict.valid === false)
+        return `Certificate rejected. It is not valid for the ${verdict.label}.`;
+      return `Redux answered: ${verdict.text}`;
+    }
+    if (request.status === COMPUTE_FAILED)
+      return `The certificate was not checked. ${request.failure?.headline ?? ""}`;
+    if (request.status === COMPUTE_CANCELLED) return "Check cancelled.";
+    return "";
+  }
+
   function cancelSolve() {
     solveRun.cancel();
     pictureRun.cancel();
@@ -1652,8 +1828,9 @@ export default function Workbench({ problem }) {
           {modeNote}
         </Box>
       )}
-      <Box sx={{ display: mode === "solve" ? "block" : "none" }}>
+      <Box sx={{ display: task === "solve" ? "block" : "none" }}>
         <ComputeStatus
+          quiet
           idPrefix={`${ID}-solve`}
           status={solveRun.status}
           announcement={solveAnnouncement}
@@ -1677,6 +1854,7 @@ export default function Workbench({ problem }) {
       </Box>
       <Box sx={{ display: mode === "reduce" ? "block" : "none" }}>
         <ComputeStatus
+          quiet
           idPrefix={`${ID}-reduce`}
           status={reduceRun.status}
           announcement={reduceAnnouncement}
@@ -1685,6 +1863,7 @@ export default function Workbench({ problem }) {
           busyLabel={`Running the reduction to ${selectedReduction?.target ?? "the target"}`}
         />
         <ComputeStatus
+          quiet
           idPrefix={`${ID}-target-solve`}
           status={targetSolveRun.status}
           announcement={targetSolveAnnouncement}
@@ -1692,25 +1871,44 @@ export default function Workbench({ problem }) {
           onCancel={targetSolveRun.cancel}
           busyLabel={`Running ${targetSolverName}`}
         />
+        {[
+          [targetCheck, "target-check", `Checking the ${builtTargetName} answer`],
+          [sourceCheck, "source-check", `Checking the ${problem.name} answer`],
+        ].map(([check, key, busyLabel]) => (
+          <ComputeStatus
+            key={key}
+            quiet
+            idPrefix={`${ID}-${key}`}
+            status={check.request.status}
+            announcement={checkAnnouncement(check)}
+            failure={unreadableFailure(check.request) ? null : check.request.failure}
+            onCancel={check.request.cancel}
+            busyLabel={busyLabel}
+          />
+        ))}
+        <ComputeStatus
+          quiet
+          idPrefix={`${ID}-map`}
+          status={mapRun.status}
+          announcement={mapAnnouncement}
+          failure={mapRun.status === COMPUTE_FAILED ? mapRun.failure : null}
+          onCancel={mapRun.cancel}
+          busyLabel="Mapping the answer across"
+        />
+      </Box>
+      <Box sx={{ display: task === "verify" ? "block" : "none" }}>
+        <ComputeStatus
+          quiet
+          idPrefix={`${ID}-verify-check`}
+          status={verifyCheck.request.status}
+          announcement={checkAnnouncement(verifyCheck)}
+          failure={unreadableFailure(verifyCheck.request) ? null : verifyCheck.request.failure}
+          onCancel={verifyCheck.request.cancel}
+          busyLabel="Checking this certificate"
+        />
       </Box>
     </>
   );
-
-  let targetLockReason = "";
-  if (mode === "reduce" && reduceTargetName) {
-    if (reduceRun.isRunning) targetLockReason = `Building the ${reduceTargetName} instance.`;
-    else if (reduceCurrent && !reduceResult.targetInstance)
-      targetLockReason = `Redux did not send the ${reduceTargetName} instance it built, so there is nothing to check against.`;
-    else
-      targetLockReason = `Run the reduction first: checking against ${reduceTargetName} needs the target instance it builds.`;
-  }
-
-  const verifyProps = {
-    verify,
-    sourceName: problem.name,
-    targetName: reduceTargetName,
-    targetLockReason,
-  };
 
   // #295: the seed the last Solve's run reported, while that run is of this instance and the
   // solver picked now.
@@ -1723,83 +1921,152 @@ export default function Workbench({ problem }) {
       ? { seed: pictureResult.seed }
       : null;
 
-  // The picture the Result panel counts steps from: the chosen visualization's, of this run.
-  const countedPicture = pictureResult?.run
-    ? (pictureResult.run.pictures[selectedViz?.className] ?? null)
-    : pictureResult;
-  const solveSummary = solveResult
-    ? {
-        solverName: solveResult.solverName,
-        output: solveResult.output,
-        elapsedMs: solveRun.elapsedMs,
-        instance: solveResult.instance,
-        seed: solveSeed,
-        // An old flat list is [base, ...steps, solved]; a format=frames run is one frame per
-        // step, its last one the solved picture (#199).
-        stepCount:
-          countedPicture && pictureResult.runId === solveResult.runId
-            ? countedPicture.format === "frames"
-              ? countedPicture.frames.length
-              : Math.max(countedPicture.frames.length - 2, 0)
-            : null,
-      }
-    : null;
-  // #303 stage 2: the Solve step's answer and its map back join the build's facts once it ran.
+  // #303 stage 2: the Solve step's answer and its map back, once it ran.
   let solvedFields = {};
   if (targetSolveCurrent) {
     solvedFields = {
       solverName: targetSolveResult.solverName,
       mappedBack: targetSolveResult.mappedBack,
     };
-    // #912: another target picture may run another solver; the panel reports the view shown.
+    // #912: another target picture may run another solver; the results report the view shown.
     if (viewSolved && switchedCurrent) solvedFields = viewRunFields(switchedView.view);
   }
-  const reduceSummary = reduceResult
-    ? {
-        ...reduceResult,
-        ...solvedFields,
-        elapsedMs: reduceRun.elapsedMs,
-      }
-    : null;
 
-  // #303 stage 2: the results tagged by stage, in the stepper's order, under the task bar.
-  const stageRows = [];
-  if (mode === "reduce" && selectedReduction) {
+  // --- The results (#303 stage 4: Board G's one list of rows) ------------------------------
+  // Each fact once: an answer in its copyable field, with the time in its sentence; the target
+  // instance with the build; the verdicts as rows. The run's status lines under the bar are
+  // spoken, not shown (ComputeStatus `quiet`).
+  const resultRows = [];
+  let resultsEmpty = "";
+  /** A verdict's row: the verifier, what it was checked against, and its answer. */
+  function verdictRow(key, verdict, tag, what) {
+    const valid = verdict.valid;
+    return {
+      key,
+      tag,
+      tone: valid === true ? "ok" : valid === false ? "err" : "info",
+      icon: valid === true ? "✓" : valid === false ? "✗" : "?",
+      text:
+        valid === null
+          ? `${verdict.verifierName} answered "${verdict.text}" for ${what}, which is neither True nor False, so this page will not guess which it meant.`
+          : `${valid ? "Valid" : "Not valid"}: ${verdict.verifierName} ${
+              valid ? "accepts" : "rejects"
+            } ${what} for the ${verdict.label}.`,
+    };
+  }
+
+  if (task === "solve") {
+    resultsEmpty = "No run yet: press Solve for an answer.";
+    if (solveResult) {
+      const changed = solveResult.instance !== instance;
+      const answer = asCertificate(solveResult.output);
+      if (changed) {
+        resultRows.push({
+          key: "changed",
+          id: `${ID}-result-changed`,
+          tone: "warn",
+          icon: "!",
+          text: "The instance changed since this run. Press Solve again for an answer to the new one; Check it in Verify waits for it.",
+        });
+      }
+      resultRows.push({
+        key: "answer",
+        tone: "ok",
+        icon: "✓",
+        text: `${solveResult.solverName}'s answer, ${formatSeconds(solveRun.elapsedMs)} round trip:`,
+        code: {
+          id: `${ID}-result-answer`,
+          text: answer || "The solver returned an empty answer.",
+        },
+        action: {
+          id: `${ID}-result-verify-answer`,
+          label: "Check it in Verify",
+          disabled: !answer || changed || !sourceVerifier?.className,
+          onClick: handleVerifyAnswer,
+        },
+      });
+      if (solveSeed) {
+        resultRows.push({
+          key: "seed",
+          tone: "info",
+          icon: "#",
+          text: <SeedText id={`${ID}-result-seed`} seed={solveSeed.seed} />,
+        });
+      }
+    }
+  } else if (task === "verify") {
+    resultsEmpty = sourceVerifier ? "Nothing checked yet: type an answer and press Check." : "";
+    if (verifyVerdict) {
+      resultRows.push(verdictRow("verdict", verifyVerdict, undefined, "this answer"));
+    }
+  } else if (selectedReduction) {
     if (!reduceCurrent) {
-      stageRows.push({
+      resultRows.push({
         key: "reduce-next",
         tag: "Reduce",
         tone: "info",
         icon: "1",
-        text: `Reduce builds the ${targetLabel} instance from this one. Solve then runs a ${targetLabel} algorithm on it and maps the answer back to ${problem.name}, and Verify checks the answers.`,
+        text: `Reduce builds the ${targetLabel} instance from this one. Solve then runs a ${targetLabel} algorithm on it and maps the answer back to ${problem.name}, and Verify checks both answers.`,
       });
     } else {
       const builds = reduceResult.view
         ? reduceResult.view.frames.filter((frame) => frame.phase === "build").length
         : 0;
-      stageRows.push({
+      // The older requests solve this instance first, and the build carries that answer across.
+      const carried = reduceResult.solverName
+        ? `, carrying ${reduceResult.solverName}'s answer across`
+        : "";
+      resultRows.push({
         key: "reduce-done",
         tag: "Reduce",
         tone: "ok",
         icon: "✓",
         text: `Built the ${reduceResult.targetName} instance with ${reduceResult.reductionName}${
           builds > 0 ? ` in ${builds} step${builds === 1 ? "" : "s"}` : ""
-        }, ${formatSeconds(reduceRun.elapsedMs)}.`,
+        }${carried}, ${formatSeconds(reduceRun.elapsedMs)}:`,
+        code: {
+          id: `${ID}-result-target-instance`,
+          text:
+            reduceResult.targetInstance ??
+            "Redux did not send the target instance's text for this run.",
+          maxHeight: 180,
+        },
       });
       if (targetSolveCurrent) {
         const solved = targetSolveResult;
-        stageRows.push({
-          key: "solve-answer",
-          tag: "Solve",
-          tone: "ok",
-          icon: "✓",
-          text: `${solved.solverName} on the ${solved.targetName} instance: ${
-            solved.answer || "no answer came back"
-          }${solved.view ? "" : "."} ${formatSeconds(targetSolveRun.elapsedMs)}.`,
-        });
+        const time = formatSeconds(targetSolveRun.elapsedMs);
+        resultRows.push(
+          solved.targetCertificate
+            ? {
+                key: "solve-answer",
+                tag: "Solve",
+                tone: "ok",
+                icon: "✓",
+                text: `${solvedFields.solverName} on the ${solved.targetName} instance, ${time}:`,
+                code: { id: `${ID}-result-target-answer`, text: solved.targetCertificate },
+              }
+            : {
+                key: "solve-answer",
+                tag: "Solve",
+                tone: "ok",
+                icon: "✓",
+                text: `${solvedFields.solverName} on the ${solved.targetName} instance: ${
+                  solved.answer || "no answer came back"
+                }${/[.!?]$/.test(solved.answer ?? "") ? "" : "."} ${time}.`,
+              },
+        );
         const mapped = solvedFields.mappedBack;
-        if (mapped) {
-          stageRows.push({
+        if (mapped && solved.mappedCertificate) {
+          resultRows.push({
+            key: "solve-mapped",
+            tag: "Solve",
+            tone: mapped.ok === false ? "err" : "ok",
+            icon: "←",
+            text: `Mapped back to ${problem.name}:`,
+            code: { id: `${ID}-result-mapped-back`, text: solved.mappedCertificate },
+          });
+        } else if (mapped) {
+          resultRows.push({
             key: "solve-mapped",
             tag: "Solve",
             tone: mapped.ok === false ? "err" : "ok",
@@ -1807,7 +2074,7 @@ export default function Workbench({ problem }) {
             text: `Mapped back to ${problem.name}: ${mapped.text}`,
           });
         } else {
-          stageRows.push({
+          resultRows.push({
             key: "solve-mapped",
             tag: "Solve",
             tone: "warn",
@@ -1818,16 +2085,67 @@ export default function Workbench({ problem }) {
           });
         }
         if (Number.isSafeInteger(solved.seed)) {
-          stageRows.push({
+          resultRows.push({
             key: "solve-seed",
             tag: "Solve",
             tone: "info",
             icon: "#",
-            text: `Seed ${solved.seed} made this run. Type it in the Seed box to repeat the same steps.`,
+            text: <SeedText id={`${ID}-result-target-seed`} seed={solved.seed} />,
+          });
+        }
+        // Verify's two checks, then whether they agree.
+        if (targetVerdict) {
+          resultRows.push(
+            verdictRow("verify-target", targetVerdict, "Verify", `the ${solved.targetName} answer`),
+          );
+        }
+        if (sourceVerdict) {
+          resultRows.push(
+            verdictRow(
+              "verify-source",
+              sourceVerdict,
+              "Verify",
+              `the mapped-back ${problem.name} answer`,
+            ),
+          );
+        }
+        if (targetVerdict && sourceVerdict) {
+          const onTarget = targetVerdict.valid;
+          const onSource = sourceVerdict.valid;
+          let agree = null;
+          if (onTarget === true && onSource === true) {
+            agree = {
+              tone: "ok",
+              icon: "=",
+              text: "Both checks pass: the reduction carried this answer across correctly for this instance. Only a proof shows it works for every instance.",
+            };
+          } else if (onTarget === true && onSource === false) {
+            agree = {
+              tone: "err",
+              icon: "≠",
+              text: `The checks disagree: the ${solved.targetName} answer is valid but the one mapped back to ${problem.name} is not, so the reduction or its answer map has a bug (or an answer was edited).`,
+            };
+          } else if (onTarget === false && onSource === true) {
+            agree = {
+              tone: "warn",
+              icon: "≠",
+              text: `The checks disagree: the mapped-back ${problem.name} answer is valid but the ${solved.targetName} answer is not.`,
+            };
+          } else if (onTarget === false && onSource === false) {
+            agree = { tone: "err", icon: "=", text: "Both checks reject their answers." };
+          }
+          if (agree) resultRows.push({ key: "verify-agree", tag: "Verify", ...agree });
+        } else if (!targetVerdict && !sourceVerdict) {
+          resultRows.push({
+            key: "verify-next",
+            tag: "Verify",
+            tone: "info",
+            icon: "3",
+            text: `Next: Verify checks the ${solved.targetName} answer with a ${solved.targetName} verifier, and the mapped-back answer with a ${problem.name} verifier.`,
           });
         }
       } else if (!targetSolveRun.isRunning) {
-        stageRows.push({
+        resultRows.push({
           key: "solve-next",
           tag: "Solve",
           tone: "info",
@@ -1837,24 +2155,9 @@ export default function Workbench({ problem }) {
             : `${targetLabel} declares no algorithm, so the built instance can't be solved here.`,
         });
       }
-      if (verdictCurrent && verdictLine) {
-        stageRows.push({
-          key: "verify-verdict",
-          tag: "Verify",
-          tone: checked.valid === true ? "ok" : checked.valid === false ? "err" : "info",
-          icon: checked.valid === true ? "✓" : checked.valid === false ? "✗" : "?",
-          text: verdictLine.text,
-        });
-      } else if (targetSolveCurrent) {
-        stageRows.push({
-          key: "verify-next",
-          tag: "Verify",
-          tone: "info",
-          icon: "3",
-          text: `Next: Verify checks a certificate against the ${targetLabel} instance the reduction built, or against this ${problem.name} instance.`,
-        });
-      }
     }
+  } else {
+    resultsEmpty = `No reductions from ${problem.name} are declared yet.`;
   }
 
   // #912: the Reduction View's dropdowns, and what it says while it draws another picture.
@@ -1901,43 +2204,8 @@ export default function Workbench({ problem }) {
   const resultPanel = (
     <ResultPanel
       idPrefix={`${ID}-result`}
-      problem={problem}
-      mode={mode}
-      instance={instance}
-      solveResult={solveSummary}
-      reduceResult={reduceSummary}
-      onVerifyAnswer={handleVerifyAnswer}
-      stages={stageRows}
-      showVerify={false}
-      map={
-        mode === "reduce" && reduceSummary
-          ? {
-              select:
-                solvers.length > 0
-                  ? {
-                      value: String(mapSolverIndex),
-                      options: solvers.map((solver, index) => ({
-                        value: String(index),
-                        label: solver.name,
-                        tags: solverTags(solver),
-                        listTags: solverListTags(solver),
-                        card: solverCard(solver),
-                      })),
-                      onChange: (value) => setMapSolverIndex(Number(value)),
-                    }
-                  : null,
-              onMap: handleMap,
-              disabled: mapDisabled,
-              hint: mapHint,
-              request: mapRun,
-              announcement: mapAnnouncement,
-              mapped: mapCurrent ? mapResult : null,
-              onVerifyMapped:
-                verify.targetLocked || !reduceReach.verify ? null : handleVerifyMapped,
-            }
-          : null
-      }
-      verifyProps={verifyProps}
+      rows={resultRows}
+      empty={resultsEmpty}
       gadgets={
         reduceGadgets.length > 0
           ? {
@@ -1954,6 +2222,118 @@ export default function Workbench({ problem }) {
       }
     />
   );
+
+  // #303 stage 4: the Verifier menus, always a dropdown with its (i), even with one verifier.
+  function verifierSelect(list, chosen, onPick) {
+    if (!chosen) return null;
+    return {
+      value: chosen.className,
+      options: list.map((verifier) => ({
+        value: verifier.className,
+        label: verifier.name,
+        tags: [],
+        card: verifierCard(verifier),
+      })),
+      onChange: onPick,
+    };
+  }
+  const sourceVerifierSelect = verifierSelect(verifiers, sourceVerifier, setSourceVerifierPick);
+  const verifyRow = sourceVerifier ? (
+    <VerifyTaskRow
+      idPrefix={`${ID}-verify`}
+      field={{
+        label: "Answer to check",
+        value: verifyCertificate,
+        onChange: setVerifyCertificate,
+        verifier: sourceVerifier,
+        unreadable: unreadableFailure(verifyCheck.request),
+      }}
+      useAnswer={
+        solveAnswer && solveAnswer !== verifyCertificate
+          ? () => handleVerifyCheck(solveAnswer)
+          : null
+      }
+    />
+  ) : null;
+  const reduceVerify = targetSolveCurrent ? (
+    <Box
+      id={`${ID}-checks`}
+      sx={{
+        flex: "1 1 560px",
+        minWidth: 0,
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "flex-start",
+        gap: "14px 16px",
+      }}
+    >
+      <ReduceVerifySide
+        idPrefix={`${ID}-verify-target`}
+        select={
+          targetVerifier
+            ? {
+                label: `${builtTargetName} verifier`,
+                ...verifierSelect(targetVerifiers, targetVerifier, (className) =>
+                  setTargetVerifierPicks((picks) => ({
+                    ...picks,
+                    [selectedReduction.target]: className,
+                  })),
+                ),
+              }
+            : null
+        }
+        noVerifier={`${builtTargetName} declares no verifier, so its answer can't be checked here.`}
+        field={{
+          label: `${builtTargetName} answer`,
+          value: targetCertificate,
+          onChange: (text) => setReduceCertificate("target", text),
+          verifier: targetVerifier,
+          unreadable: unreadableFailure(targetCheck.request),
+        }}
+        onCheck={checkTarget}
+        checkDisabled={!canCheckTarget}
+        extra={
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+            <Box
+              id={`${ID}-map-button`}
+              component="button"
+              type="button"
+              disabled={mapDisabled}
+              aria-describedby={`${ID}-map-hint`}
+              onClick={handleMap}
+              sx={{ ...secondaryButtonSx, alignSelf: "flex-start" }}
+            >
+              Map a {problem.name} answer across
+            </Box>
+            <Box id={`${ID}-map-hint`} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
+              {mapHint}
+            </Box>
+          </Box>
+        }
+      />
+      <ReduceVerifySide
+        idPrefix={`${ID}-verify-source`}
+        select={
+          sourceVerifierSelect
+            ? {
+                label: `${problem.name} verifier, for the mapped-back answer`,
+                ...sourceVerifierSelect,
+              }
+            : null
+        }
+        noVerifier={`${problem.name} declares no verifier, so the mapped-back answer can't be checked here.`}
+        field={{
+          label: `Mapped-back ${problem.name} answer`,
+          value: mappedCertificate,
+          onChange: (text) => setReduceCertificate("source", text),
+          verifier: sourceVerifier,
+          unreadable: unreadableFailure(sourceCheck.request),
+        }}
+        onCheck={checkSource}
+        checkDisabled={!canCheckSource}
+      />
+    </Box>
+  ) : null;
 
   // #303: what full screen hides stays mounted, so a half-typed certificate or an open
   // Legend survives going in and out.
@@ -2173,24 +2553,21 @@ export default function Workbench({ problem }) {
                         }
                       : null,
                   noSolver: `${targetLabel} declares no algorithm.`,
-                  verify: (
-                    <VerifyBox idPrefix={`${ID}-result-verify`} mode="reduce" {...verifyProps} />
-                  ),
+                  verify: reduceVerify,
                 }
               : null
           }
-          runLabel={runLabel}
-          runDisabled={runDisabled}
-          onRun={handleRun}
-          verify={<VerifyBox idPrefix={`${ID}-result-verify`} mode="solve" {...verifyProps} />}
+          verifier={sourceVerifierSelect}
+          runLabel={mainButton.label}
+          runDisabled={mainButton.disabled}
+          onRun={mainButton.onRun}
+          verify={verifyRow}
           status={status}
         />
 
-        {task !== "verify" && (
-          <Box component="section" aria-label="Results" id={`${ID}-results`}>
-            {resultPanel}
-          </Box>
-        )}
+        <Box component="section" aria-label="Results" id={`${ID}-results`}>
+          {resultPanel}
+        </Box>
       </Box>
     </Box>
   );
