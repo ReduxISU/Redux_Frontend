@@ -23,6 +23,11 @@
 // Solve results leave it out (`showVerify`). Reduce keeps it under its results until stage 4
 // of #303 builds Reduce's own checks.
 //
+// #303 stage 2: Reduce's results start with one row per thing a stage did or does next, tagged
+// Reduce, Solve or Verify, in the stepper's order (StageRows, below). The Verify box moved to the
+// stepper's Verify stage (CommandBar.js). The reduction's facts follow: the Solve step's answer,
+// mapped back, joins them once it ran.
+//
 // Time is the round trip this browser measured, network included, and is labelled that way:
 // Redux reports no running time of its own for a solve (#95).
 
@@ -30,7 +35,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { COMPUTE_FAILED } from "../../../hooks/useComputeRequest";
 import ComputeStatus from "../../detail/ComputeStatus";
-import { MONO_FONT, secondaryButtonSx } from "../layout";
+import { MONO_FONT, PHONE_MEDIA, secondaryButtonSx } from "../layout";
 import TaggedSelect from "../TaggedSelect";
 import GadgetsSection from "./GadgetsSection";
 import VerifyBox from "./VerifyBox";
@@ -142,6 +147,101 @@ export function SeedLine({ id, seed }) {
   );
 }
 
+const STAGE_TONES = {
+  ok: { borderColor: "status.ok", backgroundColor: "status.okBg", icon: "status.okText" },
+  err: { borderColor: "status.err", backgroundColor: "status.errBg", icon: "status.errText" },
+  warn: { borderColor: "status.warn", backgroundColor: "status.warnBg", icon: "status.warnText" },
+  info: { borderColor: "border.main", backgroundColor: "surface.raised", icon: "text.secondary" },
+};
+
+/**
+ * #303 stage 2: Reduce's results, one row each, tagged by the stage they belong to.
+ * @param {{id: string, rows: Array<{key: string, tag: string, tone: "ok"|"err"|"warn"|"info",
+ *   icon: string, text: string, action?: {id: string, label: string, disabled?: boolean}}>,
+ *   onAction: (key: string) => void}} props A row's action calls `onAction` with its key.
+ */
+function StageRows({ id, rows, onAction }) {
+  if (rows.length === 0) return null;
+  return (
+    <Box
+      component="ul"
+      id={id}
+      aria-label="Results by stage"
+      sx={{ listStyle: "none", m: 0, p: 0, display: "flex", flexDirection: "column", gap: 1 }}
+    >
+      {rows.map((row) => {
+        const tone = STAGE_TONES[row.tone] ?? STAGE_TONES.info;
+        return (
+          <Box
+            component="li"
+            key={row.key}
+            id={`${id}-${row.key}`}
+            data-stage={row.tag.toLowerCase()}
+            data-tone={row.tone}
+            sx={{
+              ...actionRowSx,
+              flexWrap: "nowrap",
+              px: 1.5,
+              py: 1,
+              borderRadius: "10px",
+              border: "1px solid",
+              borderColor: tone.borderColor,
+              backgroundColor: tone.backgroundColor,
+              color: "text.primary",
+              fontSize: "0.875rem",
+              [PHONE_MEDIA]: { flexWrap: "wrap" },
+            }}
+          >
+            <Box
+              component="span"
+              data-tag
+              sx={{
+                width: 52,
+                flex: "none",
+                fontSize: "0.6875rem",
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: "text.secondary",
+              }}
+            >
+              {row.tag}
+            </Box>
+            <Box
+              component="span"
+              aria-hidden="true"
+              sx={{
+                width: 20,
+                flex: "none",
+                textAlign: "center",
+                fontWeight: 700,
+                color: tone.icon,
+              }}
+            >
+              {row.icon}
+            </Box>
+            <Box component="span" sx={{ flex: "1 1 240px", minWidth: 0, overflowWrap: "anywhere" }}>
+              {row.text}
+            </Box>
+            {row.action && (
+              <Box
+                id={row.action.id}
+                component="button"
+                type="button"
+                disabled={Boolean(row.action.disabled)}
+                onClick={() => onAction(row.key)}
+                sx={{ ...actionButtonSx, minHeight: 40 }}
+              >
+                {row.action.label}
+              </Box>
+            )}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
@@ -163,8 +263,10 @@ export function SeedLine({ id, seed }) {
  *   sourceFrame, targetFrame, namers?, colors?, activeIndex, onHighlight}`, everything
  *   ./GadgetsSection.js takes
  *   except its idPrefix. `runId` remounts the section per run, so a new run starts it closed.
- * @param {boolean} [props.showVerify] Ends the results with the Verify box (#303: Reduce only;
- *   Solve's Verify box is in the Verify tab).
+ * @param {boolean} [props.showVerify] Ends the results with the Verify box (#303: the Verify box
+ *   is in the Verify tab, and stage 2 put Reduce's in its stepper's Verify stage).
+ * @param {Array} [props.stages] #303 stage 2: Reduce's rows by stage (StageRows).
+ * @param {(key: string) => void} [props.onStageAction] A stage row's action button.
  */
 export default function ResultPanel({
   idPrefix,
@@ -178,6 +280,8 @@ export default function ResultPanel({
   verifyProps,
   gadgets,
   showVerify = true,
+  stages = [],
+  onStageAction = () => {},
 }) {
   const result = mode === "solve" ? solveResult : reduceResult;
   const changed = Boolean(result) && result.instance !== instance;
@@ -185,6 +289,10 @@ export default function ResultPanel({
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+      {mode === "reduce" && (
+        <StageRows id={`${idPrefix}-stages`} rows={stages} onAction={onStageAction} />
+      )}
+
       {!result && (
         <Typography id={`${idPrefix}-empty`} sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
           {mode === "solve"
@@ -245,9 +353,11 @@ export default function ResultPanel({
             <Fact label="Algorithm">{reduceResult.reductionName}</Fact>
             <Fact label="Time (round trip)">{formatSeconds(reduceResult.elapsedMs)}</Fact>
             <Fact label="Answer from">
-              {reduceResult.mappedBack
-                ? `${reduceResult.solverName}, on the ${reduceResult.targetName} target`
-                : reduceResult.solverName}
+              {!reduceResult.solverName
+                ? "Not solved yet"
+                : reduceResult.mappedBack || !reduceResult.certificate
+                  ? `${reduceResult.solverName}, on the ${reduceResult.targetName} target`
+                  : reduceResult.solverName}
             </Fact>
           </Box>
           <CodeBlock
@@ -266,11 +376,12 @@ export default function ResultPanel({
             >
               {reduceResult.mappedBack.text || "The view came back without a closing step."}
             </CodeBlock>
-          ) : (
+          ) : reduceResult.certificate !== null && reduceResult.certificate !== undefined ? (
+            // The older requests solve the source first and carry its answer across.
             <CodeBlock id={`${idPrefix}-carried`} label={`${problem.name} answer carried across`}>
               {formatOutput(reduceResult.certificate) || "The solver returned an empty answer."}
             </CodeBlock>
-          )}
+          ) : null}
 
           {map && (
             <Box

@@ -15,8 +15,15 @@
 // to the (i) card after the title (pages/[problem].js), the instance to the editor, and the
 // result to the list. Full screen shows only the picture(s) and the steps (Escape or Exit full
 // screen leaves it). Verify is its own tab; Solve's "Check it in Verify" opens it and checks
-// the answer there. Stage 1 keeps Reduce's and Verify's #229 behavior inside this shell; stage
-// 2 of #303 builds Reduce's stepper and stage 4 Verify's own checks.
+// the answer there. Stage 4 of #303 builds Verify's own checks.
+//
+// #303 stage 2: Reduce is a Reduce -> Solve -> Verify stepper (CommandBar.js), each stage with
+// its own menus. Reduce builds the target (the Reduction View's Build frames, or the older
+// requests), Solve runs a target Algorithm on what was built and maps its answer back to this
+// instance (handleSolveTarget), and Verify hosts the Verify box with its Check against switch.
+// The two pictures sit side by side with an arrow between them (PaneGrid.js), each with its own
+// header, Picture menu, zoom and Full screen; Full screen beside the Showing line shows both.
+// The results under the bar are tagged by stage.
 //
 // What this component owns, and why here:
 //   - The one instance value. Every part of the page reads it, and editing it anywhere
@@ -68,7 +75,8 @@
 //     solver picked now; a solver with no seed, or a backend older than #932, shows neither.
 //     Solve's answer is visualizeRun's own `answer` when it has one, so the answer and the steps
 //     are one run (and Run makes one request, not two); ProblemProvider/solve answers only when
-//     visualizeRun can't. Reduce mode sends no seed yet.
+//     visualizeRun can't. #303 stage 2: Reduce's Solve stage has the Seed box too, for a
+//     randomized target Algorithm; it goes on the Reduction View request, which reports the seed.
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
@@ -91,6 +99,7 @@ import useGadgetColorMode from "../../hooks/useGadgetColorMode";
 import { gadgetColorMap, highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
+  buildOnlyView,
   hasSkippedPairs,
   paneFrame,
   pieceNamer,
@@ -102,6 +111,7 @@ import {
 import {
   REDUX_API_BASE_URL,
   requestMappedSolution,
+  requestMappedSolutionBack,
   requestReducedInstance,
   requestReduction,
   requestSolvedInstance,
@@ -277,9 +287,17 @@ export default function Workbench({ problem }) {
   // everything below that tells Solve from Reduce reads `mode`, Verify counting as Solve.
   const [task, setTask] = useState("solve");
   const mode = task === "reduce" ? "reduce" : "solve";
-  // #303: the workspace shows only the picture(s) and the steps.
-  const [fullScreen, setFullScreen] = useState(false);
+  // #303: the workspace shows only the picture(s) and the steps: "all" of them, or (stage 2)
+  // one of Reduce's two panes alone, "source" or "target"; null when off.
+  const [fullScreen, setFullScreen] = useState(null);
   const exitRef = useRef(null);
+  // The Full screen button that went in, so coming out puts focus back on it.
+  const fullFromRef = useRef(null);
+  // #303 stage 2: the Reduce stage whose menus the bar shows, when one was picked in the stepper
+  // (null: the next stage to do). A pick that can't be reached any more is ignored.
+  const [reduceStagePick, setReduceStagePick] = useState(null);
+  // #303 stage 2: the target's Algorithm for Reduce's Solve step, by target problem.
+  const [targetSolverPicks, setTargetSolverPicks] = useState({});
   const [instance, setInstance] = useState(() =>
     typeof router.query.instance === "string"
       ? router.query.instance
@@ -322,6 +340,9 @@ export default function Workbench({ problem }) {
   // #912: asking for the Reduction View again with another picture on one side. Its own
   // request, so a slower answer to an earlier pick never lands over a later one.
   const viewSwitch = useComputeRequest({ subject: "instance" });
+  // #303 stage 2: Reduce's Solve step, solving the target the reduction built.
+  const targetSolveRun = useComputeRequest({ subject: "instance" });
+  const solveIdRef = useRef(0);
 
   const solveResult = solveRun.status === COMPUTE_DONE ? solveRun.result : null;
   const pictureResult = pictureRun.status === COMPUTE_DONE ? pictureRun.result : null;
@@ -353,15 +374,42 @@ export default function Workbench({ problem }) {
     reduceResult.reductionClassName === selectedReduction?.className;
   // #215: the current reduction's Reduction View, when Redux sent one; #912: drawn with the
   // pictures last picked for it, once Redux has sent that view.
+  // #303 stage 2: the target's solvers, and the one Reduce's Solve step runs: the one picked
+  // for this target, or the one the Reduction View ran by default, or the first.
+  const targetSolvers = selectedReduction?.targetSolvers ?? [];
+  const builtView = reduceCurrent ? (reduceResult.view ?? null) : null;
+  const selectedTargetSolver =
+    targetSolvers.find(
+      (solver) => solver.className === targetSolverPicks[selectedReduction?.target],
+    ) ??
+    targetSolvers.find((solver) => solver.name === builtView?.solverName) ??
+    targetSolvers[0] ??
+    null;
+  const targetSolveResult = targetSolveRun.status === COMPUTE_DONE ? targetSolveRun.result : null;
+  // The Solve step's answer counts while it is of this build and of the Algorithm picked now.
+  const targetSolveCurrent =
+    Boolean(targetSolveResult) &&
+    reduceCurrent &&
+    targetSolveResult.runId === reduceResult.runId &&
+    targetSolveResult.solverClassName === (selectedTargetSolver?.className ?? null);
+  const solveId = targetSolveCurrent ? targetSolveResult.solveId : null;
   const [switchedView, setSwitchedView] = useState(null);
   const [switchNote, setSwitchNote] = useState(null);
   const [switchPending, setSwitchPending] = useState(null);
   const switchedCurrent =
-    reduceCurrent && Boolean(switchedView) && switchedView.runId === reduceResult.runId;
-  const reduceView =
-    mode === "reduce" && reduceCurrent
-      ? ((switchedCurrent ? switchedView.view : reduceResult.view) ?? null)
-      : null;
+    reduceCurrent &&
+    Boolean(switchedView) &&
+    switchedView.runId === reduceResult.runId &&
+    switchedView.solveId === solveId;
+  // The whole view (Build, Solve, Map back) last drawn for this build: Reduce's, the Solve step's
+  // (with its Algorithm), or another picture's (#912). Until Solve has drawn one, only its Build
+  // frames show (lib/reductionView.js buildOnlyView).
+  let wholeView = builtView;
+  if (targetSolveCurrent && targetSolveResult.view) wholeView = targetSolveResult.view;
+  if (switchedCurrent && switchedView.view) wholeView = switchedView.view;
+  const viewSolved = targetSolveCurrent && Boolean(targetSolveResult.view);
+  const buildView = useMemo(() => (wholeView ? buildOnlyView(wholeView) : null), [wholeView]);
+  const reduceView = mode === "reduce" && wholeView ? (viewSolved ? wholeView : buildView) : null;
   const switching =
     Boolean(reduceView) && viewSwitch.isRunning && switchPending?.runId === reduceResult.runId;
 
@@ -427,11 +475,19 @@ export default function Workbench({ problem }) {
   // #215: where the Reduction View's steps are. #274: a new reduction opens on its last step,
   // the end of Map back, as a solve opens on its finished result; the step controls and the
   // phase buttons still go back to Build and Solve.
+  // #303 stage 2: Reduce opens on Build's last step (the built target), and the Solve step's view
+  // on its last, the end of Map back.
   const [reduceStep, setReduceStep] = useState(0);
   const [reduceStepsFor, setReduceStepsFor] = useState(reduceRun.result);
   if (reduceStepsFor !== reduceRun.result) {
     setReduceStepsFor(reduceRun.result);
-    setReduceStep(openingStep(reduceRun.result?.view?.frames));
+    const landed = reduceRun.result?.view;
+    setReduceStep(openingStep(landed ? buildOnlyView(landed).frames : null));
+  }
+  const [solveStepsFor, setSolveStepsFor] = useState(targetSolveRun.result);
+  if (solveStepsFor !== targetSolveRun.result) {
+    setSolveStepsFor(targetSolveRun.result);
+    if (targetSolveRun.result?.view) setReduceStep(openingStep(targetSolveRun.result.view.frames));
   }
   // #912: another picture's view opens on the same phase and step as the one before it.
   const [switchLanded, setSwitchLanded] = useState(viewSwitch.result);
@@ -440,7 +496,7 @@ export default function Workbench({ problem }) {
     setSwitchLanded(landed);
     if (landed && landed.runId === reduceResult?.runId) {
       if (landed.view) {
-        setSwitchedView({ runId: landed.runId, view: landed.view });
+        setSwitchedView({ runId: landed.runId, solveId: landed.solveId, view: landed.view });
         setReduceStep(samePlaceIn(landed.fromFrames, landed.fromIndex, landed.view.frames));
       } else {
         setSwitchNote("Redux couldn't draw that picture here, so the view keeps the one before.");
@@ -536,15 +592,15 @@ export default function Workbench({ problem }) {
 
   // --- Full screen (#303) ----------------------------------------------------------------
   // Going in moves focus to Exit full screen and stops the page scrolling under the overlay;
-  // coming out puts focus back on the Full screen button.
+  // coming out puts focus back on the Full screen button that went in.
   const wasFullRef = useRef(false);
   useLayoutEffect(() => {
     if (fullScreen) {
       exitRef.current?.focus();
     } else if (wasFullRef.current) {
-      document.getElementById(`${ID}-full-screen`)?.focus();
+      document.getElementById(fullFromRef.current ?? `${ID}-full-screen`)?.focus();
     }
-    wasFullRef.current = fullScreen;
+    wasFullRef.current = Boolean(fullScreen);
     if (!fullScreen) return undefined;
     const root = document.documentElement;
     const previous = root.style.overflow;
@@ -553,6 +609,18 @@ export default function Workbench({ problem }) {
       root.style.overflow = previous;
     };
   }, [fullScreen]);
+
+  /** A Full screen button: "all", or (#303 stage 2) one of Reduce's panes alone. */
+  function toggleFullScreen(which) {
+    setFullScreen((on) => {
+      if (on === which) return null;
+      if (!on)
+        fullFromRef.current = which === "all" ? `${ID}-full-screen` : `${ID}-${which}-full-screen`;
+      return which;
+    });
+  }
+  // Solve and Verify draw one picture: a pane's own full screen means nothing there.
+  const fullOn = mode === "solve" && fullScreen ? "all" : fullScreen;
 
   // --- Handlers --------------------------------------------------------------------------
   function selectTarget(name) {
@@ -596,6 +664,9 @@ export default function Workbench({ problem }) {
     }
     const fromFrames = reduceView.frames;
     const fromIndex = Math.min(reduceStep, fromFrames.length - 1);
+    // #303 stage 2: once the Solve step has drawn its view, the new picture is of that solve.
+    const solved = viewSolved ? targetSolveResult : null;
+    const forSolve = solveId;
     setSwitchNote(null);
     setSwitchPending({ runId: run.runId, which, source, target });
     viewSwitch.start(async (signal) => {
@@ -604,35 +675,75 @@ export default function Workbench({ problem }) {
         instance: run.instance,
         sourceVisualization: source,
         targetVisualization: target,
+        solver: solved?.solverClassName ?? null,
+        seed: solved?.seed ?? null,
         signal,
       });
-      return { view, runId: run.runId, fromFrames, fromIndex };
+      return { view, runId: run.runId, solveId: forSolve, fromFrames, fromIndex };
     });
   }
 
-  const isRunning = solveRun.isRunning || pictureRun.isRunning || reduceRun.isRunning;
+  const isRunning =
+    solveRun.isRunning || pictureRun.isRunning || reduceRun.isRunning || targetSolveRun.isRunning;
   const hasInstance = instance.trim() !== "";
   const canSolve = Boolean(selectedSolver?.className);
   const canReduce = canSolve && Boolean(selectedReduction?.className);
-  // #295: the Seed box shows for a randomized solver in Solve mode; hidden, it is ignored.
-  const seedShown = mode === "solve" && isRandomizedSolver(selectedSolver);
+
+  // --- Reduce's stepper (#303 stage 2) ------------------------------------------------------
+  // Reduce builds the target; Solve runs a target Algorithm on it and maps the answer back;
+  // Verify checks certificates. A stage is reachable once the one before it is done, and the bar
+  // shows the next stage to do unless another reachable one was picked. A new Reduce (or another
+  // instance, target or reduction) starts again from Solve; another Algorithm, from Solve.
+  const reduceReach = { reduce: true, solve: reduceCurrent, verify: targetSolveCurrent };
+  const nextStage = !reduceCurrent ? "reduce" : !targetSolveCurrent ? "solve" : "verify";
+  const reduceStage = reduceStagePick && reduceReach[reduceStagePick] ? reduceStagePick : nextStage;
+  const reduceStages = [
+    { key: "reduce", label: "Reduce", done: reduceCurrent },
+    { key: "solve", label: "Solve", done: targetSolveCurrent },
+    { key: "verify", label: "Verify", done: false },
+  ].map((stage) => ({
+    key: stage.key,
+    label: stage.label,
+    state: stage.done ? "done" : stage.key === nextStage ? "current" : "todo",
+    reachable: reduceReach[stage.key],
+  }));
+  const solvingTarget = mode === "reduce" && reduceStage === "solve";
+
+  // #295: the Seed box shows for a randomized solver in Solve mode, and (#303 stage 2) for a
+  // randomized target Algorithm in Reduce's Solve stage; hidden, it is ignored.
+  const seedShown =
+    (mode === "solve" && isRandomizedSolver(selectedSolver)) ||
+    (task === "reduce" && solvingTarget && isRandomizedSolver(selectedTargetSolver));
   const typedSeed = seedShown ? parseSeed(seedText) : null;
   const seedInvalid = Number.isNaN(typedSeed);
   // Everything that stops a Run but the Seed box's text (Run again with this seed brings its own).
-  // (Verify has no Run: its Check is the Verify box's own.)
+  // (Verify has no Run: its Check is the Verify box's own, and so is Reduce's Verify stage.)
+  let modeBlocked;
+  if (mode === "solve") modeBlocked = !canSolve;
+  else if (reduceStage === "solve")
+    modeBlocked = !reduceCurrent || !selectedTargetSolver?.className;
+  else modeBlocked = reduceStage === "verify" || !canReduce;
   const runBlocked =
-    task === "verify" ||
+    task === "verify" || !hasInstance || Boolean(instanceError) || isRunning || modeBlocked;
+  const runDisabled = runBlocked || seedInvalid;
+  // What stops Reduce's Solve step, whichever stage is shown (Run again with this seed works from
+  // Verify too).
+  const targetSolveBlocked =
     !hasInstance ||
     Boolean(instanceError) ||
     isRunning ||
-    (mode === "solve" ? !canSolve : !canReduce);
-  const runDisabled = runBlocked || seedInvalid;
+    !reduceCurrent ||
+    !selectedTargetSolver?.className;
 
   /**
    * Run. `seed` (#295) repeats a randomized solver's run in Solve mode; anything else (a click
    * event) takes the Seed box's number, or lets Redux pick one when the box is blank or hidden.
    */
   function handleRun(seed = null) {
+    if (mode === "reduce" && reduceStage === "solve") {
+      handleSolveTarget(seed);
+      return;
+    }
     const givenSeed = mode === "solve" && Number.isSafeInteger(seed) ? seed : null;
     if (givenSeed === null ? runDisabled : runBlocked) return;
     const runSeed = givenSeed ?? typedSeed;
@@ -727,6 +838,9 @@ export default function Workbench({ problem }) {
         : Promise.resolve();
       finished = Promise.all([answer, picture]);
     } else {
+      // #303 stage 2: a new build starts the stepper again from Solve.
+      targetSolveRun.reset();
+      setReduceStagePick(null);
       const reduction = selectedReduction;
       const pictures = {
         sourceVisualization: sourceViewPicture,
@@ -760,9 +874,12 @@ export default function Workbench({ problem }) {
             reductionName: view.reductionName || reduction.name,
             targetInstance: view.target.instance,
             gadgets: view.gadgets,
+            // #303 stage 2: the view also solved the target, but Reduce only builds it: the
+            // solve and its answer mapped back are the Solve step's to show.
+            solverName: null,
             solverClassName: null,
             certificate: null,
-            ...viewRunFields(view),
+            mappedBack: null,
           };
         }
         // The target instance's text (for the Result panel and Check against: target) comes
@@ -827,6 +944,97 @@ export default function Workbench({ problem }) {
     });
   }
 
+  /**
+   * #303 stage 2: Reduce's Solve step. Runs the target Algorithm on the target the build made and
+   * maps its answer back to this instance. With a Reduction View, that is the view again with the
+   * Algorithm (and a randomized one's seed), on the same pictures: its Solve and Map back phases.
+   * Without one (or when the view can't run that Algorithm on its picture), ProblemProvider/solve
+   * solves the target instance and ProblemProvider/mapSolutionBack maps the answer back. `seed`
+   * as handleRun takes it.
+   */
+  function handleSolveTarget(seed = null) {
+    const givenSeed = Number.isSafeInteger(seed) ? seed : null;
+    if (targetSolveBlocked || (givenSeed === null && seedInvalid)) return;
+    const run = reduceResult;
+    const solver = selectedTargetSolver;
+    const runSeed = givenSeed ?? typedSeed;
+    const shown = reduceView;
+    solveIdRef.current += 1;
+    const solveIdNow = solveIdRef.current;
+    setReduceStagePick(null);
+    viewSwitch.reset();
+    setSwitchNote(null);
+    targetSolveRun.start(async (signal) => {
+      const ran = {
+        runId: run.runId,
+        solveId: solveIdNow,
+        solverClassName: solver.className,
+        targetName: run.targetName,
+      };
+      const view = run.view
+        ? await requestReductionViewOrNull({
+            reduction: run.reductionClassName,
+            instance: run.instance,
+            sourceVisualization: shown?.source.visualization ?? sourceViewPicture,
+            targetVisualization:
+              shown?.target.visualization ?? targetViewPicture(selectedReduction),
+            solver: solver.className,
+            seed: runSeed,
+            signal,
+          })
+        : null;
+      if (view) {
+        const fields = viewRunFields(view);
+        const solveFrames = view.frames.filter((frame) => frame.phase === "solve");
+        return {
+          ...ran,
+          view,
+          solverName: fields.solverName || solver.name,
+          seed: view.seed,
+          answer: solveFrames.at(-1)?.caption ?? "",
+          mappedBack: fields.mappedBack,
+          mapNote: null,
+        };
+      }
+      const targetInstance = run.targetInstance ?? run.view?.target.instance ?? null;
+      if (!targetInstance) {
+        throw new Error(`Redux did not send the ${run.targetName} instance it built.`);
+      }
+      const answer = asCertificate(
+        await requestSolvedInstance(REDUX_API_BASE_URL, solver.className, targetInstance, signal),
+      );
+      let mappedBack = null;
+      let mapNote = null;
+      try {
+        const mapped = asCertificate(
+          await requestMappedSolutionBack(
+            REDUX_API_BASE_URL,
+            run.reductionClassName,
+            run.instance,
+            answer,
+            signal,
+          ),
+        );
+        mappedBack = { text: mapped, ok: null };
+      } catch (error) {
+        if (error?.name === "AbortError") throw error;
+        mapNote =
+          error?.payload?.error === "no_backward_map" || error?.status === 404
+            ? `This reduction can't map answers back yet, so only the ${run.targetName} side has an answer.`
+            : `The answer was not mapped back: ${error?.message ?? "Redux did not answer."}`;
+      }
+      return {
+        ...ran,
+        view: null,
+        solverName: solver.name,
+        seed: null,
+        answer,
+        mappedBack,
+        mapNote,
+      };
+    });
+  }
+
   // --- Check it in Verify and Map a solution across ---------------------------------------
   // #303: Check it in Verify opens the Verify tab and checks the run's answer there.
   function handleVerifyAnswer() {
@@ -867,8 +1075,10 @@ export default function Workbench({ problem }) {
     });
   }
 
+  // The check is shown in the stepper's Verify stage (#303 stage 2), so it waits for Solve.
   function handleVerifyMapped() {
-    if (!mapCurrent || verify.targetLocked) return;
+    if (!mapCurrent || verify.targetLocked || !reduceReach.verify) return;
+    setReduceStagePick("verify");
     verify.check(mapResult.certificate, CHECK_TARGET);
   }
 
@@ -940,9 +1150,13 @@ export default function Workbench({ problem }) {
   // --- What the command bar and picture pane show ------------------------------------------
   const solveRan = Boolean(solveResult);
   const reduceRan = Boolean(reduceResult);
-  // #303: Board G's button names.
-  const runLabel =
-    mode === "solve" ? (solveRan ? "Solve again" : "Solve") : reduceRan ? "Reduce again" : "Reduce";
+  // #303: Board G's button names (stage 2: Reduce's per stage).
+  const targetLabel = selectedReduction?.target ?? targetName ?? "the target";
+  let runLabel;
+  if (mode === "solve") runLabel = solveRan ? "Solve again" : "Solve";
+  else if (reduceStage === "solve")
+    runLabel = targetSolveCurrent ? "Solve again" : `Solve through ${targetLabel}`;
+  else runLabel = reduceRan ? "Rebuild" : "Reduce";
 
   let modeNote = "";
   if (task === "verify") {
@@ -955,11 +1169,23 @@ export default function Workbench({ problem }) {
       modeNote = `A seed is a whole number up to ${MAX_SEED}. Leave it blank for a random run.`;
   } else if (reductions.length === 0) {
     modeNote = `No reductions from ${problem.name} are declared yet.`;
+  } else if (reduceStage === "verify") {
+    modeNote = "";
+  } else if (reduceStage === "solve") {
+    if (!selectedTargetSolver)
+      modeNote = `${targetLabel} declares no algorithm, so its instance can't be solved here.`;
+    else if (!selectedTargetSolver.className)
+      modeNote =
+        "This algorithm cannot be run: the catalog did not say which backend solver it is.";
+    else if (seedInvalid)
+      modeNote = `A seed is a whole number up to ${MAX_SEED}. Leave it blank for a random run.`;
+    else
+      modeNote = `Solve runs ${selectedTargetSolver.name} on the ${targetLabel} instance the reduction built, then maps its answer back to ${problem.name}.`;
   } else if (!canSolve) {
     modeNote =
       "A reduction carries a solver's answer across, and this problem has no solver to run.";
   } else if (reductionViewWorth(selectedReduction?.className)) {
-    modeNote = `Reduce builds the ${selectedReduction.target} instance step by step, solves it, and maps its answer back to this one.`;
+    modeNote = `Reduce builds the ${selectedReduction.target} instance from this one, step by step.`;
   } else {
     modeNote = `Reduce solves the instance with ${selectedSolver.name} first, then carries the answer across.`;
   }
@@ -981,7 +1207,9 @@ export default function Workbench({ problem }) {
     showing = `Running the reduction to ${selectedReduction?.target ?? "the target"}.`;
   } else if (reduceCurrent) {
     showing = `${problem.name} ${ARROW} ${reduceResult.targetName} (${reduceResult.reductionName})`;
-    if (reduceView?.solverName) showing += `, solved by ${reduceView.solverName}`;
+    // #303 stage 2: only once the Solve step has solved the target.
+    if (targetSolveRun.isRunning) showing += `, solving with ${selectedTargetSolver?.name}`;
+    else if (targetSolveCurrent) showing += `, solved by ${targetSolveResult.solverName}`;
   } else {
     showing = NOT_RUN_TEXT;
   }
@@ -1092,7 +1320,6 @@ export default function Workbench({ problem }) {
   // The reduction's target picture (Reduce mode only).
   let target = null;
   if (mode === "reduce") {
-    const targetLabel = selectedReduction?.target ?? targetName ?? "the target";
     const targetViz = reduceCurrent
       ? reduceResult.targetVisualization
       : selectedReduction?.targetVisualization;
@@ -1148,8 +1375,16 @@ export default function Workbench({ problem }) {
     } else if (targetViz) {
       targetType = { options: [targetOption(targetViz)], value: targetViz.className };
     }
+    // #303 stage 2: the pane's label row says what the target is now.
+    let targetState;
+    if (!reduceCurrent)
+      targetState = { k: "Status", v: reduceRun.isRunning ? "being built" : "not built yet" };
+    else if (targetSolveCurrent) targetState = { k: "Algorithm", v: targetSolveResult.solverName };
+    else if (targetSolveRun.isRunning)
+      targetState = { k: "Status", v: `solving with ${selectedTargetSolver?.name}` };
+    else targetState = { k: "Status", v: "built" };
     target = {
-      title: `Target: ${targetLabel}`,
+      parts: [{ k: "Problem", v: targetLabel }, targetState],
       type: targetType,
       content,
     };
@@ -1395,6 +1630,18 @@ export default function Workbench({ problem }) {
     reduceAnnouncement = "Run cancelled.";
   }
 
+  let targetSolveAnnouncement = "";
+  const targetSolverName = selectedTargetSolver?.name ?? "the algorithm";
+  if (targetSolveRun.status === COMPUTE_RUNNING) {
+    targetSolveAnnouncement = `Running ${targetSolverName} on the ${targetLabel} instance. This can take up to a minute.`;
+  } else if (targetSolveRun.status === COMPUTE_DONE) {
+    targetSolveAnnouncement = `${targetSolveResult.solverName} finished in ${formatSeconds(targetSolveRun.elapsedMs)}.`;
+  } else if (targetSolveRun.status === COMPUTE_FAILED) {
+    targetSolveAnnouncement = `${targetSolverName} did not run. ${targetSolveRun.failure?.headline ?? ""}`;
+  } else if (targetSolveRun.status === COMPUTE_CANCELLED) {
+    targetSolveAnnouncement = "Run cancelled.";
+  }
+
   function cancelSolve() {
     solveRun.cancel();
     pictureRun.cancel();
@@ -1439,6 +1686,14 @@ export default function Workbench({ problem }) {
           failure={reduceRun.failure?.code === "instance_parse_error" ? null : reduceRun.failure}
           onCancel={reduceRun.cancel}
           busyLabel={`Running the reduction to ${selectedReduction?.target ?? "the target"}`}
+        />
+        <ComputeStatus
+          idPrefix={`${ID}-target-solve`}
+          status={targetSolveRun.status}
+          announcement={targetSolveAnnouncement}
+          failure={targetSolveRun.failure}
+          onCancel={targetSolveRun.cancel}
+          busyLabel={`Running ${targetSolverName}`}
         />
       </Box>
     </>
@@ -1499,14 +1754,131 @@ export default function Workbench({ problem }) {
             : null,
       }
     : null;
+  // #303 stage 2: the Solve step's answer and its map back join the build's facts once it ran.
+  let solvedFields = {};
+  if (targetSolveCurrent) {
+    solvedFields = {
+      solverName: targetSolveResult.solverName,
+      mappedBack: targetSolveResult.mappedBack,
+    };
+    // #912: another target picture may run another solver; the panel reports the view shown.
+    if (viewSolved && switchedCurrent) solvedFields = viewRunFields(switchedView.view);
+  }
   const reduceSummary = reduceResult
     ? {
         ...reduceResult,
-        // #912: another target picture may run another solver; the panel reports the view shown.
-        ...(switchedCurrent && switchedView.view ? viewRunFields(switchedView.view) : {}),
+        ...solvedFields,
         elapsedMs: reduceRun.elapsedMs,
       }
     : null;
+
+  // #303 stage 2: Run again with this seed, for the Solve step's randomized Algorithm.
+  const targetSeedRerun = () => {
+    const seed = targetSolveResult?.seed;
+    if (!Number.isSafeInteger(seed)) return;
+    setSeedText(String(seed));
+    handleSolveTarget(seed);
+  };
+
+  // #303 stage 2: the results tagged by stage, in the stepper's order, under the task bar.
+  const stageRows = [];
+  if (mode === "reduce" && selectedReduction) {
+    if (!reduceCurrent) {
+      stageRows.push({
+        key: "reduce-next",
+        tag: "Reduce",
+        tone: "info",
+        icon: "1",
+        text: `Reduce builds the ${targetLabel} instance from this one. Solve then runs a ${targetLabel} algorithm on it and maps the answer back to ${problem.name}, and Verify checks the answers.`,
+      });
+    } else {
+      const builds = reduceResult.view
+        ? reduceResult.view.frames.filter((frame) => frame.phase === "build").length
+        : 0;
+      stageRows.push({
+        key: "reduce-done",
+        tag: "Reduce",
+        tone: "ok",
+        icon: "✓",
+        text: `Built the ${reduceResult.targetName} instance with ${reduceResult.reductionName}${
+          builds > 0 ? ` in ${builds} step${builds === 1 ? "" : "s"}` : ""
+        }, ${formatSeconds(reduceRun.elapsedMs)}.`,
+      });
+      if (targetSolveCurrent) {
+        const solved = targetSolveResult;
+        stageRows.push({
+          key: "solve-answer",
+          tag: "Solve",
+          tone: "ok",
+          icon: "✓",
+          text: `${solved.solverName} on the ${solved.targetName} instance: ${
+            solved.answer || "no answer came back"
+          }${solved.view ? "" : "."} ${formatSeconds(targetSolveRun.elapsedMs)}.`,
+        });
+        const mapped = solvedFields.mappedBack;
+        if (mapped) {
+          stageRows.push({
+            key: "solve-mapped",
+            tag: "Solve",
+            tone: mapped.ok === false ? "err" : "ok",
+            icon: "←",
+            text: `Mapped back to ${problem.name}: ${mapped.text}`,
+          });
+        } else {
+          stageRows.push({
+            key: "solve-mapped",
+            tag: "Solve",
+            tone: "warn",
+            icon: "!",
+            text:
+              solved.mapNote ??
+              `This reduction can't map answers back yet, so only the ${solved.targetName} side has an answer.`,
+          });
+        }
+        if (Number.isSafeInteger(solved.seed)) {
+          stageRows.push({
+            key: "solve-seed",
+            tag: "Solve",
+            tone: "info",
+            icon: "#",
+            text: `Seed ${solved.seed} made this run. The same seed gives the same steps.`,
+            action: {
+              id: `${ID}-result-stage-seed-rerun`,
+              label: "Run again with this seed",
+              disabled: targetSolveBlocked,
+            },
+          });
+        }
+      } else if (!targetSolveRun.isRunning) {
+        stageRows.push({
+          key: "solve-next",
+          tag: "Solve",
+          tone: "info",
+          icon: "2",
+          text: selectedTargetSolver
+            ? `Next: Solve through ${targetLabel} runs ${selectedTargetSolver.name} on the built instance. The ${problem.name} side gets its answer by mapping back, not by solving ${problem.name}.`
+            : `${targetLabel} declares no algorithm, so the built instance can't be solved here.`,
+        });
+      }
+      if (verdictCurrent && verdictLine) {
+        stageRows.push({
+          key: "verify-verdict",
+          tag: "Verify",
+          tone: checked.valid === true ? "ok" : checked.valid === false ? "err" : "info",
+          icon: checked.valid === true ? "✓" : checked.valid === false ? "✗" : "?",
+          text: verdictLine.text,
+        });
+      } else if (targetSolveCurrent) {
+        stageRows.push({
+          key: "verify-next",
+          tag: "Verify",
+          tone: "info",
+          icon: "3",
+          text: `Next: Verify checks a certificate against the ${targetLabel} instance the reduction built, or against this ${problem.name} instance.`,
+        });
+      }
+    }
+  }
 
   // #912: the Reduction View's dropdowns, and what it says while it draws another picture.
   let reductionPane = null;
@@ -1558,7 +1930,11 @@ export default function Workbench({ problem }) {
       solveResult={solveSummary}
       reduceResult={reduceSummary}
       onVerifyAnswer={handleVerifyAnswer}
-      showVerify={mode === "reduce"}
+      stages={stageRows}
+      onStageAction={(key) => {
+        if (key === "solve-seed") targetSeedRerun();
+      }}
+      showVerify={false}
       map={
         mode === "reduce" && reduceSummary
           ? {
@@ -1582,7 +1958,8 @@ export default function Workbench({ problem }) {
               request: mapRun,
               announcement: mapAnnouncement,
               mapped: mapCurrent ? mapResult : null,
-              onVerifyMapped: verify.targetLocked ? null : handleVerifyMapped,
+              onVerifyMapped:
+                verify.targetLocked || !reduceReach.verify ? null : handleVerifyMapped,
             }
           : null
       }
@@ -1607,6 +1984,10 @@ export default function Workbench({ problem }) {
   // #303: what full screen hides stays mounted, so a half-typed certificate or an open
   // Legend survives going in and out.
   const hiddenInFull = fullScreen ? { display: "none" } : {};
+  // What full screen is titled: the problem, or in Reduce (#303 stage 2) the reduction or one pane's problem.
+  let fullTitle = problem.name;
+  if (fullOn === "all" && mode === "reduce") fullTitle = `${problem.name} ${ARROW} ${targetLabel}`;
+  else if (fullOn === "target") fullTitle = targetLabel;
 
   return (
     <Box
@@ -1614,9 +1995,10 @@ export default function Workbench({ problem }) {
       component="section"
       aria-label={fullScreen ? `${problem.name}, full screen` : "Workspace"}
       data-full-screen={fullScreen ? "true" : undefined}
+      data-full-screen-on={fullOn ?? undefined}
       onKeyDown={(event) => {
         if (event.key === "Escape" && fullScreen && !event.defaultPrevented) {
-          setFullScreen(false);
+          setFullScreen(null);
         }
       }}
       sx={{
@@ -1657,15 +2039,19 @@ export default function Workbench({ problem }) {
             gap: 1.5,
           }}
         >
-          <Box component="h2" sx={{ m: 0, fontSize: "1rem", fontWeight: 700 }}>
-            {problem.name}
+          <Box
+            component="h2"
+            id={`${ID}-full-title`}
+            sx={{ m: 0, fontSize: "1rem", fontWeight: 700 }}
+          >
+            {fullTitle}
           </Box>
           <Box
             id={`${ID}-full-exit`}
             ref={exitRef}
             component="button"
             type="button"
-            onClick={() => setFullScreen(false)}
+            onClick={() => setFullScreen(null)}
             sx={secondaryButtonSx}
           >
             Exit full screen
@@ -1688,9 +2074,20 @@ export default function Workbench({ problem }) {
         showing={showing}
         showingIsError={Boolean(instanceError)}
         verdict={verdictLine}
-        stack={false}
         source={{
-          title: `Source: ${problem.name}`,
+          // #303 stage 2: Reduce's source pane's label row.
+          parts: [
+            { k: "Problem", v: problem.name },
+            ...(targetSolveCurrent && solvedFields.mappedBack
+              ? [
+                  {
+                    k: "Answer",
+                    // The problem the view drew, when there is one (as its Problem part).
+                    v: `mapped back from ${wholeView?.target?.problem ?? targetSolveResult.targetName}`,
+                  },
+                ]
+              : []),
+          ],
           type: vizTypeControl,
           content: sourceContent,
         }}
@@ -1715,7 +2112,7 @@ export default function Workbench({ problem }) {
         legendFrames={legendFrames}
         legendStates={legendStates}
         legendAnnotations={legendAnnotations}
-        fullScreen={{ on: fullScreen, onToggle: () => setFullScreen((on) => !on) }}
+        fullScreen={{ on: fullOn, onToggle: toggleFullScreen }}
       />
 
       <Box sx={{ display: fullScreen ? "none" : "flex", flexDirection: "column", gap: 2.5 }}>
@@ -1772,6 +2169,39 @@ export default function Workbench({ problem }) {
               : null
           }
           seed={seedShown ? { value: seedText, onChange: setSeedText, invalid: seedInvalid } : null}
+          stepper={
+            reductions.length > 0
+              ? {
+                  stages: reduceStages,
+                  shown: reduceStage,
+                  onPick: setReduceStagePick,
+                  busy: isRunning,
+                  solver:
+                    targetSolvers.length > 0
+                      ? {
+                          label: `${targetLabel} algorithm`,
+                          value: selectedTargetSolver?.className ?? "",
+                          options: targetSolvers.map((solver) => ({
+                            value: solver.className,
+                            label: solver.name,
+                            tags: solverTags(solver),
+                            listTags: solverListTags(solver),
+                            card: solverCard(solver),
+                          })),
+                          onChange: (className) =>
+                            setTargetSolverPicks((picks) => ({
+                              ...picks,
+                              [selectedReduction.target]: className,
+                            })),
+                        }
+                      : null,
+                  noSolver: `${targetLabel} declares no algorithm.`,
+                  verify: (
+                    <VerifyBox idPrefix={`${ID}-result-verify`} mode="reduce" {...verifyProps} />
+                  ),
+                }
+              : null
+          }
           runLabel={runLabel}
           runDisabled={runDisabled}
           onRun={handleRun}

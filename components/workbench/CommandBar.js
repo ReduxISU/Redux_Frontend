@@ -4,8 +4,7 @@
 // Reduce / Verify tabs, then the menus for the task on now, then its main button:
 //   - Solve: the Algorithm dropdown with its (i) on its right, then, for a randomized solver
 //     only, the Seed box (#295), then Solve;
-//   - Reduce: the Reduce to and Reduction dropdowns, then Reduce (stage 2 of #303 turns this
-//     into the Reduce, Solve, Verify stepper);
+//   - Reduce: the Reduce, Solve, Verify stepper (stage 2, below);
 //   - Verify: the Verify box (./panels/VerifyBox.js), which has its own Check button.
 // The run's status (the note on what the button will do, the run's ComputeStatus) shows under
 // the row. The results list follows the bar (Workbench.js).
@@ -16,6 +15,16 @@
 // The tabs are pressed toggle buttons in a labelled group, as the mockup has them, not an ARIA
 // tablist: the bar's controls change with the task, but the picture, the steps and the results
 // above and below it are shared, so there is no one tab panel to point at.
+//
+// #303 stage 2: Reduce is a Reduce -> Solve -> Verify stepper (StageList, below), on its own row
+// under the menus with the main button at its right. The menus are the stage's only:
+//   - Reduce: Reduce to and Reduction, and Reduce (Rebuild once built);
+//   - Solve: the target's Algorithm (its (i) on its right), the Seed box right of it for a
+//     randomized solver, and Solve through <target>, which solves the TARGET instance;
+//   - Verify: the Verify box (./panels/VerifyBox.js) with its Check against switch, and no main
+//     button (the box has its own Check). Stage 4 of #303 replaces it with Reduce's own checks.
+// A stage later in the flow stays disabled until the one before it is done; Workbench.js says
+// which stage is shown, which are done, and which can be reached.
 //
 // #295: the Seed box takes digits only: blank lets Redux pick a new seed each Run, a number
 // repeats that run exactly. Workbench.js decides when it shows and what Run sends.
@@ -83,6 +92,137 @@ export function SeedInput({ id, value, onChange, invalid }) {
   );
 }
 
+/** What a stage's mark and accessible name say about it. */
+const STAGE_WORDS = {
+  done: "done",
+  current: "next",
+  todo: "not yet",
+};
+
+/**
+ * #303 stage 2: Reduce's stepper. Each stage is a button that shows its menus; a stage that
+ * can't be reached yet is disabled. The one shown has aria-current="step".
+ * @param {{idPrefix: string, stages: Array<{key: string, label: string, state: "done"|"current"|
+ *   "todo", reachable: boolean}>, shown: string, onPick: (key: string) => void,
+ *   busy: boolean}} props
+ */
+function StageList({ idPrefix, stages, shown, onPick, busy }) {
+  return (
+    <Box
+      component="ol"
+      id={`${idPrefix}-stages`}
+      aria-label="Reduction stages"
+      sx={{
+        listStyle: "none",
+        m: 0,
+        p: 0,
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "6px",
+        minWidth: 0,
+      }}
+    >
+      {stages.map((stage, index) => {
+        const isShown = stage.key === shown;
+        const can = stage.reachable && !busy;
+        const done = stage.state === "done";
+        return (
+          <Box
+            component="li"
+            key={stage.key}
+            sx={{ display: "flex", alignItems: "center", gap: "6px" }}
+          >
+            {index > 0 && (
+              <Box
+                component="span"
+                aria-hidden="true"
+                sx={{ display: "flex", color: "text.secondary" }}
+              >
+                <svg
+                  width="18"
+                  height="12"
+                  viewBox="0 0 18 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M1 6h15M11 1l5 5-5 5" />
+                </svg>
+              </Box>
+            )}
+            <Box
+              id={`${idPrefix}-stage-${stage.key}`}
+              component="button"
+              type="button"
+              data-stage-state={stage.state}
+              aria-current={isShown ? "step" : undefined}
+              aria-label={`${stage.label}, ${STAGE_WORDS[stage.state]}${
+                isShown ? ", showing its controls" : can ? ". Press to show its controls." : ""
+              }`}
+              disabled={!can}
+              onClick={() => onPick(stage.key)}
+              sx={{
+                minHeight: 44,
+                pl: 0.75,
+                pr: 1.75,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                borderRadius: "999px",
+                fontFamily: "inherit",
+                fontSize: "0.875rem",
+                fontWeight: 700,
+                cursor: "pointer",
+                border: isShown ? "2px solid" : "1px solid",
+                borderColor: isShown ? "brand.softLine" : done ? "status.ok" : "border.main",
+                backgroundColor: isShown ? "brand.tint" : done ? "surface.main" : "transparent",
+                color: isShown || done ? "text.primary" : "text.secondary",
+                "&:hover:not(:disabled)": { backgroundColor: "surface.raised2" },
+                "&:disabled": { cursor: "not-allowed" },
+              }}
+            >
+              <Box
+                component="span"
+                aria-hidden="true"
+                sx={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "0.8125rem",
+                  boxSizing: "border-box",
+                  ...(done
+                    ? {
+                        backgroundColor: "status.okBg",
+                        border: "2px solid",
+                        borderColor: "status.ok",
+                      }
+                    : stage.state === "current"
+                      ? {
+                          backgroundColor: "brand.soft",
+                          border: "2px solid",
+                          borderColor: "brand.softLine",
+                          color: "brand.onSoft",
+                        }
+                      : { border: "1px solid", borderColor: "border.main" }),
+                }}
+              >
+                {done ? "✓" : index + 1}
+              </Box>
+              {stage.label}
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
 function TaskButton({ id, pressed, onClick, children }) {
   return (
     <Box
@@ -112,6 +252,44 @@ function TaskButton({ id, pressed, onClick, children }) {
   );
 }
 
+/** The main button: Solve, Reduce, Solve through <target>, ... */
+function RunButton({ id, label, disabled, onRun }) {
+  return (
+    <Box
+      id={id}
+      component="button"
+      type="button"
+      onClick={onRun}
+      disabled={disabled}
+      sx={{
+        flex: "none",
+        minHeight: 44,
+        px: "26px",
+        border: "1px solid",
+        borderColor: "brand.softLine",
+        borderRadius: "10px",
+        backgroundColor: "brand.soft",
+        color: "brand.onSoft",
+        fontFamily: "inherit",
+        fontSize: "0.9375rem",
+        fontWeight: 700,
+        cursor: "pointer",
+        "&:hover:not(:disabled)": { backgroundColor: "brand.softHover" },
+        "&:disabled": {
+          cursor: "not-allowed",
+          borderColor: "border.main",
+          borderStyle: "dashed",
+          backgroundColor: "surface.track",
+          color: "text.secondary",
+        },
+        [PHONE_MEDIA]: { flex: "1 1 100%" },
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
 /**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
@@ -125,8 +303,14 @@ function TaskButton({ id, pressed, onClick, children }) {
  * @param {{value: string, options: Array, onChange: Function}|null} props.reduction The
  *   Reduction dropdown.
  * @param {{value: string, onChange: (text: string) => void, invalid: boolean}|null} props.seed
- *   The Seed box (#295), Solve only, or null to hide it (a solver that isn't randomized).
- * @param {string} props.runLabel "Solve", "Reduce again", ...
+ *   The Seed box (#295): Solve's, or Reduce's Solve stage's (#303 stage 2), or null to hide it
+ *   (a solver that isn't randomized).
+ * @param {{stages: Array, shown: "reduce"|"solve"|"verify", onPick: Function, busy: boolean,
+ *   solver: {label: string, value: string, options: Array, onChange: Function}|null,
+ *   noSolver: string, verify: import("react").ReactNode}|null} [props.stepper] #303 stage 2: Reduce's stepper (see
+ *   StageList), the stage shown, the target's Algorithm dropdown for the Solve stage (null when
+ *   the target declares none) and the Verify stage's box.
+ * @param {string} props.runLabel "Solve", "Reduce", "Solve through Clique", ...
  * @param {boolean} props.runDisabled
  * @param {() => void} props.onRun
  * @param {import("react").ReactNode} props.verify The Verify box, shown in Verify.
@@ -141,18 +325,25 @@ export default function CommandBar({
   target,
   reduction,
   seed,
+  stepper = null,
   runLabel,
   runDisabled,
   onRun,
   verify,
   status,
 }) {
+  const reducing = task === "reduce" && stepper;
+  const stage = reducing ? stepper.shown : null;
+  const runButton = (
+    <RunButton id={`${idPrefix}-run`} label={runLabel} disabled={runDisabled} onRun={onRun} />
+  );
   return (
     <Box
       component="section"
       aria-label="Task"
       id={`${idPrefix}-command-bar`}
       data-task={task}
+      data-stage={stage ?? undefined}
       sx={{
         borderTop: "1px solid",
         borderColor: "border.soft",
@@ -208,7 +399,7 @@ export default function CommandBar({
         )}
         {task === "solve" && seed && <SeedInput id={`${idPrefix}-seed`} {...seed} />}
 
-        {task === "reduce" && target && reduction && (
+        {task === "reduce" && (stage === null || stage === "reduce") && target && reduction && (
           <>
             <TaggedSelect
               id={`${idPrefix}-target`}
@@ -228,43 +419,52 @@ export default function CommandBar({
             />
           </>
         )}
+        {stage === "solve" &&
+          (stepper.solver ? (
+            <TaggedSelect
+              id={`${idPrefix}-target-solver`}
+              hue="blue"
+              infoPlacement="box"
+              boxSx={fieldSx}
+              {...stepper.solver}
+            />
+          ) : (
+            <Box
+              id={`${idPrefix}-target-solver-none`}
+              sx={{ fontSize: "0.875rem", color: "text.secondary", pb: 1.25 }}
+            >
+              {stepper.noSolver}
+            </Box>
+          ))}
+        {stage === "solve" && seed && <SeedInput id={`${idPrefix}-seed`} {...seed} />}
 
-        {task !== "verify" && (
-          <Box
-            id={`${idPrefix}-run`}
-            component="button"
-            type="button"
-            onClick={onRun}
-            disabled={runDisabled}
-            sx={{
-              flex: "none",
-              minHeight: 44,
-              px: "26px",
-              border: "1px solid",
-              borderColor: "brand.softLine",
-              borderRadius: "10px",
-              backgroundColor: "brand.soft",
-              color: "brand.onSoft",
-              fontFamily: "inherit",
-              fontSize: "0.9375rem",
-              fontWeight: 700,
-              cursor: "pointer",
-              "&:hover:not(:disabled)": { backgroundColor: "brand.softHover" },
-              "&:disabled": {
-                cursor: "not-allowed",
-                borderColor: "border.main",
-                borderStyle: "dashed",
-                backgroundColor: "surface.track",
-                color: "text.secondary",
-              },
-              [PHONE_MEDIA]: { flex: "1 1 100%" },
-            }}
-          >
-            {runLabel}
-          </Box>
-        )}
+        {task === "solve" && runButton}
       </Box>
 
+      {reducing && (
+        <Box
+          id={`${idPrefix}-stage-row`}
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px 16px",
+          }}
+        >
+          <StageList
+            idPrefix={idPrefix}
+            stages={stepper.stages}
+            shown={stage}
+            onPick={stepper.onPick}
+            busy={stepper.busy}
+          />
+          {stage !== "verify" && runButton}
+        </Box>
+      )}
+      {task === "reduce" && !reducing && runButton}
+
+      {stage === "verify" && stepper.verify}
       {task === "verify" && verify}
       {status}
     </Box>
