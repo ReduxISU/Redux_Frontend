@@ -251,3 +251,26 @@ export function visualizationCard(visualization, role) {
     ],
   };
 }
+
+// --- Verifier (#303 stage 4) ----------------------------------------------------------------
+
+/**
+ * A verifier's card: what it checks and the certificate it reads. The backend declares no
+ * kinds of verifier, so its dropdown carries no tags.
+ * @returns {Card}
+ */
+export function verifierCard(verifier) {
+  const contributors = verifier.contributors ?? [];
+  return {
+    title: verifier.name,
+    kind: "Verifier",
+    description: verifier.certificateDescription ?? "",
+    facts: [
+      {
+        label: "Certificate",
+        value: verifier.certificateFormat || NOT_DECLARED,
+      },
+      { label: "Authors", value: contributors.length > 0 ? contributors.join(", ") : NOT_DECLARED },
+    ],
+  };
+}

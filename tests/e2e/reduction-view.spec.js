@@ -13,7 +13,17 @@
 
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { drawnCollisions, openPanel, reduceAgain, reduceAndSolve } from "./helpers";
+import {
+  answerViewCertificates,
+  clickPhase,
+  drawnCollisions,
+  openBottomSection,
+  openPanel,
+  reduceAgain,
+  reduceAndSolve,
+  VIEW_MAPPED_ANSWER,
+  VIEW_TARGET_ANSWER,
+} from "./helpers";
 import {
   COLORING_TO_CLIQUE_COVER_VIEW,
   SAT_TO_3SAT_VIEW,
@@ -88,6 +98,7 @@ async function openReduce(page, problem, instance, target) {
  * reductionView requests the page made, so a test can count them.
  */
 async function openView(page, key) {
+  await answerViewCertificates(page);
   const { view, problem, target, instance } = CASES[key];
   const asked = [];
   await page.route(REDUCTION_VIEW_REQUEST, (route) => {
@@ -186,7 +197,12 @@ for (const key of Object.keys(CASES)) {
     const source = await pane(page, "source").boundingBox();
     const target = await pane(page, "target").boundingBox();
     expect(target.x).toBeGreaterThan(source.x + source.width);
-    expect(Math.abs(target.y - source.y)).toBeLessThan(2);
+    // #303: the two picture areas line up and share a height; a shorter picture is centered in
+    // its area, so the pictures' own tops may differ.
+    const sourceArea = await page.locator(`${VIEW}-source-picture-area`).boundingBox();
+    const targetArea = await page.locator(`${VIEW}-target-picture-area`).boundingBox();
+    expect(Math.abs(targetArea.y - sourceArea.y)).toBeLessThan(2);
+    expect(Math.abs(targetArea.height - sourceArea.height)).toBeLessThan(2);
 
     // #274: a finished reduction opens on its last step, the end of Map back, as a solve opens on
     // its result.
@@ -220,7 +236,7 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await openView(page, "satTo3sat");
   const firstOf = (phase) => view.frames.findIndex((frame) => frame.phase === phase);
 
-  await phaseButton(page, "solve").click();
+  await clickPhase(page, "solve");
   await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(firstOf("solve")));
   await expect(phaseButton(page, "solve")).toHaveAttribute("aria-current", "step");
   await expect(phaseButton(page, "build")).not.toHaveAttribute("aria-current", "step");
@@ -232,7 +248,7 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(phaseButton(page, "build")).toHaveAttribute("aria-current", "step");
   await expect(page.locator(`${VIEW}-caption-event`)).toHaveText("Built");
 
-  await phaseButton(page, "map").click();
+  await clickPhase(page, "map");
   await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "map");
   await expect(page.locator(`${VIEW}-caption-event`)).toHaveText("Mapped");
 
@@ -242,14 +258,14 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(page.locator(`${VIEW}-caption-verdict`)).toHaveText("Verdict: yes");
   await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames.at(-1).caption);
 
-  // The Result panel says the answer was mapped back, and by which solver.
+  // The results say the answer was mapped back (the certificate Redux mapped back), and which
+  // solver solved the target.
   await openPanel(page, "result", { expect });
-  await expect(page.locator("#workbench-result-mapped-back")).toContainText(
-    view.frames.at(-1).caption,
+  await expect(page.locator("#workbench-result-mapped-back")).toHaveText(VIEW_MAPPED_ANSWER);
+  await expect(page.locator("#workbench-result-rows-solve-answer")).toContainText(
+    `${view.solver} on the 3SAT instance`,
   );
-  await expect(page.locator("#workbench-result-reduce")).toContainText(
-    `${view.solver}, on the 3SAT target`,
-  );
+  await expect(page.locator("#workbench-result-target-answer")).toHaveText(VIEW_TARGET_ANSWER);
 });
 
 test("Build shows only what the target has built so far, and the finished target after it", async ({
@@ -284,10 +300,10 @@ test("Build shows only what the target has built so far, and the finished target
 
   // Solve and Map back draw the whole target; a dashed line there is the solver's own (a pair
   // its candidate needs and the graph lacks), never a rule's.
-  await phaseButton(page, "solve").click();
+  await clickPhase(page, "solve");
   await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
   await expect(ruleSaysNo).toHaveCount(0);
-  await phaseButton(page, "map").click();
+  await clickPhase(page, "map");
   await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
 });
 
@@ -344,7 +360,7 @@ test("the Packing panes' texts never meet a line or a marker, at each phase's fi
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "subsetSumToPartition");
   for (const phase of ["build", "solve", "map"]) {
-    await phaseButton(page, phase).click();
+    await clickPhase(page, phase);
     for (const side of ["source", "target"]) {
       const selector = `${VIEW}-${side} svg[id$="-svg"]`;
       expect(await drawnCollisions(page, selector), `${side}, ${phase}`).toEqual([]);
@@ -375,7 +391,7 @@ test("pointing at a source piece marks what it became on the target, and the oth
   const { view } = CASES.sat3ToClique;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "sat3ToClique");
-  await phaseButton(page, "solve").click();
+  await clickPhase(page, "solve");
   await expect(readout(page)).toHaveAttribute("data-linked", "false");
 
   // A literal of the formula: its element gadget names one clique node.
@@ -418,7 +434,7 @@ test("a tap pins a link, keyboard focus links too, and Escape clears it", async 
   const { view } = CASES.coloringToCliqueCover;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "coloringToCliqueCover");
-  await phaseButton(page, "map").click();
+  await clickPhase(page, "map");
 
   // Tap (click) a node of the source graph: the link stays once the pointer leaves.
   await pane(page, "source").locator('[data-node-id="a"]').click();
@@ -491,7 +507,10 @@ for (const scheme of ["light", "dark"]) {
             PHONE_TEXT_PX,
           );
         }
-        // The view's own words: the phase bar, the caption and the link line read in the theme.
+        // The view's own words: the phase bar, the caption and the link line read in the theme
+        // (the phase bar and the link line in their sections at the bottom of the page).
+        await openBottomSection(page, "phases");
+        await openBottomSection(page, "gadgets");
         for (const selector of [
           `#workbench-phases-build`,
           `${VIEW}-caption-text`,
@@ -556,7 +575,7 @@ for (const [status, body] of [
     await page.locator("#workbench-stage-reduce").click();
     await expect(page.locator("#workbench-mode-note")).toContainText("carries the answer across");
     await openPanel(page, "result", { expect });
-    await expect(page.locator("#workbench-result-carried")).toBeVisible();
+    await expect(page.locator("#workbench-result-rows-reduce-done")).toContainText("answer across");
   });
 }
 

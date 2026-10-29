@@ -200,7 +200,7 @@ export async function openPanel(page, panelKey, { expect }) {
   if (panelKey === "verify") {
     await page.locator("#workbench-mode-verify").click();
     await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("#workbench-result-verify")).toBeVisible();
+    await expect(page.locator("#workbench-verify-certificate")).toBeVisible();
     return;
   }
   if (panelKey === "details") {
@@ -411,4 +411,43 @@ export async function rerunReduction(page, { expect }) {
   await expect(page.locator("#workbench-run")).toBeEnabled();
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-stage-verify")).toHaveAttribute("aria-current", "step");
+}
+
+/** The answers answerViewCertificates gives unless told otherwise. */
+export const VIEW_TARGET_ANSWER = "(the target's answer)";
+export const VIEW_MAPPED_ANSWER = "(the answer mapped back)";
+
+/**
+ * #303 stage 4: after a Reduction View's Solve, the workbench asks for the certificates behind
+ * it (the view says what its solver found only in captions): ProblemProvider/solve on the target
+ * instance, then ProblemProvider/mapSolutionBack. A spec that answers reductionView with a
+ * capture answers those too, here, so they never reach the real backend with a captured
+ * instance. Call it before the spec's own routes: a route added later wins.
+ */
+export async function answerViewCertificates(
+  page,
+  { target = VIEW_TARGET_ANSWER, mapped = VIEW_MAPPED_ANSWER } = {},
+) {
+  await page.route(/\/api\/redux\/ProblemProvider\/solve\?/, (route) =>
+    route.fulfill({ json: target }),
+  );
+  await page.route(/\/api\/redux\/ProblemProvider\/mapSolutionBack\?/, (route) =>
+    route.fulfill({ json: mapped }),
+  );
+}
+
+/**
+ * #303 (Board G polish): opens one of the collapsible sections at the bottom of the page, under
+ * the results ("gadgets": the Gadgets list with the Reduction View's Plain / Color switch and
+ * its link line; "phases": the Reduction View's phase buttons). Does nothing when it is open.
+ */
+export async function openBottomSection(page, key) {
+  const toggle = page.locator(`#workbench-result-${key}-toggle`);
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+}
+
+/** Jumps the Reduction View to a phase with its button in the Phases section. */
+export async function clickPhase(page, phase) {
+  await openBottomSection(page, "phases");
+  await page.locator(`#workbench-phases-${phase}`).click();
 }

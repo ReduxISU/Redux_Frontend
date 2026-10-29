@@ -19,9 +19,16 @@
 // mockup has it), the picture's zoom buttons (DiagramZoom.js renders them into this row through
 // ../pictures/zoomControlsSlot.js) and Full screen, all on one line where the width allows. In
 // Reduce the Showing line stays above the two pictures, with Full screen at its right, and each
-// picture keeps its own zoom buttons. The steps come straight under the picture(s), then the
-// note and the Legend. Full screen (Workbench.js) keeps the header row, the picture(s) and the
-// steps, and hides the rest: the note, the verdict and the Legend.
+// picture keeps its own zoom buttons. Full screen (Workbench.js) keeps the header row, the
+// picture(s) and the steps, and hides the rest: the note and the Legend.
+//
+// #303 (Board G polish): the order under the picture(s) is the mockup's: the note, the Legend,
+// then the steps, with the step's caption under the step controls (the pictures render it into
+// that place through ../pictures/secondarySlots.js StepTextSlot). The Reduction View's phase
+// buttons are not in the mockup: they go to the Phases section at the bottom of the page (the
+// Workbench's SecondarySlots). Verify's verdict is a row in the results, so the picture shows
+// no verdict of its own; only the "Show where it fails" button would show here, once Redux can
+// draw a certificate.
 //
 // #303 stage 2: Reduce's two pictures are ./PaneGrid.js's panes, before a Reduction View and in
 // it: each pane has its label row, its own Picture menu, zoom buttons and Full screen (that
@@ -35,11 +42,12 @@
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import StepScrubber from "../detail/StepScrubber";
 import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import PictureCanvas from "../pictures/PictureCanvas";
 import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
+import { AtBottom, SecondarySlots, StepTextSlot } from "../pictures/secondarySlots";
 import { ZoomControlsSlot } from "../pictures/zoomControlsSlot";
 import Legend from "./Legend";
 import { COMPACT_MEDIA, PHONE_MEDIA, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
@@ -52,9 +60,17 @@ const PICTURE_MIN_HEIGHT = 440;
  * The Visualization Type label and dropdown at a picture's top right, its list opening
  * aligned to the right edge. With a single choice it still shows (so every picture says what
  * type it is, with its tags and info card) but cannot be opened. #303: labelled "Picture", as
- * Board G has it; `inline` puts the label beside the box, on the header row.
+ * Board G has it; `inline` puts the label beside the box, on the header row. `menu` (Reduce's
+ * panes) keeps it a dropdown that opens even with one choice; picking the picture already
+ * drawn changes nothing.
  */
-function VisualizationTypeControl({ id, options, value, onChange, inline = false }) {
+function VisualizationTypeControl({ id, options, value, onChange, inline = false, menu = false }) {
+  let pick;
+  if (menu)
+    pick = (next) => {
+      if (next !== value) onChange?.(next);
+    };
+  else if (options.length > 1) pick = onChange;
   return (
     <TaggedSelect
       id={id}
@@ -63,12 +79,15 @@ function VisualizationTypeControl({ id, options, value, onChange, inline = false
       align="right"
       options={options}
       value={value}
-      onChange={options.length > 1 ? onChange : undefined}
+      onChange={pick}
       labelPlacement={inline ? "row" : "stack"}
       boxSx={
-        inline
-          ? { flex: "0 1 300px", minWidth: 200, [PHONE_MEDIA]: { flex: "1 1 200px" } }
-          : { width: SHARED_CONTROL_WIDTH, flex: "none", [COMPACT_MEDIA]: { width: "100%" } }
+        // Reduce's panes are narrower: the menu shrinks first, so Full screen stays on its row.
+        menu
+          ? { flex: "1 1 180px", maxWidth: 300, minWidth: 150 }
+          : inline
+            ? { flex: "0 1 300px", minWidth: 200, [PHONE_MEDIA]: { flex: "1 1 200px" } }
+            : { width: SHARED_CONTROL_WIDTH, flex: "none", [COMPACT_MEDIA]: { width: "100%" } }
       }
     />
   );
@@ -104,7 +123,10 @@ function ShowingLine({ id, text, isError }) {
   );
 }
 
-/** The verdict of the last check (#229 stage 3), under the header row. */
+/**
+ * The verdict of the last check (#229 stage 3), under the header row. #303: shown only with its
+ * "Show where it fails" button (the verdict itself is a result row).
+ */
 function VerdictLine({ verdict }) {
   return (
     <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 10px" }}>
@@ -316,6 +338,9 @@ export default function VisualizationPane({
 }) {
   // #303: the row DiagramZoom.js puts a single picture's zoom buttons on.
   const [zoomSlot, setZoomSlot] = useState(null);
+  // #303: where the step's caption goes, under the step controls.
+  const [stepTextSlot, setStepTextSlot] = useState(null);
+  const secondarySlots = useContext(SecondarySlots);
   const single = !reduction && !target;
   const full = fullScreen.on;
   const only = full === "source" || full === "target" ? full : null;
@@ -344,166 +369,179 @@ export default function VisualizationPane({
   const showingLine = (
     <ShowingLine id={`${idPrefix}-showing`} text={showing} isError={showingIsError} />
   );
-  const typeControl = (which, type) =>
-    type && <VisualizationTypeControl id={`${idPrefix}-${which}-type`} inline {...type} />;
+  // Reduce's panes (`menu`) keep their Picture menus dropdowns even with one picture.
+  const typeControl = (which, type, menu = false) =>
+    type && (
+      <VisualizationTypeControl id={`${idPrefix}-${which}-type`} inline menu={menu} {...type} />
+    );
 
   return (
-    <Box
-      component="section"
-      aria-label="Visualization"
-      id={`${idPrefix}-pane`}
-      sx={{ display: "flex", flexDirection: "column", gap: "14px", minWidth: 0 }}
-    >
-      {single ? (
-        <Box
-          component="figure"
-          id={`${idPrefix}-figure`}
-          sx={{ m: 0, display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
-        >
+    <StepTextSlot.Provider value={stepTextSlot}>
+      <Box
+        component="section"
+        aria-label="Visualization"
+        id={`${idPrefix}-pane`}
+        sx={{ display: "flex", flexDirection: "column", gap: "14px", minWidth: 0 }}
+      >
+        {single ? (
           <Box
-            id={`${idPrefix}-picture-header`}
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "8px 12px",
-            }}
+            component="figure"
+            id={`${idPrefix}-figure`}
+            sx={{ m: 0, display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
           >
-            <Box sx={{ flex: "1 1 240px", minWidth: 0 }}>{showingLine}</Box>
             <Box
-              id={`${idPrefix}-picture-controls`}
+              id={`${idPrefix}-picture-header`}
               sx={{
-                flex: "0 1 auto",
-                minWidth: 0,
                 display: "flex",
-                flexWrap: "nowrap",
+                flexWrap: "wrap",
                 alignItems: "center",
-                justifyContent: "flex-end",
-                gap: "6px 8px",
-                [COMPACT_MEDIA]: { flexWrap: "wrap", justifyContent: "flex-start" },
+                justifyContent: "space-between",
+                gap: "8px 12px",
               }}
             >
-              {typeControl("source", source.type)}
+              <Box sx={{ flex: "1 1 240px", minWidth: 0 }}>{showingLine}</Box>
               <Box
-                ref={setZoomSlot}
-                id={`${idPrefix}-zoom-slot`}
+                id={`${idPrefix}-picture-controls`}
                 sx={{
+                  flex: "0 1 auto",
+                  minWidth: 0,
                   display: "flex",
-                  flex: "none",
+                  flexWrap: "nowrap",
                   alignItems: "center",
-                  whiteSpace: "nowrap",
-                  "&:empty": { display: "none" },
+                  justifyContent: "flex-end",
+                  gap: "6px 8px",
+                  [COMPACT_MEDIA]: { flexWrap: "wrap", justifyContent: "flex-start" },
                 }}
-              />
+              >
+                {typeControl("source", source.type)}
+                <Box
+                  ref={setZoomSlot}
+                  id={`${idPrefix}-zoom-slot`}
+                  sx={{
+                    display: "flex",
+                    flex: "none",
+                    alignItems: "center",
+                    whiteSpace: "nowrap",
+                    "&:empty": { display: "none" },
+                  }}
+                />
+                {fullButton}
+              </Box>
+            </Box>
+            {!full && verdict?.button && <VerdictLine verdict={verdict} />}
+            <ZoomControlsSlot.Provider value={zoomSlot}>
+              <PictureBox idPrefix={`${idPrefix}-source`} content={source.content} />
+            </ZoomControlsSlot.Provider>
+          </Box>
+        ) : (
+          <>
+            {/* #303 stage 2: in Reduce the Showing line is a line of its own above the two panes,
+              with the both-pictures Full screen at its right. */}
+            <Box
+              id={`${idPrefix}-showing-row`}
+              sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "8px 16px",
+              }}
+            >
+              {showingLine}
               {fullButton}
             </Box>
-          </Box>
-          {!full && verdict && <VerdictLine verdict={verdict} />}
-          <ZoomControlsSlot.Provider value={zoomSlot}>
-            <PictureBox idPrefix={`${idPrefix}-source`} content={source.content} />
-          </ZoomControlsSlot.Provider>
-        </Box>
-      ) : (
-        <>
-          {/* #303 stage 2: in Reduce the Showing line is a line of its own above the two panes,
-              with the both-pictures Full screen at its right. */}
-          <Box
-            id={`${idPrefix}-showing-row`}
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "8px 16px",
-            }}
-          >
-            {showingLine}
-            {fullButton}
-          </Box>
-          {!full && verdict && <VerdictLine verdict={verdict} />}
-          {reduction ? (
-            <ReductionView
-              // A new run, or another picture on either side, starts with nothing pointed at.
-              key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
-              idPrefix={`${idPrefix}-reduction`}
-              view={reduction.view}
-              frameIndex={steps?.currentStep ?? 0}
-              activeGadget={reduction.activeGadget}
-              loading={reduction.loading ?? null}
-              colorMode={reduction.colorMode ?? "plain"}
-              onColorMode={reduction.onColorMode ?? null}
-              labels={{ source: source.parts, target: target?.parts }}
-              full={{ source: paneFull("source"), target: paneFull("target") }}
-              only={only}
-              typeControls={{
-                source: typeControl("source", reduction.types?.source),
-                target: typeControl("target", reduction.types?.target),
-              }}
-            />
-          ) : (
-            <PaneGrid
-              id={`${idPrefix}-panes`}
-              only={only}
-              source={
-                <PaneSection
-                  id={`${idPrefix}-source`}
-                  which="source"
-                  parts={source.parts}
-                  full={paneFull("source")}
-                  hidden={only === "target"}
-                  typeControl={typeControl("source", source.type)}
-                >
-                  <PictureBox idPrefix={`${idPrefix}-source`} content={source.content} />
-                </PaneSection>
-              }
-              target={
-                <PaneSection
-                  id={`${idPrefix}-target`}
-                  which="target"
-                  parts={target.parts}
-                  full={paneFull("target")}
-                  hidden={only === "source"}
-                  typeControl={typeControl("target", target.type)}
-                >
-                  <PictureBox idPrefix={`${idPrefix}-target`} content={target.content} />
-                </PaneSection>
-              }
-            />
-          )}
-        </>
-      )}
+            {!full && verdict?.button && <VerdictLine verdict={verdict} />}
+            {reduction ? (
+              <ReductionView
+                // A new run, or another picture on either side, starts with nothing pointed at.
+                key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
+                idPrefix={`${idPrefix}-reduction`}
+                view={reduction.view}
+                frameIndex={steps?.currentStep ?? 0}
+                activeGadget={reduction.activeGadget}
+                loading={reduction.loading ?? null}
+                colorMode={reduction.colorMode ?? "plain"}
+                onColorMode={reduction.onColorMode ?? null}
+                labels={{ source: source.parts, target: target?.parts }}
+                full={{ source: paneFull("source"), target: paneFull("target") }}
+                only={only}
+                typeControls={{
+                  source: typeControl("source", reduction.types?.source, true),
+                  target: typeControl("target", reduction.types?.target, true),
+                }}
+              />
+            ) : (
+              <PaneGrid
+                id={`${idPrefix}-panes`}
+                only={only}
+                source={
+                  <PaneSection
+                    id={`${idPrefix}-source`}
+                    which="source"
+                    parts={source.parts}
+                    full={paneFull("source")}
+                    hidden={only === "target"}
+                    typeControl={typeControl("source", source.type, true)}
+                  >
+                    <PictureBox idPrefix={`${idPrefix}-source`} content={source.content} />
+                  </PaneSection>
+                }
+                target={
+                  <PaneSection
+                    id={`${idPrefix}-target`}
+                    which="target"
+                    parts={target.parts}
+                    full={paneFull("target")}
+                    hidden={only === "source"}
+                    typeControl={typeControl("target", target.type, true)}
+                  >
+                    <PictureBox idPrefix={`${idPrefix}-target`} content={target.content} />
+                  </PaneSection>
+                }
+              />
+            )}
+          </>
+        )}
 
-      {reduction && steps && (
-        <ReductionPhaseBar
-          idPrefix={`${idPrefix}-phases`}
-          frames={reduction.view.frames}
-          frameIndex={steps.currentStep}
-          onStepChange={steps.onStepChange}
-        />
-      )}
-      {steps && steps.frameCount > 1 && (
-        <StepScrubber
-          idPrefix={`${idPrefix}-steps`}
-          frameCount={steps.frameCount}
-          currentStep={steps.currentStep}
-          onStepChange={steps.onStepChange}
-        />
-      )}
-      {note && !full && (
-        <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.875rem", color: noteColor }}>
-          {note.text}
-        </Box>
-      )}
+        {note && !full && (
+          <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.875rem", color: noteColor }}>
+            {note.text}
+          </Box>
+        )}
 
-      {(legendFrames.some(Boolean) || legendStates) && !full && (
-        <Legend
-          idPrefix={`${idPrefix}-legend`}
-          frames={legendFrames}
-          states={legendStates}
-          annotations={legendAnnotations}
+        {(legendFrames.some(Boolean) || legendStates) && !full && (
+          <Legend
+            idPrefix={`${idPrefix}-legend`}
+            frames={legendFrames}
+            states={legendStates}
+            annotations={legendAnnotations}
+          />
+        )}
+
+        {reduction && steps && (
+          <AtBottom slots={secondarySlots} slot={secondarySlots.phases}>
+            <ReductionPhaseBar
+              idPrefix={`${idPrefix}-phases`}
+              frames={reduction.view.frames}
+              frameIndex={steps.currentStep}
+              onStepChange={steps.onStepChange}
+            />
+          </AtBottom>
+        )}
+        {steps && steps.frameCount > 1 && (
+          <StepScrubber
+            idPrefix={`${idPrefix}-steps`}
+            frameCount={steps.frameCount}
+            currentStep={steps.currentStep}
+            onStepChange={steps.onStepChange}
+          />
+        )}
+        <Box
+          ref={setStepTextSlot}
+          id={`${idPrefix}-step-text`}
+          sx={{ display: "flex", flexDirection: "column", gap: 1, "&:empty": { display: "none" } }}
         />
-      )}
-    </Box>
+      </Box>
+    </StepTextSlot.Provider>
   );
 }

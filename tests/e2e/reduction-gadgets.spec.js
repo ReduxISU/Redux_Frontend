@@ -27,7 +27,14 @@ import {
   SAT3_FORMULA_FRAMES,
   SAT3_TO_ILP_FORMULA_VIEW,
 } from "./formula-payloads";
-import { openPanel, reduceAndSolve, rerunReduction } from "./helpers";
+import {
+  answerViewCertificates,
+  clickPhase,
+  openBottomSection,
+  openPanel,
+  reduceAndSolve,
+  rerunReduction,
+} from "./helpers";
 import { EXACT_COVER_RECURSIVE_NESTED_FRAMES } from "./nested-set-payloads";
 import {
   CLIQUE_GRAPH_FRAMES,
@@ -117,6 +124,7 @@ async function openReduce(page, instance = SAT3_TO_CLIQUE_VIEW.source.instance) 
  * Reduce, then Solve (#303 stage 2), so the view walks every phase.
  */
 async function openView(page, answer) {
+  await answerViewCertificates(page);
   await page.route(REDUCTION_VIEW_REQUEST, (route) => route.fulfill({ json: answer() }));
   await openReduce(page);
   await reduceAndSolve(page, { expect });
@@ -258,6 +266,7 @@ for (const [type, capture] of Object.entries(PICTURES)) {
     ids = await drawnPieceIds(page, "source");
     expect(ids.length, `${type} draws pieces with ids`).toBeGreaterThan(0);
     await rerunReduction(page, { expect });
+    await openBottomSection(page, "gadgets");
     await expect(page.locator(`${VIEW}-marks-row`)).toBeVisible();
     await page.mouse.move(1, 1);
     await toStep(page, 2);
@@ -266,7 +275,7 @@ for (const [type, capture] of Object.entries(PICTURES)) {
     // on both sides.
     await expect(rings(page, "source")).toHaveCount(0);
     await openPanel(page, "result", { expect });
-    await page.locator("#workbench-result-gadgets-toggle").click();
+    await openBottomSection(page, "gadgets");
     const row = gadgetRow(page, 0);
     await row.scrollIntoViewIfNeeded();
     await row.hover();
@@ -296,6 +305,7 @@ for (const [type, capture] of Object.entries(PICTURES)) {
     await page.mouse.move(1, 1);
 
     // Color: every drawn piece has a mark of its own id, on both sides, in a palette color.
+    await openBottomSection(page, "gadgets");
     await marksButton(page, "color").click();
     await expect(marksButton(page, "color")).toHaveAttribute("aria-pressed", "true");
     for (const side of ["source", "target"]) {
@@ -319,9 +329,12 @@ for (const scheme of ["light", "dark"]) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, () => SAT_TO_3SAT_VIEW);
+    await openBottomSection(page, "gadgets");
     await page.locator(`${VIEW}-marks-row`).scrollIntoViewIfNeeded();
     await expect(marksButton(page, "plain")).toHaveAttribute("aria-pressed", "true");
     await expect(rings(page, "source")).toHaveCount(0);
+
+    await openBottomSection(page, "gadgets");
 
     await marksButton(page, "color").click();
     await expect(page.locator(`${VIEW}-marks-row`)).toHaveAttribute("data-gadget-marks", "color");
@@ -359,6 +372,8 @@ for (const scheme of ["light", "dark"]) {
     await expect(page.locator(`${VIEW}-marks-row`)).toHaveAttribute("data-gadget-marks", "color");
     await expect(rings(page, "target").first()).toBeVisible();
 
+    await openBottomSection(page, "gadgets");
+
     await marksButton(page, "plain").click();
     await expect(rings(page, "target")).toHaveCount(0);
   });
@@ -392,7 +407,7 @@ test("each build step lists the gadgets it made in plain words, and the step tha
   await expect(list).toContainText("K = 3, the number of clauses");
 
   // Solve lists none.
-  await page.locator("#workbench-phases-solve").click();
+  await clickPhase(page, "solve");
   await expect(list).toHaveCount(0);
 });
 
@@ -455,7 +470,7 @@ test("the Result panel's Gadgets rows say each gadget in plain words, with the p
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, () => view);
   await openPanel(page, "result", { expect });
-  await page.locator("#workbench-result-gadgets-toggle").click();
+  await openBottomSection(page, "gadgets");
   const index = (kind, test) =>
     view.gadgets.findIndex((gadget) => gadget.gadgetKind === kind && test(gadget));
 
@@ -487,7 +502,7 @@ for (const scheme of ["light", "dark"]) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, () => SAT3_TO_CLIQUE_RULES_VIEW);
-    await page.locator("#workbench-phases-solve").click();
+    await clickPhase(page, "solve");
     // Hovering a Clique node draws the renderer's trace on it and the gadget gold on what the
     // node is linked to: both at once, on one picture.
     const node = pane(page, "target").locator('[data-node-id="x1_0"]');
@@ -514,9 +529,9 @@ test("on SAT's Factor Graph target the gadgets' ids are the picture's own, so a 
   await toStep(page, 0);
   await expect(pane(page, "target")).toHaveAttribute("data-picture-type", "BipartiteGraph");
   await expect(page.locator(`${VIEW}-target-note`)).not.toContainText("can't be shown");
-  await page.locator("#workbench-phases-solve").click();
+  await clickPhase(page, "solve");
   await openPanel(page, "result", { expect });
-  await page.locator("#workbench-result-gadgets-toggle").click();
+  await openBottomSection(page, "gadgets");
   const group = view.gadgets.findIndex((gadget) => gadget.gadgetKind === "group");
   await gadgetRow(page, group).hover();
   // C1 was split into C1, C4 and C5: each is a clause node of the factor graph.
@@ -595,9 +610,9 @@ test("Exact Cover to Subset Sum and 3SAT to 0-1 ILP: a Gadgets row marks a set's
   await page.setViewportSize({ width: 1280, height: 1000 });
   let view = EXACT_COVER_TO_SUBSET_SUM_VIEW;
   await openView(page, () => view);
-  await page.locator("#workbench-phases-solve").click();
+  await clickPhase(page, "solve");
   await openPanel(page, "result", { expect });
-  await page.locator("#workbench-result-gadgets-toggle").click();
+  await openBottomSection(page, "gadgets");
   const set = view.gadgets.findIndex((gadget) => gadget.gadgetKind === "element");
   await gadgetRow(page, set).hover();
   await expect(
@@ -610,7 +625,7 @@ test("Exact Cover to Subset Sum and 3SAT to 0-1 ILP: a Gadgets row marks a set's
   view = SAT3_TO_ILP_VIEW;
   await rerunReduction(page, { expect });
   await expect(pane(page, "target")).toHaveAttribute("data-picture-type", "Table");
-  await page.locator("#workbench-phases-map").click();
+  await clickPhase(page, "map");
   await openPanel(page, "result", { expect });
   const toggle = page.locator("#workbench-result-gadgets-toggle");
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();

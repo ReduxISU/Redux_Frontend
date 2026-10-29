@@ -2945,14 +2945,21 @@ test("Grouped Graph: one cluster per clause, its literals, complement edges and 
     await expect(piece).toHaveAttribute("tabindex", "0");
   }
 
-  // The Edges switch adds the edges inside each clause (the 3SAT to Independent Set graph).
-  await page.locator(`${CLAUSES}-edges-all`).click();
-  await expect(page.locator(`${CLAUSES}-edges-all`)).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="clause"]`)).toHaveCount(
-    payload.clauseEdges.length,
-  );
-  await page.locator(`${CLAUSES}-edges-complements`).click();
-  await expect(page.locator(`${CLAUSES}-graph [data-edge-kind="clause"]`)).toHaveCount(0);
+  // #303: only complement edges, never the edges inside a clause the payload also sends (the
+  // 3SAT to Independent Set graph), and no switch to add them.
+  expect(payload.clauseEdges.length).toBeGreaterThan(0);
+  await expect(
+    page.locator(`${CLAUSES}-graph [data-edge-kind]:not([data-edge-kind="complement"])`),
+  ).toHaveCount(0);
+  const groupOf = new Map(payload.nodes.map((node) => [node.id, node.group]));
+  for (const edge of payload.edges) expect(groupOf.get(edge.a)).not.toBe(groupOf.get(edge.b));
+  const drawn = await page
+    .locator(`${CLAUSES}-graph [data-edge-id]`)
+    .evaluateAll((paths) => paths.map((path) => path.dataset.edgeId));
+  expect(drawn.sort()).toEqual(payload.edges.map((edge) => edge.id).sort());
+  await expect(page.locator(`[id^="${CLAUSES.slice(1)}-edges"]`)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Complement pairs" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add clause edges" })).toHaveCount(0);
 });
 
 test("Grouped Graph: before Run the clause graph is the plain formula, and step 1 keeps it in place", async ({
@@ -3092,10 +3099,6 @@ test("Grouped Graph: the clause graph zooms like a graph, and a tap still traces
   const zoom = page.locator(`${CLAUSES}-zoom`);
   await page.locator(`${CLAUSES}-zoom-in`).click();
   await expect(zoom).toHaveAttribute("data-zoom", "1.50");
-  // The Edges switch changes what is drawn, not where, so the zoom stays.
-  await page.locator(`${CLAUSES}-edges-all`).click();
-  await expect(zoom).toHaveAttribute("data-zoom", "1.50");
-  await page.locator(`${CLAUSES}-edges-complements`).click();
 
   // Focusing a literal brings it into view; tapping it traces its variable.
   await literal(page, "c0-0").focus();

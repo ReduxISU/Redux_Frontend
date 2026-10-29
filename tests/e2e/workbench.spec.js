@@ -217,7 +217,7 @@ test("Reduce shows Reduce to and Reduction, and Reduce builds the target picture
   await expect(page.locator("#workbench-run")).toHaveText("Rebuild");
 
   await openPanel(page, "result", { expect });
-  await expect(page.locator("#workbench-result-reduce")).toContainText(reduction);
+  await expect(page.locator("#workbench-result-rows-reduce-done")).toContainText(reduction);
 });
 
 test("a problem with nothing this site can draw falls back cleanly", async ({ page }) => {
@@ -281,12 +281,20 @@ test("at phone width the column stacks: tabs on their own row, then each menu, t
       .evaluate((element) => getComputedStyle(element).position),
   ).toBe("static");
 
-  const tasks = await page.locator("#workbench-tasks").boundingBox();
-  const solver = await page.locator("#workbench-solver-button").boundingBox();
-  const run = await page.locator("#workbench-run").boundingBox();
+  // The default picture grows the page above the bar once it draws, so wait for it, then read
+  // every box at once.
+  await expect(page.locator('figure [role="img"]').first()).toBeVisible();
+  const settled = await page.evaluate(() =>
+    Object.fromEntries(
+      ["tasks", "solver-button", "run", "mode-solve", "mode-verify"].map((key) => {
+        const rect = document.getElementById(`workbench-${key}`).getBoundingClientRect();
+        return [key, { x: rect.x, y: rect.y, width: rect.width, height: rect.height }];
+      }),
+    ),
+  );
+  const { tasks, "solver-button": solver, run } = settled;
   // The tabs take the row's width, three side by side.
-  const solve = await page.locator("#workbench-mode-solve").boundingBox();
-  const verify = await page.locator("#workbench-mode-verify").boundingBox();
+  const { "mode-solve": solve, "mode-verify": verify } = settled;
   expect(Math.abs(solve.y - verify.y)).toBeLessThan(2);
   expect(solver.y).toBeGreaterThan(tasks.y + tasks.height - 1);
   expect(run.y).toBeGreaterThan(solver.y + solver.height - 1);

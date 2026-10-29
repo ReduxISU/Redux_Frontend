@@ -17,7 +17,13 @@
 // with steps), with a seed added.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, selectSolverByName } from "./helpers";
+import {
+  answerViewCertificates,
+  gotoProblemDetail,
+  selectSolverByName,
+  VIEW_MAPPED_ANSWER,
+  VIEW_TARGET_ANSWER,
+} from "./helpers";
 import { SAT_TO_3SAT_VIEW } from "./reduction-payloads";
 import { SAT3_BACKTRACKING_ONE_RUN, SAT3_PPZ_ONE_RUN } from "./run-payloads";
 
@@ -32,7 +38,8 @@ const RUN_CAPTURE = SAT3_BACKTRACKING_ONE_RUN;
 const RUN = "#workbench-run";
 const RESULTS = "#workbench-results";
 
-async function openSat3(page) {
+/** `editInfo` changes allInfo before the page reads it. */
+async function openSat3(page, { editInfo } = {}) {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route(ALL_INFO_REQUEST, async (route) => {
     const response = await route.fetch();
@@ -45,6 +52,7 @@ async function openSat3(page) {
       info[SAT3_BACKTRACKING_ONE_RUN.solver].solverType = "Backtracking";
       info[SAT3_BACKTRACKING_ONE_RUN.solver].solverTypes = ["Backtracking"];
     }
+    editInfo?.(info);
     await route.fulfill({ response, json: info });
   });
   await page.route(RUN_REQUEST, (route) => route.fulfill({ json: { ...RUN_CAPTURE, seed: SEED } }));
@@ -208,28 +216,171 @@ test("a randomized solver's Seed box sits between the Algorithm (i) and Solve, a
   await expect(page.locator("#workbench-seed")).toHaveCount(0);
 });
 
-test("Check it in Verify sits at the far right of its row and opens the Verify tab", async ({
+test("Check it in Verify sits at the far right of the answer's row and opens the Verify tab", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openSat3(page);
   await solve(page);
 
-  const results = await boxOf(page, RESULTS);
+  // One row for the answer (its sentence, the answer to copy, the action at the far right),
+  // then the seed's row.
+  const rows = await page
+    .locator("#workbench-result-rows > li")
+    .evaluateAll((items) => items.map((item) => [item.id, item.dataset.tone]));
+  expect(rows).toEqual([
+    ["workbench-result-rows-answer", "ok"],
+    ["workbench-result-rows-seed", "info"],
+  ]);
+  const answerRow = await boxOf(page, "#workbench-result-rows-answer");
   const action = await boxOf(page, "#workbench-result-verify-answer");
-  const seedLine = await boxOf(page, "#workbench-result-seed");
   await expect(page.locator("#workbench-result-verify-answer")).toHaveText("Check it in Verify");
-  expect(Math.abs(results.x + results.width - (action.x + action.width))).toBeLessThan(2);
-  expect(sameLine(seedLine, action)).toBe(true);
+  expect(Math.abs(answerRow.x + answerRow.width - (action.x + action.width))).toBeLessThan(16);
+  expect(sameLine(answerRow, action)).toBe(true);
+  await expect(page.locator("#workbench-result-rows-answer")).toContainText("round trip");
 
   await page.locator("#workbench-result-verify-answer").click();
   await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#workbench-result-verify-certificate")).toHaveValue(
-    RUN_CAPTURE.answer,
+  await expect(page.locator("#workbench-verify-certificate")).toHaveValue(RUN_CAPTURE.answer);
+  // Verify's main button is Check, and its verdict is a row in the results.
+  await expect(page.locator(RUN)).toHaveText("Check");
+  await expect(page.locator("#workbench-result-rows-verdict")).toBeVisible();
+});
+
+test("Verify's task bar: the Verifier menu with its (i), Check where Solve is, the answer and its format under them", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  const solveButton = await boxOf(page, RUN);
+  await page.locator("#workbench-mode-verify").click();
+
+  // A dropdown even with one verifier, listing the backend's verifiers, with its info card.
+  const menu = page.locator("#workbench-verifier-button");
+  await expect(menu).toBeEnabled();
+  await expect(page.locator("#workbench-verifier-info-button")).toBeVisible();
+  await menu.click();
+  const options = page.locator("#workbench-verifier-listbox").getByRole("option");
+  expect(await options.count()).toBeGreaterThanOrEqual(1);
+  await expect(options.first()).toContainText("Verifier");
+  await page.keyboard.press("Escape");
+
+  const tabs = await boxOf(page, "#workbench-tasks");
+  const dropdown = await boxOf(page, "#workbench-verifier-button");
+  const info = await boxOf(page, "#workbench-verifier-info-button");
+  const check = await boxOf(page, RUN);
+  await expect(page.locator(RUN)).toHaveText("Check");
+  expect(dropdown.x).toBeGreaterThanOrEqual(tabs.x + tabs.width);
+  expect(info.x + info.width).toBeLessThanOrEqual(check.x);
+  expect(sameLine(dropdown, check)).toBe(true);
+  // Check is the main button, the same size Solve is in Solve.
+  expect(Math.round(check.height)).toBe(Math.round(solveButton.height));
+
+  // The answer to check, on the row under them, with the verifier's format under it.
+  const field = await boxOf(page, "#workbench-verify-certificate");
+  expect(field.y).toBeGreaterThan(check.y + check.height);
+  await expect(page.getByLabel("Answer to check")).toHaveCount(1);
+  await expect(page.locator("#workbench-verify-certificate-hint")).toContainText("Format:");
+  await expect(page.locator("#workbench-verify-certificate")).toHaveAttribute(
+    "aria-describedby",
+    "workbench-verify-certificate-hint",
   );
-  // Verify has no Solve button and no results list: the Verify box checks.
-  await expect(page.locator(RUN)).toHaveCount(0);
-  await expect(page.locator(RESULTS)).toHaveCount(0);
+});
+
+test("the Verifier menu lists every verifier the problem has, and Check uses the one picked", async ({
+  page,
+}) => {
+  // No problem in Redux declares two verifiers yet, so this one gets a second.
+  const second = { className: "SAT3ClauseByClauseVerifier", name: "Clause by Clause Verifier" };
+  await page.route(/\/api\/redux\/Navigation\/Batch\/allVerifiers/, async (route) => {
+    const response = await route.fetch();
+    const verifiers = await response.json();
+    verifiers.SAT3 = [...verifiers.SAT3, second.className];
+    await route.fulfill({ response, json: verifiers });
+  });
+  await openSat3(page, {
+    editInfo: (info) => {
+      info[second.className] = {
+        verifierName: second.name,
+        verifierDefinition: "Checks the clauses one at a time.",
+        contributors: [],
+      };
+    },
+  });
+  const used = [];
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    used.push(new URL(route.request().url()).searchParams.get("verifier"));
+    return route.fulfill({ json: "True" });
+  });
+  await page.locator("#workbench-mode-verify").click();
+  await page.locator("#workbench-verify-certificate").fill(RUN_CAPTURE.answer);
+
+  // The first is chosen; Check asks it.
+  await expect(page.locator("#workbench-verifier-value")).toContainText("3SAT Solution Verifier");
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveAttribute("data-tone", "ok");
+
+  // Both are listed by name; picking the second makes Check ask that one.
+  await page.locator("#workbench-verifier-button").click();
+  const options = page.locator("#workbench-verifier-listbox").getByRole("option");
+  await expect(options).toHaveCount(2);
+  await expect(options.nth(0)).toContainText("3SAT Solution Verifier");
+  await expect(options.nth(1)).toContainText(second.name);
+  await options.nth(1).click();
+  await expect(page.locator("#workbench-verifier-value")).toContainText(second.name);
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveCount(0);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verdict")).toContainText(second.name);
+  expect(used).toEqual(["SAT3Verifier", second.className]);
+});
+
+test("Verify: a passing and a failing answer each get a row in its tone", async ({ page }) => {
+  await openSat3(page);
+  const verdicts = [];
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    const body = route.request().postDataJSON();
+    verdicts.push(body.certificate);
+    return route.fulfill({ json: body.certificate === RUN_CAPTURE.answer ? "True" : "False" });
+  });
+  await page.locator("#workbench-mode-verify").click();
+  const row = page.locator("#workbench-result-rows-verdict");
+
+  await page.locator("#workbench-verify-certificate").fill(RUN_CAPTURE.answer);
+  await page.locator(RUN).click();
+  await expect(row).toHaveAttribute("data-tone", "ok");
+  await expect(row).toContainText("Valid:");
+  await expect(row).toContainText("accepts this answer");
+
+  await page.locator("#workbench-verify-certificate").fill("(x1:False,x2:False,x3:False)");
+  await expect(row).toHaveCount(0);
+  await page.locator(RUN).click();
+  await expect(row).toHaveAttribute("data-tone", "err");
+  await expect(row).toContainText("Not valid:");
+  await expect(row).toContainText("rejects this answer");
+  expect(verdicts).toEqual([RUN_CAPTURE.answer, "(x1:False,x2:False,x3:False)"]);
+});
+
+test("Check it in Verify round trip: Solve's answer is checked in Verify, and Solve still shows it", async ({
+  page,
+}) => {
+  await openSat3(page);
+  const verdicts = [];
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    verdicts.push(route.request().postDataJSON().certificate);
+    return route.fulfill({ json: "True" });
+  });
+  await solve(page);
+  await page.locator("#workbench-result-verify-answer").click();
+  await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#workbench-verify-certificate")).toHaveValue(RUN_CAPTURE.answer);
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveAttribute("data-tone", "ok");
+  expect(verdicts).toEqual([RUN_CAPTURE.answer]);
+  // The answer and its verdict stay with their tabs.
+  await page.locator("#workbench-mode-solve").click();
+  await expect(page.locator("#workbench-result-answer")).toHaveText(RUN_CAPTURE.answer);
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveCount(0);
+  await page.locator("#workbench-mode-verify").click();
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveAttribute("data-tone", "ok");
 });
 
 for (const width of [320, 1280]) {
@@ -280,11 +431,8 @@ for (const width of [320, 390]) {
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 
     await expect(page.locator("#navbar-menu-button")).toBeVisible();
-    await expect(page.locator("header[data-site-banner] img")).toHaveCount(2);
-    for (const img of await page.locator("header[data-site-banner] img").all()) {
-      await expect(img).toBeHidden();
-    }
-    await expect(page.locator("#problem-footer")).toBeVisible();
+    await expect(page.locator("header[data-site-banner] img")).toHaveCount(0);
+    await expect(page.locator("#site-footer img:visible")).toHaveCount(1);
     // Every task button is a 44px target.
     for (const task of ["solve", "reduce", "verify"]) {
       const box = await boxOf(page, `#workbench-mode-${task}`);
@@ -303,18 +451,20 @@ for (const width of [320, 390]) {
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 const REDUCE_SEED = 777;
 
-async function openSatReduce(page, { width = 1280 } = {}) {
+async function openSatReduce(page, { width = 1280, seeded = true } = {}) {
   const asked = [];
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width, height: 1000 });
+  await answerViewCertificates(page);
   await page.route(REDUCTION_VIEW_REQUEST, (route) => {
     const url = new URL(route.request().url());
     asked.push(url);
     const seed = url.searchParams.get("seed");
     return route.fulfill({
-      json: url.searchParams.get("solver")
-        ? { ...SAT_TO_3SAT_VIEW, seed: seed ? Number(seed) : REDUCE_SEED }
-        : SAT_TO_3SAT_VIEW,
+      json:
+        url.searchParams.get("solver") && seeded
+          ? { ...SAT_TO_3SAT_VIEW, seed: seed ? Number(seed) : REDUCE_SEED }
+          : SAT_TO_3SAT_VIEW,
     });
   });
   const instance = SAT_TO_3SAT_VIEW.source.instance;
@@ -360,9 +510,9 @@ test("Reduce's stepper runs Reduce, Solve, Verify in order, each with only its o
   await expect(page.locator("#workbench-target-button")).toBeVisible();
   await expect(page.locator("#workbench-reduction-button")).toBeVisible();
   await expect(page.locator("#workbench-target-solver-button")).toHaveCount(0);
-  await expect(page.locator("#workbench-result-verify")).toHaveCount(0);
+  await expect(page.locator("#workbench-verify-target")).toHaveCount(0);
   await expect(page.locator(RUN)).toHaveText("Reduce");
-  await expect(page.locator("#workbench-result-stages-reduce-next")).toHaveAttribute(
+  await expect(page.locator("#workbench-result-rows-reduce-next")).toHaveAttribute(
     "data-stage",
     "reduce",
   );
@@ -404,28 +554,31 @@ test("Reduce's stepper runs Reduce, Solve, Verify in order, each with only its o
     SAT_TO_3SAT_VIEW.solver,
   );
   expect(solverName).not.toBe("");
-  // Verify's box only: no main button, and the Check against switch, its target side unlocked.
+  // Verify's two checks and Check both: the Solve stage's menus are gone.
   await expect(page.locator("#workbench-target-solver-button")).toHaveCount(0);
-  await expect(page.locator(RUN)).toHaveCount(0);
-  await expect(page.locator("#workbench-result-verify-check-on-target")).toBeEnabled();
+  await expect(page.locator(RUN)).toHaveText("Check both");
+  await expect(page.locator("#workbench-verify-target-verifier-button")).toBeVisible();
+  await expect(page.locator("#workbench-verify-source-verifier-button")).toBeVisible();
 
   // The results, tagged by stage in the stepper's order, with the answer mapped back.
-  // (This route answers every Solve with a seed, so Solve has its seed row too.)
+  // (This route answers every Solve with a seed, so Solve has its seed row too; the seeded
+  // run's certificates come from visualizeRun, which this suite answers 404, so they stay
+  // the view's captions.)
   const rows = await page
-    .locator("#workbench-result-stages > li")
+    .locator("#workbench-result-rows > li")
     .evaluateAll((items) => items.map((item) => [item.id, item.dataset.stage]));
   expect(rows).toEqual([
-    ["workbench-result-stages-reduce-done", "reduce"],
-    ["workbench-result-stages-solve-answer", "solve"],
-    ["workbench-result-stages-solve-mapped", "solve"],
-    ["workbench-result-stages-solve-seed", "solve"],
-    ["workbench-result-stages-verify-next", "verify"],
+    ["workbench-result-rows-reduce-done", "reduce"],
+    ["workbench-result-rows-solve-answer", "solve"],
+    ["workbench-result-rows-solve-mapped", "solve"],
+    ["workbench-result-rows-solve-seed", "solve"],
+    ["workbench-result-rows-verify-next", "verify"],
   ]);
-  await expect(page.locator("#workbench-result-stages-solve-mapped")).toContainText(
+  await expect(page.locator("#workbench-result-rows-solve-mapped")).toContainText(
     `Mapped back to SAT: ${SAT_TO_3SAT_VIEW.frames.at(-1).caption}`,
   );
-  await expect(page.locator("#workbench-result-mapped-back")).toContainText(
-    SAT_TO_3SAT_VIEW.frames.at(-1).caption,
+  await expect(page.locator("#workbench-result-target-instance")).toHaveText(
+    SAT_TO_3SAT_VIEW.target.instance,
   );
 
   // The stepper goes back to an earlier stage's menus; a new Reduce starts again from Solve.
@@ -435,7 +588,7 @@ test("Reduce's stepper runs Reduce, Solve, Verify in order, each with only its o
   await page.locator(RUN).click();
   await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
   await expect(stage(page, "verify")).toBeDisabled();
-  await expect(page.locator("#workbench-result-stages-solve-next")).toBeVisible();
+  await expect(page.locator("#workbench-result-rows-solve-next")).toBeVisible();
 });
 
 test("a randomized target Algorithm gets the Seed box right of its dropdown, and the seed goes on the request", async ({
@@ -462,14 +615,20 @@ test("a randomized target Algorithm gets the Seed box right of its dropdown, and
   await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
   expect(asked.at(-1).searchParams.get("solver")).toMatch(/WalkSAT/);
   expect(asked.at(-1).searchParams.get("seed")).toBe("31");
-  await expect(page.locator("#workbench-result-stages-solve-seed")).toContainText("Seed 31");
+  const seedRow = page.locator("#workbench-result-rows-solve-seed");
+  await expect(seedRow).toContainText("Seed 31 made this run.");
+  await expect(seedRow.locator("button")).toHaveCount(0);
 
-  // Run again with this seed asks for the same run, from the Verify stage too.
+  // The seed typed in again (from a fresh box) asks for the same run.
   const before = asked.length;
-  await page.locator("#workbench-result-stage-seed-rerun").click();
+  await stage(page, "solve").click();
+  await page.locator("#workbench-seed").fill("");
+  await page.locator("#workbench-seed").fill("31");
+  await page.locator(RUN).click();
   await expect.poll(() => asked.length).toBe(before + 1);
   await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
   expect(asked.at(-1).searchParams.get("seed")).toBe("31");
+  await expect(seedRow).toContainText("Seed 31 made this run.");
 
   // A deterministic Algorithm has no Seed box.
   await stage(page, "solve").click();
@@ -587,4 +746,315 @@ test("each pane's Full screen shows that picture alone with the steps; Reduce's 
   for (const hidden of hiddenInFull) await expect(page.locator(hidden)).toBeHidden();
   await page.keyboard.press("Escape");
   await expect(page.locator("#workbench-full-screen")).toBeFocused();
+});
+
+test("Reduce's Verify stage checks both answers, prefilled from Solve, and says whether they agree", async ({
+  page,
+}) => {
+  await openSatReduce(page, { seeded: false });
+  const calls = [];
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    const url = new URL(route.request().url());
+    const body = route.request().postDataJSON();
+    calls.push({ verifier: url.searchParams.get("verifier"), ...body });
+    const valid = [VIEW_TARGET_ANSWER, VIEW_MAPPED_ANSWER].includes(body.certificate);
+    return route.fulfill({ json: valid ? "True" : "False" });
+  });
+  await page.locator(RUN).click();
+  await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
+  await page.locator(RUN).click();
+  await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
+
+  // Each side: its Verifier menu, its answer prefilled from the Solve stage, and Check.
+  const targetBox = page.locator("#workbench-verify-target-certificate");
+  const sourceBox = page.locator("#workbench-verify-source-certificate");
+  await expect(targetBox).toHaveValue(VIEW_TARGET_ANSWER);
+  await expect(sourceBox).toHaveValue(VIEW_MAPPED_ANSWER);
+  await expect(page.locator("#workbench-verify-target-verifier-info-button")).toBeVisible();
+  await expect(page.locator("#workbench-verify-source-verifier-info-button")).toBeVisible();
+  await expect(page.locator("#workbench-verify-target-check")).toBeEnabled();
+  await expect(page.locator("#workbench-verify-source-check")).toBeEnabled();
+
+  // Check both runs both checks: the target's answer against the built instance, the mapped-back
+  // one against this instance, each a Verify row, then the row saying they agree.
+  await page.locator(RUN).click();
+  const targetRow = page.locator("#workbench-result-rows-verify-target");
+  const sourceRow = page.locator("#workbench-result-rows-verify-source");
+  const agree = page.locator("#workbench-result-rows-verify-agree");
+  await expect(targetRow).toHaveAttribute("data-tone", "ok");
+  await expect(sourceRow).toHaveAttribute("data-tone", "ok");
+  await expect(agree).toHaveAttribute("data-tone", "ok");
+  await expect(agree).toContainText("Both checks pass");
+  for (const row of [targetRow, sourceRow, agree]) {
+    await expect(row).toHaveAttribute("data-stage", "verify");
+  }
+  expect(calls).toHaveLength(2);
+  const targetCall = calls.find((call) => call.certificate === VIEW_TARGET_ANSWER);
+  const sourceCall = calls.find((call) => call.certificate === VIEW_MAPPED_ANSWER);
+  expect(targetCall.problemInstance).toBe(SAT_TO_3SAT_VIEW.target.instance);
+  expect(sourceCall.problemInstance).toBe(SAT_TO_3SAT_VIEW.source.instance);
+  expect(targetCall.verifier).not.toBe(sourceCall.verifier);
+  await expect(stage(page, "verify")).toHaveAttribute("data-stage-state", "done");
+
+  // An edited answer is checked as typed, and a failing one makes the checks disagree.
+  await sourceBox.fill("(x1:False)");
+  await expect(sourceRow).toHaveCount(0);
+  await page.locator("#workbench-verify-source-check").click();
+  await expect(sourceRow).toHaveAttribute("data-tone", "err");
+  await expect(agree).toHaveAttribute("data-tone", "err");
+  await expect(agree).toContainText("The checks disagree");
+
+  // Nothing is said twice: the mapped-back answer appears once in the results.
+  const results = (await page.locator(RESULTS).textContent()) ?? "";
+  expect(results.split(VIEW_MAPPED_ANSWER)).toHaveLength(2);
+  expect(results.split(VIEW_TARGET_ANSWER)).toHaveLength(2);
+  expect(results).not.toContain("finished in");
+  await expect(page.locator("#workbench-result-map")).toHaveCount(0);
+});
+
+test("at 390 px the results, in every task, never scroll sideways", async ({ page }) => {
+  await openSatReduce(page, { width: 390, seeded: false });
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) =>
+    route.fulfill({ json: "True" }),
+  );
+  await page.locator(RUN).click();
+  await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
+  await page.locator(RUN).click();
+  await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verify-agree")).toBeVisible();
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+  const results = await boxOf(page, RESULTS);
+  expect(results.x + results.width).toBeLessThanOrEqual(390);
+
+  await page.locator("#workbench-mode-verify").click();
+  await page.locator("#workbench-verify-certificate").fill("(x1:True,x2:False)");
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verdict")).toBeVisible();
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+});
+
+// --- #303 follow-ups: Reduce's panes ----------------------------------------------------------
+
+/** Opens 3SAT's Reduce on 0-1 Integer Linear Programming, with Redux's own Reduction View. */
+async function openSatToIlp(page, width) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width, height: 1000 });
+  await page.route(REDUCTION_VIEW_REQUEST, (route) => route.continue());
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  await page.locator("#workbench-mode-reduce").click();
+  await page.locator("#workbench-target-button").click();
+  await page
+    .locator("#workbench-target-listbox")
+    .getByRole("option")
+    .filter({ hasText: /^0-1 Integer Linear Programming/ })
+    .first()
+    .click();
+}
+
+/** The two panes' picture areas, and where each picture's zoom box sits in its area. */
+function pictureAreas(page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('[id$="-picture-area"]')].map((area) => {
+      const box = area.getBoundingClientRect();
+      const zoom = area.querySelector("[data-zoom]")?.getBoundingClientRect() ?? null;
+      return {
+        id: area.id,
+        top: box.top,
+        height: box.height,
+        above: zoom ? zoom.top - box.top : null,
+        below: zoom ? box.bottom - zoom.bottom : null,
+      };
+    }),
+  );
+}
+
+test("at 1280 px Reduce's two picture areas are the same height, before and after Reduce and on full screen, a shorter picture centered", async ({
+  page,
+}) => {
+  await openSatToIlp(page, 1280);
+  let [source, target] = await pictureAreas(page);
+  expect(source.id).toBe("workbench-source-picture-area");
+  expect(target.id).toBe("workbench-target-picture-area");
+  expect(Math.abs(source.height - target.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(source.top - target.top)).toBeLessThanOrEqual(1);
+
+  await page.locator(RUN).click();
+  const targetZoom = page.locator("#workbench-reduction-target-picture-area [data-zoom]");
+  await expect(targetZoom).toBeVisible({ timeout: 20_000 });
+  for (const full of [false, true]) {
+    if (full) {
+      await page.locator("#workbench-full-screen").click();
+      await expect(page.locator("#workbench-full-screen")).toHaveAttribute("aria-pressed", "true");
+    }
+    [source, target] = await pictureAreas(page);
+    expect(source.id).toBe("workbench-reduction-source-picture-area");
+    expect(Math.abs(source.height - target.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(source.top - target.top)).toBeLessThanOrEqual(1);
+    // The table is shorter than the clause graph: it sits in the middle of its area (its
+    // caption and hint above the zoom box), not at the top.
+    expect(target.above).toBeGreaterThan(60);
+    expect(target.below).toBeGreaterThan(60);
+  }
+});
+
+test("at 800 px Reduce's panes stack, each picture at its own height", async ({ page }) => {
+  await openSatToIlp(page, 800);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible({
+    timeout: 20_000,
+  });
+  const [source, target] = await pictureAreas(page);
+  expect(target.top).toBeGreaterThan(source.top + source.height);
+  expect(Math.abs(source.height - target.height)).toBeGreaterThan(50);
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+});
+
+test("Reduce's Picture menus are dropdowns naming each picture and its type, never a class name, even with one picture", async ({
+  page,
+}) => {
+  await openSatToIlp(page, 1280);
+  const menu = (side) => page.locator(`#workbench-${side}-type-button`);
+  const optionsOf = async (side) => {
+    await menu(side).click();
+    const listbox = page.locator(`#workbench-${side}-type-listbox`);
+    await expect(listbox).toBeVisible();
+    const texts = await listbox
+      .getByRole("option")
+      .evaluateAll((options) => options.map((option) => option.innerText.replace(/\s+/g, " ")));
+    await page.keyboard.press("Escape");
+    await expect(listbox).toBeHidden();
+    return texts;
+  };
+  const noClassNames = (texts) => {
+    for (const text of texts) expect(text).not.toMatch(/\b[A-Z][a-z]+[A-Z]\w*Visualization\b/);
+  };
+
+  // Before Reduce: the source's menu opens on its one picture, with its type's tag.
+  await expect(menu("source")).toBeEnabled();
+  let options = await optionsOf("source");
+  expect(options).toEqual(["3SAT Visualization Grouped Graph"]);
+
+  // After Reduce, both sides. Redux's catalog lists no picture for 0-1 Integer Linear
+  // Programming, so its picture is named after the problem, with the Table tag Redux sent.
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible({
+    timeout: 20_000,
+  });
+  for (const side of ["source", "target"]) await expect(menu(side)).toBeEnabled();
+  await expect(page.locator("#workbench-target-type-value")).toContainText(
+    "0-1 Integer Linear Programming Visualization",
+  );
+  options = await optionsOf("source");
+  noClassNames(options);
+  expect(options[0]).toBe("3SAT Visualization Grouped Graph");
+  options = await optionsOf("target");
+  noClassNames(options);
+  expect(options).toEqual(["0-1 Integer Linear Programming Visualization Table"]);
+
+  // Picking the picture already drawn asks Redux for nothing.
+  let asked = 0;
+  page.on("request", (request) => {
+    if (REDUCTION_VIEW_REQUEST.test(request.url())) asked += 1;
+  });
+  await menu("target").click();
+  await page.locator("#workbench-target-type-listbox").getByRole("option").first().click();
+  await expect(page.locator("#workbench-target-type-listbox")).toBeHidden();
+  expect(asked).toBe(0);
+  await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible();
+});
+
+// --- #303 follow-ups: Board G's order, and what it does not show at the bottom ---------------
+
+const topOf = async (page, selector) => (await boxOf(page, selector)).y;
+const bottomOf = async (page, selector) => {
+  const box = await boxOf(page, selector);
+  return box.y + box.height;
+};
+
+test("Solve keeps Board G's order: the picture, the Legend, the steps, then the step's caption", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  await solve(page);
+  const caption = page.locator("#workbench-step-text [aria-live]");
+  await expect(caption).toHaveCount(1);
+  await expect(caption).toContainText("Verdict:");
+  expect(await topOf(page, "#workbench-legend-toggle")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-source-picture"),
+  );
+  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-legend-body"),
+  );
+  expect(await topOf(page, "#workbench-step-text")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-steps-position"),
+  );
+  expect(await topOf(page, "#workbench-command-bar")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-step-text"),
+  );
+});
+
+test("Reduce keeps Board G's order, and the Gadgets switch, its link line and the phase buttons wait in closed sections at the bottom", async ({
+  page,
+}) => {
+  await openSatReduce(page);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+
+  // Under the pictures: the Legend, the steps and the caption; nothing of the Gadgets or phases.
+  const pane = page.locator("#workbench-pane");
+  for (const piece of ["marks-row", "link"]) {
+    await expect(pane.locator(`#workbench-reduction-${piece}`)).toHaveCount(0);
+  }
+  await expect(pane.locator("#workbench-phases")).toHaveCount(0);
+  expect(await topOf(page, "#workbench-legend-toggle")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-reduction-panes"),
+  );
+  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-legend-body"),
+  );
+  await expect(page.locator("#workbench-step-text #workbench-reduction-caption")).toBeVisible();
+
+  // At the bottom, under the results: Gadgets (n) then Phases, both closed.
+  const gadgets = page.locator("#workbench-result-gadgets");
+  const phases = page.locator("#workbench-result-phases");
+  for (const toggle of ["gadgets", "phases"]) {
+    await expect(page.locator(`#workbench-result-${toggle}-toggle`)).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  }
+  await expect(page.locator("#workbench-result-gadgets-count")).toHaveText(
+    `(${SAT_TO_3SAT_VIEW.gadgets.length})`,
+  );
+  expect(await topOf(page, "#workbench-result-gadgets")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-result-rows"),
+  );
+  expect(await topOf(page, "#workbench-result-phases")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-result-gadgets"),
+  );
+
+  // Opened, Gadgets starts with the Plain / Color switch and the link line, which still work:
+  // pointing at a source piece says what it became, and Color marks both sides.
+  await page.locator("#workbench-result-gadgets-toggle").click();
+  await expect(gadgets.locator("#workbench-reduction-marks-row")).toBeVisible();
+  const link = gadgets.locator("#workbench-reduction-link");
+  await expect(link).toContainText("Point at a piece");
+  await page.locator("#workbench-reduction-source [data-node-id]").first().hover();
+  await expect(link).toHaveAttribute("data-linked", "true");
+  await page.locator("#workbench-reduction-marks-color").click();
+  await expect(page.locator("#workbench-reduction-marks-row")).toHaveAttribute(
+    "data-gadget-marks",
+    "color",
+  );
+  await page.locator("#workbench-reduction-marks-plain").click();
+
+  // Opened, Phases jumps the steps, as the bar beside the pictures did; each button is a 44px
+  // target.
+  await page.locator("#workbench-result-phases-toggle").click();
+  const build = phases.locator("#workbench-phases-build");
+  await expect(build).toBeVisible();
+  expect((await boxOf(page, "#workbench-phases-build")).height).toBeGreaterThanOrEqual(44);
+  await expect(build).toHaveAttribute("aria-current", "step");
 });

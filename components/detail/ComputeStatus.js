@@ -28,6 +28,7 @@ import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Typography from "@mui/material/Typography";
 import { COMPUTE_CANCELLED, COMPUTE_FAILED, COMPUTE_RUNNING } from "../../hooks/useComputeRequest";
+import { visuallyHiddenSx } from "../pictures/pictureSx";
 
 /**
  * Cancel does not stop the backend. Saying otherwise would be the easiest
@@ -49,6 +50,8 @@ export const CANCEL_EXPLANATION =
  * @param {() => void} props.onCancel Called by the Cancel button.
  * @param {string} props.busyLabel Visible text next to the spinner, e.g.
  *   "Running Clique Brute Force Solver".
+ * @param {boolean} [props.quiet] #303 stage 4: the announcement is spoken but not shown, for
+ *   a page whose results already say it (the workbench's result rows).
  */
 export default function ComputeStatus({
   idPrefix,
@@ -57,6 +60,7 @@ export default function ComputeStatus({
   failure = null,
   onCancel,
   busyLabel,
+  quiet = false,
 }) {
   const isRunning = status === COMPUTE_RUNNING;
 
@@ -66,7 +70,7 @@ export default function ComputeStatus({
         id={`${idPrefix}-status`}
         role="status"
         aria-live="polite"
-        sx={{ color: "text.secondary" }}
+        sx={quiet ? visuallyHiddenSx : { color: "text.secondary" }}
       >
         <Typography variant="body2" sx={{ color: "inherit" }}>
           {announcement}

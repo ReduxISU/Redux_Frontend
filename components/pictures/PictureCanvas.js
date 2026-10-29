@@ -3,10 +3,13 @@
 // #199: draws one frame of a format=frames picture with the renderer registered for its
 // picture type (./registry.js), and, during a run, the step's caption under it: what the
 // solver did at this step, in Redux's own words, with the step's event and, on the last
-// step, the run's verdict.
+// step, the run's verdict. #303: in the workbench the caption goes under the step controls
+// (./secondarySlots.js StepTextSlot).
 
 import Box from "@mui/material/Box";
+import { useContext } from "react";
 import { hasPictureRenderer, PICTURE_RENDERERS } from "./registry";
+import { InSlot, StepTextSlot } from "./secondarySlots";
 
 // Redux's StepEvent names, as a reader would say them.
 const EVENT_TEXT = {
@@ -106,6 +109,7 @@ export default function PictureCanvas({
   boxSoFar = false,
   runs = null,
 }) {
+  const stepTextSlot = useContext(StepTextSlot);
   // Read straight off the module's table (not through a function) so React sees one stable
   // component per type.
   const Renderer = hasPictureRenderer(type) ? PICTURE_RENDERERS[type] : null;
@@ -139,7 +143,9 @@ export default function PictureCanvas({
         runs={runs}
       />
       {showCaption && typeof frame.caption === "string" && frame.caption && (
-        <FrameCaption id={`${idPrefix}-caption`} frame={frame} />
+        <InSlot slot={stepTextSlot}>
+          <FrameCaption id={`${idPrefix}-caption`} frame={frame} />
+        </InSlot>
       )}
     </Box>
   );

@@ -68,7 +68,7 @@ import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import ErrorBanner from "../components/ErrorBanner";
-import NavBar, { IsuLogo } from "../components/NavBar";
+import NavBar from "../components/NavBar";
 import PageTitle from "../components/PageTitle";
 import PlaylistRail from "../components/PlaylistRail";
 import { isProblemComplete } from "../components/StatusIcon";
@@ -152,31 +152,12 @@ function optionLabel(facetKey, optionKey) {
 // that something's happening, without changing what that choice guesses.
 function PageShell({ children, loading = false, title = null }) {
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", flex: 1 }}>
       {/* #279: the tab names the problem by its display name. */}
       {title && <PageTitle title={title} />}
-      <NavBar sticky logoInFooter />
+      <NavBar sticky />
       {loading && <LinearProgress aria-label="Loading problem" />}
       {children}
-      {/* #303: on phones the ISU logo sits here, at the bottom of the page. */}
-      <Box
-        component="footer"
-        id="problem-footer"
-        sx={{
-          display: "none",
-          [PHONE_MEDIA]: {
-            display: "flex",
-            justifyContent: "center",
-            px: 2,
-            py: 3,
-            borderTop: "1px solid",
-            borderColor: "divider",
-            backgroundColor: "surface.nav",
-          },
-        }}
-      >
-        <IsuLogo idPrefix="problem-footer" />
-      </Box>
     </Box>
   );
 }

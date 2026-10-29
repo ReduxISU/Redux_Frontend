@@ -48,10 +48,14 @@
 // the gadgets the step made, in plain words, and the step's bound when it sets one. A dashed
 // "Rule says no" line is a piece too (lib/reductionView.js gives it to its edge rule). A picture
 // that draws none of the pieces a side's gadgets name (a Search Tree) says links can't be shown.
+//
+// #303 (Board G polish): in the workbench the step's caption goes under the step controls, and
+// the Plain / Color switch with the line saying what is linked goes to the Gadgets section at the
+// bottom of the page (./secondarySlots.js); outside it they stay under the pictures.
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GADGET_EMPTY_SIDE, GADGET_KINDS, OTHER_GADGET_KIND } from "../../data/gadgetKinds";
 import { describeGadget, gadgetColorMap, gadgetIdName } from "../../lib/gadgets";
 import {
@@ -73,6 +77,7 @@ import { PaneGrid, PaneSection } from "../workbench/PaneGrid";
 import { GADGET_PALETTE } from "./gadgetRings";
 import { FAINT_FILTER, PictureToggle } from "./graphPieces";
 import PictureCanvas from "./PictureCanvas";
+import { AtBottom, InSlot, SecondarySlots, StepTextSlot } from "./secondarySlots";
 
 const ARROW = "↦";
 const GADGET_RING = paletteVars.viz.gadget;
@@ -340,7 +345,7 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
             title={phase.about}
             onClick={() => onStepChange(start)}
             sx={{
-              minHeight: 36,
+              minHeight: 44,
               px: 1.5,
               borderRadius: "999px",
               border: "1px solid",
@@ -559,6 +564,8 @@ export default function ReductionView({
   colorMode = "plain",
   onColorMode = null,
 }) {
+  const stepTextSlot = useContext(StepTextSlot);
+  const secondarySlots = useContext(SecondarySlots);
   const { source, target, gadgets } = view;
   const sourceFrames = useMemo(
     () => view.frames.map((frame) => paneFrame(frame, "source", source.type)),
@@ -750,56 +757,60 @@ export default function ReductionView({
         }
       />
       {!loading && (
-        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px" }}>
-          {gadgets.length > 0 && onColorMode && (
-            <Box
-              id={`${idPrefix}-marks-row`}
-              data-gadget-marks={colorMode}
-              sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}
-            >
+        <AtBottom slots={secondarySlots} slot={secondarySlots.gadgets}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px" }}>
+            {gadgets.length > 0 && onColorMode && (
               <Box
-                component="span"
-                id={`${idPrefix}-marks-label`}
-                sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
+                id={`${idPrefix}-marks-row`}
+                data-gadget-marks={colorMode}
+                sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}
               >
-                Gadgets
+                <Box
+                  component="span"
+                  id={`${idPrefix}-marks-label`}
+                  sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
+                >
+                  Gadgets
+                </Box>
+                <PictureToggle
+                  id={`${idPrefix}-marks`}
+                  label="Gadget marks: Plain marks one gadget while you point at it, Color gives every gadget its own color"
+                  options={MARK_MODES}
+                  value={colorMode}
+                  onChange={onColorMode}
+                />
               </Box>
-              <PictureToggle
-                id={`${idPrefix}-marks`}
-                label="Gadget marks: Plain marks one gadget while you point at it, Color gives every gadget its own color"
-                options={MARK_MODES}
-                value={colorMode}
-                onChange={onColorMode}
-              />
+            )}
+            <Box
+              id={`${idPrefix}-link`}
+              aria-live="polite"
+              data-linked={link ? "true" : "false"}
+              sx={{
+                flex: "1 1 280px",
+                minWidth: 0,
+                fontSize: "0.8125rem",
+                color: link ? "text.primary" : "text.secondary",
+                borderLeft: "3px solid",
+                borderColor: link ? GADGET_RING : "transparent",
+                pl: 1,
+              }}
+            >
+              {readout}
             </Box>
-          )}
-          <Box
-            id={`${idPrefix}-link`}
-            aria-live="polite"
-            data-linked={link ? "true" : "false"}
-            sx={{
-              flex: "1 1 280px",
-              minWidth: 0,
-              fontSize: "0.8125rem",
-              color: link ? "text.primary" : "text.secondary",
-              borderLeft: "3px solid",
-              borderColor: link ? GADGET_RING : "transparent",
-              pl: 1,
-            }}
-          >
-            {readout}
           </Box>
-        </Box>
+        </AtBottom>
       )}
       {!loading && (
-        <ReductionCaption
-          id={`${idPrefix}-caption`}
-          frames={view.frames}
-          frameIndex={index}
-          gadgets={gadgets}
-          describe={describe}
-          colors={colors?.byGadget ?? null}
-        />
+        <InSlot slot={stepTextSlot}>
+          <ReductionCaption
+            id={`${idPrefix}-caption`}
+            frames={view.frames}
+            frameIndex={index}
+            gadgets={gadgets}
+            describe={describe}
+            colors={colors?.byGadget ?? null}
+          />
+        </InSlot>
       )}
     </Box>
   );

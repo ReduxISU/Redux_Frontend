@@ -6,8 +6,10 @@
 // Full screen for that pane), then the picture, then a note under it. The header rows line up
 // across the two panes: the grid has four shared rows and each pane is a subgrid spanning them
 // (the mockup's `g-fig4`), so a label that wraps on one side pushes both sides' controls down
-// together. At 900 px and narrower the panes stack, source first, with the arrow turned to point
-// down between them.
+// together. The picture row is shared too, so the two picture areas are always the same height
+// (`${id}-picture-area`), a shorter picture centered in its area. At 900 px and narrower the
+// panes stack, source first, with the arrow turned to point down between them, each picture at
+// its own height.
 //
 // Used by VisualizationPane.js before a Reduction View arrives (the default picture and the
 // target's placeholder, or the older reduction's two frames) and by the Reduction View itself
@@ -202,7 +204,19 @@ export function PaneSection({
           />
         )}
       </Box>
-      <Box sx={{ minWidth: 0 }}>
+      {/* The picture row is shared, so both pictures' areas are the taller one's height; a
+          shorter picture sits in the middle of its area. Stacked, each keeps its own height. */}
+      <Box
+        id={`${id}-picture-area`}
+        sx={{
+          minWidth: 0,
+          alignSelf: "stretch",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          [PANES_STACK_MEDIA]: { display: "block" },
+        }}
+      >
         <ZoomControlsSlot.Provider value={zoomSlot}>{children}</ZoomControlsSlot.Provider>
       </Box>
       <Box
