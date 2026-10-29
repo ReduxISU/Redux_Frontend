@@ -1028,7 +1028,7 @@ test("at 800 px Reduce's panes stack, each picture at its own height", async ({ 
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 });
 
-test("Reduce's Picture menus are dropdowns naming each picture and its type, never a class name, even with one picture", async ({
+test("Reduce's Picture menus are dropdowns naming each picture and its type, never a class name", async ({
   page,
 }) => {
   await openSatToIlp(page, 1280);
@@ -1055,22 +1055,22 @@ test("Reduce's Picture menus are dropdowns naming each picture and its type, nev
   noClassNames(options);
   expect(options[0]).toBe("3SAT Visualization Grouped Graph");
 
-  // After Reduce, both sides. Redux's catalog lists no picture for 0-1 Integer Linear
-  // Programming, so its picture is named after the problem, with the Table tag Redux sent.
+  // After Reduce, both sides. With includePictures=true (#279) Redux lists 0-1 Integer
+  // Programming's Table and Formula pictures; the reduction draws its Table.
   await page.locator(RUN).click();
   await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible({
     timeout: 20_000,
   });
   for (const side of ["source", "target"]) await expect(menu(side)).toBeEnabled();
   await expect(page.locator("#workbench-target-type-value")).toContainText(
-    "0-1 Integer Linear Programming Visualization",
+    "0-1 Integer Programming Table Visualization",
   );
   options = await optionsOf("source");
   noClassNames(options);
   expect(options[0]).toBe("3SAT Visualization Grouped Graph");
   options = await optionsOf("target");
   noClassNames(options);
-  expect(options).toEqual(["0-1 Integer Linear Programming Visualization Table"]);
+  expect(options).toContain("0-1 Integer Programming Table Visualization Table");
 
   // Picking the picture already drawn asks Redux for nothing.
   let asked = 0;
@@ -1078,7 +1078,11 @@ test("Reduce's Picture menus are dropdowns naming each picture and its type, nev
     if (REDUCTION_VIEW_REQUEST.test(request.url())) asked += 1;
   });
   await menu("target").click();
-  await page.locator("#workbench-target-type-listbox").getByRole("option").first().click();
+  await page
+    .locator("#workbench-target-type-listbox")
+    .getByRole("option")
+    .filter({ hasText: "0-1 Integer Programming Table Visualization" })
+    .click();
   await expect(page.locator("#workbench-target-type-listbox")).toBeHidden();
   expect(asked).toBe(0);
   await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible();
