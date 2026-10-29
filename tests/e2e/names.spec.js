@@ -16,7 +16,9 @@ import { gotoHomeAndWaitForLoad, gotoProblemDetail, skipStartupSplash } from "./
 async function readDisplayNames(request) {
   const [keys, info] = await Promise.all([
     request.get("/api/redux/Navigation/Batch/allProblems").then((response) => response.json()),
-    request.get("/api/redux/Navigation/Batch/allInfo").then((response) => response.json()),
+    request
+      .get("/api/redux/Navigation/Batch/allInfo?includePictures=true")
+      .then((response) => response.json()),
   ]);
   return new Map(keys.map((key) => [key, info[key]?.problemName || key]));
 }

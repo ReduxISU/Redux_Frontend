@@ -128,6 +128,19 @@ test("the page is one centered column: title, instance, picture, steps, task bar
   await expect(page.locator("#workbench-instance-full-instance")).toBeEditable();
 });
 
+test("the problem's description runs the full width of the column, not half of it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+
+  // 3SAT's description is long enough to wrap; its lines reach the workspace's width, not a
+  // shorter reading measure.
+  const text = await boxOf(page, "#problem-one-liner");
+  const card = await boxOf(page, "#workbench");
+  expect(text.width).toBeGreaterThan(card.width - 4);
+});
+
 test("the banner stays at the top of the window while the page scrolls", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openSat3(page);
@@ -364,6 +377,35 @@ test("Verify: a passing and a failing answer each get a row in its tone", async 
   await expect(row).toContainText("Not valid:");
   await expect(row).toContainText("rejects this answer");
   expect(verdicts).toEqual([RUN_CAPTURE.answer, "(x1:False,x2:False,x3:False)"]);
+});
+
+test("the answer box's placeholder is Redux's example, after Example: or e.g., without the full stop", async ({
+  page,
+}) => {
+  // #279: SAT3's format ends "Example: (...)"; N-Queens' ends "— e.g. {...}." and Max Cut's
+  // "— e.g. {...}". A format with no example gives the verifier's own example certificate.
+  const formats = {
+    SAT3: "Pairs. Example: (x1:True,x2:False,x3:True)",
+    NQUEENS: "Queen positions: {(row,col),...} — e.g. {(0,1),(1,3),(2,0),(3,2)}.",
+  };
+  await page.route(ALL_INFO_REQUEST, async (route) => {
+    const response = await route.fetch();
+    const info = await response.json();
+    for (const [code, format] of Object.entries(formats)) info[code].certificateFormat = format;
+    info.MAXCUT.certificateFormat = "Set of vertices on the S side";
+    info.MaxCutVerifier = { ...info.MaxCutVerifier, certificate: "{1,3}" };
+    await route.fulfill({ response, json: info });
+  });
+  const field = page.locator("#workbench-verify-certificate");
+  for (const [code, placeholder] of [
+    ["3SAT", "(x1:True,x2:False,x3:True)"],
+    ["NQUEENS", "{(0,1),(1,3),(2,0),(3,2)}"],
+    ["MAXCUT", "{1,3}"],
+  ]) {
+    await page.goto(`/${code}`);
+    await page.locator("#workbench-mode-verify").click();
+    await expect(field).toHaveAttribute("placeholder", placeholder);
+  }
 });
 
 test("Check it in Verify round trip: Solve's answer is checked in Verify, and Solve still shows it", async ({
@@ -1015,7 +1057,7 @@ test("at 800 px Reduce's panes stack, each picture at its own height", async ({ 
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 });
 
-test("Reduce's Picture menus are dropdowns naming each picture and its type, never a class name, even with one picture", async ({
+test("Reduce's Picture menus are dropdowns naming each picture and its type, never a class name", async ({
   page,
 }) => {
   await openSatToIlp(page, 1280);
@@ -1035,27 +1077,29 @@ test("Reduce's Picture menus are dropdowns naming each picture and its type, nev
     for (const text of texts) expect(text).not.toMatch(/\b[A-Z][a-z]+[A-Z]\w*Visualization\b/);
   };
 
-  // Before Reduce: the source's menu opens on its one picture, with its type's tag.
+  // Before Reduce: the source's menu lists 3SAT's pictures (the ones Redux lists with
+  // includePictures=true, #279), the default first, each with its type's tag.
   await expect(menu("source")).toBeEnabled();
   let options = await optionsOf("source");
-  expect(options).toEqual(["3SAT Visualization Grouped Graph"]);
+  noClassNames(options);
+  expect(options[0]).toBe("3SAT Visualization Grouped Graph");
 
-  // After Reduce, both sides. Redux's catalog lists no picture for 0-1 Integer Linear
-  // Programming, so its picture is named after the problem, with the Table tag Redux sent.
+  // After Reduce, both sides. With includePictures=true (#279) Redux lists 0-1 Integer
+  // Programming's Table and Formula pictures; the reduction draws its Table.
   await page.locator(RUN).click();
   await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible({
     timeout: 20_000,
   });
   for (const side of ["source", "target"]) await expect(menu(side)).toBeEnabled();
   await expect(page.locator("#workbench-target-type-value")).toContainText(
-    "0-1 Integer Linear Programming Visualization",
+    "0-1 Integer Programming Table Visualization",
   );
   options = await optionsOf("source");
   noClassNames(options);
   expect(options[0]).toBe("3SAT Visualization Grouped Graph");
   options = await optionsOf("target");
   noClassNames(options);
-  expect(options).toEqual(["0-1 Integer Linear Programming Visualization Table"]);
+  expect(options).toContain("0-1 Integer Programming Table Visualization Table");
 
   // Picking the picture already drawn asks Redux for nothing.
   let asked = 0;
@@ -1063,7 +1107,11 @@ test("Reduce's Picture menus are dropdowns naming each picture and its type, nev
     if (REDUCTION_VIEW_REQUEST.test(request.url())) asked += 1;
   });
   await menu("target").click();
-  await page.locator("#workbench-target-type-listbox").getByRole("option").first().click();
+  await page
+    .locator("#workbench-target-type-listbox")
+    .getByRole("option")
+    .filter({ hasText: "0-1 Integer Programming Table Visualization" })
+    .click();
   await expect(page.locator("#workbench-target-type-listbox")).toBeHidden();
   expect(asked).toBe(0);
   await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible();

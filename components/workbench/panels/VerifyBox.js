@@ -22,10 +22,19 @@ import DoneButton from "../DoneButton";
 import { controlLabelSx, MONO_FONT, secondaryButtonSx } from "../layout";
 import TaggedSelect from "../TaggedSelect";
 
-/** The backend's certificate formats end in "Example: ..."; that example is the placeholder. */
-function exampleFrom(format) {
-  const match = /Example:\s*(.+)$/.exec(format ?? "");
-  return match ? match[1].trim() : "";
+// "... Example: x" or "... - e.g. x" (an em dash or a hyphen), at the end of the format.
+const EXAMPLE = /(?:\bExample:|\s[—-]\s*e\.g\.)\s*(.+?)\s*$/s;
+
+/**
+ * #279: the placeholder is Redux's own example, so it is text Redux can read. Most certificate
+ * formats end in "Example: ...", a few (N-Queens, Max Cut, Min Cut, Minimum s-t Cut) in
+ * "- e.g. ..."; a format with neither gives the verifier's own example certificate, if any.
+ * An example written as the end of a sentence keeps its full stop out of the field.
+ */
+export function exampleFrom(format, fallback = "") {
+  const match = EXAMPLE.exec(format ?? "");
+  if (match) return match[1].replace(/\.$/, "").trim();
+  return (fallback ?? "").trim();
 }
 
 /** The failure of a check whose certificate Redux could not read, or null. */
@@ -57,7 +66,7 @@ export function CertificateField({ id, label, value, onChange, verifier, unreada
         component="input"
         type="text"
         value={value}
-        placeholder={exampleFrom(format)}
+        placeholder={exampleFrom(format, verifier?.exampleCertificate)}
         onChange={(event) => onChange(event.target.value)}
         spellCheck={false}
         autoComplete="off"

@@ -64,12 +64,12 @@ async function patchJson(page, pattern, patch) {
 async function ensureVisualizationChoices(page) {
   await patchJson(
     page,
-    /\/api\/redux\/Navigation\/Batch\/allVisualizations$/,
+    /\/api\/redux\/Navigation\/Batch\/allVisualizations(?=\?|$)/,
     async (body, route) => {
       const reductionsUrl = route
         .request()
         .url()
-        .replace(/Navigation\/Batch\/allVisualizations$/, "Navigation/Reductions");
+        .replace(/Navigation\/Batch\/allVisualizations(?=\?|$)/, "Navigation/Reductions");
       const graph = await (await route.fetch({ url: reductionsUrl })).json();
       if ((body[PROBLEM_CODE] ?? []).length < 2) {
         body[PROBLEM_CODE] = [...(body[PROBLEM_CODE] ?? []), EXTRA_SOURCE_VIZ];
@@ -80,11 +80,15 @@ async function ensureVisualizationChoices(page) {
       return body;
     },
   );
-  await patchJson(page, /\/api\/redux\/Navigation\/Batch\/allVisualizationTypes$/, (body) => ({
-    ...body,
-    ...EXTRA_VIZ_TYPES,
-  }));
-  await patchJson(page, /\/api\/redux\/Navigation\/Batch\/allInfo$/, (body) => {
+  await patchJson(
+    page,
+    /\/api\/redux\/Navigation\/Batch\/allVisualizationTypes(?=\?|$)/,
+    (body) => ({
+      ...body,
+      ...EXTRA_VIZ_TYPES,
+    }),
+  );
+  await patchJson(page, /\/api\/redux\/Navigation\/Batch\/allInfo(?=\?|$)/, (body) => {
     for (const [className, visualizationType] of Object.entries(EXTRA_VIZ_TYPES)) {
       body[className] = {
         visualizationName: `${className} (test stand-in)`,
