@@ -129,7 +129,7 @@ export default function VerifyBox({
     cannotCheck =
       "This verifier cannot be run: the catalog did not say which backend verifier it is.";
   else if (!hasInstance)
-    cannotCheck = "There is no instance to check against. Press Edit to write one.";
+    cannotCheck = "There is no instance to check against. Write one in the Instance box above.";
   else if (certificate.trim() === "") cannotCheck = "Type a certificate to check.";
 
   return (
