@@ -72,6 +72,7 @@ import {
 import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf, strongestState } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import { useBoxWidth } from "./useBoxWidth";
 
 /** The dash of a faded piece's outline: grey and dashed, never transparent. */
@@ -136,7 +137,7 @@ function pillLook(state) {
       };
     case "Background":
       return {
-        fill: paletteVars.surface.input,
+        fill: PICTURE_CANVAS,
         line: style.line,
         width: 1.4,
         dash: undefined,

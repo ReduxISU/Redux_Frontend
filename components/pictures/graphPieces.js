@@ -11,6 +11,7 @@ import { paletteVars } from "../theme";
 import { GadgetCircle, GadgetRect } from "./gadgetRings";
 import { NODE_RADIUS, outlineDistance } from "./graphLayout";
 import { pictureStateStyle } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 
 export const MONO = '"JetBrains Mono", "Fira Code", Consolas, monospace';
 
@@ -198,7 +199,7 @@ export function Badge({ x, y, text, testId }) {
         height={2 * r}
         rx={r}
         fill={paletteVars.text.primary}
-        stroke={paletteVars.surface.input}
+        stroke={PICTURE_CANVAS}
         strokeWidth={1.5}
       />
       <text
@@ -206,7 +207,7 @@ export function Badge({ x, y, text, testId }) {
         y={y}
         textAnchor="middle"
         dominantBaseline="central"
-        fill={paletteVars.surface.input}
+        fill={PICTURE_CANVAS}
         fontFamily={MONO}
         fontSize={10.5}
         fontWeight={700}
@@ -240,7 +241,7 @@ export function WeightTag({ x, y, text, state, faint, dragId }) {
         width={width}
         height={18}
         rx={9}
-        fill={paletteVars.surface.input}
+        fill={PICTURE_CANVAS}
         stroke={stated ? style.line : pictureStateStyle("Background").line}
         strokeWidth={stated ? 1.6 : 1}
         strokeDasharray={stated ? style.dash : undefined}
@@ -284,11 +285,11 @@ export function StatePill({
   const width = value.length * charWidth + 12;
   const style = pictureStateStyle(state);
   const plain = state === "Background";
-  let fill = plain ? paletteVars.surface.input : style.fill;
+  let fill = plain ? PICTURE_CANVAS : style.fill;
   let line = style.line;
   let ink = plain ? style.text : style.ink;
   if (traced) {
-    fill = paletteVars.surface.input;
+    fill = PICTURE_CANVAS;
     line = TRACE_COLOR;
     ink = paletteVars.text.primary;
   }

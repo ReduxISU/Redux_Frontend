@@ -42,6 +42,7 @@ import {
 } from "./geometryLayout";
 import { FAINT_FILTER, groupColors, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import { useBoxWidth } from "./useBoxWidth";
 
 /** The group color of each role being merged: left blue, right purple (not orange, #850). */
@@ -55,7 +56,7 @@ const HULL_TINT = 14;
 
 /** `color` mixed into the canvas, `percent` of it: a tint, never a see-through color. */
 function tint(color, percent) {
-  return `color-mix(in srgb, ${color} ${percent}%, ${paletteVars.surface.input})`;
+  return `color-mix(in srgb, ${color} ${percent}%, ${PICTURE_CANVAS})`;
 }
 
 /** The ids of a list that are points of the layout, in order. */
@@ -195,7 +196,7 @@ export default function GeometryRenderer({
             y={plot.y}
             width={plot.width}
             height={plot.height}
-            fill={paletteVars.surface.input}
+            fill={PICTURE_CANVAS}
             stroke={paletteVars.border.soft}
           />
           {layout.xTicks.map((tick) => (
@@ -371,11 +372,7 @@ export default function GeometryRenderer({
                   cy={point.py}
                   r={DOT_RADIUS}
                   data-body=""
-                  fill={
-                    state === "Background" && group === undefined
-                      ? paletteVars.surface.input
-                      : look.fill
-                  }
+                  fill={state === "Background" && group === undefined ? PICTURE_CANVAS : look.fill}
                   stroke={isTraced ? TRACE_COLOR : look.line}
                   strokeWidth={isTraced ? 3 : look.strokeWidth}
                   strokeDasharray={isTraced ? undefined : look.dash}
@@ -422,7 +419,7 @@ export default function GeometryRenderer({
                       cy={point.badge.y}
                       r={BADGE_RADIUS}
                       fill={paletteVars.text.primary}
-                      stroke={paletteVars.surface.input}
+                      stroke={PICTURE_CANVAS}
                       strokeWidth={1.5}
                     />
                     <text
@@ -430,7 +427,7 @@ export default function GeometryRenderer({
                       y={point.badge.y}
                       textAnchor="middle"
                       dominantBaseline="central"
-                      fill={paletteVars.surface.input}
+                      fill={PICTURE_CANVAS}
                       fontFamily={MONO}
                       fontSize={11}
                       fontWeight={700}
@@ -451,7 +448,7 @@ export default function GeometryRenderer({
               width={tip.width}
               height={22}
               rx={6}
-              fill={paletteVars.surface.input}
+              fill={PICTURE_CANVAS}
               stroke={TRACE_COLOR}
             />
             <text

@@ -46,6 +46,7 @@ import DiagramZoom from "./DiagramZoom";
 import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import {
   CHIP_HEIGHT,
   cellAt,
@@ -71,7 +72,7 @@ const FRAME_MARGIN = 10;
 const READ_DASH = "4 3";
 
 /** `color` mixed into `base`, `percent` of it: a tint, never a see-through color. */
-function tint(color, percent, base = paletteVars.surface.input) {
+function tint(color, percent, base = PICTURE_CANVAS) {
   return `color-mix(in srgb, ${color} ${percent}%, ${base})`;
 }
 
@@ -592,7 +593,7 @@ function gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetO
             const source = read.get(id);
             const isTraced = traced === id;
             const faint = near !== null && !near.has(id);
-            let fill = base ? paletteVars.surface.main : paletteVars.surface.input;
+            let fill = base ? paletteVars.surface.main : PICTURE_CANVAS;
             let line = paletteVars.viz.dim;
             let width = 1;
             let dash;
@@ -1119,7 +1120,7 @@ function rowsDrawing({
         width={layout.right - layout.left}
         height={layout.bottom - layout.top}
         rx={6}
-        fill={paletteVars.surface.input}
+        fill={PICTURE_CANVAS}
         stroke={paletteVars.border.main}
         strokeWidth={1}
         pointerEvents="none"
@@ -1144,7 +1145,7 @@ function rowsDrawing({
           const stated = rowState !== "Background";
           const faint = near !== null && !near.has(r);
           const isTraced = tracedRow === r;
-          const rowFill = stated ? rowStyle.fill : paletteVars.surface.input;
+          const rowFill = stated ? rowStyle.fill : PICTURE_CANVAS;
           const parts = [describe(r)];
           if (stated) parts.push(rowStyle.legend);
           const width = layout.right - layout.left;
@@ -1246,7 +1247,7 @@ function rowsDrawing({
                           dash: ownStyle.dash,
                         }
                       : {
-                          fill: paletteVars.surface.input,
+                          fill: PICTURE_CANVAS,
                           line: unset ? paletteVars.viz.dim : paletteVars.text.secondary,
                           ink: unset ? paletteVars.text.secondary : paletteVars.text.primary,
                           dash: unset ? "3 2" : undefined,
@@ -1297,7 +1298,7 @@ function rowsDrawing({
                         height={PILL_HEIGHT}
                         rx={PILL_HEIGHT / 2}
                         data-pill={value}
-                        fill={stated ? rowFill : paletteVars.surface.input}
+                        fill={stated ? rowFill : PICTURE_CANVAS}
                         stroke={tone.line}
                         strokeWidth={1.3}
                         strokeDasharray={tone.dash}
@@ -1493,7 +1494,7 @@ export function tableAnnotations(payload, frames) {
       text: keys.has("settled")
         ? "Pill (#n: settled n-th, its cost is final; dashed: not yet)"
         : "Pill (the row's verdict: green yes, grey or red no)",
-      swatch: { kind: "fill", fill: paletteVars.surface.input, line: met.line },
+      swatch: { kind: "fill", fill: PICTURE_CANVAS, line: met.line },
     });
   }
   if (keys.has("settled") && keys.has("cost")) {

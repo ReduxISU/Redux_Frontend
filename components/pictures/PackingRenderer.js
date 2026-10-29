@@ -48,6 +48,7 @@ import {
   textWidth,
 } from "./packingLayout";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import { useBoxWidth } from "./useBoxWidth";
 
 /** The dashed line a row's total is held to, and its dash. */
@@ -417,7 +418,7 @@ export default function PackingRenderer({
                   const room = cutInside ? piece.width - CUT_ROOM : piece.width;
                   const fits = room >= textWidth(text, 12.5) + 6;
                   const fill = over ? pictureStateStyle("Rejected").line : look.fill;
-                  const ink = over ? paletteVars.surface.input : look.ink;
+                  const ink = over ? PICTURE_CANVAS : look.ink;
                   return (
                     <Fragment key={piece.id}>
                       <g
@@ -504,7 +505,7 @@ export default function PackingRenderer({
                   x2={row.lineX}
                   y1={row.trackY - 5}
                   y2={row.trackY + 35}
-                  stroke={paletteVars.surface.input}
+                  stroke={PICTURE_CANVAS}
                   strokeWidth={4.5}
                   pointerEvents="none"
                 />
