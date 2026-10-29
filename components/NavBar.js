@@ -22,6 +22,9 @@
 // linked from here rather than left undiscoverable, since it's a core-data
 // feature (the whole catalog's reduction graph), not a demo page.
 //
+// #303: the links say "Problems" (Home, the catalog) and "Reductions" (the reduction graph),
+// as Board G's banner does. Their URLs, ids and the pages' own headings are unchanged.
+//
 // Below `md` (the project's one responsive breakpoint) the links collapse into
 // a menu button, by project-owner request: five links plus the wordmark
 // wrapped onto two or three lines at phone width. The desktop links keep their
@@ -164,8 +167,8 @@ export function IsuLogo({ idPrefix = "site-footer", sx }) {
 }
 
 const NAV_LINKS = [
-  { id: "navbar-home-link", href: "/", label: "Home" },
-  { id: "navbar-reduction-graph-link", href: "/reduction-graph", label: "Reduction Graph" },
+  { id: "navbar-home-link", href: "/", label: "Problems" },
+  { id: "navbar-reduction-graph-link", href: "/reduction-graph", label: "Reductions" },
   { id: "navbar-aboutus-link", href: "/aboutus", label: "About Us" },
   { id: "navbar-help-link", href: "/help", label: "Help" },
   { id: "navbar-contribute-link", href: "/contribute", label: "Contribute" },
