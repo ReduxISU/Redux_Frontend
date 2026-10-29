@@ -9,10 +9,10 @@
 //     problem's answer and map that answer onto the target (ProblemProvider/mapSolution). The
 //     mapped certificate gets its own Verify This Answer, checked against the target.
 //   - A randomized solver's seed (Solve mode, #295, ReduxISU/Redux#932): the run says which
-//     seed it ran with (SeedLine, below), with Run again with this seed to see the same steps
-//     again; it also puts the seed in the command bar's Seed box. A solver without a seed shows
-//     neither. Solve's answer is that same run's whenever ProblemProvider/visualizeRun gave one
-//     (Workbench.js), so the answer and the steps agree.
+//     seed it ran with (SeedLine, below); typed into the command bar's Seed box, it repeats the
+//     same steps. A solver without a seed shows no seed. Solve's answer is that same run's
+//     whenever ProblemProvider/visualizeRun gave one (Workbench.js), so the answer and the steps
+//     agree.
 //   - Verify at the bottom (./VerifyBox.js), which works before anything has run.
 //   - Gadgets (Reduce mode, stage 4, ./GadgetsSection.js): what the reduction built for each
 //     piece of the source, at the bottom of the reduction's result; hidden when it lists none.
@@ -109,40 +109,19 @@ const actionRowSx = {
 const actionButtonSx = { ...secondaryButtonSx, ml: "auto", flex: "none" };
 
 /**
- * The seed a randomized solver's run reported, and Run again with this seed (#295).
- * @param {{id: string, seed: {seed: number, onRerun: () => void, disabled?: boolean}|null}} props
- *   The button's id is `${id}-rerun`.
+ * The seed a randomized solver's run reported (#295). The number is plain text a user can select
+ * and paste into the Seed box, which repeats the run exactly.
+ * @param {{id: string, seed: {seed: number}|null}} props The number's own id is `${id}-value`.
  */
 export function SeedLine({ id, seed }) {
   if (!seed) return null;
   return (
-    <Box
-      sx={{
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        gap: "4px 12px",
-        fontSize: "0.875rem",
-        minWidth: 0,
-      }}
-    >
-      <Box component="span" id={id} sx={{ color: "text.primary" }}>
-        Seed:{" "}
-        <Box component="span" id={`${id}-value`} sx={{ fontFamily: MONO_FONT }}>
-          {seed.seed}
-        </Box>
-      </Box>
-      <Box
-        id={`${id}-rerun`}
-        component="button"
-        type="button"
-        onClick={seed.onRerun}
-        disabled={Boolean(seed.disabled)}
-        aria-describedby={id}
-        sx={{ ...secondaryButtonSx, minHeight: 40 }}
-      >
-        Run again with this seed
-      </Box>
+    <Box component="span" id={id} sx={{ fontSize: "0.875rem", color: "text.primary", minWidth: 0 }}>
+      Seed{" "}
+      <Box component="span" id={`${id}-value`} sx={{ fontFamily: MONO_FONT, userSelect: "all" }}>
+        {seed.seed}
+      </Box>{" "}
+      made this run. Type it in the Seed box to repeat the same steps.
     </Box>
   );
 }

@@ -66,13 +66,12 @@
 //     #912) gets a fixed dropdown naming the default.
 //   - A randomized solver's seed (#295, ReduxISU/Redux#932), Solve mode only for now: its run
 //     (visualizeRun, or a frames picture) reports the seed it ran with, shown in the Result
-//     panel as "Seed: 12345" with Run again with this seed, which asks for the same run again
-//     with `seed` set, so the steps come out the same. For a randomized solver (one declaring
-//     the "Stochastic" type) the command bar has a Seed box: blank lets Redux pick a new seed
-//     each Run, a number repeats that run. Run again with this seed puts its seed in the box.
-//     The box keeps its text for the page's life and is not in the URL; it is ignored while
-//     hidden. The seed and its button show only while the run is of this instance and the
-//     solver picked now; a solver with no seed, or a backend older than #932, shows neither.
+//     results as "Seed 12345 made this run". For a randomized solver (one declaring the
+//     "Stochastic" type) the command bar has a Seed box: blank lets Redux pick a new seed each
+//     Run, a number (the reported seed, pasted in) repeats that run exactly. The box keeps its
+//     text for the page's life and is not in the URL; it is ignored while hidden. The seed
+//     shows only while the run is of this instance and the solver picked now; a solver with no
+//     seed, or a backend older than #932, shows none.
 //     Solve's answer is visualizeRun's own `answer` when it has one, so the answer and the steps
 //     are one run (and Run makes one request, not two); ProblemProvider/solve answers only when
 //     visualizeRun can't. #303 stage 2: Reduce's Solve stage has the Seed box too, for a
@@ -717,7 +716,7 @@ export default function Workbench({ problem }) {
     (task === "reduce" && solvingTarget && isRandomizedSolver(selectedTargetSolver));
   const typedSeed = seedShown ? parseSeed(seedText) : null;
   const seedInvalid = Number.isNaN(typedSeed);
-  // Everything that stops a Run but the Seed box's text (Run again with this seed brings its own).
+  // Everything that stops a Run but the Seed box's text.
   // (Verify has no Run: its Check is the Verify box's own, and so is Reduce's Verify stage.)
   let modeBlocked;
   if (mode === "solve") modeBlocked = !canSolve;
@@ -727,8 +726,7 @@ export default function Workbench({ problem }) {
   const runBlocked =
     task === "verify" || !hasInstance || Boolean(instanceError) || isRunning || modeBlocked;
   const runDisabled = runBlocked || seedInvalid;
-  // What stops Reduce's Solve step, whichever stage is shown (Run again with this seed works from
-  // Verify too).
+  // What stops Reduce's Solve step, whichever stage is shown.
   const targetSolveBlocked =
     !hasInstance ||
     Boolean(instanceError) ||
@@ -737,17 +735,16 @@ export default function Workbench({ problem }) {
     !selectedTargetSolver?.className;
 
   /**
-   * Run. `seed` (#295) repeats a randomized solver's run in Solve mode; anything else (a click
-   * event) takes the Seed box's number, or lets Redux pick one when the box is blank or hidden.
+   * Run. A randomized solver (#295) gets the Seed box's number, or lets Redux pick one when the
+   * box is blank or hidden.
    */
-  function handleRun(seed = null) {
+  function handleRun() {
     if (mode === "reduce" && reduceStage === "solve") {
-      handleSolveTarget(seed);
+      handleSolveTarget();
       return;
     }
-    const givenSeed = mode === "solve" && Number.isSafeInteger(seed) ? seed : null;
-    if (givenSeed === null ? runDisabled : runBlocked) return;
-    const runSeed = givenSeed ?? typedSeed;
+    if (runDisabled) return;
+    const runSeed = typedSeed;
     setSerializeError(null);
     let runInstance = instance;
     const serialized = edits.serialize();
@@ -950,15 +947,14 @@ export default function Workbench({ problem }) {
    * maps its answer back to this instance. With a Reduction View, that is the view again with the
    * Algorithm (and a randomized one's seed), on the same pictures: its Solve and Map back phases.
    * Without one (or when the view can't run that Algorithm on its picture), ProblemProvider/solve
-   * solves the target instance and ProblemProvider/mapSolutionBack maps the answer back. `seed`
-   * as handleRun takes it.
+   * solves the target instance and ProblemProvider/mapSolutionBack maps the answer back. The
+   * seed, as handleRun's.
    */
-  function handleSolveTarget(seed = null) {
-    const givenSeed = Number.isSafeInteger(seed) ? seed : null;
-    if (targetSolveBlocked || (givenSeed === null && seedInvalid)) return;
+  function handleSolveTarget() {
+    if (targetSolveBlocked || seedInvalid) return;
     const run = reduceResult;
     const solver = selectedTargetSolver;
-    const runSeed = givenSeed ?? typedSeed;
+    const runSeed = typedSeed;
     const shown = reduceView;
     solveIdRef.current += 1;
     const solveIdNow = solveIdRef.current;
@@ -1716,22 +1712,15 @@ export default function Workbench({ problem }) {
     targetLockReason,
   };
 
-  // #295: the seed the last Solve's run reported, with Run again with this seed, while that run
-  // is of this instance and the solver picked now.
+  // #295: the seed the last Solve's run reported, while that run is of this instance and the
+  // solver picked now.
   const solveSeed =
     mode === "solve" &&
     !isRunning &&
     pictureRunCurrent &&
     Number.isSafeInteger(pictureResult.seed) &&
     pictureResult.solverClassName === (selectedSolver?.className ?? null)
-      ? {
-          seed: pictureResult.seed,
-          onRerun: () => {
-            setSeedText(String(pictureResult.seed));
-            handleRun(pictureResult.seed);
-          },
-          disabled: runBlocked,
-        }
+      ? { seed: pictureResult.seed }
       : null;
 
   // The picture the Result panel counts steps from: the chosen visualization's, of this run.
@@ -1772,14 +1761,6 @@ export default function Workbench({ problem }) {
         elapsedMs: reduceRun.elapsedMs,
       }
     : null;
-
-  // #303 stage 2: Run again with this seed, for the Solve step's randomized Algorithm.
-  const targetSeedRerun = () => {
-    const seed = targetSolveResult?.seed;
-    if (!Number.isSafeInteger(seed)) return;
-    setSeedText(String(seed));
-    handleSolveTarget(seed);
-  };
 
   // #303 stage 2: the results tagged by stage, in the stepper's order, under the task bar.
   const stageRows = [];
@@ -1842,12 +1823,7 @@ export default function Workbench({ problem }) {
             tag: "Solve",
             tone: "info",
             icon: "#",
-            text: `Seed ${solved.seed} made this run. The same seed gives the same steps.`,
-            action: {
-              id: `${ID}-result-stage-seed-rerun`,
-              label: "Run again with this seed",
-              disabled: targetSolveBlocked,
-            },
+            text: `Seed ${solved.seed} made this run. Type it in the Seed box to repeat the same steps.`,
           });
         }
       } else if (!targetSolveRun.isRunning) {
@@ -1932,9 +1908,6 @@ export default function Workbench({ problem }) {
       reduceResult={reduceSummary}
       onVerifyAnswer={handleVerifyAnswer}
       stages={stageRows}
-      onStageAction={(key) => {
-        if (key === "solve-seed") targetSeedRerun();
-      }}
       showVerify={false}
       map={
         mode === "reduce" && reduceSummary

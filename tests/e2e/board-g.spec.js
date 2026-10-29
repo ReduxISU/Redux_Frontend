@@ -462,14 +462,20 @@ test("a randomized target Algorithm gets the Seed box right of its dropdown, and
   await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
   expect(asked.at(-1).searchParams.get("solver")).toMatch(/WalkSAT/);
   expect(asked.at(-1).searchParams.get("seed")).toBe("31");
-  await expect(page.locator("#workbench-result-stages-solve-seed")).toContainText("Seed 31");
+  const seedRow = page.locator("#workbench-result-stages-solve-seed");
+  await expect(seedRow).toContainText("Seed 31 made this run.");
+  await expect(seedRow.locator("button")).toHaveCount(0);
 
-  // Run again with this seed asks for the same run, from the Verify stage too.
+  // The seed typed in again (from a fresh box) asks for the same run.
   const before = asked.length;
-  await page.locator("#workbench-result-stage-seed-rerun").click();
+  await stage(page, "solve").click();
+  await page.locator("#workbench-seed").fill("");
+  await page.locator("#workbench-seed").fill("31");
+  await page.locator(RUN).click();
   await expect.poll(() => asked.length).toBe(before + 1);
   await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
   expect(asked.at(-1).searchParams.get("seed")).toBe("31");
+  await expect(seedRow).toContainText("Seed 31 made this run.");
 
   // A deterministic Algorithm has no Seed box.
   await stage(page, "solve").click();

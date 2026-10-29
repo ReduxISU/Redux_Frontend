@@ -1,8 +1,8 @@
 // tests/e2e/run-seed.spec.js
 //
 // #295 (ReduxISU/Redux#932): a randomized solver's run reports the seed it ran with, and the
-// Result panel shows it with the answer ("Seed: 4242") with Run again with this seed, which asks
-// for the same run with `seed` set and puts the seed in the command bar's Seed box. The Seed box
+// results show it with the answer ("Seed 4242 made this run"), as text a user can paste into the
+// command bar's Seed box, which asks for the same run with `seed` set. The Seed box
 // shows only for a randomized solver (one declaring the "Stochastic" type), between the
 // Algorithm dropdown's info button and Run: blank sends no seed, so Redux picks a new one each time, and a
 // number is sent as `seed`. Nothing shows when the run reports no seed (a solver that isn't
@@ -29,7 +29,8 @@ const SOLVE_REQUEST = /\/api\/redux\/ProblemProvider\/solve\?/;
 const ALL_INFO_REQUEST = /\/api\/redux\/Navigation\/Batch\/allInfo/;
 
 const SEED_LINE = "#workbench-result-seed";
-const RERUN = `${SEED_LINE}-rerun`;
+const SEED_LINE_TEXT = (seed) =>
+  `Seed ${seed} made this run. Type it in the Seed box to repeat the same steps.`;
 const SEED_INPUT = "#workbench-seed";
 const RUN = "#workbench-run";
 
@@ -89,7 +90,7 @@ async function openSat3(page, run, seed, solverName) {
   return seeds;
 }
 
-test("a randomized solver's run shows its seed, and Run again with this seed asks for that seed", async ({
+test("a randomized solver's run shows its seed, and that seed typed in the Seed box asks for the same run", async ({
   page,
 }) => {
   const seeds = await openSat3(page, SAT3_PPZ_ONE_RUN, SEED, SAT3_PPZ_ONE_RUN.solverName);
@@ -99,18 +100,22 @@ test("a randomized solver's run shows its seed, and Run again with this seed ask
   // A plain Run sends no seed; Redux picks one and says which.
   await page.locator(RUN).click();
   await expect(page.locator("#workbench-result-answer")).toHaveText(SAT3_PPZ_ONE_RUN.answer);
-  await expect(page.locator(SEED_LINE)).toHaveText(`Seed: ${SEED}`);
+  await expect(page.locator(SEED_LINE)).toHaveText(SEED_LINE_TEXT(SEED));
   await expect(page.locator(`${SEED_LINE}-value`)).toHaveText(String(SEED));
-  await expect(page.locator(RERUN)).toHaveText("Run again with this seed");
-  await expect(page.locator(RERUN)).toBeEnabled();
+  // The seed is plain text to copy, with no button of its own.
+  await expect(page.locator(SEED_LINE).locator("button")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Run again with this seed/ })).toHaveCount(0);
   expect(seeds).toEqual([null]);
 
-  // Run again with this seed asks for the same run, and puts the seed in the Seed box.
-  await page.locator(RERUN).click();
+  // That seed, typed into the Seed box, asks for the same run: the same seed and answer.
+  const shown = ((await page.locator(`${SEED_LINE}-value`).textContent()) ?? "").trim();
+  await page.locator(SEED_INPUT).fill(shown);
+  await page.locator(RUN).click();
   await expect.poll(() => seeds.length).toBe(2);
   expect(seeds[1]).toBe(String(SEED));
   await expect(page.locator(SEED_INPUT)).toHaveValue(String(SEED));
-  await expect(page.locator(SEED_LINE)).toHaveText(`Seed: ${SEED}`);
+  await expect(page.locator(SEED_LINE)).toHaveText(SEED_LINE_TEXT(SEED));
+  await expect(page.locator("#workbench-result-answer")).toHaveText(SAT3_PPZ_ONE_RUN.answer);
 
   // With the box cleared, Run picks a new seed again: it sends none.
   await page.locator(SEED_INPUT).fill("");
@@ -130,18 +135,14 @@ test("a randomized solver's run shows its seed, and Run again with this seed ask
   await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | x3)");
   await openPanel(page, "result", { expect });
   await expect(page.locator(SEED_LINE)).toHaveCount(0);
-  await expect(page.locator(RERUN)).toHaveCount(0);
 });
 
-test("a run that reports no seed shows neither the seed nor Run again with this seed", async ({
-  page,
-}) => {
+test("a run that reports no seed shows no seed", async ({ page }) => {
   const seeds = await openSat3(page, SAT3_PPZ_ONE_RUN, null, SAT3_PPZ_ONE_RUN.solverName);
   await page.locator(RUN).click();
   await openPanel(page, "result", { expect });
   await expect(page.locator("#workbench-result-answer")).toHaveText(SAT3_PPZ_ONE_RUN.answer);
   await expect(page.locator(SEED_LINE)).toHaveCount(0);
-  await expect(page.locator(RERUN)).toHaveCount(0);
   expect(seeds).toEqual([null]);
 });
 
@@ -195,7 +196,7 @@ test("a typed seed is sent as seed on Run", async ({ page }) => {
   await expect.poll(() => seeds.length).toBe(1);
   expect(seeds[0]).toBe("777");
   await openPanel(page, "result", { expect });
-  await expect(page.locator(SEED_LINE)).toHaveText("Seed: 777");
+  await expect(page.locator(SEED_LINE)).toHaveText(SEED_LINE_TEXT(777));
 });
 
 test("a seed too big for Redux keeps Run disabled and says why", async ({ page }) => {
