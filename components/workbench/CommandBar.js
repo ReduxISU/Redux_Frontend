@@ -444,8 +444,6 @@ export default function CommandBar({
             </Box>
           ))}
         {stage === "solve" && seed && <SeedInput id={`${idPrefix}-seed`} {...seed} />}
-        {stage === "verify" && stepper.verify}
-
         {task === "verify" &&
           (verifier ? (
             <TaggedSelect
@@ -467,6 +465,10 @@ export default function CommandBar({
 
         {(task === "solve" || task === "verify") && runButton}
       </Box>
+
+      {/* #303: Reduce's Verify stage holds two whole checks, so they get their own row under the
+          tabs rather than stretching the tabs' row and pushing the tabs down. */}
+      {stage === "verify" && stepper.verify}
 
       {reducing && (
         <Box
