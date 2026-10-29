@@ -23,14 +23,15 @@ test("clicking a card reaches its detail page", async ({ page }) => {
   await expect(page.locator("#workbench")).toBeVisible();
 });
 
-test("the workbench opens on Details, with the instance in the command bar", async ({ page }) => {
+test("the workbench opens with the instance in its always-visible editor", async ({ page }) => {
   await gotoFirstProblemDetail(page, { expect });
 
-  await expect(page.locator("#workbench-rail-details")).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#workbench-panel-heading")).toHaveText("Details");
+  // #303: no rail or panels; the problem's details are the title's (i) card.
+  await expect(page.locator("#workbench-rail")).toHaveCount(0);
+  await expect(page.locator("#problem-info-button")).toBeVisible();
 
-  // Every problem declares a runnable default instance today, and the command bar shows it.
-  const instanceText = (await page.locator("#workbench-instance-text").textContent()) ?? "";
+  // Every problem declares a runnable default instance today, and the editor shows it.
+  const instanceText = await page.locator("#workbench-instance-full-instance").inputValue();
   expect(instanceText.trim()).not.toBe("");
   await expect(page.locator("#workbench-run")).toBeVisible();
   await expect(page.locator("#workbench-pane")).toBeVisible();

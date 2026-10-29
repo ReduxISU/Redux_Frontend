@@ -256,8 +256,8 @@ test("the (i) card shows on keyboard focus and on a tap, as a tooltip the button
   await expect(card).toHaveAttribute("role", "tooltip");
   await expect(card).toBeHidden();
 
-  // Keyboard focus (Tab onto it from the control before it) shows it.
-  await page.locator("#workbench-mode-reduce").focus();
+  // Keyboard focus (Tab onto it from the dropdown before it, #303) shows it.
+  await page.locator("#workbench-solver-button").focus();
   await page.keyboard.press("Tab");
   await expect(info).toBeFocused();
   await expect(card).toBeVisible();
