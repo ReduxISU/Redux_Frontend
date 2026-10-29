@@ -508,8 +508,7 @@ for (const scheme of ["light", "dark"]) {
           );
         }
         // The view's own words: the phase bar, the caption and the link line read in the theme
-        // (the phase bar and the link line in their sections at the bottom of the page).
-        await openBottomSection(page, "phases");
+        // (the link line in the Gadgets section at the bottom of the page).
         await openBottomSection(page, "gadgets");
         for (const selector of [
           `#workbench-phases-build`,

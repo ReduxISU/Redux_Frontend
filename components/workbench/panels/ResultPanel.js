@@ -190,10 +190,8 @@ export function ResultRows({ id, rows }) {
  *   sourceFrame, targetFrame, namers?, colors?, activeIndex, onHighlight}`, everything
  *   ./GadgetsSection.js takes except its idPrefix. `runId` remounts the section per run, so a
  *   new run starts it closed.
- * @param {import("react").ReactNode} [props.after] #303: more collapsible sections, after the
- *   Gadgets (./SecondarySection.js).
  */
-export default function ResultPanel({ idPrefix, rows, empty = "", gadgets = null, after = null }) {
+export default function ResultPanel({ idPrefix, rows, empty = "", gadgets = null }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
       <ResultRows id={`${idPrefix}-rows`} rows={rows} />
@@ -216,7 +214,6 @@ export default function ResultPanel({ idPrefix, rows, empty = "", gadgets = null
           controlsRef={gadgets.controlsRef}
         />
       )}
-      {after}
     </Box>
   );
 }

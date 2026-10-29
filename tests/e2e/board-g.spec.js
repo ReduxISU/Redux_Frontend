@@ -1085,44 +1085,44 @@ test("Solve keeps Board G's order: the picture, the Legend, the steps, then the 
   );
 });
 
-test("Reduce keeps Board G's order, and the Gadgets switch, its link line and the phase buttons wait in closed sections at the bottom", async ({
+test("Reduce keeps Board G's order, the phases above the steps, and the Gadgets switch and its link line wait in a closed section at the bottom", async ({
   page,
 }) => {
   await openSatReduce(page);
   await page.locator(RUN).click();
   await expect(page.locator("#workbench-reduction")).toBeVisible();
 
-  // Under the pictures: the Legend, the steps and the caption; nothing of the Gadgets or phases.
+  // Under the pictures: the Legend, the phases, the steps and the caption; nothing of the
+  // Gadgets.
   const pane = page.locator("#workbench-pane");
   for (const piece of ["marks-row", "link"]) {
     await expect(pane.locator(`#workbench-reduction-${piece}`)).toHaveCount(0);
   }
-  await expect(pane.locator("#workbench-phases")).toHaveCount(0);
   expect(await topOf(page, "#workbench-legend-toggle")).toBeGreaterThan(
     await bottomOf(page, "#workbench-reduction-panes"),
   );
-  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+  // The phases, always shown, sit right above the step controls; no Phases section is left.
+  await expect(pane.locator("#workbench-phases")).toBeVisible();
+  await expect(page.locator("#workbench-result-phases")).toHaveCount(0);
+  expect(await topOf(page, "#workbench-phases")).toBeGreaterThan(
     await bottomOf(page, "#workbench-legend-body"),
+  );
+  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-phases"),
   );
   await expect(page.locator("#workbench-step-text #workbench-reduction-caption")).toBeVisible();
 
-  // At the bottom, under the results: Gadgets (n) then Phases, both closed.
+  // At the bottom, under the results: Gadgets (n), closed.
   const gadgets = page.locator("#workbench-result-gadgets");
-  const phases = page.locator("#workbench-result-phases");
-  for (const toggle of ["gadgets", "phases"]) {
-    await expect(page.locator(`#workbench-result-${toggle}-toggle`)).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-  }
+  await expect(page.locator("#workbench-result-gadgets-toggle")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   await expect(page.locator("#workbench-result-gadgets-count")).toHaveText(
     `(${SAT_TO_3SAT_VIEW.gadgets.length})`,
   );
   expect(await topOf(page, "#workbench-result-gadgets")).toBeGreaterThan(
     await bottomOf(page, "#workbench-result-rows"),
-  );
-  expect(await topOf(page, "#workbench-result-phases")).toBeGreaterThan(
-    await bottomOf(page, "#workbench-result-gadgets"),
   );
 
   // Opened, Gadgets starts with the Plain / Color switch and the link line, which still work:
@@ -1140,11 +1140,60 @@ test("Reduce keeps Board G's order, and the Gadgets switch, its link line and th
   );
   await page.locator("#workbench-reduction-marks-plain").click();
 
-  // Opened, Phases jumps the steps, as the bar beside the pictures did; each button is a 44px
-  // target.
-  await page.locator("#workbench-result-phases-toggle").click();
-  const build = phases.locator("#workbench-phases-build");
-  await expect(build).toBeVisible();
+  // The phase buttons are 44px targets, the step's phase marked.
+  const build = pane.locator("#workbench-phases-build");
   expect((await boxOf(page, "#workbench-phases-build")).height).toBeGreaterThanOrEqual(44);
   await expect(build).toHaveAttribute("aria-current", "step");
+});
+
+test("the marked phase follows the step as it moves, and a phase button jumps to its phase", async ({
+  page,
+}) => {
+  await openSatReduce(page);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  // Solve through 3SAT, so every phase has steps.
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-phases-map")).toBeEnabled();
+  const bar = page.locator("#workbench-phases");
+  const marked = bar.locator('[aria-current="step"]');
+  const firstOf = (phase) => SAT_TO_3SAT_VIEW.frames.findIndex((frame) => frame.phase === phase);
+
+  // A phase button jumps to its phase's first step, and is the one marked.
+  await page.locator("#workbench-phases-build").click();
+  await expect(marked).toHaveCount(1);
+  await expect(marked).toHaveAttribute("data-phase", "build");
+  await expect(bar).toHaveAttribute("data-current-phase", "build");
+  await expect(page.locator("#workbench-steps-position")).toContainText("Step 1 of");
+  // Stepping forward across Build's end moves the mark to Solve, and back moves it back.
+  for (let step = 0; step < firstOf("solve"); step += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  await expect(marked).toHaveAttribute("data-phase", "solve");
+  await page.locator("#workbench-steps-previous").click();
+  await expect(marked).toHaveAttribute("data-phase", "build");
+  // Scrubbing to the end marks Map back.
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("End");
+  await expect(marked).toHaveAttribute("data-phase", "map");
+  // The marked phase looks different from the others (its fill), not by aria alone.
+  const fill = (id) =>
+    page.locator(id).evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(await fill("#workbench-phases-map")).not.toBe(await fill("#workbench-phases-build"));
+});
+
+test("on a phone the phases wrap above the steps, with no sideways scroll", async ({ page }) => {
+  await openSatReduce(page, { width: 390 });
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  await expect(page.locator("#workbench-phases")).toBeVisible();
+  for (const phase of ["build", "solve", "map"]) {
+    const box = await boxOf(page, `#workbench-phases-${phase}`);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-phases"),
+  );
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 });

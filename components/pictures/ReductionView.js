@@ -307,7 +307,10 @@ function ReductionPane({
 
 /**
  * The phase bar: "1 · Build", "2 · Solve", "3 · Map back", the current one marked. Each jumps to
- * its phase's first step. Sits with the step controls, as the mockup's stepper has it.
+ * its phase's first step. Sits with the step controls, as the mockup's stepper has it. #303: it
+ * sits right above them, always shown, so the reader sees which stage the algorithm is in as the
+ * steps play; the phase holding the step on screen is `aria-current="step"` and drawn as the
+ * soft brand button (`brand.soft` fill, `brand.softLine` outline), the others plain.
  * @param {Object} props
  * @param {string} props.idPrefix
  * @param {Object[]} props.frames The view's frames.
@@ -322,7 +325,8 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
       id={idPrefix}
       role="group"
       aria-label="Reduction phases"
-      sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}
+      data-current-phase={current ?? undefined}
+      sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center", minWidth: 0 }}
     >
       {REDUCTION_PHASES.map((phase, index) => {
         const start = starts[phase.key];
@@ -343,10 +347,10 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
               px: 1.5,
               borderRadius: "999px",
               border: "1px solid",
-              borderColor: here ? "brand.line" : "border.main",
-              boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.line}` : "none",
-              backgroundColor: here ? "surface.raised" : "surface.main",
-              color: here ? "text.primary" : "text.secondary",
+              borderColor: here ? "brand.softLine" : "border.main",
+              boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.softLine}` : "none",
+              backgroundColor: here ? "brand.soft" : "surface.main",
+              color: here ? "brand.onSoft" : "text.secondary",
               fontFamily: "inherit",
               fontSize: "0.8125rem",
               fontWeight: here ? 700 : 500,
