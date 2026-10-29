@@ -281,6 +281,9 @@ test("an edge rule highlights its node on the source and its edges on the target
 
   const index = gadgetIndex(CLIQUE, "edgeRule", "1");
   const rule = CLIQUE.reduce.gadgets[index];
+  // The pointer stays where the toggle was; once the list opens beneath it, it would hover
+  // (and highlight) another row. Park it off the list so only the focused row counts.
+  await page.mouse.move(0, 0);
   await row(page, index).focus();
   await expect(sourcePicture(page)).toHaveAttribute("data-gadget-highlight-count", "1");
   await expect(sourcePicture(page).locator('[data-node-id="1"]')).toHaveAttribute(
