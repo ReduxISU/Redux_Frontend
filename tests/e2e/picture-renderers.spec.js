@@ -7597,12 +7597,21 @@ async function zoomTableToReadable(page) {
 
 /**
  * The tables that tighten to a phone's box and keep their text at its own size: at 390 px every
- * one but the four-variable ILP; at 320 px (a 230 px box) the narrow ones. The rest open at Fit
- * and zoom in to readable text.
+ * one but the four-variable ILP; at 320 px (a 238 px box) the narrow ones and the
+ * shortest-path tables. The rest open at Fit and zoom in to readable text.
  */
 const TABLE_PHONE_FITS = {
   390: Object.keys(TABLE_CASES).filter((key) => key !== "ilpSeveral"),
-  320: ["editDistance", "editDistanceEmpty", "dfaAccept", "nfaBacktrack", "nfaReject"],
+  320: [
+    "editDistance",
+    "editDistanceEmpty",
+    "dfaAccept",
+    "nfaBacktrack",
+    "nfaReject",
+    "sssp",
+    "spsp",
+    "spspEarly",
+  ],
 };
 
 for (const width of [390, 320]) {
