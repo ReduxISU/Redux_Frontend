@@ -195,7 +195,12 @@ for (const key of Object.keys(CASES)) {
     const source = await pane(page, "source").boundingBox();
     const target = await pane(page, "target").boundingBox();
     expect(target.x).toBeGreaterThan(source.x + source.width);
-    expect(Math.abs(target.y - source.y)).toBeLessThan(2);
+    // #303: the two picture areas line up and share a height; a shorter picture is centered in
+    // its area, so the pictures' own tops may differ.
+    const sourceArea = await page.locator(`${VIEW}-source-picture-area`).boundingBox();
+    const targetArea = await page.locator(`${VIEW}-target-picture-area`).boundingBox();
+    expect(Math.abs(targetArea.y - sourceArea.y)).toBeLessThan(2);
+    expect(Math.abs(targetArea.height - sourceArea.height)).toBeLessThan(2);
 
     // #274: a finished reduction opens on its last step, the end of Map back, as a solve opens on
     // its result.

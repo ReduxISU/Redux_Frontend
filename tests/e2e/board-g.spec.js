@@ -833,3 +833,79 @@ test("at 390 px the results, in every task, never scroll sideways", async ({ pag
   await expect(page.locator("#workbench-result-rows-verdict")).toBeVisible();
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 });
+
+// --- #303 follow-ups: Reduce's panes ----------------------------------------------------------
+
+/** Opens 3SAT's Reduce on 0-1 Integer Linear Programming, with Redux's own Reduction View. */
+async function openSatToIlp(page, width) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width, height: 1000 });
+  await page.route(REDUCTION_VIEW_REQUEST, (route) => route.continue());
+  await gotoProblemDetail(page, PROBLEM, { expect });
+  await page.locator("#workbench-mode-reduce").click();
+  await page.locator("#workbench-target-button").click();
+  await page
+    .locator("#workbench-target-listbox")
+    .getByRole("option")
+    .filter({ hasText: /^0-1 Integer Linear Programming/ })
+    .first()
+    .click();
+}
+
+/** The two panes' picture areas, and where each picture's zoom box sits in its area. */
+function pictureAreas(page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('[id$="-picture-area"]')].map((area) => {
+      const box = area.getBoundingClientRect();
+      const zoom = area.querySelector("[data-zoom]")?.getBoundingClientRect() ?? null;
+      return {
+        id: area.id,
+        top: box.top,
+        height: box.height,
+        above: zoom ? zoom.top - box.top : null,
+        below: zoom ? box.bottom - zoom.bottom : null,
+      };
+    }),
+  );
+}
+
+test("at 1280 px Reduce's two picture areas are the same height, before and after Reduce and on full screen, a shorter picture centered", async ({
+  page,
+}) => {
+  await openSatToIlp(page, 1280);
+  let [source, target] = await pictureAreas(page);
+  expect(source.id).toBe("workbench-source-picture-area");
+  expect(target.id).toBe("workbench-target-picture-area");
+  expect(Math.abs(source.height - target.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(source.top - target.top)).toBeLessThanOrEqual(1);
+
+  await page.locator(RUN).click();
+  const targetZoom = page.locator("#workbench-reduction-target-picture-area [data-zoom]");
+  await expect(targetZoom).toBeVisible({ timeout: 20_000 });
+  for (const full of [false, true]) {
+    if (full) {
+      await page.locator("#workbench-full-screen").click();
+      await expect(page.locator("#workbench-full-screen")).toHaveAttribute("aria-pressed", "true");
+    }
+    [source, target] = await pictureAreas(page);
+    expect(source.id).toBe("workbench-reduction-source-picture-area");
+    expect(Math.abs(source.height - target.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(source.top - target.top)).toBeLessThanOrEqual(1);
+    // The table is shorter than the clause graph: it sits in the middle of its area (its
+    // caption and hint above the zoom box), not at the top.
+    expect(target.above).toBeGreaterThan(60);
+    expect(target.below).toBeGreaterThan(60);
+  }
+});
+
+test("at 800 px Reduce's panes stack, each picture at its own height", async ({ page }) => {
+  await openSatToIlp(page, 800);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible({
+    timeout: 20_000,
+  });
+  const [source, target] = await pictureAreas(page);
+  expect(target.top).toBeGreaterThan(source.top + source.height);
+  expect(Math.abs(source.height - target.height)).toBeGreaterThan(50);
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+});
