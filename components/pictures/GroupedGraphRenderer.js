@@ -7,9 +7,9 @@
 // one chip per variable says what it is assigned so far.
 //
 // The payload holds the clauses (`groups`, with their members), the literals (`nodes`, each
-// naming its variable and clause), the variables, the complement edges (`edges`) and the edges
-// inside each clause (`clauseEdges`, shown with the Edges switch: with them the picture is the
-// 3SAT to Independent Set graph). Each frame holds the literal states (`nodes`), the clause
+// naming its variable and clause), the variables and the complement edges (`edges`). #303: only
+// the complement edges are drawn; the payload's edges inside each clause (`clauseEdges`, the
+// 3SAT to Independent Set graph) are not, and there is no switch for them. Each frame holds the literal states (`nodes`), the clause
 // states (`groups`), the assignment so far, and the focus (the variable being tried).
 //
 // Hovering, focusing or tapping a literal or a variable chip traces that variable everywhere it
@@ -44,18 +44,12 @@ import {
   MONO,
   NodeLabel,
   nodeLook,
-  PictureToggle,
   TRACE_COLOR,
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 
 /** A literal's (and a variable chip's) label size, in viewBox units. */
 const LABEL_SIZE = 12.5;
-
-const EDGE_CHOICES = [
-  { value: "complements", label: "Complement pairs" },
-  { value: "all", label: "Add clause edges" },
-];
 
 /** A clause hull's look in a state: the state's tint and line, or the plain canvas outline. */
 function hullLook(state) {
@@ -82,16 +76,13 @@ const HULL_INSET = 3;
 
 /**
  * An edge's control point: a complement edge bowed halfway towards the ring's centre (as the
- * design draws them), a clause edge straight, plus `extra` by hand along the normal (-dy, dx):
- * the control point moves twice as far, so the curve's middle moves `extra`.
+ * design draws them), plus `extra` by hand along the normal (-dy, dx): the control point moves
+ * twice as far, so the curve's middle moves `extra`.
  */
-function edgeControl(kind, a, b, ring, extra) {
+function edgeControl(a, b, ring, extra) {
   const mx = (a.x + b.x) / 2;
   const my = (a.y + b.y) / 2;
-  const auto =
-    kind === "complement"
-      ? { x: mx + (ring.x - mx) * 0.5, y: my + (ring.y - my) * 0.5 }
-      : { x: mx, y: my };
+  const auto = { x: mx + (ring.x - mx) * 0.5, y: my + (ring.y - my) * 0.5 };
   const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
   const nx = -(b.y - a.y) / length;
   const ny = (b.x - a.x) / length;
@@ -127,7 +118,6 @@ export default function GroupedGraphRenderer({
     [payload],
   );
   const literalById = useMemo(() => new Map(literals.map((node) => [node.id, node])), [literals]);
-  const [edgeChoice, setEdgeChoice] = useState("complements");
   const [hover, setHover] = useState(null);
   const [pinned, setPinned] = useState(null);
   // (A variable from an earlier payload, after the formula changed, traces nothing.)
@@ -185,16 +175,15 @@ export default function GroupedGraphRenderer({
       edits.setNode(id, { x: dx, y: dy });
     },
     dragEdge: (key, point) => {
-      const [kind, ...rest] = key.split(":");
-      const id = rest.join(":");
-      const list = kind === "clause" ? payload?.clauseEdges : payload?.edges;
+      const id = key.split(":").slice(1).join(":");
+      const list = payload?.edges;
       const edge = (Array.isArray(list) ? list : []).find((candidate) => candidate?.id === id);
       const a = pos.get(edge?.a);
       const b = pos.get(edge?.b);
       if (!a || !b) return;
       // The curve's middle sits a quarter of the way from the chord's middle to the control
       // point, and moves with the hand-made bend: put it under the pointer.
-      const { auto } = edgeControl(kind, a, b, ring, 0);
+      const { auto } = edgeControl(a, b, ring, 0);
       const middle = {
         x: 0.25 * a.x + 0.5 * auto.x + 0.25 * b.x,
         y: 0.25 * a.y + 0.5 * auto.y + 0.25 * b.y,
@@ -203,12 +192,7 @@ export default function GroupedGraphRenderer({
     },
   });
 
-  const edgeSets = [
-    { kind: "complement", edges: Array.isArray(payload?.edges) ? payload.edges : [] },
-    ...(edgeChoice === "all"
-      ? [{ kind: "clause", edges: Array.isArray(payload?.clauseEdges) ? payload.clauseEdges : [] }]
-      : []),
-  ];
+  const edges = Array.isArray(payload?.edges) ? payload.edges : [];
 
   const tracePress = (variable) => setPinned((current) => (current === variable ? null : variable));
   const traceHandlers = (variable) => ({
@@ -235,7 +219,6 @@ export default function GroupedGraphRenderer({
     <Box
       id={`${idPrefix}-graph`}
       data-graph-shape={payload?.shape ?? ""}
-      data-edges={edgeChoice}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
     >
       <DiagramZoom
@@ -244,15 +227,6 @@ export default function GroupedGraphRenderer({
         drawing={layout}
         resetOn={[payload]}
         editor={editor}
-        toolbar={
-          <PictureToggle
-            id={`${idPrefix}-edges`}
-            label="Edges"
-            options={EDGE_CHOICES}
-            value={edgeChoice}
-            onChange={setEdgeChoice}
-          />
-        }
       >
         <g data-layer="clauses">
           {groups.map((group, index) => {
@@ -301,51 +275,46 @@ export default function GroupedGraphRenderer({
           })}
         </g>
         <g data-layer="edges">
-          {edgeSets.map(({ kind, edges }) =>
-            edges.map((edge) => {
-              const a = pos.get(edge?.a);
-              const b = pos.get(edge?.b);
-              if (!a || !b) return null;
-              const variable = literalById.get(edge.a)?.variable;
-              const faint = traced !== null && variable !== traced;
-              let line = edgeLook("Background").line;
-              let width = 1.3;
-              let dash = kind === "clause" ? "3 3" : undefined;
-              if (traced !== null) {
-                if (faint) {
-                  line = FAINT_EDGE.line;
-                  dash = FAINT_EDGE.dash;
-                } else {
-                  line = TRACE_COLOR;
-                  width = 2.4;
-                }
+          {edges.map((edge) => {
+            const a = pos.get(edge?.a);
+            const b = pos.get(edge?.b);
+            if (!a || !b) return null;
+            const variable = literalById.get(edge.a)?.variable;
+            const faint = traced !== null && variable !== traced;
+            let line = edgeLook("Background").line;
+            let width = 1.3;
+            let dash;
+            if (traced !== null) {
+              if (faint) {
+                line = FAINT_EDGE.line;
+                dash = FAINT_EDGE.dash;
+              } else {
+                line = TRACE_COLOR;
+                width = 2.4;
               }
-              const key = `${kind}:${edge.id}`;
-              const extra = edits.bends[key] ?? 0;
-              const { control } = edgeControl(kind, a, b, ring, extra);
-              const r = (value) => Math.round(value * 10) / 10;
-              const d =
-                kind === "complement" || extra !== 0
-                  ? `M${r(a.x)},${r(a.y)} Q${r(control.x)},${r(control.y)} ${r(b.x)},${r(b.y)}`
-                  : `M${r(a.x)},${r(a.y)} L${r(b.x)},${r(b.y)}`;
-              return (
-                <Fragment key={`${kind}-${edge.id}`}>
-                  <GadgetUnderlay id={edge.id} color={gadgetOf(edge.id)} d={d} width={width} />
-                  <path
-                    data-edge-id={edge.id}
-                    data-edge-kind={kind}
-                    data-traced={traced ? (faint ? "faint" : "trace") : undefined}
-                    d={d}
-                    fill="none"
-                    stroke={line}
-                    strokeWidth={width}
-                    strokeDasharray={dash}
-                  />
-                  <EdgeHandle id={key} d={d} />
-                </Fragment>
-              );
-            }),
-          )}
+            }
+            const key = `complement:${edge.id}`;
+            const extra = edits.bends[key] ?? 0;
+            const { control } = edgeControl(a, b, ring, extra);
+            const r = (value) => Math.round(value * 10) / 10;
+            const d = `M${r(a.x)},${r(a.y)} Q${r(control.x)},${r(control.y)} ${r(b.x)},${r(b.y)}`;
+            return (
+              <Fragment key={`complement-${edge.id}`}>
+                <GadgetUnderlay id={edge.id} color={gadgetOf(edge.id)} d={d} width={width} />
+                <path
+                  data-edge-id={edge.id}
+                  data-edge-kind="complement"
+                  data-traced={traced ? (faint ? "faint" : "trace") : undefined}
+                  d={d}
+                  fill="none"
+                  stroke={line}
+                  strokeWidth={width}
+                  strokeDasharray={dash}
+                />
+                <EdgeHandle id={key} d={d} />
+              </Fragment>
+            );
+          })}
         </g>
         <g data-layer="literals">
           {literals.map((literal, index) => {
