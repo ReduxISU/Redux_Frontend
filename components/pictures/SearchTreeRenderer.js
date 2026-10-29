@@ -18,8 +18,8 @@
 // Before Run there is no tree to draw: the picture says the tree grows once the solver runs.
 // Layout is searchTreeLayout.js's pure function of the run's frames, one drawing box for the
 // whole run, so a node is the same size at every step and the zoom holds still while stepping;
-// zoomed in, a step's node out of view brings the view to the path from the root down to it
-// (DiagramZoom.js's `follow`). The tree opens at fit, like every picture; one too wide to read
+// zoomed in, a step's node out of view, or a path from the root down to it that the view could
+// hold but cuts, brings the view to that path (DiagramZoom.js's `follow`). The tree opens at fit, like every picture; one too wide to read
 // there (on a phone, or a wide one on a desktop) zooms in past its text's design size
 // (READABLE_SCALE). Hovering, focusing or tapping a node traces its path from the root,
 // everything else faded by color.
