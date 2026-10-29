@@ -550,6 +550,7 @@ export default function AutomatonRenderer({
       : layout.garbage;
   const editor = makeEditor({
     edits,
+    piece: "state",
     nodeAt: (id) =>
       garbageAt && id === garbageAt.id ? { x: garbageAt.x, y: garbageAt.y } : (pos.get(id) ?? null),
     moveNode: (id, point) => edits.setNode(id, point),

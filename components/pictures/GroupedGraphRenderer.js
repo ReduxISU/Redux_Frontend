@@ -158,6 +158,7 @@ export default function GroupedGraphRenderer({
   const ring = { x: layout.cx, y: layout.cy };
   const editor = makeEditor({
     edits,
+    piece: "clause or literal",
     nodeAt: (id) => {
       if (id.startsWith("group:")) {
         const group = groupById.get(id.slice("group:".length));

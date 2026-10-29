@@ -17,14 +17,15 @@
 //
 // The changes are kept while the steps play and after Run, and go back to the automatic layout
 // when `resetOn` changes (the renderer passes the instance and visualization, and the Graph its
-// Force / Circle choice) or on Reset layout (DiagramZoom.js's button).
+// Force / Circle choice) or on Reset (DiagramZoom.js's one button, which puts the zoom and the
+// pan back too, #303).
 //
 // #252: they belong to the instance and visualization (the renderer's `layoutKey`, resetOn's
 // first entry), not to the renderer on screen. Switching the Visualization Type unmounts the
 // renderer, or hands it another key, so each key's changes are kept here for the page's life
 // and come back when the same picture (with the same resetOn) is drawn again.
 //
-// The gestures themselves (drag, long-press on touch, arrow keys) are DiagramZoom.js's: a piece
+// The gestures themselves (a mouse drag, press and hold on touch, arrow keys) are DiagramZoom.js's: a piece
 // is draggable when it carries `data-drag-node` or `data-drag-edge` (see dragProps below), and
 // the renderer hands DiagramZoom an `editor` (makeEditor) that says where a node is and applies
 // its picture type's limits.
@@ -128,14 +129,17 @@ export function clamp(value, low, high) {
  *   to `point` (already kept inside the picture area), within its picture type's limits.
  * @param {(id: string, point: {x: number, y: number}) => void} [options.dragEdge] Bends edge
  *   `id` (or turns a loop) so its middle is as near `point` as it can be.
+ * @param {string} [options.piece] What a movable piece is called in the gesture help under the
+ *   picture (#303: "drag a node to move it"); "node" unless the picture says otherwise.
  */
-export function makeEditor({ edits, nodeAt, moveNode, dragEdge }) {
+export function makeEditor({ edits, nodeAt, moveNode, dragEdge, piece = "node" }) {
   return {
     edited: edits.edited,
     reset: edits.reset,
     nodeAt,
     moveNode,
     dragEdge: dragEdge ?? (() => {}),
+    piece,
   };
 }
 
