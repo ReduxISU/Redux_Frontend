@@ -247,9 +247,10 @@ test("Check it in Verify sits at the far right of the answer's row and opens the
   await page.locator("#workbench-result-verify-answer").click();
   await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#workbench-verify-certificate")).toHaveValue(RUN_CAPTURE.answer);
-  // Verify's main button is Check, and its verdict is a row in the results.
-  await expect(page.locator(RUN)).toHaveText("Check");
+  // Verify's main button is Check, and its verdict is a row in the results; #303: once the
+  // answer is checked, Check says Checked.
   await expect(page.locator("#workbench-result-rows-verdict")).toBeVisible();
+  await expect(page.locator(RUN)).toHaveText("Checked");
 });
 
 test("Verify's task bar: the Verifier menu with its (i), Check where Solve is, the answer and its format under them", async ({
@@ -1477,4 +1478,30 @@ test("Reduce's stages say Reduced, Solved and Checked once done, and are their a
   await touchInstance(page);
   await expect(stage(page, "reduce")).toHaveAttribute("aria-current", "step");
   await expectAction(page.locator(RUN), "Reduce");
+});
+
+test("on a phone the step's description sits on its own line under Step N of M:, left-aligned with it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openSat3(page);
+  await solve(page);
+  await page.locator("#workbench-steps-first").click();
+  await page.locator("#workbench-steps-next").click();
+  const description = page.locator("#workbench-step-text");
+  await expect(description).not.toBeEmpty();
+  const label = await boxOf(page, "#workbench-steps-line strong");
+  const text = await boxOf(page, "#workbench-step-text");
+  expect(text.y).toBeGreaterThanOrEqual(label.y + label.height - 0.5);
+  expect(Math.abs(text.x - label.x)).toBeLessThan(1);
+  // The line still speaks the step, and keeps its ids.
+  await expect(page.locator("#workbench-steps-line")).toHaveAttribute("aria-live", "polite");
+  await expect(page.locator("#workbench-steps-position")).toHaveText(/^Step 2 of /);
+
+  // On a desktop the description stays on the label's line.
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const wideLabel = await boxOf(page, "#workbench-steps-line strong");
+  const wideText = await boxOf(page, "#workbench-step-text");
+  expect(wideText.y).toBeLessThan(wideLabel.y + wideLabel.height);
+  expect(wideText.x).toBeGreaterThan(wideLabel.x + wideLabel.width);
 });

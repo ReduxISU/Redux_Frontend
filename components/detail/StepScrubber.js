@@ -17,7 +17,8 @@
 // #303 (Board G): laid out as the mockup's step bar, one box in the well color (`surface.well`)
 // with a hairline border: five buttons (First step, Previous step, Play / Pause as the soft brand
 // button, Next step, Last step), the slider ("Step"), "Speed" and its dropdown, then one line
-// under them: "Step N of M:" in bold and the step's description. The description is rendered by
+// under them: "Step N of M:" in bold and the step's description (on a phone, the description on
+// its own line under it). The description is rendered by
 // the picture into `textRef`'s element (../pictures/secondarySlots.js StepTextSlot), so this file
 // never knows what a step says. The buttons are 40px squares, as the mockup draws them, each
 // with an invisible 44px hit area around it (`::before`) so a finger still lands on it.
@@ -41,6 +42,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Slider from "@mui/material/Slider";
 import { useEffect, useState } from "react";
+import { PHONE_MEDIA } from "../workbench/layout";
 
 // Milliseconds between frames while playing at 1x. SPEED_OPTIONS' `factor`
 // multiplies this, so 2x plays twice as fast (half the delay) and 0.5x half
@@ -340,7 +342,8 @@ export default function StepScrubber({
         </Select>
       </Box>
 
-      {/* "Step N of M:" and the step's description, one line under the controls. The colon goes
+      {/* "Step N of M:" and the step's description, one line under the controls (#303: on a
+          phone, the description on its own line under it, left-aligned with it). The colon goes
           when no description was rendered (a picture with no captions). */}
       <Box
         id={`${idPrefix}-line`}
@@ -367,7 +370,13 @@ export default function StepScrubber({
         <Box
           ref={textRef}
           id={descriptionId}
-          sx={{ flex: "1 1 0", minWidth: "min(100%, 240px)", "&:empty": { display: "none" } }}
+          sx={{
+            flex: "1 1 0",
+            minWidth: "min(100%, 240px)",
+            "&:empty": { display: "none" },
+            // #303: on a phone the description gets its own line, under "Step N of M:".
+            [PHONE_MEDIA]: { flexBasis: "100%" },
+          }}
         />
       </Box>
     </Box>
