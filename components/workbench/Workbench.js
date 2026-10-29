@@ -221,12 +221,15 @@ function viewRunFields(view) {
  * @param {(className: string) => void} onPick
  */
 function viewTypeControl(which, all, side, pending, onPick) {
-  const option = (visualization) => ({
-    value: visualization.className,
-    label: visualization.name,
-    tags: visualizationTags(visualization),
-    card: visualizationCard(visualization, which),
-  });
+  const option = (visualization) => {
+    const shown = readableVisualization(visualization, side);
+    return {
+      value: shown.className,
+      label: shown.name,
+      tags: visualizationTags(shown),
+      card: visualizationCard(shown, which),
+    };
+  };
   if (!side.visualization) {
     const drawn = all.find((visualization) => visualization.pictureType === side.type) ?? all[0];
     return drawn ? { options: [option(drawn)], value: drawn.className } : null;
@@ -234,8 +237,10 @@ function viewTypeControl(which, all, side, pending, onPick) {
   const value = pending ?? side.visualization;
   const workable = all.filter((visualization) => viewPictureWorkable(visualization, which));
   if (!workable.some((visualization) => visualization.className === value)) {
+    // A picture the catalog does not list (Redux draws it, but Navigation/Batch/allVisualizations
+    // leaves it out): named after its problem, tagged with the picture type Redux says it drew.
     const named = all.find((visualization) => visualization.className === value);
-    workable.unshift(named ?? { className: value, name: value });
+    workable.unshift(named ?? { className: value, pictureType: side.type });
   }
   // #239: the pictures the view can't draw are listed after the rest, greyed, saying why.
   const unworkable = all
@@ -249,6 +254,22 @@ function viewTypeControl(which, all, side, pending, onPick) {
           : "The Reduction View can't draw this picture yet.",
     }));
   return { options: [...workable.map(option), ...unworkable], value, onChange: onPick };
+}
+
+/**
+ * #303: a visualization as a Picture menu shows it, never by its class name: one with no
+ * declared name (allInfo's visualizationName) is called after the problem it draws, as Redux
+ * names its own ("3SAT Visualization").
+ * @param {Object} visualization
+ * @param {{problem: string, type: string}} side The Reduction View's side it is drawn on.
+ */
+function readableVisualization(visualization, side) {
+  const named = visualization.name && visualization.name !== visualization.className;
+  return {
+    ...visualization,
+    name: named ? visualization.name : `${side.problem || "This problem's"} Visualization`,
+    pictureType: visualization.pictureType ?? side.type,
+  };
 }
 
 /** The name of a visualization among `all` by class name, or null. */

@@ -909,3 +909,57 @@ test("at 800 px Reduce's panes stack, each picture at its own height", async ({ 
   expect(Math.abs(source.height - target.height)).toBeGreaterThan(50);
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 });
+
+test("Reduce's Picture menus are dropdowns naming each picture and its type, never a class name, even with one picture", async ({
+  page,
+}) => {
+  await openSatToIlp(page, 1280);
+  const menu = (side) => page.locator(`#workbench-${side}-type-button`);
+  const optionsOf = async (side) => {
+    await menu(side).click();
+    const listbox = page.locator(`#workbench-${side}-type-listbox`);
+    await expect(listbox).toBeVisible();
+    const texts = await listbox
+      .getByRole("option")
+      .evaluateAll((options) => options.map((option) => option.innerText.replace(/\s+/g, " ")));
+    await page.keyboard.press("Escape");
+    await expect(listbox).toBeHidden();
+    return texts;
+  };
+  const noClassNames = (texts) => {
+    for (const text of texts) expect(text).not.toMatch(/\b[A-Z][a-z]+[A-Z]\w*Visualization\b/);
+  };
+
+  // Before Reduce: the source's menu opens on its one picture, with its type's tag.
+  await expect(menu("source")).toBeEnabled();
+  let options = await optionsOf("source");
+  expect(options).toEqual(["3SAT Visualization Grouped Graph"]);
+
+  // After Reduce, both sides. Redux's catalog lists no picture for 0-1 Integer Linear
+  // Programming, so its picture is named after the problem, with the Table tag Redux sent.
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible({
+    timeout: 20_000,
+  });
+  for (const side of ["source", "target"]) await expect(menu(side)).toBeEnabled();
+  await expect(page.locator("#workbench-target-type-value")).toContainText(
+    "0-1 Integer Linear Programming Visualization",
+  );
+  options = await optionsOf("source");
+  noClassNames(options);
+  expect(options[0]).toBe("3SAT Visualization Grouped Graph");
+  options = await optionsOf("target");
+  noClassNames(options);
+  expect(options).toEqual(["0-1 Integer Linear Programming Visualization Table"]);
+
+  // Picking the picture already drawn asks Redux for nothing.
+  let asked = 0;
+  page.on("request", (request) => {
+    if (REDUCTION_VIEW_REQUEST.test(request.url())) asked += 1;
+  });
+  await menu("target").click();
+  await page.locator("#workbench-target-type-listbox").getByRole("option").first().click();
+  await expect(page.locator("#workbench-target-type-listbox")).toBeHidden();
+  expect(asked).toBe(0);
+  await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible();
+});

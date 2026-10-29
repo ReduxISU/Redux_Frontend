@@ -52,9 +52,17 @@ const PICTURE_MIN_HEIGHT = 440;
  * The Visualization Type label and dropdown at a picture's top right, its list opening
  * aligned to the right edge. With a single choice it still shows (so every picture says what
  * type it is, with its tags and info card) but cannot be opened. #303: labelled "Picture", as
- * Board G has it; `inline` puts the label beside the box, on the header row.
+ * Board G has it; `inline` puts the label beside the box, on the header row. `menu` (Reduce's
+ * panes) keeps it a dropdown that opens even with one choice; picking the picture already
+ * drawn changes nothing.
  */
-function VisualizationTypeControl({ id, options, value, onChange, inline = false }) {
+function VisualizationTypeControl({ id, options, value, onChange, inline = false, menu = false }) {
+  let pick;
+  if (menu)
+    pick = (next) => {
+      if (next !== value) onChange?.(next);
+    };
+  else if (options.length > 1) pick = onChange;
   return (
     <TaggedSelect
       id={id}
@@ -63,7 +71,7 @@ function VisualizationTypeControl({ id, options, value, onChange, inline = false
       align="right"
       options={options}
       value={value}
-      onChange={options.length > 1 ? onChange : undefined}
+      onChange={pick}
       labelPlacement={inline ? "row" : "stack"}
       boxSx={
         inline
@@ -344,8 +352,11 @@ export default function VisualizationPane({
   const showingLine = (
     <ShowingLine id={`${idPrefix}-showing`} text={showing} isError={showingIsError} />
   );
-  const typeControl = (which, type) =>
-    type && <VisualizationTypeControl id={`${idPrefix}-${which}-type`} inline {...type} />;
+  // Reduce's panes (`menu`) keep their Picture menus dropdowns even with one picture.
+  const typeControl = (which, type, menu = false) =>
+    type && (
+      <VisualizationTypeControl id={`${idPrefix}-${which}-type`} inline menu={menu} {...type} />
+    );
 
   return (
     <Box
@@ -437,8 +448,8 @@ export default function VisualizationPane({
               full={{ source: paneFull("source"), target: paneFull("target") }}
               only={only}
               typeControls={{
-                source: typeControl("source", reduction.types?.source),
-                target: typeControl("target", reduction.types?.target),
+                source: typeControl("source", reduction.types?.source, true),
+                target: typeControl("target", reduction.types?.target, true),
               }}
             />
           ) : (
@@ -452,7 +463,7 @@ export default function VisualizationPane({
                   parts={source.parts}
                   full={paneFull("source")}
                   hidden={only === "target"}
-                  typeControl={typeControl("source", source.type)}
+                  typeControl={typeControl("source", source.type, true)}
                 >
                   <PictureBox idPrefix={`${idPrefix}-source`} content={source.content} />
                 </PaneSection>
@@ -464,7 +475,7 @@ export default function VisualizationPane({
                   parts={target.parts}
                   full={paneFull("target")}
                   hidden={only === "source"}
-                  typeControl={typeControl("target", target.type)}
+                  typeControl={typeControl("target", target.type, true)}
                 >
                   <PictureBox idPrefix={`${idPrefix}-target`} content={target.content} />
                 </PaneSection>

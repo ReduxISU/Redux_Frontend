@@ -331,17 +331,23 @@ test("a picture picked before Run is the one the view is drawn with", async ({ p
   expect(asked[0].source).toBe("SatFactorGraphVisualization");
 });
 
-test("a backend that ignores the choice gets a fixed dropdown naming what it drew", async ({
+test("a backend that ignores the choice gets a one-picture dropdown naming what it drew", async ({
   page,
 }) => {
   const asked = await answerViews(page, { older: true });
   await runSatTo3sat(page);
   await expect(page.locator(VIEW)).toHaveAttribute("data-target-visualization", "");
-  // The capture names no picture, so each dropdown names the side's default and can't open.
+  // The capture names no picture, so each dropdown names the side's default, and (#303) still
+  // opens, on that one picture; picking it asks for nothing.
   await expect(typeButton(page, "target")).toContainText("3SAT Visualization");
-  await expect(typeButton(page, "target")).toBeDisabled();
   await expect(typeButton(page, "source")).toContainText("SAT Visualization");
-  await expect(typeButton(page, "source")).toBeDisabled();
+  for (const side of ["source", "target"]) {
+    await expect(typeButton(page, side)).toBeEnabled();
+    await typeButton(page, side).click();
+    const options = page.locator(`#workbench-${side}-type-listbox`).getByRole("option");
+    await expect(options).toHaveCount(1);
+    await options.first().click();
+  }
   // One request for Reduce and one for Solve; none for a picture.
   expect(asked).toHaveLength(2);
 });
