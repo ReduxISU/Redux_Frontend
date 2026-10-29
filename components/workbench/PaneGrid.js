@@ -7,7 +7,9 @@
 // across the two panes: the grid has four shared rows and each pane is a subgrid spanning them
 // (the mockup's `g-fig4`), so a label that wraps on one side pushes both sides' controls down
 // together. The picture row is shared too, so the two picture areas are always the same height
-// (`${id}-picture-area`), a shorter picture centered in its area. At 900 px and narrower the
+// (`${id}-picture-area`), and the picture's card (./layout.js pictureCardSx, a hairline border
+// the reader can see) fills its area, so the two cards are visibly one height, a shorter picture
+// centered in its card. At 900 px and narrower the
 // panes stack, source first, with the arrow turned to point down between them, each picture at
 // its own height.
 //
@@ -206,8 +208,9 @@ export function PaneSection({
           />
         )}
       </Box>
-      {/* The picture row is shared, so both pictures' areas are the taller one's height; a
-          shorter picture sits in the middle of its area. Stacked, each keeps its own height. */}
+      {/* The picture row is shared, so both pictures' areas are the taller one's height, and
+          the picture's card stretches to fill its area (its `flex`), a shorter picture in the
+          middle of its card. Stacked, each keeps its own height. */}
       <Box
         id={`${id}-picture-area`}
         sx={{
@@ -215,7 +218,6 @@ export function PaneSection({
           alignSelf: "stretch",
           display: "flex",
           flexDirection: "column",
-          justifyContent: "center",
           [PANES_STACK_MEDIA]: { display: "block" },
         }}
       >

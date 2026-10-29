@@ -72,7 +72,7 @@ import {
   unbuiltIds,
 } from "../../lib/reductionView";
 import { paletteVars } from "../theme";
-import { COMPACT_MEDIA } from "../workbench/layout";
+import { COMPACT_MEDIA, pictureCardSx } from "../workbench/layout";
 import { PaneGrid, PaneSection } from "../workbench/PaneGrid";
 import { GADGET_PALETTE } from "./gadgetRings";
 import { FAINT_FILTER, PictureToggle } from "./graphPieces";
@@ -245,16 +245,12 @@ function ReductionPane({
           data-loading="true"
           role="status"
           sx={{
+            ...pictureCardSx,
             minHeight: 320,
-            display: "flex",
+            flexDirection: "row",
             alignItems: "center",
-            justifyContent: "center",
             gap: 1.5,
             color: "text.secondary",
-            backgroundColor: "surface.input",
-            borderRadius: "10px",
-            p: 2,
-            boxSizing: "border-box",
           }}
         >
           <CircularProgress size={18} aria-hidden="true" />
@@ -279,11 +275,9 @@ function ReductionPane({
             if (event.key === "Escape") onPoint(which, null, "clear");
           }}
           sx={{
-            minWidth: 0,
-            backgroundColor: "surface.input",
-            borderRadius: "10px",
-            p: 2,
-            boxSizing: "border-box",
+            // #303: the picture's card, filling the pane's picture area so both panes' cards are
+            // one height, the picture centered in it (../workbench/layout.js pictureCardSx).
+            ...pictureCardSx,
             [COMPACT_MEDIA]: { p: 1 },
             "& [data-rv-built='no']": { visibility: "hidden" },
             "& [data-rv-link='faint']": {

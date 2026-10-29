@@ -898,21 +898,47 @@ async function openSatToIlp(page, width) {
     .click();
 }
 
-/** The two panes' picture areas, and where each picture's zoom box sits in its area. */
+/**
+ * The two panes' picture areas, where each picture's zoom box sits in its area, and the
+ * picture's card (the area's child): its height and its border.
+ */
 function pictureAreas(page) {
   return page.evaluate(() =>
     [...document.querySelectorAll('[id$="-picture-area"]')].map((area) => {
       const box = area.getBoundingClientRect();
       const zoom = area.querySelector("[data-zoom]")?.getBoundingClientRect() ?? null;
+      const card = area.firstElementChild;
+      const style = getComputedStyle(card);
       return {
         id: area.id,
         top: box.top,
         height: box.height,
         above: zoom ? zoom.top - box.top : null,
         below: zoom ? box.bottom - zoom.bottom : null,
+        card: {
+          id: card.id,
+          height: card.getBoundingClientRect().height,
+          border: style.borderTopWidth,
+          borderStyle: style.borderTopStyle,
+          borderColor: style.borderTopColor,
+          background: style.backgroundColor,
+          visible: card.getBoundingClientRect().height > 0 && style.visibility !== "hidden",
+        },
       };
     }),
   );
+}
+
+/** Both cards are one height, filling their areas, with a hairline border unlike their fill. */
+function expectEqualCards(source, target) {
+  for (const pane of [source, target]) {
+    expect(pane.card.visible).toBe(true);
+    expect(Math.abs(pane.card.height - pane.height)).toBeLessThanOrEqual(1);
+    expect(pane.card.border).toBe("1px");
+    expect(pane.card.borderStyle).toBe("solid");
+    expect(pane.card.borderColor).not.toBe(pane.card.background);
+  }
+  expect(Math.abs(source.card.height - target.card.height)).toBeLessThanOrEqual(1);
 }
 
 test("at 1280 px Reduce's two picture areas are the same height, before and after Reduce and on full screen, a shorter picture centered", async ({
@@ -924,6 +950,9 @@ test("at 1280 px Reduce's two picture areas are the same height, before and afte
   expect(target.id).toBe("workbench-target-picture-area");
   expect(Math.abs(source.height - target.height)).toBeLessThanOrEqual(1);
   expect(Math.abs(source.top - target.top)).toBeLessThanOrEqual(1);
+  expect(source.card.id).toBe("workbench-source-picture");
+  expect(target.card.id).toBe("workbench-target-picture");
+  expectEqualCards(source, target);
 
   await page.locator(RUN).click();
   const targetZoom = page.locator("#workbench-reduction-target-picture-area [data-zoom]");
@@ -937,11 +966,26 @@ test("at 1280 px Reduce's two picture areas are the same height, before and afte
     expect(source.id).toBe("workbench-reduction-source-picture-area");
     expect(Math.abs(source.height - target.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(source.top - target.top)).toBeLessThanOrEqual(1);
+    // The cards themselves, which the reader sees, are the same height and framed.
+    expect(source.card.id).toBe("workbench-reduction-source");
+    expect(target.card.id).toBe("workbench-reduction-target");
+    expectEqualCards(source, target);
     // The table is shorter than the clause graph: it sits in the middle of its area (its
     // caption and hint above the zoom box), not at the top.
     expect(target.above).toBeGreaterThan(60);
     expect(target.below).toBeGreaterThan(60);
   }
+
+  // In the dark theme the card's fill is darker than the workspace, so its edge is the fill's
+  // edge too: both cards' fills are still one height, framed.
+  await page.emulateMedia({ colorScheme: "dark" });
+  [source, target] = await pictureAreas(page);
+  expectEqualCards(source, target);
+  const workspace = await page
+    .locator("#workbench")
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(source.card.background).not.toBe(workspace);
+  expect(target.card.background).toBe(source.card.background);
 });
 
 test("at 800 px Reduce's panes stack, each picture at its own height", async ({ page }) => {
