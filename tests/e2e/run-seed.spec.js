@@ -18,7 +18,7 @@
 // whatever the backend says.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, openPanel, selectSolverByName } from "./helpers";
+import { gotoProblemDetail, openPanel, selectSolverByName, touchInstance } from "./helpers";
 import { SAT3_BACKTRACKING_ONE_RUN, SAT3_PPZ_ONE_RUN } from "./run-payloads";
 
 const PROBLEM = "3SAT";
@@ -107,9 +107,17 @@ test("a randomized solver's run shows its seed, and that seed typed in the Seed 
   await expect(page.getByRole("button", { name: /Run again with this seed/ })).toHaveCount(0);
   expect(seeds).toEqual([null]);
 
-  // That seed, typed into the Seed box, asks for the same run: the same seed and answer.
+  // That seed, typed into the Seed box, names the run on screen, so Solve can't change it:
+  // #303: it says Solved and asks for nothing.
   const shown = ((await page.locator(`${SEED_LINE}-value`).textContent()) ?? "").trim();
   await page.locator(SEED_INPUT).fill(shown);
+  await expect(page.locator(RUN)).toHaveText("Solved");
+  await expect(page.locator(RUN)).toHaveAttribute("aria-disabled", "true");
+  expect(seeds).toHaveLength(1);
+  // On another instance (the same text with a trailing space) it asks for that run: the same
+  // seed and answer.
+  await touchInstance(page);
+  await expect(page.locator(RUN)).toHaveText("Solve");
   await page.locator(RUN).click();
   await expect.poll(() => seeds.length).toBe(2);
   expect(seeds[1]).toBe(String(SEED));

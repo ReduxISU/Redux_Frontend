@@ -94,11 +94,16 @@ test("after Run, the result is listed under the task bar", async ({ page }) => {
     "No run yet: press Solve for an answer.",
   );
   await expect(page.locator("#workbench-run")).toHaveText("Solve");
+  // #303: a randomized solver (3SAT's first, PPZ) repeats a run only with a seed typed in.
+  const seed = page.locator("#workbench-seed");
+  if ((await seed.count()) > 0) await seed.fill("5");
 
   await page.locator("#workbench-run").click();
 
   await expect(showing).toHaveText(solverName);
-  await expect(page.locator("#workbench-run")).toHaveText("Solve again");
+  // #303: done, Solve can't change the answer, so it says so and is inactive.
+  await expect(page.locator("#workbench-run")).toHaveText("Solved");
+  await expect(page.locator("#workbench-run")).toHaveAttribute("aria-disabled", "true");
   await expect(page.locator("#workbench-result-answer")).toHaveText(ANSWER);
   const bar = await page.locator("#workbench-command-bar").boundingBox();
   const results = await page.locator("#workbench-results").boundingBox();
@@ -178,6 +183,9 @@ test("Reduce shows Reduce to and Reduction, and Reduce builds the target picture
 }) => {
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
+  // These older requests carry the Solve tab's Algorithm's answer across; a randomized one
+  // (PPZ, 3SAT's first) could carry another, so then Reduce stays an action (#303).
+  const randomized = (await page.locator("#workbench-seed").count()) > 0;
 
   await page.locator("#workbench-mode-reduce").click();
   await expect(page.locator("#workbench-mode-reduce")).toHaveAttribute("aria-pressed", "true");
@@ -211,10 +219,17 @@ test("Reduce shows Reduce to and Reduction, and Reduce builds the target picture
     "data-picture-kind",
     "frame",
   );
-  // The stepper moves on to Solve; back on Reduce, the button rebuilds.
+  // The stepper moves on to Solve; back on Reduce, the build is done (#303: a rebuild of the
+  // same instance can't change it), unless a randomized answer is carried across.
   await expect(page.locator("#workbench-run")).toHaveText(`Solve through ${target}`);
   await page.locator("#workbench-stage-reduce").click();
-  await expect(page.locator("#workbench-run")).toHaveText("Rebuild");
+  if (randomized) {
+    await expect(page.locator("#workbench-run")).toHaveText("Reduce");
+    await expect(page.locator("#workbench-run")).toBeEnabled();
+  } else {
+    await expect(page.locator("#workbench-run")).toHaveText("Reduced");
+    await expect(page.locator("#workbench-run")).toHaveAttribute("aria-disabled", "true");
+  }
 
   await openPanel(page, "result", { expect });
   await expect(page.locator("#workbench-result-rows-reduce-done")).toContainText(reduction);

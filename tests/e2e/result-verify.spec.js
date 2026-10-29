@@ -147,8 +147,13 @@ test("Verify works before any Run and leaves the default picture as it is", asyn
   // Editing the answer retires its verdict row; an instance edit retires the verdict.
   await certificateBox(page).fill(ANSWER);
   await expect(verdictRow(page)).toHaveCount(0);
-  await check(page, WRONG);
+  // #303: typed back, the answer last checked has its verdict again, so Check is done: Checked.
+  const calls = verifyCalls.length;
+  await certificateBox(page).fill(WRONG);
   await expect(verdictRow(page)).toBeVisible();
+  await expect(checkButton(page)).toHaveText("Checked");
+  await expect(checkButton(page)).toHaveAttribute("aria-disabled", "true");
+  expect(verifyCalls).toHaveLength(calls);
   await openPanel(page, "instance", { expect });
   await page.locator("#workbench-instance-full-instance").fill("(x1 | x2 | !x3)");
   await expect(verdict(page)).toHaveCount(0);

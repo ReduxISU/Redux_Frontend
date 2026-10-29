@@ -81,6 +81,10 @@ function pairsFor(t) {
   add("input border on input", t.border.main, s.input, UI);
   add("input border on surface", t.border.main, s.main, UI);
   add("strong border on surface", t.border.strong, s.main, UI);
+  // #303: an inactive (done or disabled) button: muted text on the raised grey, inside a dashed
+  // strong line on the card (components/workbench/DoneButton.js inactiveSx).
+  add("inactive button label (muted) on raised", t.text.muted, s.raised, TEXT);
+  add("inactive button dashed line (strong) on raised", t.border.strong, s.raised, UI);
   add("orange button label (black on orange)", t.brand.onFill, t.brand.fill, TEXT);
   add("orange button label, hover", t.brand.onFill, t.brand.fillHover, TEXT);
   add("gold fill label", t.brand.onGold, t.brand.gold, TEXT);
