@@ -38,7 +38,8 @@ const RUN_CAPTURE = SAT3_BACKTRACKING_ONE_RUN;
 const RUN = "#workbench-run";
 const RESULTS = "#workbench-results";
 
-async function openSat3(page) {
+/** `editInfo` changes allInfo before the page reads it. */
+async function openSat3(page, { editInfo } = {}) {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route(ALL_INFO_REQUEST, async (route) => {
     const response = await route.fetch();
@@ -51,6 +52,7 @@ async function openSat3(page) {
       info[SAT3_BACKTRACKING_ONE_RUN.solver].solverType = "Backtracking";
       info[SAT3_BACKTRACKING_ONE_RUN.solver].solverTypes = ["Backtracking"];
     }
+    editInfo?.(info);
     await route.fulfill({ response, json: info });
   });
   await page.route(RUN_REQUEST, (route) => route.fulfill({ json: { ...RUN_CAPTURE, seed: SEED } }));
@@ -283,6 +285,53 @@ test("Verify's task bar: the Verifier menu with its (i), Check where Solve is, t
     "aria-describedby",
     "workbench-verify-certificate-hint",
   );
+});
+
+test("the Verifier menu lists every verifier the problem has, and Check uses the one picked", async ({
+  page,
+}) => {
+  // No problem in Redux declares two verifiers yet, so this one gets a second.
+  const second = { className: "SAT3ClauseByClauseVerifier", name: "Clause by Clause Verifier" };
+  await page.route(/\/api\/redux\/Navigation\/Batch\/allVerifiers/, async (route) => {
+    const response = await route.fetch();
+    const verifiers = await response.json();
+    verifiers.SAT3 = [...verifiers.SAT3, second.className];
+    await route.fulfill({ response, json: verifiers });
+  });
+  await openSat3(page, {
+    editInfo: (info) => {
+      info[second.className] = {
+        verifierName: second.name,
+        verifierDefinition: "Checks the clauses one at a time.",
+        contributors: [],
+      };
+    },
+  });
+  const used = [];
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    used.push(new URL(route.request().url()).searchParams.get("verifier"));
+    return route.fulfill({ json: "True" });
+  });
+  await page.locator("#workbench-mode-verify").click();
+  await page.locator("#workbench-verify-certificate").fill(RUN_CAPTURE.answer);
+
+  // The first is chosen; Check asks it.
+  await expect(page.locator("#workbench-verifier-value")).toContainText("3SAT Solution Verifier");
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveAttribute("data-tone", "ok");
+
+  // Both are listed by name; picking the second makes Check ask that one.
+  await page.locator("#workbench-verifier-button").click();
+  const options = page.locator("#workbench-verifier-listbox").getByRole("option");
+  await expect(options).toHaveCount(2);
+  await expect(options.nth(0)).toContainText("3SAT Solution Verifier");
+  await expect(options.nth(1)).toContainText(second.name);
+  await options.nth(1).click();
+  await expect(page.locator("#workbench-verifier-value")).toContainText(second.name);
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveCount(0);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verdict")).toContainText(second.name);
+  expect(used).toEqual(["SAT3Verifier", second.className]);
 });
 
 test("Verify: a passing and a failing answer each get a row in its tone", async ({ page }) => {
