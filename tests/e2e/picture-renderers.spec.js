@@ -4300,8 +4300,12 @@ test("Search Tree: on a desktop a wide tree opens at fit, and + zooms it in to r
   const smallest = await treeSmallestText(page);
   expect(smallest.label.px).toBeGreaterThanOrEqual(TREE_LABEL_PX);
   expect(smallest.note.px).toBeGreaterThanOrEqual(TREE_NOTE_PX);
-  await page.locator(`${TREE}-zoom-reset`).click();
+  // Board G's wide picture (#303) can already show the tree readable at fit, with nothing to
+  // reset; otherwise Reset takes the zoom back to fit.
+  const reset = page.locator(`${TREE}-zoom-reset`);
+  if ((await treeZoom(page)) > 1) await reset.click();
   await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  await expect(reset).toBeDisabled();
 });
 
 test("Search Tree: a short note like 2 clauses left stays on one line", async ({ page }) => {
