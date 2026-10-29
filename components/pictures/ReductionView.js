@@ -320,6 +320,9 @@ function ReductionPane({
 export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }) {
   const starts = phaseStarts(frames);
   const current = frames[frameIndex]?.phase ?? null;
+  // #303: the step's place in its phase ("3 of 8"), said on the marked phase (the step bar's
+  // line no longer repeats "Build 3 of 8").
+  const place = current ? placeInPhase(frames, frameIndex) : null;
   return (
     <Box
       id={idPrefix}
@@ -359,6 +362,11 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
             }}
           >
             {`${index + 1} · ${phase.label}`}
+            {here && place && (
+              <Box component="span" id={`${idPrefix}-place`} sx={{ fontWeight: 500 }}>
+                {` · ${place.index + 1} of ${place.count}`}
+              </Box>
+            )}
           </Box>
         );
       })}
@@ -457,12 +465,14 @@ function capitalize(text) {
   return text ? `${text[0].toUpperCase()}${text.slice(1)}` : text;
 }
 
-/** The step's caption: its phase and place in it, what happened, and the verdict at the end. */
+/**
+ * The step's caption: what happened, and the verdict at the end. #303: the phase and the step's
+ * place in it ("Build 3 of 8") moved to the phase bar's marked phase (ReductionPhaseBar), so the
+ * caption reads after the step bar's "Step N of M:".
+ */
 function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors }) {
   const frame = frames[frameIndex];
   if (!frame) return null;
-  const phase = REDUCTION_PHASES.find((entry) => entry.key === frame.phase);
-  const { index, count } = placeInPhase(frames, frameIndex);
   const word = eventWord(frame.phase, frame.event);
   const verdict =
     typeof frame.ok === "boolean" ? (frame.ok ? "Verdict: yes" : "Verdict: no") : null;
@@ -481,19 +491,6 @@ function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors })
         color: "text.primary",
       }}
     >
-      <Box
-        component="span"
-        id={`${id}-phase`}
-        sx={{
-          fontSize: "0.75rem",
-          fontWeight: 700,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "text.secondary",
-        }}
-      >
-        {`${phase?.label ?? frame.phase} ${index + 1} of ${count}`}
-      </Box>
       {word && (
         <Box component="span" id={`${id}-event`} sx={{ fontWeight: 700 }}>
           {word}

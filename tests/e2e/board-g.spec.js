@@ -1062,7 +1062,7 @@ const bottomOf = async (page, selector) => {
   return box.y + box.height;
 };
 
-test("Solve keeps Board G's order: the picture, the Legend, the steps, then the step's caption", async ({
+test("Solve keeps Board G's order: the picture, the Legend, then the steps, the step's caption on their Step N of M line", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
@@ -1077,12 +1077,96 @@ test("Solve keeps Board G's order: the picture, the Legend, the steps, then the 
   expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
     await bottomOf(page, "#workbench-legend-body"),
   );
-  expect(await topOf(page, "#workbench-step-text")).toBeGreaterThan(
-    await bottomOf(page, "#workbench-steps-position"),
+  // #303: the caption is on the step bar's last line, after "Step N of M:".
+  await expect(page.locator("#workbench-steps-bar #workbench-step-text")).toBeVisible();
+  expect(await topOf(page, "#workbench-steps-line")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-steps-slider"),
   );
   expect(await topOf(page, "#workbench-command-bar")).toBeGreaterThan(
-    await bottomOf(page, "#workbench-step-text"),
+    await bottomOf(page, "#workbench-steps-bar"),
   );
+});
+
+test("the step bar is the mockup's: five buttons, the slider, Speed, and one Step N of M: line", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  await solve(page);
+  const bar = page.locator("#workbench-steps-bar");
+  const buttons = bar.locator("#workbench-steps-buttons button");
+  expect(await buttons.evaluateAll((all) => all.map((b) => b.getAttribute("aria-label")))).toEqual([
+    "First step",
+    "Previous step",
+    "Play",
+    "Next step",
+    "Last step",
+  ]);
+  await expect(bar.getByRole("slider", { name: "Step" })).toBeVisible();
+  await expect(bar.locator("#workbench-steps-speed-label")).toHaveText("Speed");
+  const position = page.locator("#workbench-steps-position");
+  const total = Number(/of (\d+)/.exec(await position.textContent())[1]);
+  expect(total).toBeGreaterThan(2);
+  const at = async (n) => expect(position).toHaveText(`Step ${n} of ${total}`);
+  const first = page.locator("#workbench-steps-first");
+  const previous = page.locator("#workbench-steps-previous");
+  const next = page.locator("#workbench-steps-next");
+  const last = page.locator("#workbench-steps-last");
+
+  // A solve opens on its last step: Next and Last are off there.
+  await at(total);
+  await expect(next).toBeDisabled();
+  await expect(last).toBeDisabled();
+  // First jumps to step 1, where First and Previous are off.
+  await first.click();
+  await at(1);
+  await expect(first).toBeDisabled();
+  await expect(previous).toBeDisabled();
+  await expect(next).toBeEnabled();
+  // Next and Previous move one step; Last jumps to the end.
+  await next.click();
+  await at(2);
+  await next.click();
+  await at(3);
+  await previous.click();
+  await at(2);
+  await last.click();
+  await at(total);
+
+  // One line: "Step N of M:" in bold, then the step's description.
+  const line = page.locator("#workbench-steps-line");
+  await expect(line).toHaveAttribute("aria-live", "polite");
+  await expect(line).toContainText(new RegExp(`^Step ${total} of ${total}:\\s*\\S`));
+  await expect(line.locator("strong")).toHaveText(`Step ${total} of ${total}:`);
+  await expect(line.locator("#workbench-step-text")).toContainText("Verdict:");
+  // One box in the well, with a hairline border, every button a 44px target.
+  const style = await bar.evaluate((element) => {
+    const css = getComputedStyle(element);
+    return { border: css.borderTopWidth, radius: css.borderTopLeftRadius };
+  });
+  expect(style).toEqual({ border: "1px", radius: "12px" });
+  for (const id of ["first", "previous", "play-pause", "next", "last"]) {
+    const box = await boxOf(page, `#workbench-steps-${id}`);
+    expect(box.height).toBeGreaterThanOrEqual(40);
+    const hit = await page.locator(`#workbench-steps-${id}`).evaluate((element) => {
+      const before = getComputedStyle(element, "::before");
+      return element.getBoundingClientRect().height - 2 * Number.parseFloat(before.top);
+    });
+    expect(hit).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test("on a phone the step bar wraps with no sideways scroll", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openSat3(page);
+  await solve(page);
+  await page.locator("#workbench-steps-first").click();
+  await page.locator("#workbench-steps-next").click();
+  for (const id of ["bar", "last", "slider", "speed", "line"]) {
+    const box = await boxOf(page, `#workbench-steps-${id}`);
+    expect(box.x + box.width, id).toBeLessThanOrEqual(390);
+  }
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 });
 
 test("Reduce keeps Board G's order, the phases above the steps, and the Gadgets switch and its link line wait in a closed section at the bottom", async ({

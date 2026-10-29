@@ -23,8 +23,8 @@
 // picture(s) and the steps, and hides the rest: the note and the Legend.
 //
 // #303 (Board G polish): the order under the picture(s) is the mockup's: the note, the Legend,
-// then the steps, with the step's caption under the step controls (the pictures render it into
-// that place through ../pictures/secondarySlots.js StepTextSlot). Every picture sits in a card
+// then the steps, with the step's caption on the step bar's "Step N of M:" line (the pictures
+// render it into that place through ../pictures/secondarySlots.js StepTextSlot). Every picture sits in a card
 // with a hairline border (./layout.js pictureCardSx), the mockup's well, so the picture's edges
 // show on the white workspace. The Reduction View's phase buttons sit right above the step
 // controls, always shown, the phase holding the step on screen marked, so the reader sees which
@@ -529,19 +529,28 @@ export default function VisualizationPane({
             onStepChange={steps.onStepChange}
           />
         )}
-        {steps && steps.frameCount > 1 && (
+        {/* #303: the step bar, the step's description on its "Step N of M:" line. */}
+        {steps && steps.frameCount > 1 ? (
           <StepScrubber
             idPrefix={`${idPrefix}-steps`}
             frameCount={steps.frameCount}
             currentStep={steps.currentStep}
             onStepChange={steps.onStepChange}
+            textRef={setStepTextSlot}
+            textId={`${idPrefix}-step-text`}
+          />
+        ) : (
+          <Box
+            ref={setStepTextSlot}
+            id={`${idPrefix}-step-text`}
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
+              "&:empty": { display: "none" },
+            }}
           />
         )}
-        <Box
-          ref={setStepTextSlot}
-          id={`${idPrefix}-step-text`}
-          sx={{ display: "flex", flexDirection: "column", gap: 1, "&:empty": { display: "none" } }}
-        />
       </Box>
     </StepTextSlot.Provider>
   );

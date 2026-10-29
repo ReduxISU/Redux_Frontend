@@ -211,13 +211,16 @@ for (const key of Object.keys(CASES)) {
     await expect(position(page)).toHaveText(`Step ${view.frames.length} of ${view.frames.length}`);
     await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
 
-    // Build's first step, with the phase named in three places: the bar, the caption, the view.
+    // Build's first step, with the phase named in two places, the bar (with the step's place in
+    // the phase) and the view.
     await toStep(page, 0);
     await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "build");
     await expect(phaseButton(page, "build")).toHaveAttribute("aria-current", "step");
     await expect(phaseButton(page, "solve")).not.toHaveAttribute("aria-current", "step");
     const builds = view.frames.filter((frame) => frame.phase === "build").length;
-    await expect(page.locator(`${VIEW}-caption-phase`)).toHaveText(`Build 1 of ${builds}`);
+    await expect(page.locator("#workbench-phases-build #workbench-phases-place")).toHaveText(
+      ` · 1 of ${builds}`,
+    );
     await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames[0].caption);
     await expect(position(page)).toHaveText(`Step 1 of ${view.frames.length}`);
     await expect(page.locator("#workbench-showing")).toContainText(`solved by ${view.solver}`);
@@ -240,7 +243,9 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(firstOf("solve")));
   await expect(phaseButton(page, "solve")).toHaveAttribute("aria-current", "step");
   await expect(phaseButton(page, "build")).not.toHaveAttribute("aria-current", "step");
-  await expect(page.locator(`${VIEW}-caption-phase`)).toHaveText(/^Solve 1 of \d+$/);
+  await expect(page.locator("#workbench-phases-solve #workbench-phases-place")).toHaveText(
+    /^ · 1 of \d+$/,
+  );
   await expect(position(page)).toHaveText(`Step ${firstOf("solve") + 1} of ${view.frames.length}`);
 
   // One step back is Build's last step.

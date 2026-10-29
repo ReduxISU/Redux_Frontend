@@ -67,6 +67,7 @@ function pairsFor(t) {
     ["surface", s.main],
     ["raised", s.raised],
     ["input", s.input],
+    ["well", s.well],
   ]) {
     add(`text on ${bgName}`, t.text.primary, bg, TEXT);
     add(`secondary text (muted) on ${bgName}`, t.text.muted, bg, TEXT);
@@ -127,6 +128,11 @@ function pairsFor(t) {
   // on the input, the gold-bordered Map button and Check-against target side on the raised
   // grey, the mapped certificate's green border on the input, and the verdict on the Showing
   // line (on the surface; covered by the success / error text pairs above).
+  // #303: the step bar's well. Its buttons' strong border and the Play button's soft outline
+  // stand on it, and the buttons sit on the surface.
+  add("step button border (strong) on well", t.border.strong, s.well, UI);
+  add("Play button outline (soft line) on well", t.brand.softLine, s.well, UI);
+  add("Play button icon (on soft) on soft", t.brand.onSoft, t.brand.soft, UI);
   add("certificate placeholder (muted2) on input", t.text.muted2, s.input, TEXT);
   add("gold line on raised (Map button, target side)", t.brand.goldLine, s.raised, UI);
   add("success border on input (mapped certificate)", t.status.ok, s.input, UI);
