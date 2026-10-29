@@ -299,17 +299,17 @@ test("moved states stay with their picture when switching away and back", async 
   await page.keyboard.press("Shift+ArrowDown");
   await expect.poll(async () => (await centre()).y - before.y).toBeGreaterThan(20);
   const moved = await centre();
-  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeEnabled();
+  await expect(page.locator(`${AUTOMATON}-zoom-reset`)).toBeEnabled();
 
   await chooseVisualization(page, TABLE_NAME);
   await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Table");
   await chooseVisualization(page, AUTOMATON_NAME);
   await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Automaton");
   expect(await centre()).toEqual(moved);
-  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeEnabled();
+  await expect(page.locator(`${AUTOMATON}-zoom-reset`)).toBeEnabled();
 
-  // Reset layout still puts it back, and it stays back after another round trip.
-  await page.locator(`${AUTOMATON}-layout-reset`).click();
+  // Reset still puts it back, and it stays back after another round trip.
+  await page.locator(`${AUTOMATON}-zoom-reset`).click();
   expect(await centre()).toEqual(before);
   await chooseVisualization(page, TABLE_NAME);
   await chooseVisualization(page, AUTOMATON_NAME);
