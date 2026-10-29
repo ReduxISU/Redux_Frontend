@@ -931,13 +931,13 @@ test("Graph: a graph of 16 nodes still fits a 390 px phone whole, with nothing t
   await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");
 });
 
-test("Graph: the zoom buttons zoom in and out, and Fit goes back to the whole graph", async ({
+test("Graph: the zoom buttons zoom in and out, and Reset goes back to the whole graph", async ({
   page,
 }) => {
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
   const fit = await settledViewBox(page);
-  // At fit there is nothing to zoom out of or reset.
-  await expect(page.locator(`${GRAPH}-zoom-out`)).toBeDisabled();
+  // At fit there is nothing to reset, but the picture can still zoom out past fit (#303).
+  await expect(page.locator(`${GRAPH}-zoom-out`)).toBeEnabled();
   await expect(page.locator(`${GRAPH}-zoom-reset`)).toBeDisabled();
   await expect(page.locator(`${GRAPH}-zoom-in`)).toHaveAttribute("aria-label", "Zoom in");
 
@@ -1003,37 +1003,52 @@ test("Graph: zoom is kept while stepping and goes back to fit when the layout ch
   await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");
 });
 
-test("Graph: a drag pans only when zoomed in; at fit it leaves the diagram where it is", async ({
+test("Graph: a drag pans at fit too, and zoomed in it pans no further than keeps the drawing in view", async ({
   page,
 }) => {
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
   const fit = await settledViewBox(page);
+  // #303: at fit a drag on the background pans as well.
   await dragAcross(page, `${GRAPH}-svg`, -80, -40);
+  expect(await viewBoxOf(page)).not.toBe(fit);
+  await page.locator(`${GRAPH}-zoom-reset`).click();
   expect(await viewBoxOf(page)).toBe(fit);
-  // At fit a touch drag belongs to the page (it scrolls); zoomed, it is the diagram's.
+  // In normal view a vertical touch swipe belongs to the page (it scrolls), zoomed or not.
   const touchAction = () =>
     page.locator(`${GRAPH}-svg`).evaluate((svg) => getComputedStyle(svg).touchAction);
-  expect(await touchAction()).toBe("pan-x pan-y");
+  expect(await touchAction()).toBe("pan-y");
 
   await page.locator(`${GRAPH}-zoom-in`).click();
   await page.locator(`${GRAPH}-zoom-in`).click();
   const before = await viewBoxOf(page);
-  expect(await touchAction()).toBe("none");
+  expect(await touchAction()).toBe("pan-y");
   await dragAcross(page, `${GRAPH}-svg`, -80, -40);
   const after = await viewBoxOf(page);
   expect(after).not.toBe(before);
-  // Dragged left and up, the window moves right and down, but never off the drawing.
-  const [fx, fy, fw, fh] = fit.split(" ").map(Number);
+  // Dragged left and up, the window moves right and down.
+  const [bx, by] = before.split(" ").map(Number);
   const [x, y, w, h] = after.split(" ").map(Number);
-  expect(x).toBeGreaterThanOrEqual(fx - 0.01);
-  expect(y).toBeGreaterThanOrEqual(fy - 0.01);
-  expect(x + w).toBeLessThanOrEqual(fx + fw + 0.01);
-  expect(y + h).toBeLessThanOrEqual(fy + fh + 0.01);
-  // Dragging on past the edge stops at it.
+  expect(x).toBeGreaterThan(bx);
+  expect(y).toBeGreaterThan(by);
+  // Dragging on past the edge stops where a quarter of the drawing (the nodes' box) is left in
+  // the window: the window may leave the drawing, but not lose it.
   for (let drag = 0; drag < 6; drag += 1) await dragAcross(page, `${GRAPH}-svg`, -300, -150);
-  const [ex, ey] = (await viewBoxOf(page)).split(" ").map(Number);
-  expect(ex).toBeCloseTo(fx + fw - w, 1);
-  expect(ey).toBeCloseTo(fy + fh - h, 1);
+  const stopped = await viewBoxOf(page);
+  await dragAcross(page, `${GRAPH}-svg`, -300, -150);
+  expect(await viewBoxOf(page)).toBe(stopped);
+  const shown = await page.locator(`${GRAPH}-svg`).evaluate((svg) => {
+    const view = svg.viewBox.baseVal;
+    const boxes = [...svg.querySelectorAll("[data-node-id] [data-body]")].map((body) =>
+      body.getBBox(),
+    );
+    const right = Math.max(...boxes.map((box) => box.x + box.width));
+    const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+    return { right: right - view.x, bottom: bottom - view.y, w: view.width, h: view.height };
+  });
+  expect(shown.right).toBeGreaterThan(0);
+  expect(shown.bottom).toBeGreaterThan(0);
+  expect(w).toBeCloseTo(shown.w, 3);
+  expect(h).toBeCloseTo(shown.h, 3);
 });
 
 test("Graph: on a phone a tap still traces a node after zooming, and focus brings a node into view", async ({
@@ -3223,7 +3238,8 @@ for (const [key, capture] of Object.entries(PACKING_CASES)) {
       await expect(piece).toHaveAttribute("tabindex", "0");
     }
     // Nothing here can be dragged (#250 leaves the packing alone).
-    await expect(page.locator(`${PACKING}-layout-reset`)).toHaveCount(0);
+    // The help under it offers no move (#303).
+    await expect(page.locator(`${PACKING}-zoom-help`)).not.toContainText("move it");
     await expect(page.locator(`${PACKING}-svg`)).not.toHaveAttribute("data-editable", /./);
 
     await runToFrame(page, capture, 0);
@@ -3754,10 +3770,11 @@ for (const [key, capture] of Object.entries(TREE_CASES)) {
       `The search tree of this ${capture.payload.problem} instance grows from the solver's choices, step by step.`,
     );
     await expect(page.locator(`${TREE}-svg`)).toHaveCount(0);
-    // Nothing here can be dragged (#250 leaves the tree alone).
-    await expect(page.locator(`${TREE}-layout-reset`)).toHaveCount(0);
 
     await runToFrame(page, capture, 0);
+    // Nothing here can be dragged (#250 leaves the tree alone): the help under it offers no
+    // move (#303).
+    await expect(page.locator(`${TREE}-zoom-help`)).not.toContainText("move it");
     await expectTreeFrame(page, capture, 0);
     for (let index = 1; index < capture.frames.length; index += 1) {
       await page.locator("#workbench-steps-next").click();
@@ -4209,7 +4226,8 @@ for (const width of [390, 1280]) {
       );
       await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
       await expect(page.locator(`${TREE}-zoom-reset`)).toBeDisabled();
-      await expect(page.locator(`${TREE}-zoom-out`)).toBeDisabled();
+      // #303: fit is not the floor any more; the tree can still zoom out past it.
+      await expect(page.locator(`${TREE}-zoom-out`)).toBeEnabled();
       await expectFits(page, `${TREE}-svg`);
     }
   });
@@ -4421,7 +4439,8 @@ for (const [key, capture] of Object.entries(BOARD_CASES)) {
     await expect(board.locator("[data-axis]")).toHaveCount(2 * payload.size);
     await expect(board.locator("[data-axis]").first()).toHaveText(String(payload.labelsFrom));
     // Nothing here can be dragged (#250 leaves the board alone).
-    await expect(page.locator(`${BOARD}-layout-reset`)).toHaveCount(0);
+    // The help under it offers no move (#303).
+    await expect(page.locator(`${BOARD}-zoom-help`)).not.toContainText("move it");
     await expect(page.locator(`${BOARD}-svg`)).not.toHaveAttribute("data-editable", /./);
 
     await runToFrame(page, capture, 0);
@@ -4840,7 +4859,8 @@ for (const [key, capture] of Object.entries(GEOMETRY_CASES)) {
       await expect(geometryPoint(page, point.id).locator("[data-label]")).toHaveText(point.id);
     }
     // Nothing here can be dragged (#250 leaves the points alone).
-    await expect(page.locator(`${GEOMETRY}-layout-reset`)).toHaveCount(0);
+    // The help under it offers no move (#303).
+    await expect(page.locator(`${GEOMETRY}-zoom-help`)).not.toContainText("move it");
     await expect(page.locator(`${GEOMETRY}-svg`)).not.toHaveAttribute("data-editable", /./);
 
     await runToFrame(page, capture, 0);
@@ -5366,7 +5386,8 @@ for (const [key, capture] of Object.entries(SCHEDULE_CASES)) {
       }
     }
     // Nothing here can be dragged (#250 leaves a schedule's time axis alone).
-    await expect(page.locator(`${SCHEDULE}-layout-reset`)).toHaveCount(0);
+    // The help under it offers no move (#303).
+    await expect(page.locator(`${SCHEDULE}-zoom-help`)).not.toContainText("move it");
     await expect(page.locator(`${SCHEDULE}-svg`)).not.toHaveAttribute("data-editable", /./);
 
     const expectFrame = jobs ? expectJobsFrame : expectPumpsFrame;
@@ -7713,7 +7734,7 @@ for (const width of [390, 1280]) {
 // Every node-link picture (Graph, Grouped Graph, Bipartite Graph, Layered Graph, Automaton,
 // Flow Network) lets the reader drag its nodes and bend its edges (diagramEdits.js, with the
 // gestures in DiagramZoom.js), within each type's own limits. The changes stay while the steps
-// play and after Run, and go back to the layout on Reset layout or a new instance.
+// play and after Run, and go back to the layout on Reset (#303) or a new instance.
 
 /** A piece's body: its own circle or rect (data-body), or its first one (a clause's circle). */
 const bodyOf = (piece) => piece.locator("[data-body], circle, rect").first();
@@ -7802,14 +7823,14 @@ async function wobblyClick(page, piece) {
 /** The Automaton's state radius, in drawing units (automatonLayout.js STATE_RADIUS). */
 const STATE_RADIUS_UNITS = 26;
 
-test("Drag: a Graph node moves with its edges, a tap still traces, and Reset layout puts it back", async ({
+test("Drag: a Graph node moves with its edges, a tap still traces, and Reset puts it back", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
-  const reset = page.locator(`${GRAPH}-layout-reset`);
+  const reset = page.locator(`${GRAPH}-zoom-reset`);
   await expect(reset).toBeDisabled();
-  await expect(reset).toHaveAttribute("aria-label", /Reset layout/);
+  await expect(reset).toHaveAttribute("aria-label", /^Reset view/);
   const before = await centresOf(page, `${GRAPH}-graph`);
   const edgePath = graphEdge(page, "1-2").locator("path");
   const edgeBefore = await pathEnds(edgePath);
@@ -7889,15 +7910,15 @@ test("Drag: the Force / Circle switch and a new instance put the automatic layou
   await page.locator(`${GRAPH}-layout-circle`).click();
   await page.locator(`${GRAPH}-layout-force`).click();
   expect(await centresOf(page, scope)).toEqual(force);
-  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
+  await expect(page.locator(`${GRAPH}-zoom-reset`)).toBeDisabled();
 
   // A new instance (here the same graph, written with a trailing space) starts afresh.
   await mouseDrag(page, graphNode(page, "4"), -80, -40);
-  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeEnabled();
+  await expect(page.locator(`${GRAPH}-zoom-reset`)).toBeEnabled();
   await openPanel(page, "instance", { expect });
   const input = page.locator("#workbench-instance-full-instance");
   await input.fill(`${await input.inputValue()} `);
-  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
+  await expect(page.locator(`${GRAPH}-zoom-reset`)).toBeDisabled();
   await expect.poll(() => centresOf(page, scope)).toEqual(force);
 });
 
@@ -7916,7 +7937,7 @@ test("Drag: the arrow keys move a focused node, Shift further, and say so", asyn
   // Enter still pins the node.
   await page.keyboard.press("Enter");
   await expect(node).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeEnabled();
+  await expect(page.locator(`${GRAPH}-zoom-reset`)).toBeEnabled();
 });
 
 test("Drag: zoomed in, a node follows the pointer through the zoomed view, and empty space still pans", async ({
@@ -7963,7 +7984,7 @@ test("Drag: zoomed in, a node follows the pointer through the zoomed view, and e
   expect(await centresOf(page, `${GRAPH}-graph`)).toEqual(centres);
 });
 
-test("Drag: on a touch screen a swipe at fit scrolls the page, and a long press then a drag moves the node", async ({
+test("Drag: on a touch screen a swipe scrolls the page, and press and hold then a drag moves the node", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 700 });
@@ -7989,9 +8010,10 @@ test("Drag: on a touch screen a swipe at fit scrolls the page, and a long press 
     .poll(async () => down * (scrollBefore - (await page.evaluate(() => window.scrollY))))
     .toBeGreaterThan(20);
   expect(await centresOf(page, `${GRAPH}-graph`)).toEqual(before);
-  await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
+  await expect(page.locator(`${GRAPH}-zoom-reset`)).toBeDisabled();
 
-  // A long press arms the node (a dashed outline); the drag after it moves the node, not the page.
+  // Press and hold lifts the node (a shadow and a slight scale); the drag after it moves the
+  // node, not the page.
   const held = await screenCentre(node);
   const scrollHeld = await page.evaluate(() => window.scrollY);
   await touch("touchStart", [{ x: held.x, y: held.y, id: 0 }]);
@@ -8061,19 +8083,19 @@ test("Drag: an Automaton state moves with its arrows, Garbage moves too, and the
   await automatonState(page, "q:2").click();
 
   // Another visualization (drawn from the same capture here) starts from the layout again, and
-  // switching back finds this one's moves as they were left (#252); Reset layout clears them.
+  // switching back finds this one's moves as they were left (#252); Reset clears them.
   const edited = await centresOf(page, scope);
   const listbox = page.locator("#workbench-source-type-listbox");
   await page.locator("#workbench-source-type-button").click();
   await listbox.locator('[role="option"][aria-selected="false"]').first().click();
-  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeDisabled();
+  await expect(page.locator(`${AUTOMATON}-zoom-reset`)).toBeDisabled();
   await expect.poll(() => centresOf(page, scope)).toEqual(before);
   await page.locator("#workbench-source-type-button").click();
   await listbox.locator('[role="option"][aria-selected="false"]').first().click();
-  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeEnabled();
+  await expect(page.locator(`${AUTOMATON}-zoom-reset`)).toBeEnabled();
   await expect.poll(() => centresOf(page, scope)).toEqual(edited);
-  await page.locator(`${AUTOMATON}-layout-reset`).click();
-  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeDisabled();
+  await page.locator(`${AUTOMATON}-zoom-reset`).click();
+  await expect(page.locator(`${AUTOMATON}-zoom-reset`)).toBeDisabled();
   await mouseDrag(page, automatonState(page, "garbage"), -120, 0);
   const garbageMoved = await drawnCentre(automatonState(page, "garbage"));
   expect(distance(garbageMoved, garbage)).toBeLessThan(1);
@@ -8264,7 +8286,7 @@ test("Drag: a Tripartite name only moves up and down its own column, and its tri
   await mouseDrag(page, austin, 0, -400);
   const top = await drawnCentre(tripartiteElement(page, "y1"));
   expect((await drawnCentre(austin)).y).toBeGreaterThanOrEqual(top.y - 0.5);
-  await page.locator(`${TRIPARTITE}-layout-reset`).click();
+  await page.locator(`${TRIPARTITE}-zoom-reset`).click();
   expect(await drawnCentre(austin)).toEqual(before);
   await expect(line).toHaveAttribute("d", d);
 });

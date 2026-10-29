@@ -25,7 +25,7 @@
 //
 // #250: the reader can move any node and bend any edge (diagramEdits.js), freely; the changes
 // stay while the steps play and after Run, and go back to the layout on a new instance or
-// visualization, on a Force / Circle switch, or on Reset layout.
+// visualization, on a Force / Circle switch, or on Reset (with the zoom and the pan, #303).
 //
 // #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring around
 // their node and a band under their edge. A "missing" line (a phantom) with an `id` (the

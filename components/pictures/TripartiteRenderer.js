@@ -21,7 +21,7 @@
 // #250: a name can be dragged up or down its own column (or moved with the arrow keys), to pull
 // apart lines that cross, as a Bipartite Graph's nodes can; its triples' lines follow. It stays
 // in its column, between the first and the last row: which set a name is in is the instance.
-// The list does not move. Reset layout puts the names back.
+// The list does not move. Reset puts the names back.
 //
 // #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are marked: a name gets
 // a ring outside its pill, and a triple a ring around its list row and a band under its line.
@@ -101,6 +101,7 @@ export default function TripartiteRenderer({
   const byId = new Map(elements.map((element) => [element.id, element]));
   const editor = makeEditor({
     edits,
+    piece: "name",
     nodeAt: (id) => byId.get(id) ?? null,
     moveNode: (id, point) => {
       const element = byId.get(id);

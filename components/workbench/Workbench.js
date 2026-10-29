@@ -122,6 +122,7 @@ import ComputeStatus from "../detail/ComputeStatus";
 import { GADGET_PALETTE } from "../pictures/gadgetRings";
 import { pictureStateStyle, statesInFrames } from "../pictures/pictureStates";
 import { pictureAnnotations, pictureLegendFrames, pictureRuns } from "../pictures/registry";
+import { PictureFullScreen } from "../pictures/zoomControlsSlot";
 import { paletteVars } from "../theme";
 import CommandBar from "./CommandBar";
 import {
@@ -2069,51 +2070,54 @@ export default function Workbench({ problem }) {
         />
       </Box>
 
-      <VisualizationPane
-        idPrefix={ID}
-        showing={showing}
-        showingIsError={Boolean(instanceError)}
-        verdict={verdictLine}
-        source={{
-          // #303 stage 2: Reduce's source pane's label row.
-          parts: [
-            { k: "Problem", v: problem.name },
-            ...(targetSolveCurrent && solvedFields.mappedBack
-              ? [
-                  {
-                    k: "Answer",
-                    // The problem the view drew, when there is one (as its Problem part).
-                    v: `mapped back from ${wholeView?.target?.problem ?? targetSolveResult.targetName}`,
-                  },
-                ]
-              : []),
-          ],
-          type: vizTypeControl,
-          content: sourceContent,
-        }}
-        target={target}
-        steps={
-          showingRunPicture
-            ? {
-                frameCount: runFrames.length,
-                currentStep,
-                onStepChange: setCurrentStep,
-              }
-            : reduceView && !switching
+      {/* #303 stage 3: on full screen the pictures' wheel and one finger zoom and pan. */}
+      <PictureFullScreen.Provider value={Boolean(fullScreen)}>
+        <VisualizationPane
+          idPrefix={ID}
+          showing={showing}
+          showingIsError={Boolean(instanceError)}
+          verdict={verdictLine}
+          source={{
+            // #303 stage 2: Reduce's source pane's label row.
+            parts: [
+              { k: "Problem", v: problem.name },
+              ...(targetSolveCurrent && solvedFields.mappedBack
+                ? [
+                    {
+                      k: "Answer",
+                      // The problem the view drew, when there is one (as its Problem part).
+                      v: `mapped back from ${wholeView?.target?.problem ?? targetSolveResult.targetName}`,
+                    },
+                  ]
+                : []),
+            ],
+            type: vizTypeControl,
+            content: sourceContent,
+          }}
+          target={target}
+          steps={
+            showingRunPicture
               ? {
-                  frameCount: reduceView.frames.length,
-                  currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
-                  onStepChange: setReduceStep,
+                  frameCount: runFrames.length,
+                  currentStep,
+                  onStepChange: setCurrentStep,
                 }
-              : null
-        }
-        reduction={reductionPane}
-        note={note}
-        legendFrames={legendFrames}
-        legendStates={legendStates}
-        legendAnnotations={legendAnnotations}
-        fullScreen={{ on: fullOn, onToggle: toggleFullScreen }}
-      />
+              : reduceView && !switching
+                ? {
+                    frameCount: reduceView.frames.length,
+                    currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
+                    onStepChange: setReduceStep,
+                  }
+                : null
+          }
+          reduction={reductionPane}
+          note={note}
+          legendFrames={legendFrames}
+          legendStates={legendStates}
+          legendAnnotations={legendAnnotations}
+          fullScreen={{ on: fullOn, onToggle: toggleFullScreen }}
+        />
+      </PictureFullScreen.Provider>
 
       <Box sx={{ display: fullScreen ? "none" : "flex", flexDirection: "column", gap: 2.5 }}>
         <CommandBar
