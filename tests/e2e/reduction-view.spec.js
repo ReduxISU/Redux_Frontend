@@ -15,7 +15,9 @@ import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
 import {
   answerViewCertificates,
+  clickPhase,
   drawnCollisions,
+  openBottomSection,
   openPanel,
   reduceAgain,
   reduceAndSolve,
@@ -234,7 +236,7 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await openView(page, "satTo3sat");
   const firstOf = (phase) => view.frames.findIndex((frame) => frame.phase === phase);
 
-  await phaseButton(page, "solve").click();
+  await clickPhase(page, "solve");
   await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(firstOf("solve")));
   await expect(phaseButton(page, "solve")).toHaveAttribute("aria-current", "step");
   await expect(phaseButton(page, "build")).not.toHaveAttribute("aria-current", "step");
@@ -246,7 +248,7 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(phaseButton(page, "build")).toHaveAttribute("aria-current", "step");
   await expect(page.locator(`${VIEW}-caption-event`)).toHaveText("Built");
 
-  await phaseButton(page, "map").click();
+  await clickPhase(page, "map");
   await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "map");
   await expect(page.locator(`${VIEW}-caption-event`)).toHaveText("Mapped");
 
@@ -298,10 +300,10 @@ test("Build shows only what the target has built so far, and the finished target
 
   // Solve and Map back draw the whole target; a dashed line there is the solver's own (a pair
   // its candidate needs and the graph lacks), never a rule's.
-  await phaseButton(page, "solve").click();
+  await clickPhase(page, "solve");
   await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
   await expect(ruleSaysNo).toHaveCount(0);
-  await phaseButton(page, "map").click();
+  await clickPhase(page, "map");
   await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
 });
 
@@ -358,7 +360,7 @@ test("the Packing panes' texts never meet a line or a marker, at each phase's fi
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "subsetSumToPartition");
   for (const phase of ["build", "solve", "map"]) {
-    await phaseButton(page, phase).click();
+    await clickPhase(page, phase);
     for (const side of ["source", "target"]) {
       const selector = `${VIEW}-${side} svg[id$="-svg"]`;
       expect(await drawnCollisions(page, selector), `${side}, ${phase}`).toEqual([]);
@@ -389,7 +391,7 @@ test("pointing at a source piece marks what it became on the target, and the oth
   const { view } = CASES.sat3ToClique;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "sat3ToClique");
-  await phaseButton(page, "solve").click();
+  await clickPhase(page, "solve");
   await expect(readout(page)).toHaveAttribute("data-linked", "false");
 
   // A literal of the formula: its element gadget names one clique node.
@@ -432,7 +434,7 @@ test("a tap pins a link, keyboard focus links too, and Escape clears it", async 
   const { view } = CASES.coloringToCliqueCover;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "coloringToCliqueCover");
-  await phaseButton(page, "map").click();
+  await clickPhase(page, "map");
 
   // Tap (click) a node of the source graph: the link stays once the pointer leaves.
   await pane(page, "source").locator('[data-node-id="a"]').click();
@@ -505,7 +507,10 @@ for (const scheme of ["light", "dark"]) {
             PHONE_TEXT_PX,
           );
         }
-        // The view's own words: the phase bar, the caption and the link line read in the theme.
+        // The view's own words: the phase bar, the caption and the link line read in the theme
+        // (the phase bar and the link line in their sections at the bottom of the page).
+        await openBottomSection(page, "phases");
+        await openBottomSection(page, "gadgets");
         for (const selector of [
           `#workbench-phases-build`,
           `${VIEW}-caption-text`,

@@ -12,7 +12,7 @@
 // does, and reductionView is answered from captures (./reduction-payloads.js).
 
 import { expect, test } from "./fixtures";
-import { answerViewCertificates, reduceAndSolve } from "./helpers";
+import { answerViewCertificates, clickPhase, reduceAndSolve } from "./helpers";
 import {
   SAT_FACTOR_GRAPH_TO_3SAT_VIEW,
   SAT_TO_3SAT_FACTOR_GRAPH_VIEW,
@@ -209,7 +209,7 @@ test("a target picture without the build's pieces is shown whole during Build, w
 }) => {
   await answerViews(page);
   await runSatTo3sat(page);
-  await page.locator("#workbench-phases-build").click();
+  await clickPhase(page, "build");
   await expect(page.locator(VIEW)).toHaveAttribute("data-build-reveal", "pieces");
   await expect(pane(page, "target")).not.toHaveAttribute("data-hidden-count", "0");
   await expect(page.locator(`${VIEW}-target-note`)).toHaveCount(0);
@@ -224,7 +224,7 @@ test("a target picture without the build's pieces is shown whole during Build, w
   await expect(page.locator(`${VIEW}-target-note`)).toContainText("grows when the solver runs");
   // Past Build that note goes. A Search Tree draws none of the pieces the gadgets name, so the
   // pane keeps saying links can't be shown there (#239).
-  await page.locator("#workbench-phases-solve").click();
+  await clickPhase(page, "solve");
   await expect(page.locator(`${VIEW}-target-note`)).not.toContainText("grows when the solver runs");
   await expect(page.locator(`${VIEW}-target-note`)).toContainText(
     "Gadget links can't be shown on this picture",
@@ -234,7 +234,7 @@ test("a target picture without the build's pieces is shown whole during Build, w
 test("switching a picture keeps the phase and the step in it", async ({ page }) => {
   await answerViews(page);
   await runSatTo3sat(page);
-  await page.locator("#workbench-phases-solve").click();
+  await clickPhase(page, "solve");
   const start = Number(await page.locator(VIEW).getAttribute("data-frame-index"));
   await page.locator("#workbench-steps-next").click();
   await page.locator("#workbench-steps-next").click();

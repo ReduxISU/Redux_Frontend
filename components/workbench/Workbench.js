@@ -31,6 +31,11 @@
 // both prefilled from the Solve stage and editable, then says whether the two checks agree. The
 // results are one list of rows in every task (./panels/ResultPanel.js), each fact said once.
 //
+// #303 (Board G polish): what Board G does not show waits under the results in closed sections:
+// Gadgets (the list, with the Reduction View's Plain / Color switch and its link line) and
+// Phases (the Reduction View's phase buttons). The pictures render those pieces into the
+// sections' elements (../pictures/secondarySlots.js), so they keep working as before.
+//
 // What this component owns, and why here:
 //   - The one instance value. Every part of the page reads it, and editing it anywhere
 //     resets the picture to the base instance: a run's picture and result are tagged with
@@ -127,6 +132,7 @@ import ComputeStatus from "../detail/ComputeStatus";
 import { GADGET_PALETTE } from "../pictures/gadgetRings";
 import { pictureStateStyle, statesInFrames } from "../pictures/pictureStates";
 import { pictureAnnotations, pictureLegendFrames, pictureRuns } from "../pictures/registry";
+import { SecondarySlots } from "../pictures/secondarySlots";
 import { PictureFullScreen } from "../pictures/zoomControlsSlot";
 import { paletteVars } from "../theme";
 import CommandBar from "./CommandBar";
@@ -145,6 +151,7 @@ import {
 import { COMPACT_MEDIA, PHONE_MEDIA, secondaryButtonSx } from "./layout";
 import InstancePanel from "./panels/InstancePanel";
 import ResultPanel, { SeedText } from "./panels/ResultPanel";
+import SecondarySection from "./panels/SecondarySection";
 import { ReduceVerifySide, unreadableFailure, VerifyTaskRow } from "./panels/VerifyBox";
 import VisualizationPane from "./VisualizationPane";
 
@@ -318,6 +325,10 @@ export default function Workbench({ problem }) {
   // #303: the workspace shows only the picture(s) and the steps: "all" of them, or (stage 2)
   // one of Reduce's two panes alone, "source" or "target"; null when off.
   const [fullScreen, setFullScreen] = useState(null);
+  // #303 (Board G polish): the bottom sections' elements the Reduction View's Gadgets controls
+  // and phase buttons render into (../pictures/secondarySlots.js).
+  const [gadgetControlsSlot, setGadgetControlsSlot] = useState(null);
+  const [phasesSlot, setPhasesSlot] = useState(null);
   const exitRef = useRef(null);
   // The Full screen button that went in, so coming out puts focus back on it.
   const fullFromRef = useRef(null);
@@ -2238,11 +2249,29 @@ export default function Workbench({ problem }) {
               colors: gadgetRowColors,
               activeIndex: activeGadget ? gadgetHighlight.index : null,
               onHighlight: handleGadgetHighlight,
+              controlsRef: setGadgetControlsSlot,
             }
           : null
       }
+      after={
+        // #303: the Reduction View's phase buttons, which Board G does not show.
+        reductionPane ? (
+          <SecondarySection
+            key={`phases-${reduceResult.runId}`}
+            id={`${ID}-result-phases`}
+            title="Phases"
+            count={new Set(reductionPane.view.frames.map((frame) => frame.phase)).size}
+            bodyRef={setPhasesSlot}
+          />
+        ) : null
+      }
     />
   );
+  const secondarySlots = {
+    bottom: true,
+    gadgets: reduceGadgets.length > 0 ? gadgetControlsSlot : null,
+    phases: reductionPane ? phasesSlot : null,
+  };
 
   // #303 stage 4: the Verifier menus, always a dropdown with its (i), even with one verifier.
   function verifierSelect(list, chosen, onPick) {
@@ -2446,51 +2475,53 @@ export default function Workbench({ problem }) {
 
       {/* #303 stage 3: on full screen the pictures' wheel and one finger zoom and pan. */}
       <PictureFullScreen.Provider value={Boolean(fullScreen)}>
-        <VisualizationPane
-          idPrefix={ID}
-          showing={showing}
-          showingIsError={Boolean(instanceError)}
-          verdict={verdictLine}
-          source={{
-            // #303 stage 2: Reduce's source pane's label row.
-            parts: [
-              { k: "Problem", v: problem.name },
-              ...(targetSolveCurrent && solvedFields.mappedBack
-                ? [
-                    {
-                      k: "Answer",
-                      // The problem the view drew, when there is one (as its Problem part).
-                      v: `mapped back from ${wholeView?.target?.problem ?? targetSolveResult.targetName}`,
-                    },
-                  ]
-                : []),
-            ],
-            type: vizTypeControl,
-            content: sourceContent,
-          }}
-          target={target}
-          steps={
-            showingRunPicture
-              ? {
-                  frameCount: runFrames.length,
-                  currentStep,
-                  onStepChange: setCurrentStep,
-                }
-              : reduceView && !switching
+        <SecondarySlots.Provider value={secondarySlots}>
+          <VisualizationPane
+            idPrefix={ID}
+            showing={showing}
+            showingIsError={Boolean(instanceError)}
+            verdict={verdictLine}
+            source={{
+              // #303 stage 2: Reduce's source pane's label row.
+              parts: [
+                { k: "Problem", v: problem.name },
+                ...(targetSolveCurrent && solvedFields.mappedBack
+                  ? [
+                      {
+                        k: "Answer",
+                        // The problem the view drew, when there is one (as its Problem part).
+                        v: `mapped back from ${wholeView?.target?.problem ?? targetSolveResult.targetName}`,
+                      },
+                    ]
+                  : []),
+              ],
+              type: vizTypeControl,
+              content: sourceContent,
+            }}
+            target={target}
+            steps={
+              showingRunPicture
                 ? {
-                    frameCount: reduceView.frames.length,
-                    currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
-                    onStepChange: setReduceStep,
+                    frameCount: runFrames.length,
+                    currentStep,
+                    onStepChange: setCurrentStep,
                   }
-                : null
-          }
-          reduction={reductionPane}
-          note={note}
-          legendFrames={legendFrames}
-          legendStates={legendStates}
-          legendAnnotations={legendAnnotations}
-          fullScreen={{ on: fullOn, onToggle: toggleFullScreen }}
-        />
+                : reduceView && !switching
+                  ? {
+                      frameCount: reduceView.frames.length,
+                      currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
+                      onStepChange: setReduceStep,
+                    }
+                  : null
+            }
+            reduction={reductionPane}
+            note={note}
+            legendFrames={legendFrames}
+            legendStates={legendStates}
+            legendAnnotations={legendAnnotations}
+            fullScreen={{ on: fullOn, onToggle: toggleFullScreen }}
+          />
+        </SecondarySlots.Provider>
       </PictureFullScreen.Provider>
 
       <Box sx={{ display: fullScreen ? "none" : "flex", flexDirection: "column", gap: 2.5 }}>

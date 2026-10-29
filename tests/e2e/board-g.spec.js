@@ -963,3 +963,98 @@ test("Reduce's Picture menus are dropdowns naming each picture and its type, nev
   expect(asked).toBe(0);
   await expect(page.locator("#workbench-reduction-target-picture-area [data-zoom]")).toBeVisible();
 });
+
+// --- #303 follow-ups: Board G's order, and what it does not show at the bottom ---------------
+
+const topOf = async (page, selector) => (await boxOf(page, selector)).y;
+const bottomOf = async (page, selector) => {
+  const box = await boxOf(page, selector);
+  return box.y + box.height;
+};
+
+test("Solve keeps Board G's order: the picture, the Legend, the steps, then the step's caption", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  await solve(page);
+  const caption = page.locator("#workbench-step-text [aria-live]");
+  await expect(caption).toHaveCount(1);
+  await expect(caption).toContainText("Verdict:");
+  expect(await topOf(page, "#workbench-legend-toggle")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-source-picture"),
+  );
+  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-legend-body"),
+  );
+  expect(await topOf(page, "#workbench-step-text")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-steps-position"),
+  );
+  expect(await topOf(page, "#workbench-command-bar")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-step-text"),
+  );
+});
+
+test("Reduce keeps Board G's order, and the Gadgets switch, its link line and the phase buttons wait in closed sections at the bottom", async ({
+  page,
+}) => {
+  await openSatReduce(page);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+
+  // Under the pictures: the Legend, the steps and the caption; nothing of the Gadgets or phases.
+  const pane = page.locator("#workbench-pane");
+  for (const piece of ["marks-row", "link"]) {
+    await expect(pane.locator(`#workbench-reduction-${piece}`)).toHaveCount(0);
+  }
+  await expect(pane.locator("#workbench-phases")).toHaveCount(0);
+  expect(await topOf(page, "#workbench-legend-toggle")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-reduction-panes"),
+  );
+  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-legend-body"),
+  );
+  await expect(page.locator("#workbench-step-text #workbench-reduction-caption")).toBeVisible();
+
+  // At the bottom, under the results: Gadgets (n) then Phases, both closed.
+  const gadgets = page.locator("#workbench-result-gadgets");
+  const phases = page.locator("#workbench-result-phases");
+  for (const toggle of ["gadgets", "phases"]) {
+    await expect(page.locator(`#workbench-result-${toggle}-toggle`)).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  }
+  await expect(page.locator("#workbench-result-gadgets-count")).toHaveText(
+    `(${SAT_TO_3SAT_VIEW.gadgets.length})`,
+  );
+  expect(await topOf(page, "#workbench-result-gadgets")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-result-rows"),
+  );
+  expect(await topOf(page, "#workbench-result-phases")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-result-gadgets"),
+  );
+
+  // Opened, Gadgets starts with the Plain / Color switch and the link line, which still work:
+  // pointing at a source piece says what it became, and Color marks both sides.
+  await page.locator("#workbench-result-gadgets-toggle").click();
+  await expect(gadgets.locator("#workbench-reduction-marks-row")).toBeVisible();
+  const link = gadgets.locator("#workbench-reduction-link");
+  await expect(link).toContainText("Point at a piece");
+  await page.locator("#workbench-reduction-source [data-node-id]").first().hover();
+  await expect(link).toHaveAttribute("data-linked", "true");
+  await page.locator("#workbench-reduction-marks-color").click();
+  await expect(page.locator("#workbench-reduction-marks-row")).toHaveAttribute(
+    "data-gadget-marks",
+    "color",
+  );
+  await page.locator("#workbench-reduction-marks-plain").click();
+
+  // Opened, Phases jumps the steps, as the bar beside the pictures did; each button is a 44px
+  // target.
+  await page.locator("#workbench-result-phases-toggle").click();
+  const build = phases.locator("#workbench-phases-build");
+  await expect(build).toBeVisible();
+  expect((await boxOf(page, "#workbench-phases-build")).height).toBeGreaterThanOrEqual(44);
+  await expect(build).toHaveAttribute("aria-current", "step");
+});

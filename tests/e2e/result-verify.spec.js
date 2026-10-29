@@ -97,6 +97,8 @@ async function answerCompute(page) {
 
 const certificateBox = (page) => page.locator("#workbench-verify-certificate");
 const checkButton = (page) => page.locator("#workbench-run");
+// #303: the verdict is a result row; the picture shows no verdict line of its own (one would
+// come back only with "Show where it fails", once Redux can draw a certificate).
 const verdict = (page) => page.locator("#workbench-verdict");
 const verdictRow = (page) => page.locator("#workbench-result-rows-verdict");
 const overlayButton = (page) => page.locator("#workbench-verdict-overlay");
@@ -123,11 +125,9 @@ test("Verify works before any Run and leaves the default picture as it is", asyn
   );
 
   await check(page, ANSWER);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is valid`,
-  );
   await expect(verdictRow(page)).toHaveAttribute("data-tone", "ok");
   await expect(verdictRow(page)).toContainText("Valid:");
+  await expect(verdict(page)).toHaveCount(0);
   expect(verifyCalls.at(-1).certificate).toBe(ANSWER);
 
   // Nothing ran, so the Showing text is unchanged, and the picture says why the certificate
@@ -141,10 +141,7 @@ test("Verify works before any Run and leaves the default picture as it is", asyn
   await expect(overlayButton(page)).toHaveCount(0);
 
   await check(page, WRONG);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is not valid`,
-  );
-  await expect(verdict(page)).toHaveAttribute("data-valid", "false");
+  await expect(verdictRow(page)).toHaveAttribute("data-tone", "err");
   await expect(verdictRow(page)).toHaveAttribute("data-tone", "err");
 
   // Editing the answer retires its verdict row; an instance edit retires the verdict.
@@ -173,9 +170,6 @@ test("Check it in Verify opens the Verify tab with the run's answer and checks i
   await page.locator("#workbench-result-verify-answer").click();
   await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
   await expect(certificateBox(page)).toHaveValue(ANSWER);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is valid`,
-  );
   await expect(verdictRow(page)).toHaveAttribute("data-tone", "ok");
   expect(verifyCalls).toHaveLength(1);
   expect(verifyCalls[0].certificate).toBe(ANSWER);
@@ -207,9 +201,7 @@ test("Check keeps the solved picture and its current step, and a new Run retires
 
   await openPanel(page, "verify", { expect });
   await check(page, WRONG);
-  await expect(verdict(page)).toHaveText(
-    `Verifier: your certificate on the ${PROBLEM} instance is not valid`,
-  );
+  await expect(verdictRow(page)).toHaveAttribute("data-tone", "err");
   // The solved picture is untouched: same Showing text, same step, still a run picture.
   await expect(page.locator("#workbench-showing")).toHaveText(solverName);
   await expect(position).toContainText("Step 2 of 3");
@@ -218,11 +210,12 @@ test("Check keeps the solved picture and its current step, and a new Run retires
     "frame",
   );
 
-  // A new Run takes the verdict off the picture.
+  // A new Run retires the verdict.
   await page.locator("#workbench-mode-solve").click();
   await page.locator("#workbench-run").click();
   await expect(position).toContainText("Step 3 of 3");
-  await expect(verdict(page)).toHaveCount(0);
+  await page.locator("#workbench-mode-verify").click();
+  await expect(verdictRow(page)).toHaveCount(0);
 });
 
 test("after a Run, no certificate offers Show where it fails until Redux can draw one", async ({
@@ -237,13 +230,13 @@ test("after a Run, no certificate offers Show where it fails until Redux can dra
 
   // An invalid certificate gets its verdict; with no way to draw it, no button is offered.
   await check(page, WRONG);
-  await expect(verdict(page)).toHaveAttribute("data-valid", "false");
+  await expect(verdictRow(page)).toHaveAttribute("data-tone", "err");
   await expect(overlayButton(page)).toHaveCount(0);
   await expect(page.locator("#workbench-verdict-overlay-reason")).toHaveCount(0);
 
   // Nor for a valid one.
   await check(page, ANSWER);
-  await expect(verdict(page)).toHaveAttribute("data-valid", "true");
+  await expect(verdictRow(page)).toHaveAttribute("data-tone", "ok");
   await expect(overlayButton(page)).toHaveCount(0);
 });
 
@@ -272,7 +265,7 @@ test("a certificate Redux cannot read shows only its error under the box", async
   // A readable certificate clears it.
   await check(page, ANSWER);
   await expect(error).toHaveCount(0);
-  await expect(verdict(page)).toBeVisible();
+  await expect(verdictRow(page)).toBeVisible();
 });
 
 test("Reduce's Verify stage opens once Reduce and Solve are done, and checks both answers prefilled from Solve", async ({

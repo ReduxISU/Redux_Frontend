@@ -435,3 +435,19 @@ export async function answerViewCertificates(
     route.fulfill({ json: mapped }),
   );
 }
+
+/**
+ * #303 (Board G polish): opens one of the collapsible sections at the bottom of the page, under
+ * the results ("gadgets": the Gadgets list with the Reduction View's Plain / Color switch and
+ * its link line; "phases": the Reduction View's phase buttons). Does nothing when it is open.
+ */
+export async function openBottomSection(page, key) {
+  const toggle = page.locator(`#workbench-result-${key}-toggle`);
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+}
+
+/** Jumps the Reduction View to a phase with its button in the Phases section. */
+export async function clickPhase(page, phase) {
+  await openBottomSection(page, "phases");
+  await page.locator(`#workbench-phases-${phase}`).click();
+}
