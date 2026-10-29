@@ -23,10 +23,12 @@
 // picture(s) and the steps, and hides the rest: the note and the Legend.
 //
 // #303 (Board G polish): the order under the picture(s) is the mockup's: the note, the Legend,
-// then the steps, with the step's caption under the step controls (the pictures render it into
-// that place through ../pictures/secondarySlots.js StepTextSlot). The Reduction View's phase
-// buttons are not in the mockup: they go to the Phases section at the bottom of the page (the
-// Workbench's SecondarySlots). Verify's verdict is a row in the results, so the picture shows
+// then the steps, with the step's caption on the step bar's "Step N of M:" line (the pictures
+// render it into that place through ../pictures/secondarySlots.js StepTextSlot). Every picture sits in a card
+// with a hairline border (./layout.js pictureCardSx), the mockup's well, so the picture's edges
+// show on the white workspace. The Reduction View's phase buttons sit right above the step
+// controls, always shown, the phase holding the step on screen marked, so the reader sees which
+// stage the algorithm is in as it walks through its steps. Verify's verdict is a row in the results, so the picture shows
 // no verdict of its own; only the "Show where it fails" button would show here, once Redux can
 // draw a certificate.
 //
@@ -42,15 +44,21 @@
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
-import { useContext, useState } from "react";
+import { useState } from "react";
 import StepScrubber from "../detail/StepScrubber";
 import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import PictureCanvas from "../pictures/PictureCanvas";
 import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
-import { AtBottom, SecondarySlots, StepTextSlot } from "../pictures/secondarySlots";
+import { StepTextSlot } from "../pictures/secondarySlots";
 import { ZoomControlsSlot } from "../pictures/zoomControlsSlot";
 import Legend from "./Legend";
-import { COMPACT_MEDIA, PHONE_MEDIA, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
+import {
+  COMPACT_MEDIA,
+  PHONE_MEDIA,
+  pictureCardSx,
+  SHARED_CONTROL_WIDTH,
+  secondaryButtonSx,
+} from "./layout";
 import { FullScreenButton, PaneGrid, PaneSection } from "./PaneGrid";
 import TaggedSelect from "./TaggedSelect";
 
@@ -271,16 +279,11 @@ function PictureBox({ idPrefix, content }) {
           : undefined
       }
       sx={{
+        // #303: the picture's card (./layout.js pictureCardSx), in Solve, Verify and Reduce.
+        ...pictureCardSx,
         minHeight: content.compact ? 160 : PICTURE_MIN_HEIGHT,
-        display: "flex",
-        flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
         overflowX: "auto",
-        backgroundColor: "surface.input",
-        borderRadius: "10px",
-        p: 2,
-        boxSizing: "border-box",
         [COMPACT_MEDIA]: { minHeight: content.compact ? 160 : 320 },
       }}
     >
@@ -340,7 +343,6 @@ export default function VisualizationPane({
   const [zoomSlot, setZoomSlot] = useState(null);
   // #303: where the step's caption goes, under the step controls.
   const [stepTextSlot, setStepTextSlot] = useState(null);
-  const secondarySlots = useContext(SecondarySlots);
   const single = !reduction && !target;
   const full = fullScreen.on;
   const only = full === "source" || full === "target" ? full : null;
@@ -518,29 +520,37 @@ export default function VisualizationPane({
           />
         )}
 
+        {/* #303: the phases, right above the step controls, the step's phase marked. */}
         {reduction && steps && (
-          <AtBottom slots={secondarySlots} slot={secondarySlots.phases}>
-            <ReductionPhaseBar
-              idPrefix={`${idPrefix}-phases`}
-              frames={reduction.view.frames}
-              frameIndex={steps.currentStep}
-              onStepChange={steps.onStepChange}
-            />
-          </AtBottom>
+          <ReductionPhaseBar
+            idPrefix={`${idPrefix}-phases`}
+            frames={reduction.view.frames}
+            frameIndex={steps.currentStep}
+            onStepChange={steps.onStepChange}
+          />
         )}
-        {steps && steps.frameCount > 1 && (
+        {/* #303: the step bar, the step's description on its "Step N of M:" line. */}
+        {steps && steps.frameCount > 1 ? (
           <StepScrubber
             idPrefix={`${idPrefix}-steps`}
             frameCount={steps.frameCount}
             currentStep={steps.currentStep}
             onStepChange={steps.onStepChange}
+            textRef={setStepTextSlot}
+            textId={`${idPrefix}-step-text`}
+          />
+        ) : (
+          <Box
+            ref={setStepTextSlot}
+            id={`${idPrefix}-step-text`}
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
+              "&:empty": { display: "none" },
+            }}
           />
         )}
-        <Box
-          ref={setStepTextSlot}
-          id={`${idPrefix}-step-text`}
-          sx={{ display: "flex", flexDirection: "column", gap: 1, "&:empty": { display: "none" } }}
-        />
       </Box>
     </StepTextSlot.Provider>
   );

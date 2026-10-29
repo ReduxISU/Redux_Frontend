@@ -13,8 +13,9 @@
 //   4. the results, listed under the bar (./panels/ResultPanel.js).
 // #229's rail and its Details / Instance / Result panels are gone: the problem's details moved
 // to the (i) card after the title (pages/[problem].js), the instance to the editor, and the
-// result to the list. Full screen shows only the picture(s) and the steps (Escape or Exit full
-// screen leaves it). Verify is its own tab; Solve's "Check it in Verify" opens it and checks
+// result to the list. Full screen shows only the picture(s) and the steps (Escape, or the Full
+// screen button that went in, now saying "Exit full screen", leaves it; #305: there is no second
+// exit button). Verify is its own tab; Solve's "Check it in Verify" opens it and checks
 // the answer there.
 //
 // #303 stage 2: Reduce is a Reduce -> Solve -> Verify stepper (CommandBar.js), each stage with
@@ -31,10 +32,11 @@
 // both prefilled from the Solve stage and editable, then says whether the two checks agree. The
 // results are one list of rows in every task (./panels/ResultPanel.js), each fact said once.
 //
-// #303 (Board G polish): what Board G does not show waits under the results in closed sections:
-// Gadgets (the list, with the Reduction View's Plain / Color switch and its link line) and
-// Phases (the Reduction View's phase buttons). The pictures render those pieces into the
-// sections' elements (../pictures/secondarySlots.js), so they keep working as before.
+// #303 (Board G polish): what Board G does not show waits under the results in a closed
+// section: Gadgets (the list, with the Reduction View's Plain / Color switch and its link line).
+// The pictures render those pieces into the section's element (../pictures/secondarySlots.js),
+// so they keep working as before. The Reduction View's phase buttons sit above the step
+// controls (./VisualizationPane.js), so the reader sees the stage as the steps play.
 //
 // What this component owns, and why here:
 //   - The one instance value. Every part of the page reads it, and editing it anywhere
@@ -151,7 +153,6 @@ import {
 import { COMPACT_MEDIA, PHONE_MEDIA, secondaryButtonSx } from "./layout";
 import InstancePanel from "./panels/InstancePanel";
 import ResultPanel, { SeedText } from "./panels/ResultPanel";
-import SecondarySection from "./panels/SecondarySection";
 import { ReduceVerifySide, unreadableFailure, VerifyTaskRow } from "./panels/VerifyBox";
 import VisualizationPane from "./VisualizationPane";
 
@@ -325,11 +326,9 @@ export default function Workbench({ problem }) {
   // #303: the workspace shows only the picture(s) and the steps: "all" of them, or (stage 2)
   // one of Reduce's two panes alone, "source" or "target"; null when off.
   const [fullScreen, setFullScreen] = useState(null);
-  // #303 (Board G polish): the bottom sections' elements the Reduction View's Gadgets controls
-  // and phase buttons render into (../pictures/secondarySlots.js).
+  // #303 (Board G polish): the Gadgets section's element the Reduction View's Gadgets controls
+  // render into (../pictures/secondarySlots.js).
   const [gadgetControlsSlot, setGadgetControlsSlot] = useState(null);
-  const [phasesSlot, setPhasesSlot] = useState(null);
-  const exitRef = useRef(null);
   // The Full screen button that went in, so coming out puts focus back on it.
   const fullFromRef = useRef(null);
   // #303 stage 2: the Reduce stage whose menus the bar shows, when one was picked in the stepper
@@ -712,12 +711,17 @@ export default function Workbench({ problem }) {
   }, [instanceParam, solverParam, vizParam, router]);
 
   // --- Full screen (#303) ----------------------------------------------------------------
-  // Going in moves focus to Exit full screen and stops the page scrolling under the overlay;
-  // coming out puts focus back on the Full screen button that went in.
+  // Going in keeps focus on the Full screen button that went in (#305: it is the way out, now
+  // saying "Exit full screen") and stops the page scrolling under the overlay; coming out puts
+  // focus back on that button.
   const wasFullRef = useRef(false);
   useLayoutEffect(() => {
     if (fullScreen) {
-      exitRef.current?.focus();
+      document
+        .getElementById(
+          fullScreen === "all" ? `${ID}-full-screen` : `${ID}-${fullScreen}-full-screen`,
+        )
+        ?.focus();
     } else if (wasFullRef.current) {
       document.getElementById(fullFromRef.current ?? `${ID}-full-screen`)?.focus();
     }
@@ -2253,24 +2257,11 @@ export default function Workbench({ problem }) {
             }
           : null
       }
-      after={
-        // #303: the Reduction View's phase buttons, which Board G does not show.
-        reductionPane ? (
-          <SecondarySection
-            key={`phases-${reduceResult.runId}`}
-            id={`${ID}-result-phases`}
-            title="Phases"
-            count={new Set(reductionPane.view.frames.map((frame) => frame.phase)).size}
-            bodyRef={setPhasesSlot}
-          />
-        ) : null
-      }
     />
   );
   const secondarySlots = {
     bottom: true,
     gadgets: reduceGadgets.length > 0 ? gadgetControlsSlot : null,
-    phases: reductionPane ? phasesSlot : null,
   };
 
   // #303 stage 4: the Verifier menus, always a dropdown with its (i), even with one verifier.
@@ -2434,32 +2425,14 @@ export default function Workbench({ problem }) {
           : {}),
       }}
     >
+      {/* #305: only the title; the way out is the Full screen button that went in (and Escape). */}
       {fullScreen && (
         <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 1.5,
-          }}
+          component="h2"
+          id={`${ID}-full-title`}
+          sx={{ m: 0, fontSize: "1rem", fontWeight: 700 }}
         >
-          <Box
-            component="h2"
-            id={`${ID}-full-title`}
-            sx={{ m: 0, fontSize: "1rem", fontWeight: 700 }}
-          >
-            {fullTitle}
-          </Box>
-          <Box
-            id={`${ID}-full-exit`}
-            ref={exitRef}
-            component="button"
-            type="button"
-            onClick={() => setFullScreen(null)}
-            sx={secondaryButtonSx}
-          >
-            Exit full screen
-          </Box>
+          {fullTitle}
         </Box>
       )}
 

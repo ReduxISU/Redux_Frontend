@@ -14,6 +14,14 @@
 // then reduced/solved, since visualizeReduction never returns intermediate
 // steps) are the same `frameCount` prop, just a different number.
 //
+// #303 (Board G): laid out as the mockup's step bar, one box in the well color (`surface.well`)
+// with a hairline border: five buttons (First step, Previous step, Play / Pause as the soft brand
+// button, Next step, Last step), the slider ("Step"), "Speed" and its dropdown, then one line
+// under them: "Step N of M:" in bold and the step's description. The description is rendered by
+// the picture into `textRef`'s element (../pictures/secondarySlots.js StepTextSlot), so this file
+// never knows what a step says. The buttons are 40px squares, as the mockup draws them, each
+// with an invisible 44px hit area around it (`::before`) so a finger still lands on it.
+//
 // Play/pause/step buttons are real, focusable, aria-labelled controls; the
 // scrub bar is a real MUI Slider (a native range input under the hood, so
 // arrow keys move it without extra wiring); frame changes announce through
@@ -28,28 +36,91 @@
 // keeps both call sites down to frameCount/currentStep/onStepChange, per
 // the issue's genericity requirement.
 
-import PauseIcon from "@mui/icons-material/Pause";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import SkipNextIcon from "@mui/icons-material/SkipNext";
-import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Slider from "@mui/material/Slider";
-import Typography from "@mui/material/Typography";
 import { useEffect, useState } from "react";
 
 // Milliseconds between frames while playing at 1x. SPEED_OPTIONS' `factor`
 // multiplies this, so 2x plays twice as fast (half the delay) and 0.5x half
-// as fast (double the delay).
+// as fast (double the delay); #303 adds 0.25x (four times the delay) and 4x
+// (a quarter of it).
 const BASE_STEP_MS = 900;
 const SPEED_OPTIONS = [
+  { value: "0.25", factor: 4, label: "0.25x" },
   { value: "0.5", factor: 2, label: "0.5x" },
   { value: "1", factor: 1, label: "1x" },
   { value: "2", factor: 0.5, label: "2x" },
+  { value: "4", factor: 0.25, label: "4x" },
 ];
 const DEFAULT_SPEED_VALUE = "1";
+const DEFAULT_SPEED = SPEED_OPTIONS.find((option) => option.value === DEFAULT_SPEED_VALUE);
+
+// #303: the mockup's step bar icons (24-unit boxes, drawn 16px).
+const ICON_PATHS = {
+  first: "M6 5v14M18 6l-8 6 8 6z",
+  previous: "M15 6l-6 6 6 6",
+  next: "M9 6l6 6-6 6",
+  last: "M18 5v14M6 6l8 6-8 6z",
+};
+
+/** A stroked step bar icon. */
+function StrokeIcon({ d }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+
+/** Play (a triangle) or Pause (two bars), filled. */
+function PlayIcon({ playing }) {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      {playing ? (
+        <>
+          <rect x="6" y="5" width="4" height="14" rx="1" />
+          <rect x="14" y="5" width="4" height="14" rx="1" />
+        </>
+      ) : (
+        <path d="M7 5v14l12-7z" />
+      )}
+    </svg>
+  );
+}
+
+// #303: a step bar button, 40px as drawn, its hit area 44px (the `::before`).
+const stepButtonSx = {
+  position: "relative",
+  width: 40,
+  height: 40,
+  flex: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  p: 0,
+  borderRadius: "8px",
+  border: "1px solid",
+  borderColor: "border.strong",
+  backgroundColor: "surface.main",
+  color: "text.primary",
+  fontFamily: "inherit",
+  cursor: "pointer",
+  "&::before": { content: '""', position: "absolute", inset: "-2px" },
+  "&:hover:not(:disabled)": { backgroundColor: "surface.raised" },
+  "&:disabled": { cursor: "not-allowed", color: "text.disabled", borderColor: "border.soft" },
+};
 
 /**
  * @param {Object} props
@@ -64,6 +135,9 @@ const DEFAULT_SPEED_VALUE = "1";
  *   step index on every step/scrub/play tick.
  * @param {string} [props.frameNoun] What one frame is called in the
  *   position text and the aria-live announcement. Defaults to "Step".
+ * @param {import("react").Ref} [props.textRef] #303: the element the step's description is
+ *   rendered into, after "Step N of M:" (its id is `${idPrefix}-text`).
+ * @param {string} [props.textId] The description element's id, when the caller names it.
  */
 export default function StepScrubber({
   idPrefix,
@@ -71,6 +145,8 @@ export default function StepScrubber({
   currentStep,
   onStepChange,
   frameNoun = "Step",
+  textRef,
+  textId,
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [speedValue, setSpeedValue] = useState(DEFAULT_SPEED_VALUE);
@@ -97,7 +173,7 @@ export default function StepScrubber({
     if (!isPlayingEffective) {
       return undefined;
     }
-    const speed = SPEED_OPTIONS.find((option) => option.value === speedValue) ?? SPEED_OPTIONS[1];
+    const speed = SPEED_OPTIONS.find((option) => option.value === speedValue) ?? DEFAULT_SPEED;
     const timeoutId = setTimeout(() => {
       onStepChange(Math.min(currentStep + 1, lastIndex));
     }, BASE_STEP_MS * speed.factor);
@@ -118,14 +194,10 @@ export default function StepScrubber({
     setIsPlaying(true);
   }
 
-  function handleStepBack() {
+  /** Stops playing and goes to `index`. */
+  function goTo(index) {
     setIsPlaying(false);
-    onStepChange(Math.max(currentStep - 1, 0));
-  }
-
-  function handleStepForward() {
-    setIsPlaying(false);
-    onStepChange(Math.min(currentStep + 1, lastIndex));
+    onStepChange(Math.min(Math.max(index, 0), lastIndex));
   }
 
   function handleScrub(_event, value) {
@@ -136,80 +208,129 @@ export default function StepScrubber({
   const positionText = hasFrames
     ? `${frameNoun} ${currentStep + 1} of ${frameCount}`
     : "No frames available";
+  const descriptionId = textId ?? `${idPrefix}-text`;
 
   return (
     <Box
+      id={`${idPrefix}-bar`}
       sx={{
         display: "flex",
-        flexDirection: "column",
-        gap: 1,
-        px: 1.5,
-        py: 1,
-        borderRadius: 2,
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "10px 14px",
+        p: "12px 16px",
+        backgroundColor: "surface.well",
         border: "1px solid",
-        borderColor: "divider",
+        borderColor: "border.soft",
+        borderRadius: "12px",
+        minWidth: 0,
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1 }}>
-        <IconButton
-          id={`${idPrefix}-previous`}
-          size="small"
+      <Box
+        id={`${idPrefix}-buttons`}
+        role="group"
+        aria-label="Step controls"
+        sx={{ display: "flex", gap: "4px", flex: "none" }}
+      >
+        <Box
+          component="button"
+          type="button"
+          id={`${idPrefix}-first`}
+          aria-label="First step"
           disabled={!canScrub || atStart}
-          onClick={handleStepBack}
-          aria-label="Previous step"
+          onClick={() => goTo(0)}
+          sx={stepButtonSx}
         >
-          <SkipPreviousIcon fontSize="small" />
-        </IconButton>
-        <IconButton
+          <StrokeIcon d={ICON_PATHS.first} />
+        </Box>
+        <Box
+          component="button"
+          type="button"
+          id={`${idPrefix}-previous`}
+          aria-label="Previous step"
+          disabled={!canScrub || atStart}
+          onClick={() => goTo(currentStep - 1)}
+          sx={stepButtonSx}
+        >
+          <StrokeIcon d={ICON_PATHS.previous} />
+        </Box>
+        <Box
+          component="button"
+          type="button"
           id={`${idPrefix}-play-pause`}
-          size="small"
+          aria-label={isPlayingEffective ? "Pause" : "Play"}
           disabled={!canScrub}
           onClick={handlePlayPause}
-          aria-label={isPlayingEffective ? "Pause" : "Play"}
-        >
-          {isPlayingEffective ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
-        </IconButton>
-        <IconButton
-          id={`${idPrefix}-next`}
-          size="small"
-          disabled={!canScrub || atEnd}
-          onClick={handleStepForward}
-          aria-label="Next step"
-        >
-          <SkipNextIcon fontSize="small" />
-        </IconButton>
-
-        <Slider
-          id={`${idPrefix}-slider`}
-          aria-label="Scrub to step"
-          getAriaValueText={(value) => `${frameNoun} ${value + 1} of ${frameCount}`}
-          valueLabelDisplay="auto"
-          valueLabelFormat={(value) => `${value + 1}`}
-          size="small"
-          min={0}
-          max={lastIndex}
-          step={1}
-          value={currentStep}
-          onChange={handleScrub}
-          disabled={!canScrub}
-          // Below md the controls wrap: buttons and speed on one row, the scrub bar full width on
-          // its own row, so nothing is squeezed to a sliver or overflows a phone.
           sx={{
-            flex: { xs: "1 1 calc(100% - 24px)", md: 1 },
-            order: { xs: 5, md: 0 },
-            mx: { xs: 1.5, md: 1 },
-            py: { xs: "21px", md: "13px" },
+            ...stepButtonSx,
+            width: 44,
+            backgroundColor: "brand.soft",
+            borderColor: "brand.softLine",
+            color: "brand.onSoft",
+            "&:hover:not(:disabled)": { backgroundColor: "brand.softHover" },
           }}
-        />
+        >
+          <PlayIcon playing={isPlayingEffective} />
+        </Box>
+        <Box
+          component="button"
+          type="button"
+          id={`${idPrefix}-next`}
+          aria-label="Next step"
+          disabled={!canScrub || atEnd}
+          onClick={() => goTo(currentStep + 1)}
+          sx={stepButtonSx}
+        >
+          <StrokeIcon d={ICON_PATHS.next} />
+        </Box>
+        <Box
+          component="button"
+          type="button"
+          id={`${idPrefix}-last`}
+          aria-label="Last step"
+          disabled={!canScrub || atEnd}
+          onClick={() => goTo(lastIndex)}
+          sx={stepButtonSx}
+        >
+          <StrokeIcon d={ICON_PATHS.last} />
+        </Box>
+      </Box>
 
+      <Slider
+        id={`${idPrefix}-slider`}
+        aria-label="Step"
+        getAriaValueText={(value) => `${frameNoun} ${value + 1} of ${frameCount}`}
+        valueLabelDisplay="auto"
+        valueLabelFormat={(value) => `${value + 1}`}
+        size="small"
+        min={0}
+        max={lastIndex}
+        step={1}
+        value={currentStep}
+        onChange={handleScrub}
+        disabled={!canScrub}
+        // The mockup's `flex: 1 1 200px`: on a phone the slider takes its own row.
+        sx={{ flex: "1 1 200px", minWidth: 0, mx: 1, py: "13px" }}
+      />
+
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}>
+        <Box
+          component="label"
+          id={`${idPrefix}-speed-label`}
+          htmlFor={`${idPrefix}-speed-input`}
+          sx={{ fontSize: "0.8125rem", fontWeight: 600, color: "text.secondary" }}
+        >
+          Speed
+        </Box>
         <Select
           id={`${idPrefix}-speed`}
           aria-label="Playback speed"
+          inputProps={{ id: `${idPrefix}-speed-input` }}
           size="small"
           value={speedValue}
           disabled={!canScrub}
           onChange={(event) => setSpeedValue(event.target.value)}
-          sx={{ flexShrink: 0, minWidth: 76, ml: { xs: "auto", md: 0 } }}
+          sx={{ flexShrink: 0, minWidth: 84, backgroundColor: "surface.input" }}
         >
           {SPEED_OPTIONS.map((option) => (
             <MenuItem key={option.value} value={option.value}>
@@ -219,10 +340,35 @@ export default function StepScrubber({
         </Select>
       </Box>
 
-      <Box id={`${idPrefix}-position`} role="status" aria-live="polite">
-        <Typography variant="body2" sx={{ color: "text.secondary" }}>
-          {positionText}
-        </Typography>
+      {/* "Step N of M:" and the step's description, one line under the controls. The colon goes
+          when no description was rendered (a picture with no captions). */}
+      <Box
+        id={`${idPrefix}-line`}
+        role="status"
+        aria-live="polite"
+        sx={{
+          flex: "1 1 100%",
+          minWidth: 0,
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "baseline",
+          gap: "4px 8px",
+          fontSize: "0.875rem",
+          color: "text.secondary",
+          [`&:has(> #${descriptionId}:empty) [data-step-colon]`]: { display: "none" },
+        }}
+      >
+        <Box component="strong" sx={{ fontWeight: 700, color: "text.primary", flex: "none" }}>
+          <Box component="span" id={`${idPrefix}-position`}>
+            {positionText}
+          </Box>
+          <span data-step-colon="">:</span>
+        </Box>
+        <Box
+          ref={textRef}
+          id={descriptionId}
+          sx={{ flex: "1 1 0", minWidth: "min(100%, 240px)", "&:empty": { display: "none" } }}
+        />
       </Box>
     </Box>
   );

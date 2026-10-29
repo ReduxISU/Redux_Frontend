@@ -8,9 +8,10 @@
 //     The workbench's picture pane puts it under the step controls, as Board G does; with no slot
 //     (a picture outside the workbench) the caption stays under the picture.
 //   - SecondarySlots: what Board G does not show and the workbench keeps at the bottom of the
-//     page, under the results, in collapsible sections: the Reduction View's Gadgets controls
-//     (the Plain / Color switch and the "Point at a piece" readout, in the Gadgets section) and
-//     its phase buttons (in the Phases section). With no slot they stay beside the pictures.
+//     page, under the results, in a collapsible section: the Reduction View's Gadgets controls
+//     (the Plain / Color switch and the "Point at a piece" readout, in the Gadgets section). With
+//     no slot they stay beside the pictures. (The phase buttons used to wait in a Phases section
+//     here too; they now sit above the step controls, ../workbench/VisualizationPane.js.)
 
 import { createContext } from "react";
 import { createPortal } from "react-dom";
@@ -19,12 +20,12 @@ import { createPortal } from "react-dom";
 export const StepTextSlot = createContext(null);
 
 /**
- * `{bottom, gadgets, phases}`: `bottom` is true in the workbench, which keeps these pieces at the
- * bottom of the page; `gadgets` and `phases` are the bottom sections' elements (null while a
- * section is not there, and then the piece is not shown). Outside the workbench `bottom` is
- * false and each piece stays beside the pictures.
+ * `{bottom, gadgets}`: `bottom` is true in the workbench, which keeps these pieces at the bottom
+ * of the page; `gadgets` is the Gadgets section's element (null while the section is not there,
+ * and then the piece is not shown). Outside the workbench `bottom` is false and each piece stays
+ * beside the pictures.
  */
-export const SecondarySlots = createContext({ bottom: false, gadgets: null, phases: null });
+export const SecondarySlots = createContext({ bottom: false, gadgets: null });
 
 /** `children` in the bottom slot `slot` in the workbench (nothing without one), else in place. */
 export function AtBottom({ slots, slot, children }) {

@@ -3,8 +3,8 @@
 // #303 stage 3: Board G's zoom, pan and move-pieces model, which DiagramZoom.js gives every
 // picture on every page. Driven on the Clique page's Graph (one captured run answers every
 // picture request, as in picture-renderers.spec.js), whose nodes are movable:
-//   - Ctrl + wheel zooms about the pointer; a plain wheel scrolls the page and shows a hint in
-//     normal view, and zooms in full screen;
+//   - Ctrl + wheel zooms about the pointer; a plain wheel scrolls the page in normal view (no
+//     popup over the picture), and zooms in full screen;
 //   - zoom runs below fit, down to MIN_ZOOM (a quarter of fit);
 //   - a pan works at fit too, and is clamped so part of the picture stays in the window;
 //   - a right drag pans anywhere with no context menu, a left drag on a node moves it;
@@ -153,7 +153,7 @@ test.describe("desktop", () => {
     await openGraph(page);
   });
 
-  test("Ctrl + wheel zooms about the pointer; a plain wheel scrolls the page and shows the hint", async ({
+  test("Ctrl + wheel zooms about the pointer; a plain wheel scrolls the page and shows no hint", async ({
     page,
   }) => {
     await settledViewBox(page);
@@ -171,19 +171,19 @@ test.describe("desktop", () => {
     expect(Math.abs(after.y - before.y)).toBeLessThan(0.5);
     await expect(page.locator(`${GRAPH}-zoom-hint`)).toHaveCount(0);
 
-    // A plain wheel is the page's: it scrolls, the zoom stays, and the hint says how to zoom.
+    // A plain wheel is the page's: it scrolls and the zoom stays. No popup says how to zoom (the
+    // help line under the picture does).
     const zoomed = await zoomOf(page);
     const viewBox = await viewBoxOf(page);
     const scrolled = await page.evaluate(() => window.scrollY);
     const middle = await middleOf(page);
     await page.mouse.move(middle.x, middle.y);
     await page.mouse.wheel(0, 120);
-    await expect(page.locator(`${GRAPH}-zoom-hint`)).toHaveText("Hold Ctrl and scroll to zoom");
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrolled);
     expect(await zoomOf(page)).toBe(zoomed);
     expect(await viewBoxOf(page)).toBe(viewBox);
-    // It goes again by itself.
-    await expect(page.locator(`${GRAPH}-zoom-hint`)).toHaveCount(0, { timeout: 4000 });
+    await expect(page.locator(`${GRAPH}-zoom-hint`)).toHaveCount(0);
+    await expect(page.locator(`${GRAPH}-zoom-help`)).toContainText("Ctrl + scroll to zoom");
   });
 
   test("in full screen a plain wheel zooms, and the help line says so", async ({ page }) => {

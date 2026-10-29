@@ -167,8 +167,12 @@ test("full screen shows only the picture and the steps, and Escape leaves it", a
   await expect(fullButton).toHaveAttribute("aria-pressed", "false");
   await fullButton.click();
   await expect(page.locator("#workbench")).toHaveAttribute("data-full-screen", "true");
-  await expect(page.locator("#workbench-full-exit")).toBeFocused();
+  // #305: the button that went in is the one way out, focused and saying so in words.
+  await expect(fullButton).toBeFocused();
   await expect(fullButton).toHaveAttribute("aria-pressed", "true");
+  await expect(fullButton).toHaveText("Exit full screen");
+  await expect(page.locator("#workbench-full-exit")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Exit full screen", exact: true })).toHaveCount(1);
 
   // Covers the window, banner included.
   const card = await boxOf(page, "#workbench");
@@ -733,7 +737,10 @@ test("each pane's Full screen shows that picture alone with the steps; Reduce's 
   await page.locator("#workbench-source-full-screen").click();
   await expect(page.locator("#workbench-reduction-source")).toBeVisible();
   await expect(page.locator("#workbench-reduction-target")).toBeHidden();
-  await page.locator("#workbench-full-exit").click();
+  // #305: that pane's button is the one way out.
+  await expect(page.getByRole("button", { name: "Exit full screen", exact: true })).toHaveCount(1);
+  await page.locator("#workbench-source-full-screen").click();
+  await expect(page.locator("#workbench")).not.toHaveAttribute("data-full-screen", "true");
 
   // Both pictures with the arrow, and the steps.
   await page.locator("#workbench-full-screen").click();
@@ -744,8 +751,47 @@ test("each pane's Full screen shows that picture alone with the steps; Reduce's 
   await expect(page.locator("#workbench-reduction-panes-arrow")).toBeVisible();
   await expect(page.locator("#workbench-steps-slider")).toBeVisible();
   for (const hidden of hiddenInFull) await expect(page.locator(hidden)).toBeHidden();
+  await expect(page.getByRole("button", { name: "Exit full screen", exact: true })).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.locator("#workbench-full-screen")).toBeFocused();
+});
+
+test("#305: on a phone every full screen has one Exit full screen button, labelled and on screen", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const exits = page.getByRole("button", { name: "Exit full screen", exact: true });
+  /** Goes in with `id`, finds the one way out on screen, and leaves with it. */
+  async function oneWayOut(id) {
+    await page.locator(id).click();
+    await expect(page.locator("#workbench")).toHaveAttribute("data-full-screen", "true");
+    await expect(exits).toHaveCount(1);
+    const exit = page.locator(id);
+    await expect(exit).toHaveAttribute("aria-label", "Exit full screen");
+    await expect(exit).toHaveText("Exit full screen");
+    await expect(exit).toBeInViewport();
+    const box = await boxOf(page, id);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+    await exit.click();
+    await expect(page.locator("#workbench")).not.toHaveAttribute("data-full-screen", "true");
+  }
+
+  // Solve, then Verify: the one picture.
+  await openSat3(page);
+  await solve(page);
+  await oneWayOut("#workbench-full-screen");
+  await page.locator("#workbench-mode-verify").click();
+  await oneWayOut("#workbench-full-screen");
+
+  // Reduce: both pictures, then each pane alone.
+  await openSatReduce(page, { width: 390 });
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  await oneWayOut("#workbench-full-screen");
+  await oneWayOut("#workbench-source-full-screen");
+  await oneWayOut("#workbench-target-full-screen");
 });
 
 test("Reduce's Verify stage checks both answers, prefilled from Solve, and says whether they agree", async ({
@@ -852,21 +898,47 @@ async function openSatToIlp(page, width) {
     .click();
 }
 
-/** The two panes' picture areas, and where each picture's zoom box sits in its area. */
+/**
+ * The two panes' picture areas, where each picture's zoom box sits in its area, and the
+ * picture's card (the area's child): its height and its border.
+ */
 function pictureAreas(page) {
   return page.evaluate(() =>
     [...document.querySelectorAll('[id$="-picture-area"]')].map((area) => {
       const box = area.getBoundingClientRect();
       const zoom = area.querySelector("[data-zoom]")?.getBoundingClientRect() ?? null;
+      const card = area.firstElementChild;
+      const style = getComputedStyle(card);
       return {
         id: area.id,
         top: box.top,
         height: box.height,
         above: zoom ? zoom.top - box.top : null,
         below: zoom ? box.bottom - zoom.bottom : null,
+        card: {
+          id: card.id,
+          height: card.getBoundingClientRect().height,
+          border: style.borderTopWidth,
+          borderStyle: style.borderTopStyle,
+          borderColor: style.borderTopColor,
+          background: style.backgroundColor,
+          visible: card.getBoundingClientRect().height > 0 && style.visibility !== "hidden",
+        },
       };
     }),
   );
+}
+
+/** Both cards are one height, filling their areas, with a hairline border unlike their fill. */
+function expectEqualCards(source, target) {
+  for (const pane of [source, target]) {
+    expect(pane.card.visible).toBe(true);
+    expect(Math.abs(pane.card.height - pane.height)).toBeLessThanOrEqual(1);
+    expect(pane.card.border).toBe("1px");
+    expect(pane.card.borderStyle).toBe("solid");
+    expect(pane.card.borderColor).not.toBe(pane.card.background);
+  }
+  expect(Math.abs(source.card.height - target.card.height)).toBeLessThanOrEqual(1);
 }
 
 test("at 1280 px Reduce's two picture areas are the same height, before and after Reduce and on full screen, a shorter picture centered", async ({
@@ -878,6 +950,9 @@ test("at 1280 px Reduce's two picture areas are the same height, before and afte
   expect(target.id).toBe("workbench-target-picture-area");
   expect(Math.abs(source.height - target.height)).toBeLessThanOrEqual(1);
   expect(Math.abs(source.top - target.top)).toBeLessThanOrEqual(1);
+  expect(source.card.id).toBe("workbench-source-picture");
+  expect(target.card.id).toBe("workbench-target-picture");
+  expectEqualCards(source, target);
 
   await page.locator(RUN).click();
   const targetZoom = page.locator("#workbench-reduction-target-picture-area [data-zoom]");
@@ -891,11 +966,26 @@ test("at 1280 px Reduce's two picture areas are the same height, before and afte
     expect(source.id).toBe("workbench-reduction-source-picture-area");
     expect(Math.abs(source.height - target.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(source.top - target.top)).toBeLessThanOrEqual(1);
+    // The cards themselves, which the reader sees, are the same height and framed.
+    expect(source.card.id).toBe("workbench-reduction-source");
+    expect(target.card.id).toBe("workbench-reduction-target");
+    expectEqualCards(source, target);
     // The table is shorter than the clause graph: it sits in the middle of its area (its
     // caption and hint above the zoom box), not at the top.
     expect(target.above).toBeGreaterThan(60);
     expect(target.below).toBeGreaterThan(60);
   }
+
+  // In the dark theme the card's fill is darker than the workspace, so its edge is the fill's
+  // edge too: both cards' fills are still one height, framed.
+  await page.emulateMedia({ colorScheme: "dark" });
+  [source, target] = await pictureAreas(page);
+  expectEqualCards(source, target);
+  const workspace = await page
+    .locator("#workbench")
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(source.card.background).not.toBe(workspace);
+  expect(target.card.background).toBe(source.card.background);
 });
 
 test("at 800 px Reduce's panes stack, each picture at its own height", async ({ page }) => {
@@ -972,7 +1062,7 @@ const bottomOf = async (page, selector) => {
   return box.y + box.height;
 };
 
-test("Solve keeps Board G's order: the picture, the Legend, the steps, then the step's caption", async ({
+test("Solve keeps Board G's order: the picture, the Legend, then the steps, the step's caption on their Step N of M line", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
@@ -987,52 +1077,136 @@ test("Solve keeps Board G's order: the picture, the Legend, the steps, then the 
   expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
     await bottomOf(page, "#workbench-legend-body"),
   );
-  expect(await topOf(page, "#workbench-step-text")).toBeGreaterThan(
-    await bottomOf(page, "#workbench-steps-position"),
+  // #303: the caption is on the step bar's last line, after "Step N of M:".
+  await expect(page.locator("#workbench-steps-bar #workbench-step-text")).toBeVisible();
+  expect(await topOf(page, "#workbench-steps-line")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-steps-slider"),
   );
   expect(await topOf(page, "#workbench-command-bar")).toBeGreaterThan(
-    await bottomOf(page, "#workbench-step-text"),
+    await bottomOf(page, "#workbench-steps-bar"),
   );
 });
 
-test("Reduce keeps Board G's order, and the Gadgets switch, its link line and the phase buttons wait in closed sections at the bottom", async ({
+test("the step bar is the mockup's: five buttons, the slider, Speed, and one Step N of M: line", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  await solve(page);
+  const bar = page.locator("#workbench-steps-bar");
+  const buttons = bar.locator("#workbench-steps-buttons button");
+  expect(await buttons.evaluateAll((all) => all.map((b) => b.getAttribute("aria-label")))).toEqual([
+    "First step",
+    "Previous step",
+    "Play",
+    "Next step",
+    "Last step",
+  ]);
+  await expect(bar.getByRole("slider", { name: "Step" })).toBeVisible();
+  await expect(bar.locator("#workbench-steps-speed-label")).toHaveText("Speed");
+  const position = page.locator("#workbench-steps-position");
+  const total = Number(/of (\d+)/.exec(await position.textContent())[1]);
+  expect(total).toBeGreaterThan(2);
+  const at = async (n) => expect(position).toHaveText(`Step ${n} of ${total}`);
+  const first = page.locator("#workbench-steps-first");
+  const previous = page.locator("#workbench-steps-previous");
+  const next = page.locator("#workbench-steps-next");
+  const last = page.locator("#workbench-steps-last");
+
+  // A solve opens on its last step: Next and Last are off there.
+  await at(total);
+  await expect(next).toBeDisabled();
+  await expect(last).toBeDisabled();
+  // First jumps to step 1, where First and Previous are off.
+  await first.click();
+  await at(1);
+  await expect(first).toBeDisabled();
+  await expect(previous).toBeDisabled();
+  await expect(next).toBeEnabled();
+  // Next and Previous move one step; Last jumps to the end.
+  await next.click();
+  await at(2);
+  await next.click();
+  await at(3);
+  await previous.click();
+  await at(2);
+  await last.click();
+  await at(total);
+
+  // One line: "Step N of M:" in bold, then the step's description.
+  const line = page.locator("#workbench-steps-line");
+  await expect(line).toHaveAttribute("aria-live", "polite");
+  await expect(line).toContainText(new RegExp(`^Step ${total} of ${total}:\\s*\\S`));
+  await expect(line.locator("strong")).toHaveText(`Step ${total} of ${total}:`);
+  await expect(line.locator("#workbench-step-text")).toContainText("Verdict:");
+  // One box in the well, with a hairline border, every button a 44px target.
+  const style = await bar.evaluate((element) => {
+    const css = getComputedStyle(element);
+    return { border: css.borderTopWidth, radius: css.borderTopLeftRadius };
+  });
+  expect(style).toEqual({ border: "1px", radius: "12px" });
+  for (const id of ["first", "previous", "play-pause", "next", "last"]) {
+    const box = await boxOf(page, `#workbench-steps-${id}`);
+    expect(box.height).toBeGreaterThanOrEqual(40);
+    const hit = await page.locator(`#workbench-steps-${id}`).evaluate((element) => {
+      const before = getComputedStyle(element, "::before");
+      return element.getBoundingClientRect().height - 2 * Number.parseFloat(before.top);
+    });
+    expect(hit).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test("on a phone the step bar wraps with no sideways scroll", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openSat3(page);
+  await solve(page);
+  await page.locator("#workbench-steps-first").click();
+  await page.locator("#workbench-steps-next").click();
+  for (const id of ["bar", "last", "slider", "speed", "line"]) {
+    const box = await boxOf(page, `#workbench-steps-${id}`);
+    expect(box.x + box.width, id).toBeLessThanOrEqual(390);
+  }
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+});
+
+test("Reduce keeps Board G's order, the phases above the steps, and the Gadgets switch and its link line wait in a closed section at the bottom", async ({
   page,
 }) => {
   await openSatReduce(page);
   await page.locator(RUN).click();
   await expect(page.locator("#workbench-reduction")).toBeVisible();
 
-  // Under the pictures: the Legend, the steps and the caption; nothing of the Gadgets or phases.
+  // Under the pictures: the Legend, the phases, the steps and the caption; nothing of the
+  // Gadgets.
   const pane = page.locator("#workbench-pane");
   for (const piece of ["marks-row", "link"]) {
     await expect(pane.locator(`#workbench-reduction-${piece}`)).toHaveCount(0);
   }
-  await expect(pane.locator("#workbench-phases")).toHaveCount(0);
   expect(await topOf(page, "#workbench-legend-toggle")).toBeGreaterThan(
     await bottomOf(page, "#workbench-reduction-panes"),
   );
-  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+  // The phases, always shown, sit right above the step controls; no Phases section is left.
+  await expect(pane.locator("#workbench-phases")).toBeVisible();
+  await expect(page.locator("#workbench-result-phases")).toHaveCount(0);
+  expect(await topOf(page, "#workbench-phases")).toBeGreaterThan(
     await bottomOf(page, "#workbench-legend-body"),
+  );
+  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-phases"),
   );
   await expect(page.locator("#workbench-step-text #workbench-reduction-caption")).toBeVisible();
 
-  // At the bottom, under the results: Gadgets (n) then Phases, both closed.
+  // At the bottom, under the results: Gadgets (n), closed.
   const gadgets = page.locator("#workbench-result-gadgets");
-  const phases = page.locator("#workbench-result-phases");
-  for (const toggle of ["gadgets", "phases"]) {
-    await expect(page.locator(`#workbench-result-${toggle}-toggle`)).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-  }
+  await expect(page.locator("#workbench-result-gadgets-toggle")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   await expect(page.locator("#workbench-result-gadgets-count")).toHaveText(
     `(${SAT_TO_3SAT_VIEW.gadgets.length})`,
   );
   expect(await topOf(page, "#workbench-result-gadgets")).toBeGreaterThan(
     await bottomOf(page, "#workbench-result-rows"),
-  );
-  expect(await topOf(page, "#workbench-result-phases")).toBeGreaterThan(
-    await bottomOf(page, "#workbench-result-gadgets"),
   );
 
   // Opened, Gadgets starts with the Plain / Color switch and the link line, which still work:
@@ -1050,11 +1224,60 @@ test("Reduce keeps Board G's order, and the Gadgets switch, its link line and th
   );
   await page.locator("#workbench-reduction-marks-plain").click();
 
-  // Opened, Phases jumps the steps, as the bar beside the pictures did; each button is a 44px
-  // target.
-  await page.locator("#workbench-result-phases-toggle").click();
-  const build = phases.locator("#workbench-phases-build");
-  await expect(build).toBeVisible();
+  // The phase buttons are 44px targets, the step's phase marked.
+  const build = pane.locator("#workbench-phases-build");
   expect((await boxOf(page, "#workbench-phases-build")).height).toBeGreaterThanOrEqual(44);
   await expect(build).toHaveAttribute("aria-current", "step");
+});
+
+test("the marked phase follows the step as it moves, and a phase button jumps to its phase", async ({
+  page,
+}) => {
+  await openSatReduce(page);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  // Solve through 3SAT, so every phase has steps.
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-phases-map")).toBeEnabled();
+  const bar = page.locator("#workbench-phases");
+  const marked = bar.locator('[aria-current="step"]');
+  const firstOf = (phase) => SAT_TO_3SAT_VIEW.frames.findIndex((frame) => frame.phase === phase);
+
+  // A phase button jumps to its phase's first step, and is the one marked.
+  await page.locator("#workbench-phases-build").click();
+  await expect(marked).toHaveCount(1);
+  await expect(marked).toHaveAttribute("data-phase", "build");
+  await expect(bar).toHaveAttribute("data-current-phase", "build");
+  await expect(page.locator("#workbench-steps-position")).toContainText("Step 1 of");
+  // Stepping forward across Build's end moves the mark to Solve, and back moves it back.
+  for (let step = 0; step < firstOf("solve"); step += 1) {
+    await page.locator("#workbench-steps-next").click();
+  }
+  await expect(marked).toHaveAttribute("data-phase", "solve");
+  await page.locator("#workbench-steps-previous").click();
+  await expect(marked).toHaveAttribute("data-phase", "build");
+  // Scrubbing to the end marks Map back.
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("End");
+  await expect(marked).toHaveAttribute("data-phase", "map");
+  // The marked phase looks different from the others (its fill), not by aria alone.
+  const fill = (id) =>
+    page.locator(id).evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(await fill("#workbench-phases-map")).not.toBe(await fill("#workbench-phases-build"));
+});
+
+test("on a phone the phases wrap above the steps, with no sideways scroll", async ({ page }) => {
+  await openSatReduce(page, { width: 390 });
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  await expect(page.locator("#workbench-phases")).toBeVisible();
+  for (const phase of ["build", "solve", "map"]) {
+    const box = await boxOf(page, `#workbench-phases-${phase}`);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+  expect(await topOf(page, "#workbench-steps-slider")).toBeGreaterThan(
+    await bottomOf(page, "#workbench-phases"),
+  );
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 });

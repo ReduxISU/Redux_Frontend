@@ -7,7 +7,9 @@
 // across the two panes: the grid has four shared rows and each pane is a subgrid spanning them
 // (the mockup's `g-fig4`), so a label that wraps on one side pushes both sides' controls down
 // together. The picture row is shared too, so the two picture areas are always the same height
-// (`${id}-picture-area`), a shorter picture centered in its area. At 900 px and narrower the
+// (`${id}-picture-area`), and the picture's card (./layout.js pictureCardSx, a hairline border
+// the reader can see) fills its area, so the two cards are visibly one height, a shorter picture
+// centered in its card. At 900 px and narrower the
 // panes stack, source first, with the arrow turned to point down between them, each picture at
 // its own height.
 //
@@ -26,12 +28,14 @@ const ARROW_PATH = "M2 12h30M24 4l8 8-8 8";
 
 /**
  * Full screen on and off (#303): the four-corners icon, a 44px target. `text` adds the words
- * beside the icon (Reduce's both-pictures button, as the mockup has it).
+ * beside the icon (Reduce's both-pictures button, as the mockup has it). #305: while on, every
+ * one says "Exit full screen" in words too, since it is full screen's only way out (with Escape).
  * @param {{id: string, on: boolean, onToggle: () => void, label?: string, text?: boolean}} props
  *   `label` is the button's accessible name while it is off.
  */
 export function FullScreenButton({ id, on, onToggle, label = "Full screen", text = false }) {
   const name = on ? "Exit full screen" : label;
+  const words = text || on;
   return (
     <Box
       id={id}
@@ -42,7 +46,7 @@ export function FullScreenButton({ id, on, onToggle, label = "Full screen", text
       onClick={onToggle}
       sx={{
         ...secondaryButtonSx,
-        ...(text ? { px: 1.5, gap: 1 } : { width: 44, px: 0 }),
+        ...(words ? { px: 1.5, gap: 1 } : { width: 44, px: 0 }),
         flex: "none",
         display: "flex",
         alignItems: "center",
@@ -66,8 +70,8 @@ export function FullScreenButton({ id, on, onToggle, label = "Full screen", text
           }
         />
       </svg>
-      {text && (
-        <Box component="span" aria-hidden="true">
+      {words && (
+        <Box component="span" aria-hidden="true" sx={{ whiteSpace: "nowrap" }}>
           {on ? "Exit full screen" : "Full screen"}
         </Box>
       )}
@@ -204,8 +208,9 @@ export function PaneSection({
           />
         )}
       </Box>
-      {/* The picture row is shared, so both pictures' areas are the taller one's height; a
-          shorter picture sits in the middle of its area. Stacked, each keeps its own height. */}
+      {/* The picture row is shared, so both pictures' areas are the taller one's height, and
+          the picture's card stretches to fill its area (its `flex`), a shorter picture in the
+          middle of its card. Stacked, each keeps its own height. */}
       <Box
         id={`${id}-picture-area`}
         sx={{
@@ -213,7 +218,6 @@ export function PaneSection({
           alignSelf: "stretch",
           display: "flex",
           flexDirection: "column",
-          justifyContent: "center",
           [PANES_STACK_MEDIA]: { display: "block" },
         }}
       >

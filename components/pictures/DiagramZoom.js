@@ -20,8 +20,8 @@
 //   - Wheel. Ctrl (Cmd on a Mac) + wheel, or a trackpad pinch (which the browser sends as one),
 //     zooms at the pointer: the drawing's point under it stays still. In full screen a plain
 //     wheel zooms too, since there is no page to scroll. In normal view a plain wheel is left to
-//     the page, so it still scrolls, and a hint ("Hold Ctrl and scroll to zoom") shows over the
-//     picture for a moment so the reader learns the gesture.
+//     the page, so it still scrolls; the help line under the picture says how to zoom. (No popup
+//     over the picture on a plain wheel: the owner found it noisy and dropped it.)
 //   - Range. From MIN_ZOOM (a quarter of fit, the mockup's floor) to MAX_ZOOM times fit (or the
 //     renderer's readable scale, below). Every picture still opens at fit.
 //   - Pan, at any zoom, fit included, but clamped (clampView): on each axis at least a quarter
@@ -147,9 +147,6 @@ const DRAG_THRESHOLD = 4;
 
 /** How long (ms) a finger rests on a piece before a drag moves it instead (Board G's 450). */
 export const LONG_PRESS_MS = 450;
-
-/** #303: how long (ms) the "Hold Ctrl and scroll to zoom" hint stays up. */
-const HINT_MS = 1600;
 
 /** How far (drawing units) one arrow key press moves a node; with Shift, KEY_STEP_BIG. */
 export const KEY_STEP = 10;
@@ -532,9 +529,6 @@ export default function DiagramZoom({
   const [dragging, setDragging] = useState(false);
   const [panning, setPanning] = useState(false);
   const [announcement, setAnnouncement] = useState("");
-  // #303: the wheel hint ("Hold Ctrl and scroll to zoom"), while it shows.
-  const [hint, setHint] = useState(null);
-  const hintTimer = useRef(null);
 
   // Once a gesture belongs to the picture (a pinch, a lifted piece, a full-screen pan), the
   // finger's moves are its, not the page's scroll. Native and not passive: only a cancelled
@@ -549,29 +543,21 @@ export default function DiagramZoom({
     svg.addEventListener("touchmove", onTouchMove, { passive: false });
     return () => svg.removeEventListener("touchmove", onTouchMove);
   }, []);
-  // A long press or a hint still waiting when the picture goes away never fires.
+  // A long press still waiting when the picture goes away never fires.
   useEffect(() => {
     const current = gesture.current;
-    return () => {
-      clearTimeout(current.press?.timer);
-      clearTimeout(hintTimer.current);
-    };
+    return () => clearTimeout(current.press?.timer);
   }, []);
 
   // Ctrl / Cmd + wheel (and a trackpad pinch, which the browser sends as one) zooms; in full
   // screen a plain wheel does too. Native, because React's wheel listener is passive and can't
   // stop the browser zooming or scrolling the page. In normal view a plain wheel scrolls the
-  // page, and the hint says how to zoom.
+  // page.
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return undefined;
     const onWheel = (event) => {
-      if (!(event.ctrlKey || event.metaKey || fullRef.current)) {
-        clearTimeout(hintTimer.current);
-        setHint(`Hold ${onMac() ? "⌘" : "Ctrl"} and scroll to zoom`);
-        hintTimer.current = setTimeout(() => setHint(null), HINT_MS);
-        return;
-      }
+      if (!(event.ctrlKey || event.metaKey || fullRef.current)) return;
       event.preventDefault();
       const ctm = svg.getScreenCTM();
       if (!ctm) return;
@@ -1031,31 +1017,6 @@ export default function DiagramZoom({
         >
           {children}
         </DiagramSvg>
-        {hint && (
-          <Box
-            role="status"
-            id={`${idPrefix}-zoom-hint`}
-            sx={{
-              position: "absolute",
-              left: "50%",
-              bottom: 12,
-              transform: "translateX(-50%)",
-              px: 1.5,
-              py: 0.75,
-              borderRadius: "8px",
-              backgroundColor: "surface.main",
-              border: "1px solid",
-              borderColor: "border.strong",
-              color: "text.primary",
-              fontSize: "0.8125rem",
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-              pointerEvents: "none",
-            }}
-          >
-            {hint}
-          </Box>
-        )}
       </Box>
       <Box
         component="p"

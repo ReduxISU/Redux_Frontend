@@ -239,7 +239,8 @@ test("switching a picture keeps the phase and the step in it", async ({ page }) 
   await page.locator("#workbench-steps-next").click();
   await page.locator("#workbench-steps-next").click();
   await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(start + 2));
-  const caption = await page.locator(`${VIEW}-caption-phase`).textContent();
+  // #303: the step's place in its phase is said on the marked phase button.
+  const caption = await page.locator("#workbench-phases-place").textContent();
 
   await pick(page, "target", "3SAT Search Tree");
   await expect(page.locator(VIEW)).toHaveAttribute(
@@ -248,7 +249,7 @@ test("switching a picture keeps the phase and the step in it", async ({ page }) 
   );
   await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "solve");
   await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(start + 2));
-  await expect(page.locator(`${VIEW}-caption-phase`)).toHaveText(caption);
+  await expect(page.locator("#workbench-phases-place")).toHaveText(caption);
 
   // The source side too.
   await pick(page, "source", "SAT Factor Graph");

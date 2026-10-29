@@ -72,7 +72,7 @@ import {
   unbuiltIds,
 } from "../../lib/reductionView";
 import { paletteVars } from "../theme";
-import { COMPACT_MEDIA } from "../workbench/layout";
+import { COMPACT_MEDIA, pictureCardSx } from "../workbench/layout";
 import { PaneGrid, PaneSection } from "../workbench/PaneGrid";
 import { GADGET_PALETTE } from "./gadgetRings";
 import { FAINT_FILTER, PictureToggle } from "./graphPieces";
@@ -245,16 +245,12 @@ function ReductionPane({
           data-loading="true"
           role="status"
           sx={{
+            ...pictureCardSx,
             minHeight: 320,
-            display: "flex",
+            flexDirection: "row",
             alignItems: "center",
-            justifyContent: "center",
             gap: 1.5,
             color: "text.secondary",
-            backgroundColor: "surface.input",
-            borderRadius: "10px",
-            p: 2,
-            boxSizing: "border-box",
           }}
         >
           <CircularProgress size={18} aria-hidden="true" />
@@ -279,11 +275,9 @@ function ReductionPane({
             if (event.key === "Escape") onPoint(which, null, "clear");
           }}
           sx={{
-            minWidth: 0,
-            backgroundColor: "surface.input",
-            borderRadius: "10px",
-            p: 2,
-            boxSizing: "border-box",
+            // #303: the picture's card, filling the pane's picture area so both panes' cards are
+            // one height, the picture centered in it (../workbench/layout.js pictureCardSx).
+            ...pictureCardSx,
             [COMPACT_MEDIA]: { p: 1 },
             "& [data-rv-built='no']": { visibility: "hidden" },
             "& [data-rv-link='faint']": {
@@ -313,7 +307,10 @@ function ReductionPane({
 
 /**
  * The phase bar: "1 · Build", "2 · Solve", "3 · Map back", the current one marked. Each jumps to
- * its phase's first step. Sits with the step controls, as the mockup's stepper has it.
+ * its phase's first step. Sits with the step controls, as the mockup's stepper has it. #303: it
+ * sits right above them, always shown, so the reader sees which stage the algorithm is in as the
+ * steps play; the phase holding the step on screen is `aria-current="step"` and drawn as the
+ * soft brand button (`brand.soft` fill, `brand.softLine` outline), the others plain.
  * @param {Object} props
  * @param {string} props.idPrefix
  * @param {Object[]} props.frames The view's frames.
@@ -323,12 +320,16 @@ function ReductionPane({
 export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }) {
   const starts = phaseStarts(frames);
   const current = frames[frameIndex]?.phase ?? null;
+  // #303: the step's place in its phase ("3 of 8"), said on the marked phase (the step bar's
+  // line no longer repeats "Build 3 of 8").
+  const place = current ? placeInPhase(frames, frameIndex) : null;
   return (
     <Box
       id={idPrefix}
       role="group"
       aria-label="Reduction phases"
-      sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}
+      data-current-phase={current ?? undefined}
+      sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center", minWidth: 0 }}
     >
       {REDUCTION_PHASES.map((phase, index) => {
         const start = starts[phase.key];
@@ -349,10 +350,10 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
               px: 1.5,
               borderRadius: "999px",
               border: "1px solid",
-              borderColor: here ? "brand.line" : "border.main",
-              boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.line}` : "none",
-              backgroundColor: here ? "surface.raised" : "surface.main",
-              color: here ? "text.primary" : "text.secondary",
+              borderColor: here ? "brand.softLine" : "border.main",
+              boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.softLine}` : "none",
+              backgroundColor: here ? "brand.soft" : "surface.main",
+              color: here ? "brand.onSoft" : "text.secondary",
               fontFamily: "inherit",
               fontSize: "0.8125rem",
               fontWeight: here ? 700 : 500,
@@ -361,6 +362,11 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
             }}
           >
             {`${index + 1} · ${phase.label}`}
+            {here && place && (
+              <Box component="span" id={`${idPrefix}-place`} sx={{ fontWeight: 500 }}>
+                {` · ${place.index + 1} of ${place.count}`}
+              </Box>
+            )}
           </Box>
         );
       })}
@@ -459,12 +465,14 @@ function capitalize(text) {
   return text ? `${text[0].toUpperCase()}${text.slice(1)}` : text;
 }
 
-/** The step's caption: its phase and place in it, what happened, and the verdict at the end. */
+/**
+ * The step's caption: what happened, and the verdict at the end. #303: the phase and the step's
+ * place in it ("Build 3 of 8") moved to the phase bar's marked phase (ReductionPhaseBar), so the
+ * caption reads after the step bar's "Step N of M:".
+ */
 function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors }) {
   const frame = frames[frameIndex];
   if (!frame) return null;
-  const phase = REDUCTION_PHASES.find((entry) => entry.key === frame.phase);
-  const { index, count } = placeInPhase(frames, frameIndex);
   const word = eventWord(frame.phase, frame.event);
   const verdict =
     typeof frame.ok === "boolean" ? (frame.ok ? "Verdict: yes" : "Verdict: no") : null;
@@ -483,19 +491,6 @@ function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors })
         color: "text.primary",
       }}
     >
-      <Box
-        component="span"
-        id={`${id}-phase`}
-        sx={{
-          fontSize: "0.75rem",
-          fontWeight: 700,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "text.secondary",
-        }}
-      >
-        {`${phase?.label ?? frame.phase} ${index + 1} of ${count}`}
-      </Box>
       {word && (
         <Box component="span" id={`${id}-event`} sx={{ fontWeight: 700 }}>
           {word}
