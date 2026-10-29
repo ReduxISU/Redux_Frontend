@@ -34,6 +34,7 @@ import { makeEditor, nodeDragProps, useDiagramEdits } from "./diagramEdits";
 import { GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import { edgeLook, FAINT_EDGE, FAINT_FILTER, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import {
   BADGE_RADIUS,
   badgeAt,
@@ -300,7 +301,7 @@ export default function TripartiteRenderer({
                   height={PILL_HEIGHT}
                   rx={PILL_HEIGHT / 2}
                   data-body=""
-                  fill={state === "Background" ? paletteVars.surface.input : look.fill}
+                  fill={state === "Background" ? PICTURE_CANVAS : look.fill}
                   stroke={isTraced ? TRACE_COLOR : look.line}
                   strokeWidth={isTraced ? 3 : look.strokeWidth}
                   strokeDasharray={isTraced ? undefined : look.dash}
@@ -335,7 +336,7 @@ export default function TripartiteRenderer({
                       cy={badge.y}
                       r={BADGE_RADIUS}
                       fill={pictureStateStyle("Rejected").line}
-                      stroke={paletteVars.surface.input}
+                      stroke={PICTURE_CANVAS}
                       strokeWidth={1.5}
                     />
                     <text
@@ -343,7 +344,7 @@ export default function TripartiteRenderer({
                       y={badge.y}
                       textAnchor="middle"
                       dominantBaseline="central"
-                      fill={paletteVars.surface.input}
+                      fill={PICTURE_CANVAS}
                       fontFamily={MONO}
                       fontSize={11}
                       fontWeight={700}
@@ -391,7 +392,7 @@ export default function TripartiteRenderer({
                   height={LIST_ROW - 4}
                   rx={5}
                   data-body=""
-                  fill={state === "Background" ? paletteVars.surface.input : style.fill}
+                  fill={state === "Background" ? PICTURE_CANVAS : style.fill}
                   stroke={
                     isTraced ? TRACE_COLOR : state === "Background" ? "transparent" : style.line
                   }

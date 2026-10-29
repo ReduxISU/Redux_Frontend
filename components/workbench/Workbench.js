@@ -32,6 +32,13 @@
 // both prefilled from the Solve stage and editable, then says whether the two checks agree. The
 // results are one list of rows in every task (./panels/ResultPanel.js), each fact said once.
 //
+// #303: a button that is enabled but can't change the result is inactive. Once Solve, Reduce,
+// Solve through <target>, a Check, Check both or Map across has its result for exactly the
+// inputs on screen, it says what is done ("Solved", "Reduced", "Checked", "Mapped across") and
+// is aria-disabled (./DoneButton.js) until the instance or another input of that run changes.
+// A randomized solver with the Seed box blank stays Solve: its next run is a new one. "Done" is
+// derived from the same tests that keep each result on screen, so the two never disagree.
+//
 // #303 (Board G polish): what Board G does not show waits under the results in a closed
 // section: Gadgets (the list, with the Reduction View's Plain / Color switch and its link line).
 // The pictures render those pieces into the section's element (../pictures/secondarySlots.js),
@@ -138,6 +145,7 @@ import { SecondarySlots } from "../pictures/secondarySlots";
 import { PictureFullScreen } from "../pictures/zoomControlsSlot";
 import { paletteVars } from "../theme";
 import CommandBar from "./CommandBar";
+import DoneButton from "./DoneButton";
 import {
   reductionCard,
   reductionTags,
@@ -186,6 +194,31 @@ function openingStep(frames) {
 function reducedTargetFrame(result) {
   const frames = Array.isArray(result?.frames) ? result.frames : [];
   return frames.length > 1 ? frames[frames.length - 1] : null;
+}
+
+/**
+ * #303: whether a run repeats with the Seed box as it is: one by a solver that isn't randomized
+ * always does; a randomized one only when the box holds the seed the run used (asked for, or
+ * reported back). Blank, the next run picks a new seed, so it can change the result.
+ * @param {Object|null} solver
+ * @param {number|null} typedSeed The Seed box's number (null when blank or hidden).
+ * @param {{requestedSeed?: number|null, seed?: number|null}} ran
+ */
+function seedRepeats(solver, typedSeed, ran) {
+  if (!isRandomizedSolver(solver)) return true;
+  return typedSeed !== null && (typedSeed === ran.requestedSeed || typedSeed === ran.seed);
+}
+
+/** #303: what a done Solve says to change to run again. */
+function runInputs(solver) {
+  return isRandomizedSolver(solver)
+    ? "the instance, the Algorithm or the Seed"
+    : "the instance or the Algorithm";
+}
+
+/** #303: a done Check (DoneButton.js): what it says, and what to change to check again. */
+function checkedDone(what) {
+  return { label: "Checked", hint: `Change ${what}, the verifier or the instance to check again.` };
 }
 
 /**
@@ -919,7 +952,15 @@ export default function Workbench({ problem }) {
                 runInstance,
                 signal,
               );
-        return { output, solverName: solver.name, instance: runInstance, runId };
+        // #303: what the run was asked with, so the bar can tell when Solve would repeat it.
+        return {
+          output,
+          solverName: solver.name,
+          solverClassName: solver.className,
+          requestedSeed: runSeed,
+          instance: runInstance,
+          runId,
+        };
       });
       if (visualization) {
         pictureRun.start(async (signal) => {
@@ -1105,6 +1146,7 @@ export default function Workbench({ problem }) {
           view,
           solverName: fields.solverName || solver.name,
           seed: view.seed,
+          requestedSeed: runSeed,
           answer: solveFrames.at(-1)?.caption ?? "",
           mappedBack: fields.mappedBack,
           mapNote: null,
@@ -1143,6 +1185,7 @@ export default function Workbench({ problem }) {
         view: null,
         solverName: solver.name,
         seed: null,
+        requestedSeed: runSeed,
         answer,
         mappedBack,
         mapNote,
@@ -1208,7 +1251,12 @@ export default function Workbench({ problem }) {
   const solveAnswer = solveCurrent ? asCertificate(solveResult.output) : "";
   function handleVerifyAnswer() {
     if (!solveAnswer) return;
-    handleVerifyCheck(solveAnswer);
+    // #303: an answer already checked as it stands only needs its tab opened, not a new check.
+    const checkedAlready = verdictMatches(verifyCheck.verdict, {
+      ...verifySpec,
+      certificate: solveAnswer,
+    });
+    if (!checkedAlready) handleVerifyCheck(solveAnswer);
     setTask("verify");
   }
 
@@ -1220,10 +1268,13 @@ export default function Workbench({ problem }) {
   function checkSource() {
     if (canCheckSource) sourceCheck.check(sourceSpec);
   }
-  /** Reduce's Verify stage's main button: both checks, each that can run. */
+  /**
+   * Reduce's Verify stage's main button: both checks, each that can run. #303: a side whose
+   * verdict is of the answer and verifier shown is not asked again (it would say the same).
+   */
   function checkBoth() {
-    checkTarget();
-    checkSource();
+    if (!targetVerdict) checkTarget();
+    if (!sourceVerdict) checkSource();
   }
 
   // Map a solution across, from Reduce's Verify stage: the Solve tab's Algorithm answers this
@@ -1256,12 +1307,23 @@ export default function Workbench({ problem }) {
       return {
         certificate: asCertificate(mapped),
         solverName: solver.name,
+        solverClassName: solver.className,
         reused: reuse,
         runId: run.runId,
         solveId: forSolve,
       };
     });
   }
+
+  // #303: Map across is done while the target's box still holds what it mapped, from this
+  // build and the Solve tab's Algorithm now; a randomized Algorithm (solved fresh, with no seed)
+  // could map another answer, so it stays enabled.
+  const mapDone =
+    !mapDisabled &&
+    mapCurrent &&
+    mapResult.solverClassName === (mapSolver?.className ?? null) &&
+    targetCertificate === mapResult.certificate &&
+    (mapReuses || !isRandomizedSolver(mapSolver));
 
   let mapHint = "";
   // Once the Solve tab's Algorithm changes, the hint says what Map across would do now.
@@ -1316,31 +1378,94 @@ export default function Workbench({ problem }) {
   }
 
   // --- What the command bar and picture pane show ------------------------------------------
-  const solveRan = Boolean(solveResult);
-  const reduceRan = Boolean(reduceResult);
-  // #303: Board G's button names (stage 2: Reduce's per stage).
+  // #303: Board G's button names (stage 2: Reduce's per stage). A button is its action until its
+  // run is done (below); it never says "again".
   const targetLabel = selectedReduction?.target ?? targetName ?? "the target";
   let runLabel;
-  if (mode === "solve") runLabel = solveRan ? "Solve again" : "Solve";
-  else if (reduceStage === "solve")
-    runLabel = targetSolveCurrent ? "Solve again" : `Solve through ${targetLabel}`;
-  else if (reduceStage === "verify")
-    runLabel = targetVerdict || sourceVerdict ? "Check both again" : "Check both";
-  else runLabel = reduceRan ? "Rebuild" : "Reduce";
+  if (mode === "solve") runLabel = "Solve";
+  else if (reduceStage === "solve") runLabel = `Solve through ${targetLabel}`;
+  else if (reduceStage === "verify") runLabel = "Check both";
+  else runLabel = "Reduce";
+
+  // #303: the owner's rule. A button that is enabled but can't change the result is disabled;
+  // one that can (a randomized solver's next run) stays enabled. So once a run's result is of
+  // exactly the inputs on screen, its button says what is done and is inactive (DoneButton.js)
+  // until one of them changes. Each "done" below is the same test that keeps that result on
+  // screen (solveCurrent, reduceCurrent, targetSolveCurrent, the verdicts), plus the inputs the
+  // result doesn't record but a new run would use, so a result and its button never disagree.
+  // A failed or cancelled run has no result, so its button stays its action (a retry).
+  const pendingEdit = edits.hasPendingEdit && !edits.previewOnly;
+  // Solve: the answer and the picture are of this instance, Algorithm and seed, and nothing on
+  // the picture waits to be sent. A picture the run can't draw counts as done only when no run
+  // could (runGapNote's mismatches); otherwise Solve can still draw it.
+  const solvePictureSettled =
+    !selectedViz ||
+    runPictureCurrent ||
+    runGap?.reason === "shape_mismatch" ||
+    runGap?.reason === "solver_mismatch";
+  const solveDone =
+    mode === "solve" &&
+    solveCurrent &&
+    solveResult.solverClassName === (selectedSolver?.className ?? null) &&
+    !pendingEdit &&
+    solvePictureSettled &&
+    seedRepeats(selectedSolver, typedSeed, {
+      requestedSeed: solveResult.requestedSeed,
+      seed:
+        pictureRunCurrent && pictureResult.runId === solveResult.runId ? pictureResult.seed : null,
+    });
+  // Reduce: built from this instance with this reduction (so this target). The older requests
+  // also carry the Solve tab's Algorithm's answer across, so it counts there too, and a
+  // randomized one (given no seed there) could answer differently.
+  const reduceDone =
+    reduceCurrent &&
+    !pendingEdit &&
+    (Boolean(reduceResult.view) ||
+      (reduceResult.solverClassName === (selectedSolver?.className ?? null) &&
+        !isRandomizedSolver(selectedSolver)));
+  // Reduce's Solve: this build solved by this Algorithm, with this seed for a randomized one.
+  const targetSolveDone =
+    targetSolveCurrent && seedRepeats(selectedTargetSolver, typedSeed, targetSolveResult);
+  // Check both: every side that can be checked has its verdict, and at least one does.
+  const checkBothDone =
+    (Boolean(targetVerdict) || Boolean(sourceVerdict)) &&
+    (Boolean(targetVerdict) || !canCheck(targetSpec)) &&
+    (Boolean(sourceVerdict) || !canCheck(sourceSpec));
+
   // #303 stage 4: Verify's main button is Check, and Reduce's Verify stage's Check both.
-  let mainButton = { label: runLabel, disabled: runDisabled, onRun: handleRun };
+  let mainButton = { label: runLabel, disabled: runDisabled, onRun: handleRun, done: null };
   if (task === "verify") {
     mainButton = {
       label: "Check",
       disabled: !canCheck(verifySpec) || verifyCheck.request.isRunning,
       onRun: () => handleVerifyCheck(),
+      done: verifyVerdict ? checkedDone("the answer") : null,
     };
   } else if (mode === "reduce" && reduceStage === "verify") {
     mainButton = {
       label: runLabel,
       disabled: !canCheckTarget && !canCheckSource,
       onRun: checkBoth,
+      done: checkBothDone ? checkedDone("an answer") : null,
     };
+  } else if (!runBlocked && !seedInvalid) {
+    // A run in progress (or anything else that stops Run) keeps the plain disabled button.
+    if (mode === "solve" && solveDone) {
+      mainButton.done = {
+        label: "Solved",
+        hint: `Change ${runInputs(selectedSolver)} to solve again.`,
+      };
+    } else if (mode === "reduce" && reduceStage === "solve" && targetSolveDone) {
+      mainButton.done = {
+        label: "Solved",
+        hint: `Change ${runInputs(selectedTargetSolver)}, or the reduction, to solve again.`,
+      };
+    } else if (mode === "reduce" && reduceStage === "reduce" && reduceDone) {
+      mainButton.done = {
+        label: "Reduced",
+        hint: "Change the instance, Reduce to or the Reduction to build again.",
+      };
+    }
   }
 
   let modeNote = "";
@@ -2002,7 +2127,7 @@ export default function Workbench({ problem }) {
           id: `${ID}-result-changed`,
           tone: "warn",
           icon: "!",
-          text: "The instance changed since this run. Press Solve again for an answer to the new one; Check it in Verify waits for it.",
+          text: "The instance changed since this run. Press Solve for an answer to the new one; Check it in Verify waits for it.",
         });
       }
       resultRows.push({
@@ -2333,19 +2458,26 @@ export default function Workbench({ problem }) {
         }}
         onCheck={checkTarget}
         checkDisabled={!canCheckTarget}
+        checkDone={targetVerdict ? checkedDone(`the ${builtTargetName} answer`) : null}
         extra={
           <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-            <Box
+            <DoneButton
               id={`${ID}-map-button`}
-              component="button"
-              type="button"
               disabled={mapDisabled}
-              aria-describedby={`${ID}-map-hint`}
+              done={
+                mapDone
+                  ? {
+                      label: "Mapped across",
+                      hint: `Change the ${builtTargetName} answer, the Solve tab's Algorithm, the instance or the reduction to map again.`,
+                    }
+                  : null
+              }
+              describedBy={`${ID}-map-hint`}
               onClick={handleMap}
               sx={{ ...secondaryButtonSx, alignSelf: "flex-start" }}
             >
               Map a {problem.name} answer across
-            </Box>
+            </DoneButton>
             <Box id={`${ID}-map-hint`} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
               {mapHint}
             </Box>
@@ -2372,6 +2504,7 @@ export default function Workbench({ problem }) {
         }}
         onCheck={checkSource}
         checkDisabled={!canCheckSource}
+        checkDone={sourceVerdict ? checkedDone(`the ${problem.name} answer`) : null}
       />
     </Box>
   ) : null;
@@ -2585,6 +2718,7 @@ export default function Workbench({ problem }) {
           verifier={sourceVerifierSelect}
           runLabel={mainButton.label}
           runDisabled={mainButton.disabled}
+          runDone={mainButton.done}
           onRun={mainButton.onRun}
           verify={verifyRow}
           status={status}

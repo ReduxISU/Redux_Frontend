@@ -21,6 +21,7 @@ import {
   answerViewCertificates,
   gotoProblemDetail,
   selectSolverByName,
+  touchInstance,
   VIEW_MAPPED_ANSWER,
   VIEW_TARGET_ANSWER,
 } from "./helpers";
@@ -246,9 +247,10 @@ test("Check it in Verify sits at the far right of the answer's row and opens the
   await page.locator("#workbench-result-verify-answer").click();
   await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#workbench-verify-certificate")).toHaveValue(RUN_CAPTURE.answer);
-  // Verify's main button is Check, and its verdict is a row in the results.
-  await expect(page.locator(RUN)).toHaveText("Check");
+  // Verify's main button is Check, and its verdict is a row in the results; #303: once the
+  // answer is checked, Check says Checked.
   await expect(page.locator("#workbench-result-rows-verdict")).toBeVisible();
+  await expect(page.locator(RUN)).toHaveText("Checked");
 });
 
 test("Verify's task bar: the Verifier menu with its (i), Check where Solve is, the answer and its format under them", async ({
@@ -585,10 +587,15 @@ test("Reduce's stepper runs Reduce, Solve, Verify in order, each with only its o
     SAT_TO_3SAT_VIEW.target.instance,
   );
 
-  // The stepper goes back to an earlier stage's menus; a new Reduce starts again from Solve.
+  // The stepper goes back to an earlier stage's menus. #303: the build is done, so Reduce says
+  // Reduced until the instance changes; a new Reduce then starts again from Solve.
   await stage(page, "reduce").click();
   await expect(stage(page, "reduce")).toHaveAttribute("aria-current", "step");
-  await expect(page.locator(RUN)).toHaveText("Rebuild");
+  await expect(page.locator(RUN)).toHaveText("Reduced");
+  await expect(page.locator(RUN)).toHaveAttribute("aria-disabled", "true");
+  await touchInstance(page);
+  await expect(stage(page, "reduce")).toHaveAttribute("aria-current", "step");
+  await expect(page.locator(RUN)).toHaveText("Reduce");
   await page.locator(RUN).click();
   await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
   await expect(stage(page, "verify")).toBeDisabled();
@@ -623,16 +630,24 @@ test("a randomized target Algorithm gets the Seed box right of its dropdown, and
   await expect(seedRow).toContainText("Seed 31 made this run.");
   await expect(seedRow.locator("button")).toHaveCount(0);
 
-  // The seed typed in again (from a fresh box) asks for the same run.
+  // #303: that run is done: with its seed in the box, Solve says Solved. Blank, a new run can
+  // differ, so it is Solve through 3SAT again; the seed typed in again locks it again.
   const before = asked.length;
   await stage(page, "solve").click();
+  await expect(page.locator(RUN)).toHaveText("Solved");
+  await expect(page.locator(RUN)).toHaveAttribute("aria-disabled", "true");
   await page.locator("#workbench-seed").fill("");
+  await expect(page.locator(RUN)).toHaveText("Solve through 3SAT");
+  await expect(page.locator(RUN)).toBeEnabled();
   await page.locator("#workbench-seed").fill("31");
+  await expect(page.locator(RUN)).toHaveText("Solved");
+  // Another seed is another run.
+  await page.locator("#workbench-seed").fill("32");
   await page.locator(RUN).click();
   await expect.poll(() => asked.length).toBe(before + 1);
   await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
-  expect(asked.at(-1).searchParams.get("seed")).toBe("31");
-  await expect(seedRow).toContainText("Seed 31 made this run.");
+  expect(asked.at(-1).searchParams.get("seed")).toBe("32");
+  await expect(seedRow).toContainText("Seed 32 made this run.");
 
   // A deterministic Algorithm has no Seed box.
   await stage(page, "solve").click();
@@ -1280,4 +1295,213 @@ test("on a phone the phases wrap above the steps, with no sideways scroll", asyn
     await bottomOf(page, "#workbench-phases"),
   );
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+});
+
+// --- #303: a done button is inactive until an input changes --------------------------------------
+// The owner's rule: a button that is enabled but can't change the result is disabled; one that
+// can (a randomized solver with the Seed box blank) stays enabled. A done button says what is
+// done, is aria-disabled (still focusable, described), and its clicks do nothing.
+
+const BACKTRACKING = SAT3_BACKTRACKING_ONE_RUN.solverName;
+
+/** Counts the requests matching `pattern` from now on. */
+function countRequests(page, pattern) {
+  const counter = { count: 0 };
+  page.on("request", (request) => {
+    if (pattern.test(request.url())) counter.count += 1;
+  });
+  return counter;
+}
+
+async function expectDone(locator, label, description) {
+  await expect(locator).toHaveText(label);
+  await expect(locator).toHaveAttribute("aria-disabled", "true");
+  // Still focusable and explained: not the disabled attribute.
+  await expect(locator).not.toHaveAttribute("disabled");
+  await expect(locator).toHaveAccessibleDescription(description);
+  await locator.focus();
+  await expect(locator).toBeFocused();
+}
+
+async function expectAction(locator, label) {
+  await expect(locator).toHaveText(label);
+  await expect(locator).not.toHaveAttribute("aria-disabled");
+  await expect(locator).toBeEnabled();
+}
+
+test("Solve says Solved once done, and is Solve again after an instance edit or another Algorithm", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  await selectSolverByName(page, BACKTRACKING, { expect });
+  const runs = countRequests(page, RUN_REQUEST);
+  await expectAction(page.locator(RUN), "Solve");
+  await solve(page);
+  await expectDone(
+    page.locator(RUN),
+    "Solved",
+    /Change the instance or the Algorithm to solve again/,
+  );
+  // A click, or Enter on the focused button, asks for nothing.
+  await page.locator(RUN).click({ force: true });
+  await page.keyboard.press("Enter");
+  expect(runs.count).toBe(1);
+
+  // An instance edit (the result's "instance changed" row) makes Solve an action again.
+  await touchInstance(page);
+  await expect(page.locator("#workbench-result-changed")).toBeVisible();
+  await expectAction(page.locator(RUN), "Solve");
+  await solve(page);
+  await expect(page.locator(RUN)).toHaveText("Solved");
+  expect(runs.count).toBe(2);
+
+  // Another Algorithm, even with the run's reported seed typed in, is another run.
+  await selectSolverByName(page, SAT3_PPZ_ONE_RUN.solverName, { expect });
+  await page.locator("#workbench-seed").fill(String(SEED));
+  await expectAction(page.locator(RUN), "Solve");
+  // Back to the Algorithm that ran: its result is still the one on screen, so it is done.
+  await selectSolverByName(page, BACKTRACKING, { expect });
+  await expect(page.locator(RUN)).toHaveText("Solved");
+});
+
+test("a randomized solver stays Solve with the Seed box blank, and locks once a typed seed has run", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  const runs = countRequests(page, RUN_REQUEST);
+  // PPZ declares Stochastic: blank, every run picks a new seed, so Solve can change the result.
+  await solve(page);
+  await expectAction(page.locator(RUN), "Solve");
+  await page.locator(RUN).click();
+  await expect.poll(() => runs.count).toBe(2);
+  await expectAction(page.locator(RUN), "Solve");
+
+  // A typed seed repeats its run exactly: done once it ran, until the seed changes.
+  await page.locator("#workbench-seed").fill("77");
+  await expectAction(page.locator(RUN), "Solve");
+  await page.locator(RUN).click();
+  await expect.poll(() => runs.count).toBe(3);
+  await expectDone(
+    page.locator(RUN),
+    "Solved",
+    /Change the instance, the Algorithm or the Seed to solve again/,
+  );
+  await page.locator("#workbench-seed").fill("78");
+  await expectAction(page.locator(RUN), "Solve");
+  await page.locator("#workbench-seed").fill("");
+  await expectAction(page.locator(RUN), "Solve");
+});
+
+test("Verify's Check says Checked once done, and is Check again when the answer is edited", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  const checks = [];
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    const body = route.request().postDataJSON();
+    checks.push(body.certificate);
+    return route.fulfill({ json: body.certificate === RUN_CAPTURE.answer ? "True" : "False" });
+  });
+  await page.locator("#workbench-mode-verify").click();
+  const box = page.locator("#workbench-verify-certificate");
+  await box.fill(RUN_CAPTURE.answer);
+  await expectAction(page.locator(RUN), "Check");
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verdict")).toHaveAttribute("data-tone", "ok");
+  await expectDone(
+    page.locator(RUN),
+    "Checked",
+    /Change the answer, the verifier or the instance to check again/,
+  );
+  await page.locator(RUN).click({ force: true });
+  expect(checks).toHaveLength(1);
+
+  await box.fill("(x1:False,x2:False,x3:False)");
+  await expectAction(page.locator(RUN), "Check");
+  await page.locator(RUN).click();
+  await expect(page.locator(RUN)).toHaveText("Checked");
+  expect(checks).toHaveLength(2);
+  // Another instance retires the verdict, and Check is an action again.
+  await touchInstance(page);
+  await expectAction(page.locator(RUN), "Check");
+});
+
+test("Reduce's stages say Reduced, Solved and Checked once done, and are their actions again after an instance edit", async ({
+  page,
+}) => {
+  await openSatReduce(page, { seeded: false });
+  await page.route(/\/api\/redux\/ProblemProvider\/verify/, (route) => {
+    const body = route.request().postDataJSON();
+    const valid = [VIEW_TARGET_ANSWER, VIEW_MAPPED_ANSWER].includes(body.certificate);
+    return route.fulfill({ json: valid ? "True" : "False" });
+  });
+  await page.locator(RUN).click();
+  await expect(stage(page, "solve")).toHaveAttribute("aria-current", "step");
+  await stage(page, "reduce").click();
+  await expectDone(
+    page.locator(RUN),
+    "Reduced",
+    /Change the instance, Reduce to or the Reduction to build again/,
+  );
+
+  await stage(page, "solve").click();
+  await expectAction(page.locator(RUN), "Solve through 3SAT");
+  await page.locator(RUN).click();
+  await expect(stage(page, "verify")).toHaveAttribute("aria-current", "step");
+  await stage(page, "solve").click();
+  await expectDone(page.locator(RUN), "Solved", /Change the instance or the Algorithm/);
+
+  // Verify: Check both checks both sides; then each side's Check and Check both are done.
+  await stage(page, "verify").click();
+  const targetCheck = page.locator("#workbench-verify-target-check");
+  const sourceCheck = page.locator("#workbench-verify-source-check");
+  await expectAction(page.locator(RUN), "Check both");
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-result-rows-verify-agree")).toHaveAttribute(
+    "data-tone",
+    "ok",
+  );
+  await expectDone(page.locator(RUN), "Checked", /check again/);
+  await expectDone(targetCheck, "Checked", /Change the 3SAT answer, the verifier/);
+  await expectDone(sourceCheck, "Checked", /Change the SAT answer, the verifier/);
+
+  // An edited answer makes its own side's Check, and Check both, actions again.
+  await page.locator("#workbench-verify-source-certificate").fill("(x1:False)");
+  await expectAction(sourceCheck, "Check");
+  await expect(targetCheck).toHaveText("Checked");
+  await expectAction(page.locator(RUN), "Check both");
+
+  // An instance edit undoes the build: the stepper is back on Reduce, an action again.
+  await touchInstance(page);
+  await expect(stage(page, "reduce")).toHaveAttribute("aria-current", "step");
+  await expectAction(page.locator(RUN), "Reduce");
+});
+
+test("on a phone the step's description sits on its own line under Step N of M:, left-aligned with it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openSat3(page);
+  await solve(page);
+  await page.locator("#workbench-steps-first").click();
+  await page.locator("#workbench-steps-next").click();
+  const description = page.locator("#workbench-step-text");
+  await expect(description).not.toBeEmpty();
+  const label = await boxOf(page, "#workbench-steps-line strong");
+  const text = await boxOf(page, "#workbench-step-text");
+  expect(text.y).toBeGreaterThanOrEqual(label.y + label.height - 0.5);
+  expect(Math.abs(text.x - label.x)).toBeLessThan(1);
+  // The line still speaks the step, and keeps its ids.
+  await expect(page.locator("#workbench-steps-line")).toHaveAttribute("aria-live", "polite");
+  await expect(page.locator("#workbench-steps-position")).toHaveText(/^Step 2 of /);
+
+  // On a desktop the description stays on the label's line.
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const wideLabel = await boxOf(page, "#workbench-steps-line strong");
+  const wideText = await boxOf(page, "#workbench-step-text");
+  expect(wideText.y).toBeLessThan(wideLabel.y + wideLabel.height);
+  expect(wideText.x).toBeGreaterThan(wideLabel.x + wideLabel.width);
 });

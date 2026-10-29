@@ -38,6 +38,7 @@ import DiagramZoom from "./DiagramZoom";
 import { GadgetCircle, GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import {
   BOX_OVER,
   BOX_SIZE,
@@ -94,7 +95,7 @@ function gateLook(state, { oracle, future }) {
   }
   if (state === "Background") {
     return {
-      fill: paletteVars.surface.input,
+      fill: PICTURE_CANVAS,
       line: oracle ? paletteVars.viz.violet : nodeLook("Background").line,
       ink: paletteVars.text.primary,
       dash: undefined,
@@ -943,7 +944,7 @@ export function quantumAnnotations(payload, frames, { plain = false } = {}) {
     entries.push({
       key: "oracle",
       text: "Oracle (the black box holding the function f)",
-      swatch: { fill: paletteVars.surface.input, line: paletteVars.viz.violet },
+      swatch: { fill: PICTURE_CANVAS, line: paletteVars.viz.violet },
     });
   }
   const signs = new Set(

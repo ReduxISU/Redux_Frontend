@@ -6,9 +6,11 @@
 //   - CertificateField: the certificate box with its label, the format as a hint under it (its
 //     example as the placeholder), and the error of a certificate Redux cannot read;
 //   - VerifyTaskRow: the Verify tab's row under the menus, the field and, after a Solve, "Use the
-//     solver's answer"; the Verifier menu and the main Check button sit on the row above;
+//     solver's answer" (#303: hidden once the field holds that answer, when it could change
+//     nothing); the Verifier menu and the main Check button sit on the row above;
 //   - ReduceVerifySide: one of the two checks of Reduce's Verify stage, a Verifier menu, the
-//     answer to check (prefilled from the Solve stage) and its own Check button.
+//     answer to check (prefilled from the Solve stage) and its own Check button, which says
+//     "Checked" and is inactive while its verdict is of the answer, verifier and instance shown.
 // The verdicts are result rows (Workbench.js), not drawn here.
 //
 // A certificate Redux cannot read (400 certificate_parse_error) shows its error right under its
@@ -16,6 +18,7 @@
 
 import Box from "@mui/material/Box";
 import { COMPUTE_FAILED } from "../../../hooks/useComputeRequest";
+import DoneButton from "../DoneButton";
 import { controlLabelSx, MONO_FONT, secondaryButtonSx } from "../layout";
 import TaggedSelect from "../TaggedSelect";
 
@@ -143,6 +146,9 @@ export function VerifyTaskRow({ idPrefix, field, useAnswer }) {
  * @param {Object} props.field CertificateField's props, but its id.
  * @param {() => void} props.onCheck
  * @param {boolean} props.checkDisabled
+ * @param {{label: string, hint: string}|null} [props.checkDone] #303: this answer is checked
+ *   with this verifier against this instance, so Check says "Checked" and is inactive
+ *   (../DoneButton.js) until one of them changes.
  * @param {import("react").ReactNode} [props.extra] Under the box (the target's Map an answer
  *   across).
  */
@@ -153,6 +159,7 @@ export function ReduceVerifySide({
   field,
   onCheck,
   checkDisabled,
+  checkDone = null,
   extra = null,
 }) {
   return (
@@ -182,16 +189,15 @@ export function ReduceVerifySide({
       )}
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, minWidth: 0 }}>
         <CertificateField id={`${idPrefix}-certificate`} {...field} sx={{ flex: "1 1 auto" }} />
-        <Box
+        <DoneButton
           id={`${idPrefix}-check`}
-          component="button"
-          type="button"
           onClick={onCheck}
           disabled={checkDisabled}
+          done={checkDone}
           sx={{ ...secondaryButtonSx, flex: "none", mt: "22px" }}
         >
           Check
-        </Box>
+        </DoneButton>
       </Box>
       {extra}
     </Box>

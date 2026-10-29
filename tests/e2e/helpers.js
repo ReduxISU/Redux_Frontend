@@ -393,16 +393,29 @@ export async function reduceAndSolve(page, { expect }) {
 }
 
 /**
- * #303 stage 2: back to the Reduce stage (from wherever the stepper is) and Rebuild; the bar moves
- * to the Solve stage again. Before the stepper this was a second click on Run.
+ * #303 stage 2: back to the Reduce stage (from wherever the stepper is) and Reduce again; the bar
+ * moves to the Solve stage again. Before the stepper this was a second click on Run.
+ * #303: a build of the same instance is done ("Reduced", inactive), so this first toggles a
+ * trailing space on the instance, which makes it another build without changing what it says.
  */
 export async function reduceAgain(page, { expect }) {
+  await touchInstance(page);
   const reduce = page.locator("#workbench-stage-reduce");
   if ((await reduce.getAttribute("aria-current")) !== "step") await reduce.click();
   await expect(reduce).toHaveAttribute("aria-current", "step");
   await expect(page.locator("#workbench-run")).toBeEnabled();
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-stage-solve")).toHaveAttribute("aria-current", "step");
+}
+
+/**
+ * #303: edits the instance without changing its meaning (a trailing space, added or taken off),
+ * so a done Solve or Reduce is its action again.
+ */
+export async function touchInstance(page) {
+  const input = page.locator("#workbench-instance-full-instance");
+  const text = await input.inputValue();
+  await input.fill(text.endsWith(" ") ? text.slice(0, -1) : `${text} `);
 }
 
 /** reduceAgain, then Solve through the target (reduceAndSolve's second half). */

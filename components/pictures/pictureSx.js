@@ -3,6 +3,18 @@
 // #199: style pieces every picture renderer shares, so focus and motion behave the same in
 // every picture type.
 
+import { paletteVars } from "../theme";
+
+/**
+ * #303 (Board G): the color a picture is drawn on, for every fill, knock-out and halo that has
+ * to match it (a "Background" piece, a label's backing, the gap a line leaves around text). The
+ * picture's card (../workbench/layout.js pictureCardSx) is the mockup's off-white well and sets
+ * `--picture-canvas` to it, so each renderer reads the one value the card shows and the two
+ * can't drift. Outside a card (a Legend swatch, a picture drawn elsewhere) it is the input white
+ * every picture was drawn on before.
+ */
+export const PICTURE_CANVAS = `var(--picture-canvas, ${paletteVars.surface.input})`;
+
 /** A visible focus ring for anything focusable inside a picture (and the picture itself). */
 export const pictureFocusSx = {
   outline: "none",

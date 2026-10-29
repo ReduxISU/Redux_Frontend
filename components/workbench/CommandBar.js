@@ -20,7 +20,7 @@
 //
 // #303 stage 2: Reduce is a Reduce -> Solve -> Verify stepper (StageList, below), on its own row
 // under the menus with the main button at its right. The menus are the stage's only:
-//   - Reduce: Reduce to and Reduction, and Reduce (Rebuild once built);
+//   - Reduce: Reduce to and Reduction, and Reduce (Reduced once built, see below);
 //   - Solve: the target's Algorithm (its (i) on its right), the Seed box right of it for a
 //     randomized solver, and Solve through <target>, which solves the TARGET instance;
 //   - Verify (#303 stage 4): two checks side by side, the target's answer with a target verifier
@@ -29,11 +29,16 @@
 // A stage later in the flow stays disabled until the one before it is done; Workbench.js says
 // which stage is shown, which are done, and which can be reached.
 //
+// #303: a main button whose run is done, so pressing it again can't change the result, says
+// what is done ("Solved", "Reduced", "Checked") and is inactive (aria-disabled, ./DoneButton.js)
+// until the instance or another input of that run changes. Workbench.js decides when (runDone).
+//
 // #295: the Seed box takes digits only: blank lets Redux pick a new seed each Run, a number
 // repeats that run exactly. Workbench.js decides when it shows and what Run sends.
 
 import Box from "@mui/material/Box";
 import { visuallyHiddenSx } from "../pictures/pictureSx";
+import DoneButton, { inactiveSx } from "./DoneButton";
 import { controlLabelSx, PHONE_MEDIA } from "./layout";
 import TaggedSelect from "./TaggedSelect";
 
@@ -255,15 +260,18 @@ function TaskButton({ id, pressed, onClick, children }) {
   );
 }
 
-/** The main button: Solve, Reduce, Solve through <target>, ... */
-function RunButton({ id, label, disabled, onRun }) {
+/**
+ * The main button: Solve, Reduce, Solve through <target>, ... #303: once its run is done and
+ * pressing it again can't change the result, it says so ("Solved") and is aria-disabled
+ * (./DoneButton.js); `done` is null while it can still change something.
+ */
+function RunButton({ id, label, disabled, done, onRun }) {
   return (
-    <Box
+    <DoneButton
       id={id}
-      component="button"
-      type="button"
-      onClick={onRun}
+      done={done}
       disabled={disabled}
+      onClick={onRun}
       sx={{
         flex: "none",
         minHeight: 44,
@@ -277,19 +285,16 @@ function RunButton({ id, label, disabled, onRun }) {
         fontSize: "0.9375rem",
         fontWeight: 700,
         cursor: "pointer",
-        "&:hover:not(:disabled)": { backgroundColor: "brand.softHover" },
-        "&:disabled": {
-          cursor: "not-allowed",
-          borderColor: "border.main",
-          borderStyle: "dashed",
-          backgroundColor: "surface.track",
-          color: "text.secondary",
+        '&:hover:not(:disabled):not([aria-disabled="true"])': {
+          backgroundColor: "brand.softHover",
         },
+        // #303: the mockup's disabled primary, the same look as a done button.
+        "&:disabled": inactiveSx,
         [PHONE_MEDIA]: { flex: "1 1 100%" },
       }}
     >
       {label}
-    </Box>
+    </DoneButton>
   );
 }
 
@@ -318,6 +323,9 @@ function RunButton({ id, label, disabled, onRun }) {
  *   null when it declares none.
  * @param {string} props.runLabel "Solve", "Reduce", "Solve through Clique", "Check", ...
  * @param {boolean} props.runDisabled
+ * @param {{label: string, hint: string}|null} [props.runDone] #303: the run is done and pressing
+ *   the button again can't change the result: it shows `label` ("Solved", "Checked") and is
+ *   aria-disabled, described by `hint`, until an input changes (./DoneButton.js).
  * @param {() => void} props.onRun
  * @param {import("react").ReactNode} props.verify The Verify tab's row under the menus.
  * @param {import("react").ReactNode} props.status Rendered under the row: a note on what the
@@ -335,6 +343,7 @@ export default function CommandBar({
   verifier = null,
   runLabel,
   runDisabled,
+  runDone = null,
   onRun,
   verify,
   status,
@@ -342,7 +351,13 @@ export default function CommandBar({
   const reducing = task === "reduce" && stepper;
   const stage = reducing ? stepper.shown : null;
   const runButton = (
-    <RunButton id={`${idPrefix}-run`} label={runLabel} disabled={runDisabled} onRun={onRun} />
+    <RunButton
+      id={`${idPrefix}-run`}
+      label={runLabel}
+      disabled={runDisabled}
+      done={runDone}
+      onRun={onRun}
+    />
   );
   return (
     <Box

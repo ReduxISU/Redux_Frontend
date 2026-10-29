@@ -37,6 +37,7 @@ import DiagramZoom from "./DiagramZoom";
 import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import {
   BAR_INSET,
   formatGallons,
@@ -60,7 +61,7 @@ const LIMIT_DASH = "5 4";
 
 /** `color` mixed into the canvas, `percent` of it: a tint, never a see-through color. */
 function tint(color, percent) {
-  return `color-mix(in srgb, ${color} ${percent}%, ${paletteVars.surface.input})`;
+  return `color-mix(in srgb, ${color} ${percent}%, ${PICTURE_CANVAS})`;
 }
 
 /** A state's outline width on a bar or a cell. */
@@ -365,7 +366,7 @@ function jobsDrawing({ layout, payload, frame, traced, traceProps, name, gadgetO
                     height={barH}
                     rx={4}
                     data-body=""
-                    fill={state === "Background" ? paletteVars.surface.input : style.fill}
+                    fill={state === "Background" ? PICTURE_CANVAS : style.fill}
                     stroke={isTraced ? TRACE_COLOR : style.line}
                     strokeWidth={isTraced ? 3 : strokeWidthOf(state)}
                     strokeDasharray={isTraced ? undefined : style.dash}
@@ -388,7 +389,7 @@ function jobsDrawing({ layout, payload, frame, traced, traceProps, name, gadgetO
                 x2={row.deadlineX}
                 y1={row.y + 3}
                 y2={row.y + JOB_ROW - 3}
-                stroke={paletteVars.surface.input}
+                stroke={PICTURE_CANVAS}
                 strokeWidth={5}
                 pointerEvents="none"
               />
@@ -767,7 +768,7 @@ function pumpsDrawing({ layout, payload, frame, traced, traceProps, name, gadget
                           ? state === "Background"
                             ? paletteVars.viz.edge
                             : style.fill
-                          : paletteVars.surface.input
+                          : PICTURE_CANVAS
                       }
                       stroke={isOn ? style.line : paletteVars.border.soft}
                       strokeWidth={isOn ? Math.min(strokeWidthOf(state), cell / 4) : 0.8}
@@ -788,7 +789,7 @@ function pumpsDrawing({ layout, payload, frame, traced, traceProps, name, gadget
                         data-startup={id}
                         d={`M${x + inset} ${cellY} l${Math.min(7, cell * 0.5)} 0 l${-Math.min(7, cell * 0.5)} ${Math.min(7, cell * 0.5)} z`}
                         fill={paletteVars.text.primary}
-                        stroke={paletteVars.surface.input}
+                        stroke={PICTURE_CANVAS}
                         strokeWidth={1}
                       />
                     )}

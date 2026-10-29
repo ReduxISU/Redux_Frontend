@@ -49,6 +49,7 @@ import {
   TRACE_COLOR,
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 
 /** A negated literal's edge (the factor graph): dashed whatever its state. */
 const NEGATED_DASH = "5 4";
@@ -477,7 +478,7 @@ export default function BipartiteGraphRenderer({
                       width={50}
                       height={20}
                       rx={10}
-                      fill={paletteVars.surface.input}
+                      fill={PICTURE_CANVAS}
                       stroke={pictureStateStyle("Solution").line}
                       strokeWidth={1.4}
                     />

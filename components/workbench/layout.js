@@ -38,8 +38,9 @@ export const controlLabelSx = {
  * #303 (Board G): the card every picture is drawn in, the mockup's "well": a hairline border
  * (`border.soft`, the mockup's --line) and 14px corners, the picture centered in it. In Reduce's
  * side-by-side panes the card fills its picture area (`flex`), so both panes' cards are the
- * taller picture's height and the reader sees two equal frames. The fill stays `surface.input`
- * (not the mockup's off-white well), the color every renderer's knock-outs and fills assume.
+ * taller picture's height and the reader sees two equal frames. The fill is the mockup's
+ * off-white well (`surface.well`), and the card hands it to the renderers as `--picture-canvas`
+ * (../pictures/pictureSx.js PICTURE_CANVAS), so their knock-outs and plain fills match it.
  */
 export const pictureCardSx = {
   flex: "1 1 auto",
@@ -47,7 +48,8 @@ export const pictureCardSx = {
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
-  backgroundColor: "surface.input",
+  backgroundColor: "surface.well",
+  "--picture-canvas": "var(--mui-palette-surface-well)",
   border: "1px solid",
   borderColor: "border.soft",
   borderRadius: "14px",

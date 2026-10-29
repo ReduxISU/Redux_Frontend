@@ -44,6 +44,7 @@ import DiagramZoom from "./DiagramZoom";
 import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, PictureToggle, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import { useBoxWidth } from "./useBoxWidth";
 
 /** The dashes of a link from a ruled-out square, and of a queen's line of attack. */
@@ -61,7 +62,7 @@ const HINTS = [
 
 /** `color` mixed into the canvas, `percent` of it: a tint, never a see-through color. */
 function tint(color, percent) {
-  return `color-mix(in srgb, ${color} ${percent}%, ${paletteVars.surface.input})`;
+  return `color-mix(in srgb, ${color} ${percent}%, ${PICTURE_CANVAS})`;
 }
 
 /** A queen (a crown), centred on (x, y), `size` across. */
@@ -251,7 +252,7 @@ export default function BoardRenderer({
             const piece = pieceAt.get(square.id);
             const inUnit = near !== null && near.has(square.id);
             const faint = near !== null && !inUnit;
-            let fill = paletteVars.surface.input;
+            let fill = PICTURE_CANVAS;
             if (stated) fill = style.fill;
             else if (inUnit) fill = tint(TRACE_COLOR, TRACE_TINT);
             else if (attacked.has(square.id)) fill = tint(rejected.line, ATTACK_TINT);
@@ -408,7 +409,7 @@ export default function BoardRenderer({
                     state === "Background"
                       ? square.dark
                         ? paletteVars.surface.raised2
-                        : paletteVars.surface.input
+                        : PICTURE_CANVAS
                       : pictureStateStyle(state).fill
                   }
                 />

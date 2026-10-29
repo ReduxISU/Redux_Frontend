@@ -51,6 +51,7 @@ import {
 } from "./gadgetRings";
 import { edgeLook, FAINT_EDGE, FAINT_FILTER, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import { useBoxWidth } from "./useBoxWidth";
 
 /** The scale (CSS px per drawing unit) the tree's text reads at: its design size. */
@@ -548,7 +549,7 @@ function EncodedStrip({ idPrefix, payload, text, codes, bits, traced, onPoint, g
                 // would rewrap the strip, move it from under the pointer, and flicker.
                 boxShadow: lit ? `inset 0 0 0 1px ${TRACE_COLOR}` : "none",
                 borderRadius: "4px",
-                bgcolor: k % 2 ? paletteVars.surface.main : paletteVars.surface.input,
+                bgcolor: k % 2 ? paletteVars.surface.main : PICTURE_CANVAS,
               }}
             >
               <Box component="span" sx={{ fontSize: "0.75rem", color: "text.primary" }}>

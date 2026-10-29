@@ -66,6 +66,7 @@ import {
   TRACE_COLOR,
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 
 /** An ε-arrow's dash, while it has no state dash of its own. */
 const EPSILON_DASH = "5 4";
@@ -834,7 +835,7 @@ export default function AutomatonRenderer({
               // and red text. Entered: its state's full style (Rejected: red fill, solid thick red
               // outline), with the same "current state" ring an active state gets.
               const style = pictureStateStyle(stated ? garbageState : "Rejected");
-              const fill = lit ? style.fill : paletteVars.surface.input;
+              const fill = lit ? style.fill : PICTURE_CANVAS;
               const ink = lit ? style.ink : red.text;
               const outline = lit ? style.line : red.line;
               const faint = traced !== null && !tracesGarbage;
@@ -1017,7 +1018,7 @@ export function automatonAnnotations(payload, frames) {
     entries.push({
       key: "garbage",
       text: `${payload.garbage.label ?? "Garbage"} (where every missing move leads; the input is rejected)`,
-      swatch: { kind: "fill", fill: paletteVars.surface.input, line: red.line },
+      swatch: { kind: "fill", fill: PICTURE_CANVAS, line: red.line },
     });
     const garbageId = payload.garbage.id;
     if (
