@@ -319,7 +319,7 @@ export default function ProblemDetail() {
           {problem.oneLiner && (
             <Typography
               id="problem-one-liner"
-              sx={{ m: 0, maxWidth: 720, fontSize: "1.125rem", color: "ink.text2" }}
+              sx={{ m: 0, fontSize: "1.125rem", color: "ink.text2" }}
             >
               {problem.oneLiner}
             </Typography>

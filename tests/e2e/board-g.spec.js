@@ -128,6 +128,19 @@ test("the page is one centered column: title, instance, picture, steps, task bar
   await expect(page.locator("#workbench-instance-full-instance")).toBeEditable();
 });
 
+test("the problem's description runs the full width of the column, not half of it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+
+  // 3SAT's description is long enough to wrap; its lines reach the workspace's width, not a
+  // shorter reading measure.
+  const text = await boxOf(page, "#problem-one-liner");
+  const card = await boxOf(page, "#workbench");
+  expect(text.width).toBeGreaterThan(card.width - 4);
+});
+
 test("the banner stays at the top of the window while the page scrolls", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openSat3(page);
