@@ -44,13 +44,13 @@
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import StepScrubber from "../detail/StepScrubber";
 import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import PictureCanvas from "../pictures/PictureCanvas";
 import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
 import { StepTextSlot } from "../pictures/secondarySlots";
-import { ZoomControlsSlot } from "../pictures/zoomControlsSlot";
+import { PictureFullScreen, ZoomControlsSlot } from "../pictures/zoomControlsSlot";
 import Legend from "./Legend";
 import {
   COMPACT_MEDIA,
@@ -63,6 +63,15 @@ import { FullScreenButton, PaneGrid, PaneSection } from "./PaneGrid";
 import TaggedSelect from "./TaggedSelect";
 
 const PICTURE_MIN_HEIGHT = 440;
+
+/** The shortest the picture's card gets on full screen; a shorter window scrolls instead. */
+const FULL_PICTURE_MIN_HEIGHT = 280;
+
+/**
+ * The step's caption on full screen: a fixed height that scrolls, so a longer caption neither
+ * pushes the controls off the window nor resizes the picture from one step to the next.
+ */
+const FULL_STEP_TEXT_HEIGHT = "4.5rem";
 
 /**
  * The Visualization Type label and dropdown at a picture's top right, its list opening
@@ -193,6 +202,7 @@ function VerdictLine({ verdict }) {
  *   one chosen (null: the solver's own).
  */
 function PictureBox({ idPrefix, content }) {
+  const full = useContext(PictureFullScreen);
   let inner;
   if (content.kind === "frame") {
     const edit = content.edit;
@@ -281,10 +291,12 @@ function PictureBox({ idPrefix, content }) {
       sx={{
         // #303: the picture's card (./layout.js pictureCardSx), in Solve, Verify and Reduce.
         ...pictureCardSx,
-        minHeight: content.compact ? 160 : PICTURE_MIN_HEIGHT,
+        minHeight: content.compact ? 160 : full ? FULL_PICTURE_MIN_HEIGHT : PICTURE_MIN_HEIGHT,
         alignItems: "center",
         overflowX: "auto",
-        [COMPACT_MEDIA]: { minHeight: content.compact ? 160 : 320 },
+        [COMPACT_MEDIA]: {
+          minHeight: content.compact ? 160 : full ? FULL_PICTURE_MIN_HEIGHT : 320,
+        },
       }}
     >
       {inner}
@@ -383,13 +395,44 @@ export default function VisualizationPane({
         component="section"
         aria-label="Visualization"
         id={`${idPrefix}-pane`}
-        sx={{ display: "flex", flexDirection: "column", gap: "14px", minWidth: 0 }}
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "14px",
+          minWidth: 0,
+          // On full screen the pane takes the window's height and the picture what the title and
+          // controls leave: every box around a picture's area grows, whichever renderer drew it.
+          ...(full
+            ? {
+                flex: "1 1 auto",
+                "& :has([data-zoom-area]):not([data-pane-side]):not([data-pane-grid])": {
+                  display: "flex",
+                  flexDirection: "column",
+                  flex: "1 1 auto",
+                  width: "100%",
+                  minWidth: 0,
+                },
+                [`& #${idPrefix}-step-text:not(:empty)`]: {
+                  flex: "none",
+                  height: FULL_STEP_TEXT_HEIGHT,
+                  overflowY: "auto",
+                },
+              }
+            : {}),
+        }}
       >
         {single ? (
           <Box
             component="figure"
             id={`${idPrefix}-figure`}
-            sx={{ m: 0, display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
+            sx={{
+              m: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: 1.5,
+              minWidth: 0,
+              ...(full ? { flex: "1 1 auto" } : {}),
+            }}
           >
             <Box
               id={`${idPrefix}-picture-header`}
