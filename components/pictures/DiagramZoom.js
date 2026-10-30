@@ -953,15 +953,21 @@ export default function DiagramZoom({
       <Box
         ref={areaRef}
         id={`${idPrefix}-area`}
+        data-zoom-area="true"
         sx={{
           position: "relative",
           width: "100%",
-          // Measured: the drawing's shape at this width. Before that, the same by CSS.
-          height: naturalHeight ?? undefined,
-          aspectRatio: naturalHeight ? undefined : `${drawing.width} / ${drawing.height}`,
+          // On full screen, whatever height the workbench leaves it (VisualizationPane.js).
+          // Otherwise measured: the drawing's shape at this width. Before that, the same by CSS.
+          ...(full
+            ? { flex: "1 1 0" }
+            : {
+                height: naturalHeight ?? undefined,
+                aspectRatio: naturalHeight ? undefined : `${drawing.width} / ${drawing.height}`,
+                maxHeight: AREA_MAX_HEIGHT,
+                [COMPACT_MEDIA]: { maxHeight: AREA_MAX_HEIGHT_COMPACT },
+              }),
           minHeight: MIN_AREA_HEIGHT,
-          maxHeight: AREA_MAX_HEIGHT,
-          [COMPACT_MEDIA]: { maxHeight: AREA_MAX_HEIGHT_COMPACT },
           overflow: "hidden",
         }}
       >
@@ -983,6 +989,8 @@ export default function DiagramZoom({
             // gesture is ours.
             touchAction: full ? "none" : "pan-y",
             height: "100%",
+            // Out of the flow on full screen, so the drawing never holds its area open.
+            ...(full ? { position: "absolute", inset: 0 } : {}),
             userSelect: "none",
             WebkitUserSelect: "none",
             WebkitTouchCallout: "none",

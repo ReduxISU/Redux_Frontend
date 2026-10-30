@@ -20,11 +20,14 @@
 // that pane's Picture menu.
 
 import Box from "@mui/material/Box";
-import { useState } from "react";
-import { ZoomControlsSlot } from "../pictures/zoomControlsSlot";
+import { useContext, useState } from "react";
+import { PictureFullScreen, ZoomControlsSlot } from "../pictures/zoomControlsSlot";
 import { PANES_STACK_MEDIA, secondaryButtonSx } from "./layout";
 
 const ARROW_PATH = "M2 12h30M24 4l8 8-8 8";
+
+/** One pane's four rows on full screen: label, controls, picture, note. */
+const FULL_PANE_ROWS = "auto auto minmax(280px, 1fr) auto";
 
 /**
  * Full screen on and off (#303): the four-corners icon, a 44px target. `text` adds the words
@@ -155,6 +158,7 @@ export function PaneSection({
   children,
 }) {
   const [zoomSlot, setZoomSlot] = useState(null);
+  const pictureFull = useContext(PictureFullScreen);
   const column = which === "source" ? 1 : 3;
   return (
     <Box
@@ -218,7 +222,7 @@ export function PaneSection({
           alignSelf: "stretch",
           display: "flex",
           flexDirection: "column",
-          [PANES_STACK_MEDIA]: { display: "block" },
+          [PANES_STACK_MEDIA]: { display: pictureFull ? "flex" : "block" },
         }}
       >
         <ZoomControlsSlot.Provider value={zoomSlot}>{children}</ZoomControlsSlot.Provider>
@@ -243,10 +247,12 @@ export function PaneSection({
  * @param {import("react").ReactNode} props.target A PaneSection.
  */
 export function PaneGrid({ id, only = null, source, target }) {
+  const pictureFull = useContext(PictureFullScreen);
   return (
     <Box
       id={id}
       data-only={only ?? undefined}
+      data-pane-grid="true"
       sx={{
         display: "grid",
         gridTemplateColumns: only ? "minmax(0, 1fr)" : "minmax(0, 1fr) auto minmax(0, 1fr)",
@@ -257,6 +263,19 @@ export function PaneGrid({ id, only = null, source, target }) {
         // A pane alone takes the one column.
         "& > section": only ? { gridColumn: 1 } : {},
         [PANES_STACK_MEDIA]: { gridTemplateColumns: "minmax(0, 1fr)" },
+        // On full screen the picture rows share what the labels and controls leave.
+        ...(pictureFull
+          ? {
+              flex: "1 1 auto",
+              gridTemplateRows: FULL_PANE_ROWS,
+              [PANES_STACK_MEDIA]: {
+                gridTemplateColumns: "minmax(0, 1fr)",
+                gridTemplateRows: only
+                  ? FULL_PANE_ROWS
+                  : `${FULL_PANE_ROWS} auto ${FULL_PANE_ROWS}`,
+              },
+            }
+          : {}),
       }}
     >
       {source}

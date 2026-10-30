@@ -762,6 +762,90 @@ test("at 390 px the panes stack with the arrow pointing down between them, and n
   }
 });
 
+/** How far the full-screen workspace scrolls, and the height of each picture area showing. */
+async function fullScreenFit(page) {
+  return page.evaluate(() => {
+    const root = document.querySelector("#workbench");
+    return {
+      overflow: root.scrollHeight - root.clientHeight,
+      areas: [...root.querySelectorAll("[data-zoom-area]")]
+        .map((area) => area.getBoundingClientRect().height)
+        .filter((height) => height > 0),
+    };
+  });
+}
+
+test("full screen fits the picture and its controls in the window, at every step", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openSat3(page);
+  await solve(page);
+  await page.locator("#workbench-full-screen").click();
+  await expect(page.locator("#workbench")).toHaveAttribute("data-full-screen", "true");
+
+  const tall = await fullScreenFit(page);
+  expect(tall.overflow).toBeLessThanOrEqual(0);
+  expect(tall.areas).toHaveLength(1);
+  // The picture takes the room: the title, controls, steps and caption leave most of it.
+  expect(tall.areas[0]).toBeGreaterThan(450);
+  await expect(page.locator("#workbench-steps-slider")).toBeInViewport({ ratio: 1 });
+
+  // Stepping changes the caption, never the picture's size.
+  const slider = page.locator("#workbench-steps-slider");
+  await slider.focus();
+  for (let step = 0; step < 3; step += 1) {
+    await page.keyboard.press("ArrowRight");
+    const stepped = await fullScreenFit(page);
+    expect(stepped.areas[0]).toBe(tall.areas[0]);
+    expect(stepped.overflow).toBeLessThanOrEqual(0);
+  }
+
+  // The window's size is followed live, and a short one still fits.
+  await page.setViewportSize({ width: 1280, height: 640 });
+  await expect.poll(async () => (await fullScreenFit(page)).overflow).toBeLessThanOrEqual(0);
+  const short = await fullScreenFit(page);
+  expect(short.areas[0]).toBeLessThan(tall.areas[0]);
+  expect(short.areas[0]).toBeGreaterThanOrEqual(200);
+
+  // Too short to fit: the picture keeps a usable size and the window scrolls.
+  await page.setViewportSize({ width: 1280, height: 320 });
+  await expect.poll(async () => (await fullScreenFit(page)).overflow).toBeGreaterThan(0);
+  expect((await fullScreenFit(page)).areas[0]).toBeGreaterThanOrEqual(200);
+});
+
+test("Reduce's full screens fit in the window: both pictures, one alone, and stacked", async ({
+  page,
+}) => {
+  await openSatReduce(page);
+  await page.locator(RUN).click();
+  await expect(page.locator("#workbench-reduction")).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 800 });
+
+  await page.locator("#workbench-full-screen").click();
+  await expect(page.locator("#workbench")).toHaveAttribute("data-full-screen-on", "all");
+  await expect.poll(async () => (await fullScreenFit(page)).overflow).toBeLessThanOrEqual(0);
+  const both = await fullScreenFit(page);
+  expect(both.areas).toHaveLength(2);
+  expect(both.areas[0]).toBe(both.areas[1]);
+  expect(both.areas[0]).toBeGreaterThan(280);
+  await page.keyboard.press("Escape");
+
+  await page.locator("#workbench-target-full-screen").click();
+  await expect(page.locator("#workbench")).toHaveAttribute("data-full-screen-on", "target");
+  await expect.poll(async () => (await fullScreenFit(page)).overflow).toBeLessThanOrEqual(0);
+  expect((await fullScreenFit(page)).areas).toHaveLength(1);
+  await page.keyboard.press("Escape");
+
+  // Stacked, a tall window shares its height between the two.
+  await page.setViewportSize({ width: 800, height: 1200 });
+  await page.locator("#workbench-full-screen").click();
+  await expect.poll(async () => (await fullScreenFit(page)).overflow).toBeLessThanOrEqual(0);
+  const stacked = await fullScreenFit(page);
+  expect(stacked.areas).toHaveLength(2);
+  expect(stacked.areas[0]).toBeGreaterThanOrEqual(200);
+});
+
 test("each pane's Full screen shows that picture alone with the steps; Reduce's shows both with the arrow", async ({
   page,
 }) => {
@@ -1028,9 +1112,12 @@ test("at 1280 px Reduce's two picture areas are the same height, before and afte
     expect(target.card.id).toBe("workbench-reduction-target");
     expectEqualCards(source, target);
     // The table is shorter than the clause graph: it sits in the middle of its area (its
-    // caption and hint above the zoom box), not at the top.
-    expect(target.above).toBeGreaterThan(60);
-    expect(target.below).toBeGreaterThan(60);
+    // caption and hint above the zoom box), not at the top. On full screen the zoom box fills
+    // the area instead, and the drawing is centred inside it.
+    if (!full) {
+      expect(target.above).toBeGreaterThan(60);
+      expect(target.below).toBeGreaterThan(60);
+    }
   }
 
   // In the dark theme the card's fill is darker than the workspace, so its edge is the fill's
