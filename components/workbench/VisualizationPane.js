@@ -77,7 +77,8 @@ const FULL_STEP_TEXT_HEIGHT = "4.5rem";
  * The Visualization Type label and dropdown at a picture's top right, its list opening
  * aligned to the right edge. With a single choice it still shows (so every picture says what
  * type it is, with its tags and info card) but cannot be opened. #303: labelled "Picture", as
- * Board G has it; `inline` puts the label beside the box, on the header row. `menu` (Reduce's
+ * Board G has it; `inline` puts the label beside the box, on the header row, with the (i) after
+ * the box, so a long label or picture name never crowds them. `menu` (Reduce's
  * panes) keeps it a dropdown that opens even with one choice; picking the picture already
  * drawn changes nothing.
  */
@@ -98,12 +99,14 @@ function VisualizationTypeControl({ id, options, value, onChange, inline = false
       value={value}
       onChange={pick}
       labelPlacement={inline ? "row" : "stack"}
+      infoPlacement={inline ? "box" : "label"}
       boxSx={
-        // Reduce's panes are narrower: the menu shrinks first, so Full screen stays on its row.
+        // These widths count the (i), which is 48px with its gap. Reduce's panes are narrower:
+        // the menu shrinks first, so Full screen stays on its row.
         menu
-          ? { flex: "1 1 180px", maxWidth: 300, minWidth: 150 }
+          ? { flex: "1 1 228px", maxWidth: 348, minWidth: 198 }
           : inline
-            ? { flex: "0 1 300px", minWidth: 200, [PHONE_MEDIA]: { flex: "1 1 200px" } }
+            ? { flex: "0 1 348px", minWidth: 248, [PHONE_MEDIA]: { flex: "1 1 248px" } }
             : { width: SHARED_CONTROL_WIDTH, flex: "none", [COMPACT_MEDIA]: { width: "100%" } }
       }
     />

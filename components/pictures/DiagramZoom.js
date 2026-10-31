@@ -77,7 +77,7 @@
 import Box from "@mui/material/Box";
 import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { COMPACT_MEDIA } from "../workbench/layout";
+import { COMPACT_MEDIA, GROUPED_CONTROL_HEIGHT } from "../workbench/layout";
 import DiagramSvg from "./DiagramSvg";
 import { visuallyHiddenSx } from "./pictureSx";
 import { PictureFullScreen, ZoomControlsSlot } from "./zoomControlsSlot";
@@ -376,7 +376,7 @@ function onMac() {
 
 const zoomButtonSx = {
   minWidth: 36,
-  minHeight: 32,
+  minHeight: GROUPED_CONTROL_HEIGHT,
   px: 1.25,
   border: "none",
   borderLeft: "1px solid",

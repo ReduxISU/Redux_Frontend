@@ -8,6 +8,7 @@
 
 import Box from "@mui/material/Box";
 import { paletteVars } from "../theme";
+import { GROUPED_CONTROL_HEIGHT } from "../workbench/layout";
 import { GadgetCircle, GadgetRect } from "./gadgetRings";
 import { NODE_RADIUS, outlineDistance } from "./graphLayout";
 import { pictureStateStyle } from "./pictureStates";
@@ -430,7 +431,7 @@ export function PictureToggle({ id, label, options, value, onChange }) {
             aria-pressed={pressed}
             onClick={() => onChange(option.value)}
             sx={{
-              minHeight: 32,
+              minHeight: GROUPED_CONTROL_HEIGHT,
               px: 1.5,
               border: "none",
               borderLeft: "1px solid",
