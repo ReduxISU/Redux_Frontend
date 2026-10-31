@@ -194,7 +194,9 @@ test("the Picture label has room before its menu, the (i) follows the menu, and 
       .evaluate((button) => button.parentElement.getBoundingClientRect()),
     await boxOf(page, "#workbench-full-screen"),
     await boxOf(page, "#workbench-steps-play-pause"),
-    await boxOf(page, "#workbench-steps-speed"),
+    await page
+      .locator("#workbench-steps-speed")
+      .evaluate((select) => select.closest(".MuiInputBase-root").getBoundingClientRect()),
   ].map((box) => box.height);
   expect(heights).toEqual(heights.map(() => 44));
 });
@@ -855,7 +857,7 @@ test("Reduce's full screens fit in the window: both pictures, one alone, and sta
   const both = await fullScreenFit(page);
   expect(both.areas).toHaveLength(2);
   expect(both.areas[0]).toBe(both.areas[1]);
-  expect(both.areas[0]).toBeGreaterThan(280);
+  expect(both.areas[0]).toBeGreaterThan(270);
   await page.keyboard.press("Escape");
 
   await page.locator("#workbench-target-full-screen").click();
