@@ -19,6 +19,12 @@ export const COLUMN_MAX_WIDTH = 1520;
 /** One width shared by Edit, Run and every Visualization Type dropdown, right edges aligned. */
 export const SHARED_CONTROL_WIDTH = 256;
 
+/** The height of every control around a picture: the Picture menu, zoom, Full screen, the steps. */
+export const CONTROL_HEIGHT = 44;
+
+/** A control inside a group with a 1px border: the group comes to CONTROL_HEIGHT. */
+export const GROUPED_CONTROL_HEIGHT = CONTROL_HEIGHT - 2;
+
 /** The closed width of the Solver, To and Using dropdowns. */
 export const DROPDOWN_WIDTH = 340;
 

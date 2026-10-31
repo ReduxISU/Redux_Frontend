@@ -172,6 +172,33 @@ test("in Solve the Showing line sits on the Picture menu's row, with zoom and Fu
   await expect(page.locator('#workbench-source-picture [aria-label="Zoom in"]')).toHaveCount(0);
 });
 
+test("the Picture label has room before its menu, the (i) follows the menu, and every control beside the picture is one height", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openSat3(page);
+  await solve(page);
+
+  const label = await boxOf(page, "#workbench-source-type-label");
+  const menu = await boxOf(page, "#workbench-source-type-button");
+  const info = await boxOf(page, "#workbench-source-type-info-button");
+  expect(menu.x - (label.x + label.width)).toBeGreaterThanOrEqual(8);
+  expect(info.x).toBeGreaterThanOrEqual(menu.x + menu.width);
+  expect(sameLine(label, menu)).toBe(true);
+
+  const heights = [
+    menu,
+    info,
+    await page
+      .locator('#workbench-zoom-slot [aria-label="Zoom in"]')
+      .evaluate((button) => button.parentElement.getBoundingClientRect()),
+    await boxOf(page, "#workbench-full-screen"),
+    await boxOf(page, "#workbench-steps-play-pause"),
+    await boxOf(page, "#workbench-steps-speed"),
+  ].map((box) => box.height);
+  expect(heights).toEqual(heights.map(() => 44));
+});
+
 test("full screen shows only the picture and the steps, and Escape leaves it", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openSat3(page);
@@ -1297,12 +1324,7 @@ test("the step bar is the mockup's: five buttons, the slider, Speed, and one Ste
   expect(style).toEqual({ border: "1px", radius: "12px" });
   for (const id of ["first", "previous", "play-pause", "next", "last"]) {
     const box = await boxOf(page, `#workbench-steps-${id}`);
-    expect(box.height).toBeGreaterThanOrEqual(40);
-    const hit = await page.locator(`#workbench-steps-${id}`).evaluate((element) => {
-      const before = getComputedStyle(element, "::before");
-      return element.getBoundingClientRect().height - 2 * Number.parseFloat(before.top);
-    });
-    expect(hit).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBe(44);
   }
 });
 

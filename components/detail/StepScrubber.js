@@ -20,8 +20,8 @@
 // under them: "Step N of M:" in bold and the step's description (on a phone, the description on
 // its own line under it). The description is rendered by
 // the picture into `textRef`'s element (../pictures/secondarySlots.js StepTextSlot), so this file
-// never knows what a step says. The buttons are 40px squares, as the mockup draws them, each
-// with an invisible 44px hit area around it (`::before`) so a finger still lands on it.
+// never knows what a step says. The buttons and the speed menu are CONTROL_HEIGHT, like the
+// controls above the picture.
 //
 // Play/pause/step buttons are real, focusable, aria-labelled controls; the
 // scrub bar is a real MUI Slider (a native range input under the hood, so
@@ -42,7 +42,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Slider from "@mui/material/Slider";
 import { useEffect, useState } from "react";
-import { PHONE_MEDIA } from "../workbench/layout";
+import { CONTROL_HEIGHT, PHONE_MEDIA } from "../workbench/layout";
 
 // Milliseconds between frames while playing at 1x. SPEED_OPTIONS' `factor`
 // multiplies this, so 2x plays twice as fast (half the delay) and 0.5x half
@@ -102,11 +102,10 @@ function PlayIcon({ playing }) {
   );
 }
 
-// #303: a step bar button, 40px as drawn, its hit area 44px (the `::before`).
+// #303: a step bar button.
 const stepButtonSx = {
-  position: "relative",
-  width: 40,
-  height: 40,
+  width: CONTROL_HEIGHT,
+  height: CONTROL_HEIGHT,
   flex: "none",
   display: "inline-flex",
   alignItems: "center",
@@ -119,7 +118,6 @@ const stepButtonSx = {
   color: "text.primary",
   fontFamily: "inherit",
   cursor: "pointer",
-  "&::before": { content: '""', position: "absolute", inset: "-2px" },
   "&:hover:not(:disabled)": { backgroundColor: "surface.raised" },
   "&:disabled": { cursor: "not-allowed", color: "text.disabled", borderColor: "border.soft" },
 };
@@ -332,7 +330,12 @@ export default function StepScrubber({
           value={speedValue}
           disabled={!canScrub}
           onChange={(event) => setSpeedValue(event.target.value)}
-          sx={{ flexShrink: 0, minWidth: 84, backgroundColor: "surface.input" }}
+          sx={{
+            flexShrink: 0,
+            minWidth: 84,
+            height: CONTROL_HEIGHT,
+            backgroundColor: "surface.input",
+          }}
         >
           {SPEED_OPTIONS.map((option) => (
             <MenuItem key={option.value} value={option.value}>

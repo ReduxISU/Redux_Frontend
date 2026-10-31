@@ -537,7 +537,17 @@ export default function TaggedSelect({
   const hovered = hover ? options[hover.index] : null;
 
   const labelRow = (
-    <Box sx={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        minWidth: 0,
+        // Beside the box: the label's own room, centered on the box's height.
+        ...(labelPlacement === "row"
+          ? { flex: "none", minHeight: ROW_HEIGHT, pl: 1, pr: 0.5, whiteSpace: "nowrap" }
+          : {}),
+      }}
+    >
       <Box component="label" id={labelId} htmlFor={buttonId} sx={controlLabelSx}>
         {label}
       </Box>
@@ -553,7 +563,11 @@ export default function TaggedSelect({
   const box = (
     <Box
       ref={rootRef}
-      sx={{ position: "relative", minWidth: 0, ...(labelPlacement === "row" ? boxSx : {}) }}
+      sx={{
+        position: "relative",
+        minWidth: 0,
+        ...(labelPlacement === "row" && !infoAfterBox ? boxSx : {}),
+      }}
       onBlur={(event) => {
         if (open && !rootRef.current?.contains(event.relatedTarget)) {
           closeList({ focusButton: false });
@@ -775,7 +789,15 @@ export default function TaggedSelect({
   );
 
   const boxWithInfo = infoAfterBox ? (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.5,
+        minWidth: 0,
+        ...(labelPlacement === "row" ? boxSx : {}),
+      }}
+    >
       <Box sx={{ flex: "1 1 auto", minWidth: 0 }}>{box}</Box>
       {infoAfterBox}
     </Box>

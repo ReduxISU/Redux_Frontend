@@ -34,6 +34,7 @@
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
 import { paletteVars } from "../theme";
+import { CONTROL_HEIGHT } from "../workbench/layout";
 import {
   automatonArrows,
   entryArrow,
@@ -460,7 +461,7 @@ function PathPicker({ id, runs }) {
           value={runs.value}
           onChange={(event) => runs.onChange(event.target.value)}
           sx={{
-            minHeight: 32,
+            minHeight: CONTROL_HEIGHT,
             maxWidth: "100%",
             minWidth: 0,
             px: 1,
