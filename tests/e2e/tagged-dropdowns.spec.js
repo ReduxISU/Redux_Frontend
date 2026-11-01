@@ -268,12 +268,16 @@ test("the (i) card shows on keyboard focus and on a tap, as a tooltip the button
   await expect(card).toBeHidden();
   await expect(info).toBeFocused();
 
-  // A click (or tap) toggles it.
+  // A click (or tap) toggles it. A mouse click hovers the button first, and the hover opens
+  // the card on its own, so wait for that before clicking: otherwise the click races the
+  // hover's render and can land on either a closed or an open card.
   await page.locator("h1").click();
-  await info.click();
+  await info.hover();
   await expect(card).toBeVisible();
   await info.click();
   await expect(card).toBeHidden();
+  await info.click();
+  await expect(card).toBeVisible();
 
   // The touch target is 44px.
   const box = await info.boundingBox();
