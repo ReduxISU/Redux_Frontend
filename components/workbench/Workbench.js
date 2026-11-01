@@ -55,7 +55,7 @@ import {
 } from "../../lib/redux";
 import ComputeStatus from "../detail/ComputeStatus";
 import { statesInFrames } from "../pictures/pictureStates";
-import { pictureAnnotations } from "../pictures/registry";
+import { pictureAnnotations, pictureRuns } from "../pictures/registry";
 import CommandBar from "./CommandBar";
 import {
   reductionCard,
@@ -211,11 +211,16 @@ export default function Workbench({ problem }) {
   const mapResult = mapRun.status === COMPUTE_DONE ? mapRun.result : null;
   const mapCurrent = Boolean(mapResult) && reduceCurrent && mapResult.runId === reduceResult.runId;
 
-  // A new run's picture starts at its first step.
+  // Which of the picture's other runs the steps follow (#204: an NFA's one path), by id; null
+  // is the run's own frames.
+  const [runView, setRunView] = useState(null);
+
+  // A new run's picture starts at its first step, on its own frames.
   const [stepsFor, setStepsFor] = useState(pictureRun.result);
   if (stepsFor !== pictureRun.result) {
     setStepsFor(pictureRun.result);
     setCurrentStep(0);
+    setRunView(null);
   }
 
   // The Result dot only means "a run finished while you were not looking".
@@ -230,6 +235,18 @@ export default function Workbench({ problem }) {
     enabled: !(mode === "solve" && runPictureCurrent),
   });
   const showingRunPicture = mode === "solve" && runPictureCurrent;
+  // #204: the other runs a format=frames picture offers (an NFA's paths, registry.js
+  // pictureRuns), and the frames the steps walk: the chosen one's, or the run's own.
+  const otherRuns =
+    showingRunPicture && pictureResult.format === "frames"
+      ? pictureRuns(pictureResult.type, pictureResult.payload)
+      : [];
+  const chosenRun = otherRuns.find((run) => run.id === runView) ?? null;
+  const runFrames = showingRunPicture ? (chosenRun ? chosenRun.frames : pictureResult.frames) : [];
+  function chooseRun(id) {
+    setRunView(id);
+    setCurrentStep(0);
+  }
   const edits = useFrameEdits({
     backendType: selectedViz?.backendType,
     baseFrame: showingRunPicture ? null : defaultPicture.frame,
@@ -602,7 +619,7 @@ export default function Workbench({ problem }) {
       text: "This problem has no visualization this site can draw yet.",
     };
   } else if (showingRunPicture) {
-    const frame = pictureResult.frames[currentStep] ?? null;
+    const frame = runFrames[currentStep] ?? null;
     if (!frame) {
       sourceContent = { kind: "message", text: "This run came back without a picture." };
     } else if (pictureResult.format === "frames") {
@@ -612,9 +629,16 @@ export default function Workbench({ problem }) {
         payload: pictureResult.payload,
         frame,
         frameIndex: currentStep,
-        frameCount: pictureResult.frames.length,
+        frameCount: runFrames.length,
         name: selectedViz.name,
         showCaption: true,
+        runs: otherRuns.length
+          ? {
+              options: otherRuns.map(({ id, label, accepted }) => ({ id, label, accepted })),
+              value: chosenRun ? chosenRun.id : null,
+              onChange: chooseRun,
+            }
+          : null,
       };
     } else {
       sourceContent = {
@@ -797,7 +821,7 @@ export default function Workbench({ problem }) {
       text: `${CERTIFICATE_DRAWING_REASON} The picture still shows the instance.`,
       tone: "muted",
     };
-  } else if (showingRunPicture && pictureResult.frames.length <= 1) {
+  } else if (showingRunPicture && runFrames.length <= 1) {
     note = { text: "This run recorded no steps.", tone: "muted" };
   } else if (showingRunPicture) {
     note = null;
@@ -829,7 +853,7 @@ export default function Workbench({ problem }) {
   let legendStates = null;
   let legendAnnotations = null;
   if (sourceContent.kind === "picture") {
-    const frames = showingRunPicture ? pictureResult.frames : [sourceContent.frame];
+    const frames = showingRunPicture ? runFrames : [sourceContent.frame];
     legendStates = statesInFrames(frames);
     legendAnnotations = pictureAnnotations(sourceContent.type, sourceContent.payload, frames);
   }
@@ -1233,7 +1257,7 @@ export default function Workbench({ problem }) {
             steps={
               showingRunPicture
                 ? {
-                    frameCount: pictureResult.frames.length,
+                    frameCount: runFrames.length,
                     currentStep,
                     onStepChange: setCurrentStep,
                   }
