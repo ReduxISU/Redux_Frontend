@@ -62,7 +62,7 @@ import {
 import { frameAtPosition, framePosition, RUN_END } from "../../lib/runSteps";
 import ComputeStatus from "../detail/ComputeStatus";
 import { statesInFrames } from "../pictures/pictureStates";
-import { pictureAnnotations, pictureRuns } from "../pictures/registry";
+import { pictureAnnotations, pictureLegendFrames, pictureRuns } from "../pictures/registry";
 import CommandBar from "./CommandBar";
 import {
   reductionCard,
@@ -952,13 +952,20 @@ export default function Workbench({ problem }) {
     target?.content.kind === "frame" ? target.content.frame : null,
   ];
   // #199: a format=frames picture's key lists the states its whole run uses, so the key does
-  // not change while stepping.
+  // not change while stepping; a Quantum Circuit's lists only the step on screen's (#210,
+  // registry.js pictureLegendFrames).
   let legendStates = null;
   let legendAnnotations = null;
   if (sourceContent.kind === "picture") {
-    const frames = showingRunPicture ? runFrames : [sourceContent.frame];
+    const frames = pictureLegendFrames(
+      sourceContent.type,
+      sourceContent.frame,
+      showingRunPicture ? runFrames : null,
+    );
     legendStates = statesInFrames(frames);
-    legendAnnotations = pictureAnnotations(sourceContent.type, sourceContent.payload, frames);
+    legendAnnotations = pictureAnnotations(sourceContent.type, sourceContent.payload, frames, {
+      plain: !showingRunPicture,
+    });
   }
 
   // --- Status under the command bar ------------------------------------------------------

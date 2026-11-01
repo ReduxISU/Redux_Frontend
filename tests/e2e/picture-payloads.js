@@ -18603,7 +18603,7 @@ export const DM3_SEARCH_TREE_FRAMES = {
     {
       event: "Accept",
       caption:
-        "Frank has one triple left that use no element twice. Choose T4 (Sally, Madison, Frank).",
+        "Frank has one triple left that uses no element twice. Choose T4 (Sally, Madison, Frank).",
       focus: ["n1"],
       nodes: [
         { id: "n0", parent: null, label: "start", kind: "explored", state: "Covered" },
@@ -18636,7 +18636,7 @@ export const DM3_SEARCH_TREE_FRAMES = {
     {
       event: "Accept",
       caption:
-        "Paul has one triple left that use no element twice. Choose T2 (Paul, Austin, Jake).",
+        "Paul has one triple left that uses no element twice. Choose T2 (Paul, Austin, Jake).",
       focus: ["n3"],
       nodes: [
         { id: "n0", parent: null, label: "start", kind: "explored", state: "Covered" },
@@ -18686,7 +18686,7 @@ export const DM3_SEARCH_TREE_FRAMES = {
     },
     {
       event: "Accept",
-      caption: "Dave has one triple left that use no element twice. Choose T6 (Dave, Bob, Chloe).",
+      caption: "Dave has one triple left that uses no element twice. Choose T6 (Dave, Bob, Chloe).",
       focus: ["n5"],
       nodes: [
         { id: "n0", parent: null, label: "start", kind: "explored", state: "Solution" },
@@ -21183,7 +21183,7 @@ export const SUDOKU_BOARD_FRAMES = {
     {
       event: "Done",
       caption:
-        "Every square is filled and no row, column or box repeats a digit. Solved after 429 tries. (396 not shown)",
+        "Every square is filled and no row, column or box repeats a digit. Solved after 429 tries (396 not shown).",
       focus: [],
       values: {
         r0c0: "6",
@@ -32303,7 +32303,7 @@ export const DM3_BACKTRACKING_TRIPARTITE_FRAMES = {
     {
       event: "Accept",
       caption:
-        "Frank has one triple left that use no element twice. Choose T4 (Sally, Madison, Frank).",
+        "Frank has one triple left that uses no element twice. Choose T4 (Sally, Madison, Frank).",
       focus: ["T4"],
       chosen: ["T4"],
       repeats: {},
@@ -32341,7 +32341,7 @@ export const DM3_BACKTRACKING_TRIPARTITE_FRAMES = {
     {
       event: "Accept",
       caption:
-        "Paul has one triple left that use no element twice. Choose T2 (Paul, Austin, Jake).",
+        "Paul has one triple left that uses no element twice. Choose T2 (Paul, Austin, Jake).",
       focus: ["T2"],
       chosen: ["T2", "T4"],
       repeats: {},
@@ -32390,7 +32390,7 @@ export const DM3_BACKTRACKING_TRIPARTITE_FRAMES = {
     },
     {
       event: "Accept",
-      caption: "Dave has one triple left that use no element twice. Choose T6 (Dave, Bob, Chloe).",
+      caption: "Dave has one triple left that uses no element twice. Choose T6 (Dave, Bob, Chloe).",
       focus: ["T6"],
       chosen: ["T2", "T4", "T6"],
       repeats: {},
@@ -32505,7 +32505,7 @@ export const DM3_WIDE_TRIPARTITE_FRAMES = {
     {
       event: "Accept",
       caption:
-        "Bob has one triple left that use no element twice. Choose T3 (Bob, Florentina, Jo).",
+        "Bob has one triple left that uses no element twice. Choose T3 (Bob, Florentina, Jo).",
       focus: ["T3"],
       chosen: ["T1", "T3"],
       repeats: {},
@@ -32739,7 +32739,7 @@ export const DM3_WIDE_TRIPARTITE_FRAMES = {
     },
     {
       event: "Accept",
-      caption: "Ed has one triple left that use no element twice. Choose T6 (Cy, Ed, Jo).",
+      caption: "Ed has one triple left that uses no element twice. Choose T6 (Cy, Ed, Jo).",
       focus: ["T6"],
       chosen: ["T2", "T6"],
       repeats: {},
@@ -32827,7 +32827,7 @@ export const DM3_WIDE_TRIPARTITE_FRAMES = {
     },
     {
       event: "Accept",
-      caption: "Bob has one triple left that use no element twice. Choose T11 (Bob, Gus, Hal).",
+      caption: "Bob has one triple left that uses no element twice. Choose T11 (Bob, Gus, Hal).",
       focus: ["T11"],
       chosen: ["T2", "T6", "T11"],
       repeats: {},
@@ -32926,7 +32926,7 @@ export const DM3_WIDE_TRIPARTITE_FRAMES = {
     {
       event: "Accept",
       caption:
-        "Dee has one triple left that use no element twice. Choose T10 (Dee, Florentina, Kim).",
+        "Dee has one triple left that uses no element twice. Choose T10 (Dee, Florentina, Kim).",
       focus: ["T10"],
       chosen: ["T2", "T6", "T10", "T11"],
       repeats: {},
@@ -33025,7 +33025,7 @@ export const DM3_NONE_TRIPARTITE_FRAMES = {
   frames: [
     {
       event: "Accept",
-      caption: "b has one triple left that use no element twice. Choose T2 (b, c, f).",
+      caption: "b has one triple left that uses no element twice. Choose T2 (b, c, f).",
       focus: ["T2"],
       chosen: ["T2"],
       repeats: {},
