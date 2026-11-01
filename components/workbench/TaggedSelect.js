@@ -328,7 +328,9 @@ function InfoButton({ id, card, align }) {
  * @param {string} [props.id] Prefixes every id rendered here. Falls back to React's useId.
  * @param {string} props.label The visible label ("Solver", "To", "Visualization Type").
  * @param {{value: string, label: string, tags: import("./infoCards").Tag[],
- *   card: import("./infoCards").Card, disabled?: boolean, reason?: string}[]} props.options
+ *   listTags?: import("./infoCards").Tag[], card: import("./infoCards").Card,
+ *   disabled?: boolean, reason?: string}[]} props.options
+ *   `listTags`, when given, replaces `tags` in the open list, which has room for more.
  *   A `disabled` option (#239) is listed, greyed, with its `reason` under its name, and can't
  *   be chosen.
  * @param {string} props.value The chosen option's value.
@@ -643,7 +645,7 @@ export default function TaggedSelect({
               const isSelected = index === selectedIndex;
               const isActive = index === activeIndex;
               const describedBy = [
-                option.tags?.length ? `${optionId(index)}-tags` : null,
+                (option.listTags ?? option.tags)?.length ? `${optionId(index)}-tags` : null,
                 option.disabled && option.reason ? `${optionId(index)}-reason` : null,
               ].filter(Boolean);
               return (
@@ -709,7 +711,7 @@ export default function TaggedSelect({
                   </Box>
                   <TagList
                     id={`${optionId(index)}-tags`}
-                    tags={option.tags}
+                    tags={option.listTags ?? option.tags}
                     hue={hue}
                     sx={{ flex: "none" }}
                   />
