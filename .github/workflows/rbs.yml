@@ -4,6 +4,12 @@ on:
   pull_request:
   push:
     branches: [main, production]
+  # These three run only the close-parents job (see it at the bottom).
+  issues:
+    types: [closed]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
 
 # `packages: write` is required here even though this repo has no publish step of its own: the
 # reusable ci.yml job in Redux_Build_System requests it (for the future `rbs push`), and a reusable
@@ -16,12 +22,22 @@ permissions:
   packages: write
 
 concurrency:
-  group: rbs-${{ github.ref }}
+  # The event name keeps an hourly run from cancelling a push run on the same branch.
+  group: rbs-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-test:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     uses: ReduxISU/Redux_Build_System/.github/workflows/ci.yml@main
     secrets: inherit
     with:
       soft: true
+
+  # Closes this repo's issues labeled close-when-subissues-done once all their sub-issues are
+  # closed. Hourly too, for sub-issues in other repos, which don't trigger this one.
+  close-parents:
+    if: github.event_name == 'issues' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ReduxISU/Redux_Build_System/.github/workflows/close-finished-parents.yml@main
+    permissions:
+      issues: write
