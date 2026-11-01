@@ -18,6 +18,11 @@
 // needs to fall back to data/taxonomy.js's hardcoded `options` arrays instead
 // of going blank.
 //
+// #299: a seventh call, Navigation/ProblemVariants (ReduxISU/Redux#946), backs
+// the Problem Variant facet. A backend from before #946 has no such endpoint,
+// so that one call alone is allowed to fail (it then reads as no variants)
+// without taking the other six facets' live options down with it.
+//
 // Each returned array already has "Unclassified" filtered out -- matching
 // data/taxonomy.js's translation maps' own convention of never emitting it
 // as a real option -- so callers (data/taxonomy.js's
@@ -28,6 +33,7 @@ import { UNCLASSIFIED } from "../data/taxonomy";
 import {
   requestComplexityClasses,
   requestProblemTypes,
+  requestProblemVariants,
   requestReductionCosts,
   requestReductionTypes,
   requestSolverComplexityBuckets,
@@ -64,6 +70,7 @@ function withoutUnclassified(names) {
  * @returns {{
  *   complexityClass: string[],
  *   problemType: string[],
+ *   problemVariant: string[],
  *   reductionType: string[],
  *   reductionCost: string[],
  *   solverType: string[],
@@ -78,6 +85,7 @@ function withoutUnclassified(names) {
 export function useEnumCatalog(url) {
   const [complexityClass, setComplexityClass] = useState(EMPTY);
   const [problemType, setProblemType] = useState(EMPTY);
+  const [problemVariant, setProblemVariant] = useState(EMPTY);
   const [reductionType, setReductionType] = useState(EMPTY);
   const [reductionCost, setReductionCost] = useState(EMPTY);
   const [solverType, setSolverType] = useState(EMPTY);
@@ -100,6 +108,7 @@ export function useEnumCatalog(url) {
           reductionCostNames,
           solverTypeNames,
           solverComplexityBucketNames,
+          problemVariantNames,
         ] = await Promise.all([
           requestComplexityClasses(url),
           requestProblemTypes(url),
@@ -107,6 +116,8 @@ export function useEnumCatalog(url) {
           requestReductionCosts(url),
           requestSolverTypes(url),
           requestSolverComplexityBuckets(url),
+          // A backend from before #946 has no such endpoint; see this file's header.
+          requestProblemVariants(url).catch(() => null),
         ]);
 
         if (cancelled) return;
@@ -117,6 +128,7 @@ export function useEnumCatalog(url) {
         setReductionCost(withoutUnclassified(reductionCostNames));
         setSolverType(withoutUnclassified(solverTypeNames));
         setSolverComplexityBucket(withoutUnclassified(solverComplexityBucketNames));
+        setProblemVariant(withoutUnclassified(problemVariantNames));
       } catch (caughtError) {
         // #5: an unreachable backend must not throw an unhandled error, and
         // must not leave a caller with a mix of resolved and never-set
@@ -137,6 +149,7 @@ export function useEnumCatalog(url) {
   return {
     complexityClass,
     problemType,
+    problemVariant,
     reductionType,
     reductionCost,
     solverType,

@@ -328,7 +328,8 @@ function InfoButton({ id, card, align }) {
  * @param {string} [props.id] Prefixes every id rendered here. Falls back to React's useId.
  * @param {string} props.label The visible label ("Solver", "To", "Visualization Type").
  * @param {{value: string, label: string, tags: import("./infoCards").Tag[],
- *   card: import("./infoCards").Card}[]} props.options
+ *   listTags?: import("./infoCards").Tag[], card: import("./infoCards").Card}[]} props.options
+ *   `listTags`, when given, replaces `tags` in the open list, which has room for more.
  * @param {string} props.value The chosen option's value.
  * @param {(value: string) => void} [props.onChange] Leave out for a fixed choice: the box
  *   still shows its name, tags and (i) card but cannot open.
@@ -645,7 +646,9 @@ export default function TaggedSelect({
                   role="option"
                   aria-selected={isSelected}
                   aria-labelledby={`${optionId(index)}-name`}
-                  aria-describedby={option.tags?.length ? `${optionId(index)}-tags` : undefined}
+                  aria-describedby={
+                    (option.listTags ?? option.tags)?.length ? `${optionId(index)}-tags` : undefined
+                  }
                   data-active={isActive || undefined}
                   onClick={() => pick(index)}
                   onPointerEnter={(event) => {
@@ -685,7 +688,7 @@ export default function TaggedSelect({
                   </Box>
                   <TagList
                     id={`${optionId(index)}-tags`}
-                    tags={option.tags}
+                    tags={option.listTags ?? option.tags}
                     hue={hue}
                     sx={{ flex: "none" }}
                   />

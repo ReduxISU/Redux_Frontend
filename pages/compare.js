@@ -101,7 +101,8 @@ function NothingToCompare() {
 function formatReductionNote(direction, otherName, edge) {
   const parts = [];
   if (edge.cost) parts.push(optionLabel("reductionCost", edge.cost));
-  if (edge.type) parts.push(optionLabel("reductionType", edge.type));
+  // #299: every reduction type the edge lists.
+  for (const typeKey of edge.types ?? []) parts.push(optionLabel("reductionType", typeKey));
   const detail = parts.length > 0 ? ` (${parts.join(", ")})` : "";
   return direction === "to"
     ? `Reduces to ${otherName}${detail}`
