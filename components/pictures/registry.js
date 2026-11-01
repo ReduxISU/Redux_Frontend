@@ -74,12 +74,12 @@ export const PICTURE_RENDERERS = {
   FlowNetwork: FlowNetworkRenderer,
   Geometry: GeometryRenderer,
   Graph: GraphRenderer,
-  GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
   Packing: PackingRenderer,
   QuantumCircuit: QuantumRenderer,
   Schedule: ScheduleRenderer,
   SearchTree: SearchTreeRenderer,
+  GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
   TripartiteMatching: TripartiteRenderer,
 };
@@ -93,13 +93,13 @@ const PICTURE_ANNOTATIONS = {
   FlowNetwork: flowAnnotations,
   Geometry: geometryAnnotations,
   Graph: graphAnnotations,
-  GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
   Packing: packingAnnotations,
   QuantumCircuit: quantumAnnotations,
   Schedule: scheduleAnnotations,
   SearchTree: searchTreeAnnotations,
   TripartiteMatching: tripartiteAnnotations,
+  GroupedGraph: groupedGraphAnnotations,
 };
 
 /**
