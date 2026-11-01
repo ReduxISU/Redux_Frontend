@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./tests/unit/resolve-js-extension.mjs --test tests/unit/*.test.mjs",
     "test:e2e": "playwright test",
     "check:contrast": "node scripts/check-contrast.mjs",
     "format": "biome check --write .",
@@ -33,7 +34,7 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15",
+    "@biomejs/biome": "^2.6.4",
     "@playwright/test": "^1.64.1",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.3",

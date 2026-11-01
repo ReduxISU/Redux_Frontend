@@ -125,7 +125,8 @@ function resolvePlaylist(query) {
 // (components/theme.js registers one outlined/filled pair per facet.key) so
 // the colors match the card the visitor clicked through from — but always
 // outlined here, since a detail page has no "matched active filter" concept.
-const BADGE_FACET_KEYS = ["complexityClass", "problemType"];
+// #299: then the Decision / Optimization variant, the same chips the card shows.
+const BADGE_FACET_KEYS = ["complexityClass", "problemType", "problemVariant"];
 
 const TAXONOMY_BY_KEY = new Map(TAXONOMY.map((facet) => [facet.key, facet]));
 

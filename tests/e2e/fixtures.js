@@ -37,6 +37,8 @@ const API_PATH_PATTERN = /\/api\//;
 
 // #252: ProblemProvider/visualizeRun (ReduxISU/Redux#895), one solver run with every picture.
 const VISUALIZE_RUN_REQUEST = /\/api\/redux\/ProblemProvider\/visualizeRun\?/;
+// #299: Navigation/ProblemVariants (ReduxISU/Redux#946), the Problem Variant facet's options.
+const PROBLEM_VARIANTS_REQUEST = /\/api\/redux\/Navigation\/ProblemVariants$/;
 
 function isApiRequest(url) {
   return API_PATH_PATTERN.test(new URL(url).pathname);
@@ -49,6 +51,18 @@ function isApiRequest(url) {
  */
 function isRunRouteMissing(response) {
   return VISUALIZE_RUN_REQUEST.test(response.url()) && [404, 405].includes(response.status());
+}
+
+/**
+ * A backend from before ReduxISU/Redux#946 has no Navigation/ProblemVariants and answers it 404
+ * (or 405). hooks/useEnumCatalog.js takes that as "no variants known", and the Problem Variant
+ * facet lists nothing. That answer is the fallback working, not a quiet failure.
+ */
+function isProblemVariantsMissing(response) {
+  return (
+    PROBLEM_VARIANTS_REQUEST.test(new URL(response.url()).pathname) &&
+    [404, 405].includes(response.status())
+  );
 }
 
 export const test = base.extend({
@@ -76,7 +90,12 @@ export const test = base.extend({
     };
 
     const onResponse = (response) => {
-      if (isApiRequest(response.url()) && !response.ok() && !isRunRouteMissing(response)) {
+      if (
+        isApiRequest(response.url()) &&
+        !response.ok() &&
+        !isRunRouteMissing(response) &&
+        !isProblemVariantsMissing(response)
+      ) {
         failures.push(
           `${response.request().method()} ${response.url()} -- responded ${response.status()}`,
         );
