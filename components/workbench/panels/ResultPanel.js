@@ -91,8 +91,9 @@ function CodeBlock({ id, label, children, maxHeight }) {
  * @param {Object|null} props.solveResult The last solve: `{solverName, output, elapsedMs,
  *   instance, stepCount}` (`stepCount` null when the picture did not come back).
  * @param {Object|null} props.reduceResult The last reduction: `{targetName, reductionName,
- *   solverName, certificate, elapsedMs, instance, targetInstance}` (`targetInstance` null when
- *   Redux did not send it).
+ *   solverName, certificate, elapsedMs, instance, targetInstance, mappedBack}` (`targetInstance`
+ *   null when Redux did not send it; `mappedBack`, `{text, ok}`, only for a Reduction View
+ *   (#215), whose solver ran on the target, so it has no source certificate).
  * @param {() => void} props.onVerifyAnswer Verify This Answer for the solve.
  * @param {Object|null} props.map "Map a solution across" (Reduce mode): `{select, onMap,
  *   disabled, hint, request, mapped: {certificate, solverName, reused}|null, onVerifyMapped}`.
@@ -173,7 +174,11 @@ export default function ResultPanel({
             </Fact>
             <Fact label="Algorithm">{reduceResult.reductionName}</Fact>
             <Fact label="Time (round trip)">{formatSeconds(reduceResult.elapsedMs)}</Fact>
-            <Fact label="Answer from">{reduceResult.solverName}</Fact>
+            <Fact label="Answer from">
+              {reduceResult.mappedBack
+                ? `${reduceResult.solverName}, on the ${reduceResult.targetName} target`
+                : reduceResult.solverName}
+            </Fact>
           </Box>
           <CodeBlock
             id={`${idPrefix}-target-instance`}
@@ -183,9 +188,19 @@ export default function ResultPanel({
             {reduceResult.targetInstance ??
               "Redux did not send the target instance's text for this run."}
           </CodeBlock>
-          <CodeBlock id={`${idPrefix}-carried`} label={`${problem.name} answer carried across`}>
-            {formatOutput(reduceResult.certificate) || "The solver returned an empty answer."}
-          </CodeBlock>
+          {reduceResult.mappedBack ? (
+            // #215: a Reduction View solves the target and maps its answer back.
+            <CodeBlock
+              id={`${idPrefix}-mapped-back`}
+              label={`${problem.name} answer, mapped back from ${reduceResult.targetName}`}
+            >
+              {reduceResult.mappedBack.text || "The view came back without a closing step."}
+            </CodeBlock>
+          ) : (
+            <CodeBlock id={`${idPrefix}-carried`} label={`${problem.name} answer carried across`}>
+              {formatOutput(reduceResult.certificate) || "The solver returned an empty answer."}
+            </CodeBlock>
+          )}
 
           {map && (
             <Box

@@ -37,6 +37,8 @@ const API_PATH_PATTERN = /\/api\//;
 
 // #252: ProblemProvider/visualizeRun (ReduxISU/Redux#895), one solver run with every picture.
 const VISUALIZE_RUN_REQUEST = /\/api\/redux\/ProblemProvider\/visualizeRun\?/;
+// #215: ProblemProvider/reductionView (ReduxISU/Redux#660), a reduction's whole Reduction View.
+const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 
 function isApiRequest(url) {
   return API_PATH_PATTERN.test(new URL(url).pathname);
@@ -49,6 +51,15 @@ function isApiRequest(url) {
  */
 function isRunRouteMissing(response) {
   return VISUALIZE_RUN_REQUEST.test(response.url()) && [404, 405].includes(response.status());
+}
+
+/**
+ * Likewise for reductionView (lib/reductionView.js): 404 or 405 is a backend without it, and 400
+ * a reduction it can't show (or an instance it can't read). Reduce then runs the older requests,
+ * and those are what a test sees fail if anything does.
+ */
+function isReductionViewDeclined(response) {
+  return REDUCTION_VIEW_REQUEST.test(response.url()) && [400, 404, 405].includes(response.status());
 }
 
 export const test = base.extend({
@@ -76,7 +87,12 @@ export const test = base.extend({
     };
 
     const onResponse = (response) => {
-      if (isApiRequest(response.url()) && !response.ok() && !isRunRouteMissing(response)) {
+      if (
+        isApiRequest(response.url()) &&
+        !response.ok() &&
+        !isRunRouteMissing(response) &&
+        !isReductionViewDeclined(response)
+      ) {
         failures.push(
           `${response.request().method()} ${response.url()} -- responded ${response.status()}`,
         );
@@ -100,6 +116,12 @@ export const test = base.extend({
     // what the workbench draws. A spec about visualizeRun answers it itself (a route added later
     // wins), as tests/e2e/one-run.spec.js does.
     await page.route(VISUALIZE_RUN_REQUEST, (route) =>
+      route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
+    );
+    // #215: likewise, every spec runs as against a backend without reductionView, so Reduce
+    // runs its older requests (the ones those specs answer); tests/e2e/reduction-view.spec.js
+    // answers it with captures.
+    await page.route(REDUCTION_VIEW_REQUEST, (route) =>
       route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
     );
 
