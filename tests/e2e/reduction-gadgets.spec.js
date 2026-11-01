@@ -22,7 +22,11 @@
 
 import { LDC_SMALL_CODE_TREE_FRAMES } from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
-import { SAT_TO_3SAT_FORMULA_VIEW, SAT3_FORMULA_FRAMES } from "./formula-payloads";
+import {
+  SAT_TO_3SAT_FORMULA_VIEW,
+  SAT3_FORMULA_FRAMES,
+  SAT3_TO_ILP_FORMULA_VIEW,
+} from "./formula-payloads";
 import { openPanel } from "./helpers";
 import { EXACT_COVER_RECURSIVE_NESTED_FRAMES } from "./nested-set-payloads";
 import {
@@ -665,4 +669,48 @@ test("SAT to 3SAT drawn as formulas: Build hides each clause not built yet with 
   await expect(target.locator('[data-variable-id="v:x4"]')).toHaveAttribute("data-rv-link", "hot");
   // The map back ends on the SAT answer, drawn green on the source.
   await expect(pane(page, "source").locator('[data-state="Solution"]').first()).toBeVisible();
+});
+
+test("3SAT to 0-1 ILP drawn as formulas: the target's rows, bounds and chips take the gadgets, its build steps point at a row, and its strip shows 0 / 1", async ({
+  page,
+}) => {
+  // #278 Part 2: the 0-1 ILP Formula (Redux#929) on the target, its ids the pieces' own.
+  const view = SAT3_TO_ILP_FORMULA_VIEW;
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openView(page, () => view);
+  await expect(pane(page, "target")).toHaveAttribute("data-picture-type", "Formula");
+  const target = pane(page, "target");
+  // A build step points at the row it adds: R1 is highlighted though it has no state yet.
+  const row = view.frames.findIndex(
+    (frame) => frame.phase === "build" && frame.targetFocus?.[0] === "r0",
+  );
+  await toStep(page, row);
+  await expect(target.locator('[data-clause-id="r0"]')).toHaveAttribute(
+    "data-state",
+    "ElementHighlight",
+  );
+  // Pointing at the source's first literal links its occurrence in row 1 (r0-x0).
+  await toStep(page, view.frames.length - 1);
+  await pane(page, "source").locator('[data-node-id="c0-0"]').hover();
+  await expect(target.locator('[data-node-id="r0-x0"]')).toHaveAttribute("data-rv-link", "hot");
+  await expect(target.locator('[data-node-id="r0-x0"] [data-gadget-ring]')).toHaveCount(1);
+  await page.mouse.move(1, 1);
+  // A Gadgets row for a clause's bound rings the bound number r0-d.
+  await openPanel(page, "result", { expect });
+  const toggle = page.locator("#workbench-result-gadgets-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  const bound = view.gadgets.findIndex((gadget) => gadget.gadgetKind === "bound");
+  await gadgetRow(page, bound).scrollIntoViewIfNeeded();
+  await gadgetRow(page, bound).hover();
+  await expect(
+    target.locator(`[data-node-id="${view.gadgets[bound].targetIds[0]}"] [data-gadget-ring]`),
+  ).toHaveCount(1);
+  // The target's values are numbers: the strip says x1 = 0, never –.
+  const done = view.frames.at(-1).target;
+  for (const [id, value] of Object.entries(done.assignment)) {
+    const chip = target.locator(`[data-variable-id="${id}"]`);
+    await expect(chip).toHaveAttribute("data-value", String(value));
+    await expect(chip.locator("[data-value-text]")).toHaveText(`= ${value}`);
+  }
+  await expect(target.locator('[data-strip="values"] [data-strip-head]')).toHaveText("VALUES");
 });
