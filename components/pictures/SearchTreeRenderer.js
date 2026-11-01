@@ -26,17 +26,29 @@
 //
 // #250: nothing here can be dragged. The tree is drawn again from every step's own nodes, so a
 // node moved by hand would not stay put as the tree grows around it.
+//
+// #239: in the Reduction View (`boxSoFar`) the run spans Build and Map back too, and a tall tree
+// made the pane tall while the tree was still a root or nothing at all. There the box is as tall
+// as the deepest tree so far, not the whole run's: every node keeps its place (the layout and the
+// box's width are still the whole run's, and the box only grows downwards), so nothing moves as
+// it grows, and the pane fits the tree on screen early on.
+//
+// #239: a gadget's nodes (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring around
+// their box, drawn inside the node's own group. Edges carry no id of their own (only the node
+// they lead into), so they are not marked.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
+import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { Badge, FAINT_EDGE, FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle } from "./pictureStates";
 import {
   edgePath,
   layoutSearchTree,
   layoutTree,
+  MIN_HEIGHT,
   NODE_HEIGHT,
   NOTE_LEADING,
   NOTE_OFFSET,
@@ -151,6 +163,10 @@ function nodeAriaLabel(node, path) {
  * @param {Object} props.frame The frame to draw.
  * @param {number|null} props.frameIndex The frame shown, or null before Run.
  * @param {Object[]} [props.frames] Every frame of the run (one drawing box for all of them).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
+ * @param {boolean} [props.boxSoFar] Size the box's height to the steps so far, not the whole
+ *   run (#239; the Reduction View).
  */
 export default function SearchTreeRenderer({
   idPrefix,
@@ -159,10 +175,23 @@ export default function SearchTreeRenderer({
   frame,
   frameIndex,
   frames = [],
+  highlightIds,
+  gadgetColors,
+  boxSoFar = false,
 }) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   // The run's frames share one box; a frame on its own (no run passed) gets its own.
   const run = useMemo(() => layoutSearchTree(frames.length ? frames : [frame]), [frames, frame]);
   const listed = frames.length ? frames.indexOf(frame) : 0;
+  // The box drawn: the run's, or (boxSoFar) only as tall as the deepest tree so far.
+  const box = useMemo(() => {
+    if (!boxSoFar || listed < 0) return run;
+    let height = MIN_HEIGHT;
+    for (let index = 0; index <= listed; index += 1) {
+      height = Math.max(height, run.trees[index].height);
+    }
+    return { minX: run.minX, minY: run.minY, width: run.width, height };
+  }, [run, boxSoFar, listed]);
   const tree = listed >= 0 ? run.trees[listed] : layoutTree(frame?.nodes);
   const [hover, setHover] = useState(null);
   const [pinned, setPinned] = useState(null);
@@ -236,7 +265,7 @@ export default function SearchTreeRenderer({
       <DiagramZoom
         idPrefix={idPrefix}
         label={label}
-        drawing={run}
+        drawing={box}
         resetOn={[payload, frames]}
         follow={follow}
         readableScale={READABLE_SCALE}
@@ -256,8 +285,8 @@ export default function SearchTreeRenderer({
       >
         {tree.nodes.length === 0 && (
           <text
-            x={run.width / 2}
-            y={run.height / 2}
+            x={box.width / 2}
+            y={box.height / 2}
             data-empty-tree=""
             textAnchor="middle"
             dominantBaseline="central"
@@ -354,6 +383,15 @@ export default function SearchTreeRenderer({
                   stroke={isTraced ? TRACE_COLOR : look.line}
                   strokeWidth={isTraced ? 3 : look.width}
                   strokeDasharray={isTraced ? undefined : look.dash}
+                />
+                <GadgetRect
+                  id={node.id}
+                  color={gadgetOf(node.id)}
+                  x={node.x - node.width / 2}
+                  y={node.y - NODE_HEIGHT / 2}
+                  width={node.width}
+                  height={NODE_HEIGHT}
+                  rx={7}
                 />
                 <text
                   x={node.x}

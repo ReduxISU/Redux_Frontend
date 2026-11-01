@@ -99,7 +99,8 @@ function CodeBlock({ id, label, children, maxHeight }) {
  *   disabled, hint, request, mapped: {certificate, solverName, reused}|null, onVerifyMapped}`.
  * @param {Object} props.verifyProps Everything ./VerifyBox.js takes, except its idPrefix.
  * @param {Object|null} [props.gadgets] The Gadgets section (Reduce mode): `{runId, gadgets,
- *   sourceFrame, targetFrame, activeIndex, onHighlight}`, everything ./GadgetsSection.js takes
+ *   sourceFrame, targetFrame, namers?, colors?, activeIndex, onHighlight}`, everything
+ *   ./GadgetsSection.js takes
  *   except its idPrefix. `runId` remounts the section per run, so a new run starts it closed.
  */
 export default function ResultPanel({
@@ -296,6 +297,8 @@ export default function ResultPanel({
               gadgets={gadgets.gadgets}
               sourceFrame={gadgets.sourceFrame}
               targetFrame={gadgets.targetFrame}
+              namers={gadgets.namers ?? null}
+              colors={gadgets.colors ?? null}
               activeIndex={gadgets.activeIndex}
               onHighlight={gadgets.onHighlight}
             />

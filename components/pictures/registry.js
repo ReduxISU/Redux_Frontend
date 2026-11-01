@@ -12,11 +12,18 @@
 //
 // Adding a renderer (phase B, #200):
 //   1. Write components/pictures/<Type>Renderer.js. It receives
-//        { idPrefix, name, payload, frame, frameIndex, frameCount, frames, highlightIds }
+//        { idPrefix, name, payload, frame, frameIndex, frameCount, frames, highlightIds,
+//          gadgetColors }
 //      where `payload` is the response's static part, `frame` is `frames[frameIndex]`, `name`
 //      is the visualization's name (for labels), `frames` is every frame the steps walk (empty
 //      before Run; only a picture whose layout must hold still over a growing run, the Search
-//      Tree's, needs it) and `highlightIds` are gadget piece ids (#239; ignore them until then).
+//      Tree's, needs it). `highlightIds` are gadget piece ids and `gadgetColors` a color per
+//      piece id (#239): mark each of those pieces with gadgetRings.js (a ring, an inset box or a
+//      band under a line, in the color gadgetRings.js's useGadgetMarks gives it, drawn inside the
+//      piece's own group so its fade covers it, never by opacity). Every piece a renderer marks
+//      with a data-*-id attribute (lib/reductionView.js PIECE_ID_ATTRIBUTES) takes a mark.
+//      `boxSoFar` (the Reduction View) asks a picture whose box spans the run (the Search Tree)
+//      to size it to the steps so far instead, without moving any piece.
 //      Before Run, `frame` is the plain frame (plainFrame() below; `{}` unless the type
 //      registers one) and `frameIndex` is null: the renderer must draw the whole instance from
 //      the payload alone, every piece in Background, and place it exactly where the run's steps
@@ -54,10 +61,12 @@ import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRe
 import BoardRenderer, { boardAnnotations } from "./BoardRenderer";
 import CodeTreeRenderer, { codeTreeAnnotations } from "./CodeTreeRenderer";
 import FlowNetworkRenderer, { flowAnnotations } from "./FlowNetworkRenderer";
+import FormulaRenderer, { formulaAnnotations } from "./FormulaRenderer";
 import GeometryRenderer, { geometryAnnotations } from "./GeometryRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
+import NestedSetRenderer, { nestedSetAnnotations } from "./NestedSetRenderer";
 import PackingRenderer, { packingAnnotations } from "./PackingRenderer";
 import QuantumRenderer, { quantumAnnotations } from "./QuantumRenderer";
 import ScheduleRenderer, { scheduleAnnotations } from "./ScheduleRenderer";
@@ -72,10 +81,12 @@ export const PICTURE_RENDERERS = {
   Board: BoardRenderer,
   CodeTree: CodeTreeRenderer,
   FlowNetwork: FlowNetworkRenderer,
+  Formula: FormulaRenderer,
   Geometry: GeometryRenderer,
   Graph: GraphRenderer,
   GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
+  NestedSet: NestedSetRenderer,
   Packing: PackingRenderer,
   QuantumCircuit: QuantumRenderer,
   Schedule: ScheduleRenderer,
@@ -91,10 +102,12 @@ const PICTURE_ANNOTATIONS = {
   Board: boardAnnotations,
   CodeTree: codeTreeAnnotations,
   FlowNetwork: flowAnnotations,
+  Formula: formulaAnnotations,
   Geometry: geometryAnnotations,
   Graph: graphAnnotations,
   GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
+  NestedSet: nestedSetAnnotations,
   Packing: packingAnnotations,
   QuantumCircuit: quantumAnnotations,
   Schedule: scheduleAnnotations,

@@ -24,6 +24,9 @@
 // #250: the reader can move a node up and down within its layer (its layer's x stays, so the
 // left-to-right order holds), bend any edge (a back edge runs deeper or shallower under the
 // rows) and turn a loop around its node (diagramEdits.js).
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are marked: a node
+// gets a ring outside its body, and an edge (a loop too) a band under its line.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
@@ -38,12 +41,14 @@ import {
   offsetAlongNormal,
   useDiagramEdits,
 } from "./diagramEdits";
+import { GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import { NODE_RADIUS } from "./graphLayout";
 import {
   Badge,
   edgeLook,
   FAINT_EDGE,
   FAINT_FILTER,
+  GadgetNodeRing,
   groupColors,
   MONO,
   NodeBody,
@@ -81,8 +86,19 @@ function plural(count, word) {
  * @param {Object} props.payload The Layered Graph payload.
  * @param {Object} props.frame The frame to draw.
  * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-export default function LayeredGraphRenderer({ idPrefix, name, payload, frame, layoutKey = null }) {
+export default function LayeredGraphRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  layoutKey = null,
+  highlightIds,
+  gadgetColors,
+}) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const layout = useMemo(() => layoutLayered(payload), [payload]);
   const labels = useMemo(
     () => new Map(layout.nodes.map((node) => [node.id, node.label])),
@@ -183,6 +199,12 @@ export default function LayeredGraphRenderer({ idPrefix, name, payload, frame, l
                 data-removed={removed ? "true" : undefined}
                 data-traced={traced ? (faint ? "faint" : "trace") : undefined}
               >
+                <GadgetUnderlay
+                  id={edge.id}
+                  color={gadgetOf(edge.id)}
+                  d={edge.path}
+                  width={look.width}
+                />
                 <path
                   d={edge.path}
                   fill="none"
@@ -285,6 +307,14 @@ export default function LayeredGraphRenderer({ idPrefix, name, payload, frame, l
                       ? { ...look, line: TRACE_COLOR, strokeWidth: 3, dash: undefined }
                       : look
                   }
+                />
+                <GadgetNodeRing
+                  id={node.id}
+                  color={gadgetOf(node.id)}
+                  x={node.x}
+                  y={node.y}
+                  width={node.width}
+                  gap={4}
                 />
                 <NodeLabel
                   x={node.x}

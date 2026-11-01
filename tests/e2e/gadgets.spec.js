@@ -156,30 +156,24 @@ test("Gadgets is closed by default and groups the gadgets by kind with counts", 
     await expect(group.locator("li")).toHaveCount(count);
   }
 
-  // A row reads source -> target, with the note under it.
-  // A bound names no single piece on either side, so its row reads as the whole instances,
-  // and its note carries the formula.
+  // #239: a row says its gadget in plain words. A bound names no single piece on either side, so
+  // its row is its own note, the formula; so is an edge rule's, its reason. Either is said once.
   const boundIndex = CLIQUE.reduce.gadgets.findIndex((gadget) => gadget.gadgetKind === "bound");
   const bound = CLIQUE.reduce.gadgets[boundIndex];
-  await expect(row(page, boundIndex)).toHaveAttribute(
-    "aria-label",
-    "the source instance becomes the target instance",
-  );
-  await expect(page.locator(`#workbench-result-gadgets-row-${boundIndex}-note`)).toHaveText(
-    bound.note,
-  );
-  await expect(row(page, boundIndex)).toHaveAttribute(
-    "aria-describedby",
-    `workbench-result-gadgets-row-${boundIndex}-note`,
-  );
+  await expect(row(page, boundIndex)).toHaveAttribute("aria-label", bound.note);
+  await expect(row(page, boundIndex)).toHaveText(bound.note);
+  await expect(page.locator(`#workbench-result-gadgets-row-${boundIndex}-note`)).toHaveCount(0);
   const ruleIndex = gadgetIndex(CLIQUE, "edgeRule", "1");
   const rule = CLIQUE.reduce.gadgets[ruleIndex];
-  await expect(row(page, ruleIndex)).toHaveAttribute(
+  await expect(row(page, ruleIndex)).toHaveAttribute("aria-label", rule.note);
+  await expect(row(page, ruleIndex)).toHaveText(rule.note);
+  // An element reads "source becomes target.", and has no note of its own.
+  const elementIndex = CLIQUE.reduce.gadgets.findIndex((gadget) => gadget.gadgetKind === "element");
+  const element = CLIQUE.reduce.gadgets[elementIndex];
+  await expect(row(page, elementIndex)).toHaveAttribute(
     "aria-label",
-    `1 becomes ${rule.targetIds.join(", ")}`,
+    `${element.sourceIds.join(", ")} becomes ${element.targetIds.join(", ")}.`,
   );
-  await expect(row(page, ruleIndex)).toContainText(`1→${rule.targetIds.join(", ")}`);
-  await expect(row(page, ruleIndex)).toContainText(rule.note);
 });
 
 test("a group past ten rows shows ten and a Show all button", async ({ page }) => {
@@ -200,7 +194,7 @@ test("a group past ten rows shows ten and a Show all button", async ({ page }) =
   // The first clause's group reads with the clause's name and its three nodes.
   await expect(groupRows.first()).toHaveAttribute(
     "aria-label",
-    `C1 becomes ${groupsCount[0].targetIds.join(", ")}`,
+    `C1 is built as ${groupsCount[0].targetIds.join(", ")}.`,
   );
 
   const elementRows = page.locator("#workbench-result-gadgets-group-element li");

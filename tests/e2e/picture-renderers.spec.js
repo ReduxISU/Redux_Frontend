@@ -50,6 +50,14 @@
 // and gate, each step's column, outcome bars by amplitude sign, the measured read, a classical
 // solver's oracle calls, Shor's note, the trace, texts that meet nothing, and on a phone a small
 // circuit at its own size.
+// #270: the Formula renderer (SAT and 3SAT) at the end: a box per clause with ∨ inside and ∧
+// between, the chips, every step's states and marks, subscripts and the False strike, wrapping,
+// the trace, and widths from a phone to a desktop in both themes. #278: the operators and the
+// Legend's line follow the payload's layout (cnf, dnf, or none named), and every text in the
+// drawing belongs to a piece.
+// #271: the Nested Set renderer (Set Cover, Exact Cover, Hitting Set) after it: the dots on a
+// circle and a region per set, names clear of everything, every step's states and ×2 hits, each
+// fallback to the set list and the Layout switch, the trace, and widths in both themes.
 // #209: the Table renderer (Edit Distance's grid, 0-1 ILP's matrix, and the step tables of DFA,
 // NFA, SSSP and SPSP) after that: the blank before Run, every step's cells, states and arrows, a
 // layout that holds still, the edits the answer spells out, the chips, shaded coefficients, pills
@@ -62,7 +70,28 @@ import {
   LDC_SMALL_CODE_TREE_FRAMES,
 } from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
+import {
+  SAT_FORMULA_FRAMES,
+  SAT_LONG_FORMULA_FRAMES,
+  SAT_NAMES_FORMULA_FRAMES,
+  SAT_UNSAT_FORMULA_FRAMES,
+  SAT3_FORMULA_FRAMES,
+  SAT3_LONG_FORMULA_FRAMES,
+  SAT3_UNSAT_FORMULA_FRAMES,
+} from "./formula-payloads";
 import { drawnCollisions, gotoProblemDetail, openPanel } from "./helpers";
+import {
+  EXACT_COVER_CROWDED_NESTED_FRAMES,
+  EXACT_COVER_DEEP_NESTED_FRAMES,
+  EXACT_COVER_NESTED_FRAMES,
+  EXACT_COVER_NO_ROOM_NESTED_FRAMES,
+  EXACT_COVER_RECURSIVE_NESTED_FRAMES,
+  HITTING_SET_NESTED_FRAMES,
+  SET_COVER_GREEDY_OVER_NESTED_FRAMES,
+  SET_COVER_MANY_ELEMENTS_NESTED_FRAMES,
+  SET_COVER_MANY_SETS_NESTED_FRAMES,
+  SET_COVER_NESTED_FRAMES,
+} from "./nested-set-payloads";
 import {
   ARC_SET_LAYERED_FRAMES,
   BIN_PACKING_FFD_SHORT_PACKING_FRAMES,
@@ -8262,3 +8291,987 @@ test("Drag: a Tripartite name only moves up and down its own column, and its tri
   expect(await drawnCentre(austin)).toEqual(before);
   await expect(line).toHaveAttribute("d", d);
 });
+
+// --- #270: the Formula renderer (SAT and 3SAT written as a CNF formula) ------------------------
+
+const FORMULA = "#workbench-source-frames-formula";
+const formulaLiteral = (page, id) => page.locator(`${FORMULA}-formula [data-node-id="${id}"]`);
+const formulaClause = (page, id) => page.locator(`${FORMULA}-formula [data-clause-id="${id}"]`);
+const formulaChip = (page, id) => page.locator(`${FORMULA}-formula [data-variable-id="${id}"]`);
+
+/** Opens `problem` with every picture answered by the Formula `capture`. */
+async function openFormula(page, problem, capture) {
+  await openPicture(page, problem, capture);
+  await expect(page.locator(`${FORMULA}-formula`)).toBeVisible();
+}
+
+/** Frame `index`'s states, piece by piece: literals, clauses and chips (absent = Background). */
+async function expectFormulaStates(page, capture, index) {
+  const frame = capture.frames[index];
+  for (const node of capture.payload.nodes) {
+    await expect(formulaLiteral(page, node.id)).toHaveAttribute(
+      "data-state",
+      frame.nodes[node.id]?.state ?? "Background",
+    );
+  }
+  for (const group of capture.payload.groups) {
+    await expect(formulaClause(page, group.id)).toHaveAttribute(
+      "data-state",
+      frame.groups[group.id]?.state ?? "Background",
+    );
+  }
+  for (const variable of capture.payload.variables) {
+    await expect(formulaChip(page, variable.id)).toHaveAttribute(
+      "data-state",
+      frame.variables[variable.id]?.state ?? "Background",
+    );
+    const value = frame.assignment[variable.id];
+    await expect(formulaChip(page, variable.id)).toHaveAttribute(
+      "data-value",
+      typeof value === "boolean" ? String(value) : "unassigned",
+    );
+  }
+}
+
+/** Every clause box, literal pill and connective, in screen px. */
+function formulaBoxes(page) {
+  return page.locator(`${FORMULA}-formula`).evaluate((root) => {
+    const rect = (element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+    };
+    const clauses = Object.fromEntries(
+      [...root.querySelectorAll("[data-clause-id]")].map((g) => [
+        g.getAttribute("data-clause-id"),
+        rect(g.querySelector("[data-body]")),
+      ]),
+    );
+    const literals = [...root.querySelectorAll("[data-node-id]")].map((g) => ({
+      id: g.getAttribute("data-node-id"),
+      body: rect(g.querySelector("[data-body]")),
+    }));
+    const operators = [...root.querySelectorAll("[data-connective]")].map((t) => ({
+      kind: t.getAttribute("data-connective"),
+      clause: t.getAttribute("data-piece-for"),
+      box: rect(t),
+    }));
+    return { clauses, literals, operators };
+  });
+}
+
+for (const [problem, capture] of [
+  ["SAT", SAT_FORMULA_FRAMES],
+  ["3SAT", SAT3_FORMULA_FRAMES],
+]) {
+  test(`Formula: ${problem} draws a box per clause, ∨ inside it, ∧ between, and a chip per variable`, async ({
+    page,
+  }) => {
+    await openFormula(page, problem, capture);
+    const { payload } = capture;
+    const root = page.locator(`${FORMULA}-formula`);
+    await expect(root.locator("[data-clause-id]")).toHaveCount(payload.groups.length);
+    await expect(root.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
+    await expect(root.locator("[data-variable-id]")).toHaveCount(payload.variables.length);
+    // ∧ joins the clauses (one fewer than there are), ∨ the literals inside each clause.
+    await expect(root.locator('[data-connective="and"]')).toHaveCount(payload.groups.length - 1);
+    const ors = payload.groups.reduce((sum, group) => sum + group.members.length - 1, 0);
+    await expect(root.locator('[data-connective="or"]')).toHaveCount(ors);
+    for (const text of await root.locator('[data-connective="and"]').allTextContents()) {
+      expect(text).toBe("∧");
+    }
+    for (const text of await root.locator('[data-connective="or"]').allTextContents()) {
+      expect(text).toBe("∨");
+    }
+    // CNF (#278): ∧ is the operator between the boxes, ∨ the one inside them.
+    await expect(root.locator('[data-join="outer"]:not([data-connective="and"])')).toHaveCount(0);
+    await expect(root.locator('[data-join="inner"]:not([data-connective="or"])')).toHaveCount(0);
+    await expect(legendBody(page)).toContainText(
+      "Boxes are clauses, joined by ∧; the literals inside are joined by ∨ (CNF).",
+    );
+    const { clauses, operators } = await formulaBoxes(page);
+    for (const op of operators) {
+      const box = clauses[op.clause];
+      const middle = (op.box.left + op.box.right) / 2;
+      // Each ∨ sits inside its own clause's box; each ∧ outside every box, before its clause.
+      if (op.kind === "or") {
+        expect(middle > box.left && middle < box.right, `∨ of ${op.clause}`).toBe(true);
+      } else {
+        expect(middle).toBeLessThan(box.left);
+        for (const other of Object.values(clauses)) {
+          expect(middle > other.left && middle < other.right).toBe(false);
+        }
+      }
+    }
+    for (const piece of await root.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute(
+        "aria-label",
+        /^(Clause C\d+: \S+( or \S+)*|Literal ¬?\S+ in C\d+|Variable \S+: (true|false|not assigned yet))/,
+      );
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // Ids are the Grouped Graph's, and every DOM id in the picture is unique.
+    const ids = await page
+      .locator(PICTURE)
+      .evaluate((el) => [...el.querySelectorAll("[id]")].map((node) => node.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    const literalIds = await root
+      .locator("[data-node-id]")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-node-id")));
+    expect(literalIds).toEqual(payload.nodes.map((node) => node.id));
+  });
+}
+
+test("Formula: before Run the formula is plain, and step 1 keeps every pill in place", async ({
+  page,
+}) => {
+  const capture = SAT3_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  const root = page.locator(`${FORMULA}-formula`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(root.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(root.locator('[data-variable-id]:not([data-value="unassigned"])')).toHaveCount(0);
+  await expect(root.locator("[data-strike]")).toHaveCount(0);
+  await expect(root.locator("[data-clause-mark]")).toHaveCount(0);
+  await expect(formulaChip(page, "v:x1").locator("[data-value-text]")).toHaveText("–");
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(legendBody(page)).toContainText(
+    "Boxes are clauses, joined by ∧; the literals inside are joined by ∨ (CNF).",
+  );
+  await expect(legendBody(page)).not.toContainText("T / F");
+
+  const before = await nodeCentres(page, `${FORMULA}-formula`);
+  await runToFrame(page, capture, 0);
+  await expectFormulaStates(page, capture, 0);
+  expect(await nodeCentres(page, `${FORMULA}-formula`)).toEqual(before);
+});
+
+test("Formula: the steps show tried, kept, false and failed literals, clause marks and the answer", async ({
+  page,
+}) => {
+  const capture = SAT3_LONG_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  await runToFrame(page, capture, 0);
+  let sawCommitted = false;
+  let sawRejected = false;
+  for (let index = 0; index < capture.frames.length; index += 1) {
+    if (index > 0) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+    }
+    await expectFormulaStates(page, capture, index);
+    const frame = capture.frames[index];
+    for (const [id, { state }] of Object.entries(frame.groups)) {
+      const mark = formulaClause(page, id).locator("[data-clause-mark]");
+      if (state === "Covered") await expect(mark).toHaveText("✓");
+      if (state === "Rejected") {
+        await expect(mark).toHaveText("✗");
+        sawRejected = true;
+      }
+    }
+    for (const node of capture.payload.nodes) {
+      const state = frame.nodes[node.id]?.state ?? "Background";
+      // A False literal is struck through; nothing else is.
+      await expect(formulaLiteral(page, node.id).locator("[data-strike]")).toHaveCount(
+        state === "False" ? 1 : 0,
+      );
+      if (state === "Committed") {
+        sawCommitted = true;
+        // Committed is dashed, never the answer's solid outline.
+        const dash = await formulaLiteral(page, node.id)
+          .locator("[data-body]")
+          .getAttribute("stroke-dasharray");
+        expect(dash).toBeTruthy();
+      }
+    }
+  }
+  expect(sawCommitted).toBe(true);
+  expect(sawRejected).toBe(true);
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  const legend = legendBody(page);
+  await expect(legend).toContainText("Committed (kept so far)");
+  await expect(legend).toContainText("Struck through (false; the letters only");
+  await expect(legend).toContainText("✓ / ✗ by a clause's name");
+  await expect(legend).toContainText("T / F / – (the variable's value so far)");
+});
+
+for (const [problem, capture] of [
+  ["3SAT", SAT3_UNSAT_FORMULA_FRAMES],
+  ["SAT", SAT_UNSAT_FORMULA_FRAMES],
+]) {
+  test(`Formula: an unsatisfiable ${problem} formula fails clause by clause and ends blank on no`, async ({
+    page,
+  }) => {
+    await openFormula(page, problem, capture);
+    const failing = capture.frames.findIndex((frame) =>
+      Object.values(frame.groups).some((entry) => entry.state === "Rejected"),
+    );
+    await runToFrame(page, capture, failing);
+    await expectFormulaStates(page, capture, failing);
+    const [id] = Object.entries(capture.frames[failing].groups).find(
+      ([, entry]) => entry.state === "Rejected",
+    );
+    await expect(formulaClause(page, id)).toHaveAttribute("aria-label", /Rejected/);
+    await expect(formulaClause(page, id).locator("[data-clause-mark]")).toHaveText("✗");
+    await page.locator("#workbench-steps-slider input").focus();
+    await page.keyboard.press("End");
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+    // Redux's SAT solvers end an unsatisfiable run with no assignment: a blank Done, never green.
+    await expect(
+      page.locator(`${FORMULA}-formula [data-state]:not([data-state="Background"])`),
+    ).toHaveCount(0);
+  });
+}
+
+test("Formula: letters-then-digits names get a real subscript, other names are plain, and False strikes only the letters", async ({
+  page,
+}) => {
+  const capture = SAT_NAMES_FORMULA_FRAMES;
+  await openFormula(page, "SAT", capture);
+  const sizes = (locator) =>
+    locator.evaluate((g) => {
+      const text = g.querySelector("text");
+      return {
+        base: Number(text.getAttribute("font-size")),
+        sub: g.querySelector("[data-label-sub]")?.getAttribute("font-size") ?? null,
+        text: text.textContent,
+      };
+    });
+  for (const node of capture.payload.nodes) {
+    const name = node.label.replace(/^¬/, "");
+    const got = await sizes(formulaLiteral(page, node.id));
+    if (/^[A-Za-z]+\d+$/.test(name)) {
+      expect(got.sub, node.label).not.toBeNull();
+      expect(Number(got.sub) / got.base).toBeGreaterThanOrEqual(0.75);
+    } else {
+      expect(got.sub, node.label).toBeNull();
+    }
+    expect(got.text).toBe(node.label);
+  }
+  // The answer makes some literals false: each strike ends before its subscript starts.
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const falses = Object.entries(capture.frames.at(-1).nodes).filter(
+    ([, entry]) => entry.state === "False",
+  );
+  expect(falses.length).toBeGreaterThan(0);
+  let withSub = 0;
+  for (const [id] of falses) {
+    const ends = await formulaLiteral(page, id).evaluate((g) => {
+      const strike = g.querySelector("[data-strike]").getBoundingClientRect();
+      const base = g.querySelector("[data-label-base]").getBoundingClientRect();
+      const sub = g.querySelector("[data-label-sub]")?.getBoundingClientRect() ?? null;
+      return {
+        strikeLeft: strike.left,
+        strikeRight: strike.right,
+        baseLeft: base.left,
+        baseRight: base.right,
+        subLeft: sub ? sub.left : null,
+      };
+    });
+    expect(ends.strikeLeft).toBeLessThanOrEqual(ends.baseLeft + 1);
+    expect(ends.strikeRight).toBeGreaterThan((ends.baseLeft + ends.baseRight) / 2);
+    if (ends.subLeft !== null) {
+      withSub += 1;
+      expect(ends.strikeRight).toBeLessThanOrEqual(ends.subLeft + 0.5);
+    }
+  }
+  expect(withSub).toBeGreaterThan(0);
+});
+
+test("Formula: a long formula wraps between clauses, and a clause too long for a line wraps at its ∨s", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const capture = SAT_LONG_FORMULA_FRAMES;
+  await openFormula(page, "SAT", capture);
+  const { clauses, literals, operators } = await formulaBoxes(page);
+  // More than one line of clauses.
+  const tops = new Set(Object.values(clauses).map((box) => Math.round(box.top)));
+  expect(tops.size).toBeGreaterThan(1);
+  // C1's twelve literals take more than one row inside one taller box.
+  const firstClause = literals.filter((literal) => literal.id.startsWith("c0-"));
+  const rows = [...new Set(firstClause.map((literal) => Math.round(literal.body.top)))].sort(
+    (a, b) => a - b,
+  );
+  expect(rows.length).toBeGreaterThan(1);
+  for (const literal of literals) {
+    const box = clauses[literal.id.split("-")[0]];
+    expect(literal.body.left).toBeGreaterThanOrEqual(box.left);
+    expect(literal.body.right).toBeLessThanOrEqual(box.right);
+    expect(literal.body.top).toBeGreaterThanOrEqual(box.top);
+    expect(literal.body.bottom).toBeLessThanOrEqual(box.bottom);
+  }
+  // A wrapped row of C1 starts with its ∨.
+  const secondRowFirst = Math.min(
+    ...firstClause
+      .filter((literal) => Math.round(literal.body.top) === rows[1])
+      .map((literal) => literal.body.left),
+  );
+  expect(
+    operators.some(
+      (op) =>
+        op.clause === "c0" &&
+        op.kind === "or" &&
+        op.box.right <= secondRowFirst &&
+        op.box.top >= rows[1] - 2,
+    ),
+  ).toBe(true);
+  // Pills never overlap, and no text meets another piece's line or mark.
+  for (const [i, a] of literals.entries()) {
+    for (const b of literals.slice(i + 1)) {
+      const meet =
+        a.body.left < b.body.right &&
+        b.body.left < a.body.right &&
+        a.body.top < b.body.bottom &&
+        b.body.top < a.body.bottom;
+      expect(meet, `${a.id} and ${b.id}`).toBe(false);
+    }
+  }
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+});
+
+test("Formula: hovering a literal traces its variable, a clause its literals, and the rest fade by color", async ({
+  page,
+}) => {
+  await openFormula(page, "3SAT", SAT3_FORMULA_FRAMES);
+  await formulaLiteral(page, "c0-0").hover();
+  // x1 is in c0-0, c1-0, c1-2 and c2-2.
+  for (const id of ["c0-0", "c1-0", "c1-2", "c2-2"]) {
+    await expect(formulaLiteral(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(formulaChip(page, "v:x1")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "faint");
+  await expect(formulaChip(page, "v:x2")).toHaveAttribute("data-traced", "faint");
+  const faded = await formulaLiteral(page, "c0-1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+    dash: el.querySelector("[data-body]").getAttribute("stroke-dasharray"),
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  expect(faded.dash).toBeTruthy();
+
+  // Keyboard: focusing a clause traces its literals and their variables; Enter pins it.
+  await page.mouse.move(0, 0);
+  await formulaClause(page, "c2").focus();
+  for (const id of ["c2-0", "c2-1", "c2-2"]) {
+    await expect(formulaLiteral(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(formulaChip(page, "v:x3")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(formulaClause(page, "c2")).toHaveAttribute("aria-pressed", "true");
+  // A tap on a chip traces that variable instead.
+  await formulaChip(page, "v:x2").click();
+  await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaLiteral(page, "c2-0")).toHaveAttribute("data-traced", "trace");
+});
+
+/** `capture` with its payload's `layout` set to `layout` (`undefined` drops the field). */
+function withFormulaLayout(capture, layout) {
+  const payload = { ...capture.payload };
+  if (layout === undefined) delete payload.layout;
+  else payload.layout = layout;
+  return { ...capture, payload };
+}
+
+/** Each piece's place in the drawing's own units, and each connective's: what a layout decides. */
+function formulaPlaces(page) {
+  return page.locator(`${FORMULA}-svg`).evaluate((svg) => {
+    const box = (element) => {
+      const b = element.getBBox();
+      return [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",");
+    };
+    const pieces = [...svg.querySelectorAll("[data-node-id], [data-clause-id], [data-variable-id]")]
+      .map((g) => [
+        g.getAttribute("data-node-id") ??
+          g.getAttribute("data-clause-id") ??
+          g.getAttribute("data-variable-id"),
+        box(g.querySelector("[data-body]")),
+      ])
+      .sort();
+    const joins = [...svg.querySelectorAll("[data-connective]")]
+      .map((t) => `${t.getAttribute("data-join")}:${t.getAttribute("x")},${t.getAttribute("y")}`)
+      .sort();
+    return { viewBox: svg.getAttribute("viewBox"), pieces, joins };
+  });
+}
+
+test("Formula: a DNF formula swaps the operators, ∧ inside a box and ∨ between, in the same places, and its Legend says DNF", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const cnf = SAT_LONG_FORMULA_FRAMES;
+  await openFormula(page, "SAT", cnf);
+  const cnfPlaces = await formulaPlaces(page);
+
+  const dnf = withFormulaLayout(cnf, "dnf");
+  await openFormula(page, "SAT", dnf);
+  const root = page.locator(`${FORMULA}-formula`);
+  const { payload } = dnf;
+  const inner = payload.groups.reduce((sum, group) => sum + group.members.length - 1, 0);
+  // ∨ joins the boxes (one fewer than there are), ∧ the literals inside each box.
+  await expect(root.locator('[data-join="outer"]')).toHaveCount(payload.groups.length - 1);
+  await expect(root.locator('[data-join="inner"]')).toHaveCount(inner);
+  await expect(root.locator('[data-join="outer"][data-connective="or"]')).toHaveCount(
+    payload.groups.length - 1,
+  );
+  await expect(root.locator('[data-join="inner"][data-connective="and"]')).toHaveCount(inner);
+  for (const text of await root.locator('[data-join="outer"]').allTextContents()) {
+    expect(text).toBe("∨");
+  }
+  for (const text of await root.locator('[data-join="inner"]').allTextContents()) {
+    expect(text).toBe("∧");
+  }
+  // The room an operator takes belongs to its place, not its symbol: the swap moves nothing,
+  // and on this formula (several lines, a box wrapped inside) nothing meets anything.
+  expect(await formulaPlaces(page)).toEqual(cnfPlaces);
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+  const { clauses, operators } = await formulaBoxes(page);
+  for (const op of operators) {
+    const middle = (op.box.left + op.box.right) / 2;
+    const own = clauses[op.clause];
+    const inside = middle > own.left && middle < own.right;
+    expect(inside, `${op.kind} of ${op.clause}`).toBe(op.kind === "and");
+  }
+  // Said outside the drawing: the Legend, the picture's label and each box's label.
+  const legend = legendBody(page);
+  await expect(legend).toContainText(
+    "Boxes are terms, joined by ∨; the literals inside are joined by ∧ (DNF).",
+  );
+  await expect(legend).not.toContainText("CNF");
+  await expect(formulaClause(page, "c1")).toHaveAttribute("aria-label", /^Term C2: \S+( and \S+)+/);
+  await expect(page.locator(`${FORMULA}-svg`)).toHaveAttribute(
+    "aria-label",
+    /terms joined by OR and the literals in each term by AND/,
+  );
+});
+
+for (const [kind, layout] of [
+  ["an unknown", "rows"],
+  ["a missing", undefined],
+]) {
+  test(`Formula: ${kind} layout still draws its groups, and claims no form`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    const capture = withFormulaLayout(SAT3_FORMULA_FRAMES, layout);
+    await openFormula(page, "3SAT", capture);
+    const root = page.locator(`${FORMULA}-formula`);
+    const { payload } = capture;
+    await expect(root.locator("[data-clause-id]")).toHaveCount(payload.groups.length);
+    await expect(root.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
+    await expect(root.locator("[data-variable-id]")).toHaveCount(payload.variables.length);
+    // The groups are drawn as CNF's are, symbols and all...
+    await expect(root.locator('[data-join="outer"][data-connective="and"]')).toHaveCount(
+      payload.groups.length - 1,
+    );
+    await expect(root.locator('[data-join="inner"][data-connective="or"]')).toHaveCount(
+      payload.groups.reduce((sum, group) => sum + group.members.length - 1, 0),
+    );
+    // ...but nothing outside it names a form or says what the operators mean.
+    const legend = legendBody(page);
+    await expect(legend).toContainText("Boxes are groups of literals.");
+    for (const claim of ["CNF", "DNF", "clause", "term", "joined by"]) {
+      await expect(legend).not.toContainText(claim);
+    }
+    const label = await page.locator(`${FORMULA}-svg`).getAttribute("aria-label");
+    expect(label).toMatch(/a formula of 3 groups of literals and 3 variables\.$/);
+    expect(label).not.toMatch(/CNF|DNF|clause|AND|OR/);
+    await expect(formulaClause(page, "c0")).toHaveAttribute("aria-label", /^Group C1: \S+(, \S+)+/);
+    expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+  });
+}
+
+test("Formula: every text in the drawing belongs to a piece; no heading, and ASSIGNMENT is the strip's own", async ({
+  page,
+}) => {
+  const capture = SAT3_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  const svg = page.locator(`${FORMULA}-svg`);
+  const stray = await svg.evaluate((el) =>
+    [...el.querySelectorAll("text")]
+      .filter(
+        (text) =>
+          !text.closest(
+            "[data-clause-id], [data-node-id], [data-variable-id], [data-strip], [data-connective]",
+          ),
+      )
+      .map((text) => text.textContent),
+  );
+  expect(stray).toEqual([]);
+  await expect(svg).not.toContainText("FORMULA");
+  await expect(svg).not.toContainText("CNF");
+  // ASSIGNMENT is drawn once, in the strip's group with every chip, above them.
+  const strip = svg.locator('[data-strip="assignment"]');
+  await expect(strip).toHaveCount(1);
+  await expect(strip.locator("[data-strip-head]")).toHaveText("ASSIGNMENT");
+  await expect(svg.locator("text", { hasText: "ASSIGNMENT" })).toHaveCount(1);
+  await expect(strip.locator("[data-variable-id]")).toHaveCount(capture.payload.variables.length);
+  const { headBottom, chipTop } = await strip.evaluate((g) => ({
+    headBottom: (({ y, height }) => y + height)(g.querySelector("[data-strip-head]").getBBox()),
+    chipTop: Math.min(
+      ...[...g.querySelectorAll("[data-variable-id] [data-body]")].map((r) => r.getBBox().y),
+    ),
+  }));
+  expect(headBottom).toBeLessThanOrEqual(chipTop);
+
+  // A formula with no variables has no strip head.
+  await openFormula(page, "3SAT", {
+    ...capture,
+    payload: { ...capture.payload, variables: [] },
+  });
+  await expect(svg.locator("text", { hasText: "ASSIGNMENT" })).toHaveCount(0);
+  await expect(svg.locator("[data-clause-id]")).toHaveCount(capture.payload.groups.length);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Formula: at ${width} px in the ${scheme} theme it wraps to its box, with readable text and no sideways scroll`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openFormula(page, "SAT", SAT_LONG_FORMULA_FRAMES);
+      if (width < 1200) await page.locator("#workbench-panel-close").click();
+      const svg = `${FORMULA}-svg`;
+      await expect(page.locator(svg)).toBeVisible();
+      await expectFits(page, svg);
+      await expect(page.locator(`${FORMULA}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // Laid out at its box's own width (320 to 800), so the text isn't shrunk to fit.
+      await expect
+        .poll(async () => {
+          const root = page.locator(`${FORMULA}-formula`);
+          const drawn = Number(await root.getAttribute("data-drawing-width"));
+          const box = await root.evaluate((el) => el.clientWidth);
+          return Math.abs(drawn - Math.max(320, Math.min(800, box)));
+        })
+        .toBeLessThanOrEqual(1);
+      const smallest = await page.locator(svg).evaluate((el) => {
+        const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+        const sizes = [...el.querySelectorAll("[data-node-id] text")].map(
+          (text) => Number(text.getAttribute("font-size")) * scale,
+        );
+        return Math.min(...sizes);
+      });
+      // (The long formula is taller than a phone's screen, so it may be fitted smaller; zoom reads it.)
+      expect(smallest).toBeGreaterThanOrEqual(width < 700 ? 9 : 11);
+      expect(await drawnCollisions(page, svg)).toEqual([]);
+      // A short formula is drawn at its own size on a phone too.
+      if (width < 700) {
+        await openFormula(page, "3SAT", SAT3_FORMULA_FRAMES);
+        await page.locator("#workbench-panel-close").click();
+        const own = await page.locator(svg).evaluate((el) => {
+          const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+          return Math.min(
+            ...[...el.querySelectorAll("[data-node-id] text")].map(
+              (text) => Number(text.getAttribute("font-size")) * scale,
+            ),
+          );
+        });
+        expect(own).toBeGreaterThanOrEqual(13);
+      }
+      // The ∧ follows the theme: no dark-on-dark, no light-on-white.
+      const ink = await page
+        .locator(`${FORMULA}-formula [data-connective="and"]`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+// --- #271: the Nested Set renderer (the set problems' sets drawn as regions) -------------------
+
+const NESTED = "#workbench-source-frames-nestedset";
+const nestedRoot = (page) => page.locator(`${NESTED}-nestedset`);
+const nestedNode = (page, id) => nestedRoot(page).locator(`[data-node-id="${id}"]`);
+const nestedRegion = (page, id) => nestedRoot(page).locator(`[data-region-id="${id}"]`);
+
+const NESTED_CASES = [
+  { problem: "Set Cover", capture: SET_COVER_NESTED_FRAMES },
+  { problem: "Exact Cover", capture: EXACT_COVER_NESTED_FRAMES },
+  // ReduxISU/Redux#742 renamed Hitting Set to Karp's Exact Hitting Set.
+  { problem: "Exact Hitting Set", capture: HITTING_SET_NESTED_FRAMES },
+];
+
+/** Opens `problem` with every picture answered by the Nested Set `capture`. */
+async function openNested(page, problem, capture) {
+  await openPicture(page, problem, capture);
+  await expect(nestedRoot(page)).toBeVisible();
+}
+
+/** Frame `index`'s states on every element and set (absent = Background); a chip per member. */
+async function expectNestedStates(page, capture, index) {
+  const frame = capture.frames[index];
+  for (const piece of [...capture.payload.elements, ...capture.payload.sets]) {
+    const want = frame.nodes[piece.id]?.state ?? "Background";
+    for (const drawn of await nestedNode(page, piece.id).all()) {
+      await expect(drawn).toHaveAttribute("data-state", want);
+    }
+  }
+}
+
+/**
+ * Where the regions' names sit against everything else, in screen px: each name's box, every
+ * dot, and points along every region's outline (with whose it is), plus which dots fall inside
+ * each region.
+ */
+function nestedGeometry(page) {
+  return nestedRoot(page).evaluate((root) => {
+    const svg = root.querySelector("svg");
+    const toScreen = (element, x, y) => {
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      return point.matrixTransform(element.getScreenCTM());
+    };
+    const names = [...root.querySelectorAll('[data-layer="names"] [data-node-id]')].map((g) => {
+      const rect = g.querySelector("[data-body]").getBoundingClientRect();
+      const box = { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      return { id: g.getAttribute("data-node-id"), box };
+    });
+    const dots = [...root.querySelectorAll('[data-layer="elements"] [data-node-id]')].map((g) => {
+      const body = g.querySelector("circle");
+      return {
+        id: g.getAttribute("data-node-id"),
+        centre: (({ x, y }) => ({ x, y }))(
+          toScreen(body, Number(body.getAttribute("cx")), Number(body.getAttribute("cy"))),
+        ),
+        cx: Number(body.getAttribute("cx")),
+        cy: Number(body.getAttribute("cy")),
+        r: body.getBoundingClientRect().width / 2,
+      };
+    });
+    const outlines = [...root.querySelectorAll("[data-region-id]")].map((g) => {
+      const path = g.querySelector("[data-region-edge]");
+      const length = path.getTotalLength();
+      const points = [];
+      for (let at = 0; at < length; at += 2) {
+        const p = path.getPointAtLength(at);
+        const q = toScreen(path, p.x, p.y);
+        points.push({ x: q.x, y: q.y });
+      }
+      const inside = dots
+        .filter((dot) => {
+          const point = svg.createSVGPoint();
+          point.x = dot.cx;
+          point.y = dot.cy;
+          return path.isPointInFill(point);
+        })
+        .map((dot) => dot.id);
+      return { id: g.getAttribute("data-region-id"), points, inside };
+    });
+    return { names, dots, outlines };
+  });
+}
+
+for (const { problem, capture } of NESTED_CASES) {
+  test(`Nested Set: ${problem} draws its elements on a circle and every set as a region round them`, async ({
+    page,
+  }) => {
+    await openNested(page, problem, capture);
+    const { payload } = capture;
+    const root = nestedRoot(page);
+    await expect(root).toHaveAttribute("data-layout", "regions");
+    await expect(root).toHaveAttribute("data-pick-side", payload.pickSide);
+    await expect(root.locator('[data-layer="elements"] [data-node-id]')).toHaveCount(
+      payload.elements.length,
+    );
+    await expect(root.locator('[data-layer="names"] [data-node-id]')).toHaveCount(
+      payload.sets.length,
+    );
+    await expect(root.locator("[data-region-id]")).toHaveCount(payload.sets.length);
+    await expect(root.locator("[data-picked-head]")).toHaveText(
+      payload.pickSide === "elements" ? /PICKED: ELEMENTS/ : /PICKED: SETS/,
+    );
+    for (const piece of await root.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("aria-label", /^(Element \S+, |Set S\d+ \{)/);
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // Every member sits inside its set's region, and every other dot outside it.
+    const { outlines } = await nestedGeometry(page);
+    for (const set of payload.sets) {
+      const outline = outlines.find((candidate) => candidate.id === set.id);
+      expect(new Set(outline.inside), set.id).toEqual(new Set(set.members));
+    }
+    // The Bipartite Graph's ids, each piece once, and every DOM id in the picture unique.
+    const pieceIds = await root
+      .locator("[data-node-id]")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-node-id")));
+    expect(pieceIds.sort()).toEqual(
+      [...payload.elements, ...payload.sets].map((piece) => piece.id).sort(),
+    );
+    const ids = await page
+      .locator(PICTURE)
+      .evaluate((el) => [...el.querySelectorAll("[id]")].map((node) => node.id));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+}
+
+for (const { problem, capture } of [
+  ...NESTED_CASES,
+  { problem: "Exact Cover", capture: EXACT_COVER_RECURSIVE_NESTED_FRAMES },
+]) {
+  test(`Nested Set: ${problem}'s names (${capture.payload.sets.length} sets) clear every other name, every dot and every other outline`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await openNested(page, problem, capture);
+    const { names, dots, outlines } = await nestedGeometry(page);
+    const meet = (a, b) =>
+      a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    for (const [i, name] of names.entries()) {
+      for (const other of names.slice(i + 1)) {
+        expect(meet(name.box, other.box), `${name.id} and ${other.id}`).toBe(false);
+      }
+      for (const dot of dots) {
+        const dx = Math.max(name.box.left - dot.centre.x, 0, dot.centre.x - name.box.right);
+        const dy = Math.max(name.box.top - dot.centre.y, 0, dot.centre.y - name.box.bottom);
+        expect(Math.hypot(dx, dy), `${name.id} and dot ${dot.id}`).toBeGreaterThan(dot.r);
+      }
+      for (const outline of outlines) {
+        if (outline.id === name.id) continue;
+        const crossing = outline.points.some(
+          (p) =>
+            p.x > name.box.left &&
+            p.x < name.box.right &&
+            p.y > name.box.top &&
+            p.y < name.box.bottom,
+        );
+        expect(crossing, `${outline.id}'s outline under ${name.id}`).toBe(false);
+      }
+    }
+  });
+}
+
+test("Nested Set: before Run the regions are plain, and step 1 keeps every dot and name in place", async ({
+  page,
+}) => {
+  const capture = SET_COVER_NESTED_FRAMES;
+  await openNested(page, "Set Cover", capture);
+  const root = nestedRoot(page);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(root.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(root.locator("[data-hits]")).toHaveCount(0);
+  await expect(root.locator("[data-badge]")).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(legendBody(page)).not.toContainText("×N");
+  const before = await nodeCentres(page, `${NESTED}-nestedset`);
+  await runToFrame(page, capture, 0);
+  await expectNestedStates(page, capture, 0);
+  expect(await nodeCentres(page, `${NESTED}-nestedset`)).toEqual(before);
+});
+
+test("Nested Set: the steps walk the brute force's tries, the ×2 hits and the confirmed answer", async ({
+  page,
+}) => {
+  const capture = SET_COVER_NESTED_FRAMES;
+  await openNested(page, "Set Cover", capture);
+  // Frame 5 tries {S1,S2}: 2 is in both, and 5 is in neither.
+  await runToFrame(page, capture, 4);
+  await expectNestedStates(page, capture, 4);
+  await expect(nestedNode(page, "e:2")).toHaveAttribute("data-hits", "2");
+  await expect(nestedNode(page, "e:2").locator('[data-badge="hits"]')).toHaveText("×2");
+  await expect(nestedNode(page, "e:2")).toHaveAttribute("aria-label", /hit by 2 picked sets/);
+  await expect(nestedNode(page, "e:1").locator("[data-badge]")).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("×N (hit by N picked sets)");
+  // The region's own outline says the set's state too.
+  await expect(nestedRegion(page, "S1")).toHaveAttribute("data-state", "ElementHighlight");
+  for (let index = 5; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+    await expectNestedStates(page, capture, index);
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(nestedNode(page, "S1")).toHaveAttribute("data-state", "Solution");
+  await expect(nestedNode(page, "S4")).toHaveAttribute("data-state", "Solution");
+  await expect(nestedNode(page, "S2")).toHaveAttribute("data-state", "Background");
+});
+
+test("Nested Set: Exact Cover's kept sets are Committed and dashed, the ones that would double up Blocked", async ({
+  page,
+}) => {
+  const capture = EXACT_COVER_RECURSIVE_NESTED_FRAMES;
+  await openNested(page, "Exact Cover", capture);
+  await runToFrame(page, capture, 1);
+  await expectNestedStates(page, capture, 1);
+  await expect(nestedNode(page, "S1")).toHaveAttribute("data-state", "Committed");
+  await expect(nestedNode(page, "S4")).toHaveAttribute("data-state", "Blocked");
+  const dash = (id) =>
+    nestedRegion(page, id).locator("[data-region-edge]").getAttribute("stroke-dasharray");
+  expect(await dash("S1")).toBeTruthy();
+  expect(await dash("S4")).toBeTruthy();
+  expect(await dash("S1")).not.toBe(await dash("S4"));
+  const legend = legendBody(page);
+  await expect(legend).toContainText("Blocked (can't be picked)");
+  await expect(legend).toContainText("Committed (kept so far)");
+  for (let index = 2; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expectNestedStates(page, capture, index);
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Nested Set: Hitting Set picks elements and hits sets, and a greedy cover over K ends on no with nothing green", async ({
+  page,
+}) => {
+  const hitting = HITTING_SET_NESTED_FRAMES;
+  await openNested(page, "Exact Hitting Set", hitting);
+  await runToFrame(page, hitting, hitting.frames.length - 1);
+  await expectNestedStates(page, hitting, hitting.frames.length - 1);
+  const picked = Object.entries(hitting.frames.at(-1).nodes).find(
+    ([id, entry]) => id.startsWith("e:") && entry.state === "Solution",
+  );
+  expect(picked).toBeTruthy();
+  await expect(nestedNode(page, "S2")).toHaveAttribute("aria-label", /hit by 1 picked element/);
+
+  const over = SET_COVER_GREEDY_OVER_NESTED_FRAMES;
+  await openNested(page, "Set Cover", over);
+  await runToFrame(page, over, 2);
+  await expect(nestedNode(page, "S4")).toHaveAttribute("data-state", "Rejected");
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(nestedRoot(page).locator('[data-state="Solution"]')).toHaveCount(0);
+  await expect(nestedRoot(page).locator('[data-state="Committed"]')).toHaveCount(0);
+});
+
+const FALLBACKS = [
+  { problem: "Set Cover", capture: SET_COVER_MANY_SETS_NESTED_FRAMES, why: /more than 8 sets/ },
+  {
+    problem: "Set Cover",
+    capture: SET_COVER_MANY_ELEMENTS_NESTED_FRAMES,
+    why: /more than 12 elements/,
+  },
+  {
+    problem: "Exact Cover",
+    capture: EXACT_COVER_DEEP_NESTED_FRAMES,
+    why: /an element sits in more than 4 overlapping sets/,
+  },
+  {
+    problem: "Exact Cover",
+    capture: EXACT_COVER_CROWDED_NESTED_FRAMES,
+    why: /S\d's region would run into \d/,
+  },
+  {
+    problem: "Exact Cover",
+    capture: EXACT_COVER_NO_ROOM_NESTED_FRAMES,
+    why: /no room for S\d's label/,
+  },
+];
+
+for (const { problem, capture, why } of FALLBACKS) {
+  test(`Nested Set: the set list is drawn when ${why.source.replace(/\\[a-z]|[\\^$]/g, "#")}, saying why`, async ({
+    page,
+  }) => {
+    await openNested(page, problem, capture);
+    const root = nestedRoot(page);
+    await expect(root).toHaveAttribute("data-layout", "list");
+    await expect(root).toHaveAttribute("data-fallback", why);
+    await expect(root.locator("[data-fallback-reason]")).toHaveText(/^REGIONS DON'T FIT: /);
+    await expect(root.locator("[data-region-id]")).toHaveCount(0);
+    const { payload } = capture;
+    // U first, every element once; then a row per set with a chip per member.
+    await expect(root.locator('[data-row="U"]')).toHaveCount(1);
+    await expect(
+      root.locator('[data-layer="chips"] [data-node-id]:not([data-in-set])'),
+    ).toHaveCount(payload.elements.length);
+    await expect(root.locator("[data-row]:not([data-row='U'])")).toHaveCount(payload.sets.length);
+    for (const set of payload.sets) {
+      await expect(root.locator(`[data-in-set="${set.label}"]`)).toHaveCount(set.members.length);
+    }
+    // Each chip carries its element's state at a step.
+    await runToFrame(page, capture, 0);
+    await expectNestedStates(page, capture, 0);
+    expect(await drawnCollisions(page, `${NESTED}-svg`)).toEqual([]);
+  });
+}
+
+test("Nested Set: the Layout switch forces the set list, and Regions (auto) brings the regions back", async ({
+  page,
+}) => {
+  await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
+  const root = nestedRoot(page);
+  await expect(page.locator(`${NESTED}-layout-auto`)).toHaveAttribute("aria-pressed", "true");
+  await page.locator(`${NESTED}-layout-list`).click();
+  await expect(page.locator(`${NESTED}-layout-list`)).toHaveAttribute("aria-pressed", "true");
+  await expect(root).toHaveAttribute("data-layout", "list");
+  await expect(root.locator("[data-fallback-reason]")).toHaveText("SET LIST CHOSEN BY HAND");
+  await expect(root.locator('[data-row="S1"]')).toHaveAttribute("aria-label", /^Set S1 \{1,2,3\}/);
+  // The choice holds while stepping.
+  await runToFrame(page, SET_COVER_NESTED_FRAMES, 4);
+  await expect(root).toHaveAttribute("data-layout", "list");
+  await expectNestedStates(page, SET_COVER_NESTED_FRAMES, 4);
+  await expect(root.locator('[data-node-id="e:2"] [data-badge="hits"]').first()).toHaveText("×2");
+  await page.locator(`${NESTED}-layout-auto`).click();
+  await expect(root).toHaveAttribute("data-layout", "regions");
+  await expect(root.locator("[data-fallback-reason]")).toHaveCount(0);
+});
+
+test("Nested Set: hovering a dot traces it and its sets, a set its region and elements, and the rest fade by color", async ({
+  page,
+}) => {
+  await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
+  // 4 is in S2, S3 and S4.
+  await nestedNode(page, "e:4").hover();
+  for (const id of ["e:4", "S2", "S3", "S4"]) {
+    await expect(nestedNode(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(nestedRegion(page, "S3")).toHaveAttribute("data-traced", "trace");
+  await expect(nestedNode(page, "S1")).toHaveAttribute("data-traced", "faint");
+  await expect(nestedRegion(page, "S1")).toHaveAttribute("data-traced", "faint");
+  await expect(nestedNode(page, "e:1")).toHaveAttribute("data-traced", "faint");
+  const faded = await nestedNode(page, "e:1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+    dash: el.querySelector("[data-body]").getAttribute("stroke-dasharray"),
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  expect(faded.dash).toBeTruthy();
+  // Keyboard: focusing a set's name traces its elements; Enter pins it.
+  await page.mouse.move(0, 0);
+  await nestedNode(page, "S1").focus();
+  for (const id of ["e:1", "e:2", "e:3"]) {
+    await expect(nestedNode(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(nestedNode(page, "e:5")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(nestedNode(page, "S1")).toHaveAttribute("aria-pressed", "true");
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Nested Set: at ${width} px in the ${scheme} theme the regions and the set list fit with nothing to scroll`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
+      if (width < 1200) await page.locator("#workbench-panel-close").click();
+      const svg = `${NESTED}-svg`;
+      await expect(page.locator(svg)).toBeVisible();
+      await expectFits(page, svg);
+      await expect(page.locator(`${NESTED}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The heading follows the theme: no dark-on-dark, no light-on-white.
+      const ink = await page
+        .locator(`${NESTED}-nestedset [data-layer="heads"] text`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+      // The set list is laid out at its box's width, so its chips wrap instead of shrinking.
+      await page.locator(`${NESTED}-layout-list`).click();
+      await expect(nestedRoot(page)).toHaveAttribute("data-layout", "list");
+      await expectFits(page, svg);
+      const smallest = await page.locator(svg).evaluate((el) => {
+        const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+        return Math.min(
+          ...[...el.querySelectorAll("[data-node-id] text")].map(
+            (text) => Number(text.getAttribute("font-size")) * scale,
+          ),
+        );
+      });
+      expect(smallest).toBeGreaterThanOrEqual(width < 700 ? 9 : 11);
+      expect(await drawnCollisions(page, svg)).toEqual([]);
+    });
+  }
+}

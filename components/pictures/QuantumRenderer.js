@@ -25,11 +25,17 @@
 //
 // #250: nothing here can be dragged. A wire's place is its qubit's index and a column's place is
 // when it runs, so moving either would misstate the circuit.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are marked in the
+// gadget's color: a qubit (`data-qubit-id`) with a band under its wire, a gate (`data-gate-id`)
+// with a ring around its box, circle or meter, and a column (`data-column-id`) with a ring just
+// inside its strip from the first wire to the last. No mark covers a label.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
+import { GadgetCircle, GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import {
@@ -113,6 +119,8 @@ function gateLook(state, { oracle, future }) {
  * @param {Object} props.frame The frame to draw.
  * @param {number|null} props.frameIndex The frame shown, or null before Run.
  * @param {Object[]} [props.frames] Every frame of the run (one layout for all of them).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
 export default function QuantumRenderer({
   idPrefix,
@@ -121,7 +129,10 @@ export default function QuantumRenderer({
   frame,
   frameIndex,
   frames = [],
+  highlightIds,
+  gadgetColors,
 }) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
   const plain = frameIndex === null || frameIndex === undefined;
@@ -329,6 +340,15 @@ export default function QuantumRenderer({
                 style={fade(wire.id)}
                 {...traceProps(wire.id)}
               >
+                {wire.pieces.map(([from, to]) => (
+                  <GadgetUnderlay
+                    key={`gadget-${from}`}
+                    id={wire.id}
+                    color={gadgetOf(wire.id)}
+                    d={`M${from} ${wire.y} L${to} ${wire.y}`}
+                    width={2.6}
+                  />
+                ))}
                 <rect
                   x={0}
                   y={wire.y - 20}
@@ -419,6 +439,18 @@ export default function QuantumRenderer({
                 data-state={columnState}
                 data-future={future ? "true" : undefined}
               >
+                {layout.wires.length > 0 && (
+                  <GadgetRect
+                    id={column.id}
+                    color={gadgetOf(column.id)}
+                    x={column.left}
+                    y={layout.wires[0].y - GATE / 2 - 6}
+                    width={column.right - column.left}
+                    height={layout.wires[layout.wires.length - 1].y - layout.wires[0].y + GATE + 12}
+                    rx={4}
+                    gap={-1}
+                  />
+                )}
                 {column.gates.map((gate) => {
                   // The gate's own state (a measured gate's verdict), else its column's.
                   const own = stateOf(step.gates, gate.id);
@@ -451,6 +483,7 @@ export default function QuantumRenderer({
                       style={fade(gate.id)}
                       {...traceProps(gate.id)}
                     >
+                      <GateMark gate={gate} color={gadgetOf(gate.id)} />
                       <GateShape gate={gate} look={look} line={line} width={width} />
                     </g>
                   );
@@ -661,6 +694,41 @@ export default function QuantumRenderer({
 }
 
 /** One gate's drawing, centred on its column. */
+/** #239: a gadget's ring around a gate's box, circle, meter or squares. */
+function GateMark({ gate, color }) {
+  if (!color) return null;
+  const { x } = gate;
+  if (gate.type === "box") {
+    return (
+      <GadgetRect
+        id={gate.id}
+        color={color}
+        x={gate.box.left}
+        y={gate.box.top}
+        width={gate.box.right - gate.box.left}
+        height={gate.box.bottom - gate.box.top}
+        rx={6}
+      />
+    );
+  }
+  if (gate.type === "cx") {
+    return <GadgetCircle id={gate.id} color={color} cx={x} cy={gate.ys[0]} r={11} />;
+  }
+  const half = (gate.type === "measure" ? METER_WIDTH : GATE) / 2;
+  return gate.ys.map((y) => (
+    <GadgetRect
+      key={y}
+      id={gate.id}
+      color={color}
+      x={x - half}
+      y={y - GATE / 2}
+      width={2 * half}
+      height={GATE}
+      rx={5}
+    />
+  ));
+}
+
 function GateShape({ gate, look, line, width }) {
   const { x } = gate;
   const glyph = (text, y, size = GLYPH_SIZE) => (

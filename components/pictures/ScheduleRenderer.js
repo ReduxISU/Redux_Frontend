@@ -25,11 +25,16 @@
 // #250: nothing here can be dragged. Where a bar or a cell sits is its time, which is the data
 // itself (and the rows are the instance's jobs and pumps in its own order), so a moved piece
 // would only draw a schedule that is not the one the solver made.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring: a job's
+// whole row (label, bar and deadline) just inside the row, a pump's row of hourly cells just
+// outside the strip, and an hourly cell on its own outline.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
+import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import {
@@ -148,8 +153,19 @@ function Small({ x, y, text, anchor, fill, bold, ...rest }) {
  * @param {Object} props.frame The frame to draw.
  * @param {Object[]} [props.frames] Every frame of the run (none before Run): the tank's and the
  *   cost's scales hold all of them.
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-export default function ScheduleRenderer({ idPrefix, name, payload, frame, frames = [] }) {
+export default function ScheduleRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  frames = [],
+  highlightIds,
+  gadgetColors,
+}) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
   // A frame drawn on its own (no run passed) is its own run.
@@ -161,8 +177,8 @@ export default function ScheduleRenderer({ idPrefix, name, payload, frame, frame
   const { traced, traceProps } = useTrace();
   const drawing =
     layout.kind === "jobs"
-      ? jobsDrawing({ layout, payload, frame, traced, traceProps, name })
-      : pumpsDrawing({ layout, payload, frame, traced, traceProps, name });
+      ? jobsDrawing({ layout, payload, frame, traced, traceProps, name, gadgetOf })
+      : pumpsDrawing({ layout, payload, frame, traced, traceProps, name, gadgetOf });
 
   return (
     <Box
@@ -200,7 +216,7 @@ export default function ScheduleRenderer({ idPrefix, name, payload, frame, frame
 
 // ---- Job Sequencing ------------------------------------------------------------------------
 
-function jobsDrawing({ layout, payload, frame, traced, traceProps, name }) {
+function jobsDrawing({ layout, payload, frame, traced, traceProps, name, gadgetOf }) {
   const runs = new Map(
     (Array.isArray(frame?.runs) ? frame.runs : [])
       .filter((run) => typeof run?.job === "string")
@@ -313,6 +329,17 @@ function jobsDrawing({ layout, payload, frame, traced, traceProps, name }) {
                 height={JOB_ROW}
                 fill={isTraced ? tint(TRACE_COLOR, 14) : "transparent"}
               />
+              <GadgetRect
+                id={row.id}
+                color={gadgetOf(row.id)}
+                x={0}
+                y={row.y}
+                width={layout.width}
+                height={JOB_ROW}
+                // rx + gap: corners rounded 3 units, just inside the row.
+                rx={5}
+                gap={-2}
+              />
               <text
                 x={layout.heads.job}
                 y={row.cy}
@@ -400,7 +427,7 @@ function jobsDrawing({ layout, payload, frame, traced, traceProps, name }) {
 
 // ---- Pump Scheduling -----------------------------------------------------------------------
 
-function pumpsDrawing({ layout, payload, frame, traced, traceProps, name }) {
+function pumpsDrawing({ layout, payload, frame, traced, traceProps, name, gadgetOf }) {
   const { tank, cost, rows, toX, cell } = layout;
   const schedule = (Array.isArray(frame?.schedule) ? frame.schedule : []).slice(0, HOURS);
   const reached = (Array.isArray(frame?.reached) ? frame.reached : []).filter(
@@ -550,6 +577,16 @@ function pumpsDrawing({ layout, payload, frame, traced, traceProps, name }) {
         ))}
         {rows.map((row) => (
           <g key={row.id} data-pump-id={row.id}>
+            <GadgetRect
+              id={row.id}
+              color={gadgetOf(row.id)}
+              x={toX(0)}
+              y={row.y + 4}
+              width={toX(HOURS) - toX(0)}
+              height={row.height - 8}
+              rx={3}
+              gap={2}
+            />
             <text
               x={layout.demand.labelX}
               y={row.nameY}
@@ -735,6 +772,16 @@ function pumpsDrawing({ layout, payload, frame, traced, traceProps, name }) {
                       stroke={isOn ? style.line : paletteVars.border.soft}
                       strokeWidth={isOn ? Math.min(strokeWidthOf(state), cell / 4) : 0.8}
                       strokeDasharray={isOn ? style.dash : undefined}
+                    />
+                    <GadgetRect
+                      id={id}
+                      color={gadgetOf(id)}
+                      x={x + inset}
+                      y={cellY}
+                      width={Math.max(1, cell - 2 * inset)}
+                      height={row.height - 8}
+                      rx={Math.min(3, cell / 4)}
+                      gap={0}
                     />
                     {isOn && shown && starts.has(row.id) && (
                       <path
