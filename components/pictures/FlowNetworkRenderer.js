@@ -22,6 +22,9 @@
 //
 // #250: the reader can move any node and bend any edge (diagramEdits.js); the source can't go
 // right of any other node, nor the sink left of one, so the flow still reads left to right.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring around
+// their node and a band under their edge, drawn inside the piece's own group.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
@@ -36,6 +39,7 @@ import {
   useDiagramEdits,
 } from "./diagramEdits";
 import { FLOW_RADIUS, layoutFlow, shapeFlowEdges } from "./flowLayout";
+import { GadgetCircle, GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import {
   edgeLook,
   FAINT_EDGE,
@@ -94,6 +98,8 @@ function flowEdgeLook(state, units, capacity) {
  * @param {Object} props.frame The frame to draw.
  * @param {number|null} props.frameIndex The step, or null before Run.
  * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
 export default function FlowNetworkRenderer({
   idPrefix,
@@ -102,8 +108,11 @@ export default function FlowNetworkRenderer({
   frame,
   frameIndex,
   layoutKey = null,
+  highlightIds,
+  gadgetColors,
 }) {
   const layout = useMemo(() => layoutFlow(payload), [payload]);
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const labels = useMemo(
     () => new Map(layout.nodes.map((node) => [node.id, node.label])),
     [layout],
@@ -253,6 +262,12 @@ export default function FlowNetworkRenderer({
                 data-cut={cut.has(edge.id) ? "true" : undefined}
                 data-traced={traced ? (faint ? "faint" : "trace") : undefined}
               >
+                <GadgetUnderlay
+                  id={edge.id}
+                  color={gadgetOf(edge.id)}
+                  d={edge.path}
+                  width={look.width}
+                />
                 <path
                   d={edge.path}
                   fill="none"
@@ -404,6 +419,27 @@ export default function FlowNetworkRenderer({
                     stroke={line}
                     strokeWidth={strokeWidth}
                     strokeDasharray={isTraced ? undefined : look.dash}
+                  />
+                )}
+                {pill ? (
+                  <GadgetRect
+                    id={node.id}
+                    color={gadgetOf(node.id)}
+                    x={node.x - node.width / 2}
+                    y={node.y - R}
+                    width={node.width}
+                    height={2 * R}
+                    rx={R}
+                    gap={5}
+                  />
+                ) : (
+                  <GadgetCircle
+                    id={node.id}
+                    color={gadgetOf(node.id)}
+                    cx={node.x}
+                    cy={node.y}
+                    r={R}
+                    gap={5}
                   />
                 )}
                 <NodeLabel

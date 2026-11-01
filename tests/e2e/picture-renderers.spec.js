@@ -34,9 +34,64 @@
 // #208: the Board renderer (Sudoku, N-Queens) after it: every square, clue, queen and ruled-out
 // square as each step leaves them, Hints, the trace of a square's row, column and box (or a
 // queen's lines of attack), and on a phone a board drawn at its own size, its text not shrunk.
+// #212: the Geometry renderer (Convex Hull) after that: the points to scale on real axes, each
+// merge's hulls and chain, the answer's numbered corners, labels that meet nothing, and on a
+// phone a plot drawn at its own size.
+// #211: the Schedule renderer (Job Sequencing, Pump Scheduling) after that: each job's run and
+// deadline, each pump's hours, the forward pass's band, the replay's tank line and costs, the
+// budget, texts that meet no other text, line or mark, and on a phone a picture at its own size.
+// #213: the Tripartite Matching renderer (3-Dimensional Matching) after that: the three columns
+// of names, each triple's line and list row, the ×2 badges, the Blocked and Committed triples,
+// the trace, texts that meet nothing, and on a phone the list under the columns.
+// #214: the Code Tree renderer (Lossless Data Compression) after that: every character, each
+// step's merges, states and codes on one layout for the whole run, the tidy tree, the text strip,
+// the trace, texts that meet nothing, and on a phone a tree on its side at its own size.
+// #210: the Quantum Circuit renderer (the quantum-algorithm problems) after that: every qubit
+// and gate, each step's column, outcome bars by amplitude sign, the measured read, a classical
+// solver's oracle calls, Shor's note, the trace, texts that meet nothing, and on a phone a small
+// circuit at its own size.
+// #270: the Formula renderer (SAT and 3SAT) at the end: a box per clause with ∨ inside and ∧
+// between, the chips, every step's states and marks, subscripts and the False strike, wrapping,
+// the trace, and widths from a phone to a desktop in both themes. #278: the operators and the
+// Legend's line follow the payload's layout (cnf, dnf, or none named), and every text in the
+// drawing belongs to a piece.
+// #271: the Nested Set renderer (Set Cover, Exact Cover, Hitting Set) after it: the dots on a
+// circle and a region per set, names clear of everything, every step's states and ×2 hits, each
+// fallback to the set list and the Layout switch, the trace, and widths in both themes.
+// #209: the Table renderer (Edit Distance's grid, 0-1 ILP's matrix, and the step tables of DFA,
+// NFA, SSSP and SPSP) after that: the blank before Run, every step's cells, states and arrows, a
+// layout that holds still, the edits the answer spells out, the chips, shaded coefficients, pills
+// and tentative costs, the trace back to what a cell or a row came from, texts that meet nothing,
+// and on a phone a table at its own size.
 
+import {
+  LDC_CODE_TREE_FRAMES,
+  LDC_ONE_CODE_TREE_FRAMES,
+  LDC_SMALL_CODE_TREE_FRAMES,
+} from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, openPanel } from "./helpers";
+import {
+  SAT_FORMULA_FRAMES,
+  SAT_LONG_FORMULA_FRAMES,
+  SAT_NAMES_FORMULA_FRAMES,
+  SAT_UNSAT_FORMULA_FRAMES,
+  SAT3_FORMULA_FRAMES,
+  SAT3_LONG_FORMULA_FRAMES,
+  SAT3_UNSAT_FORMULA_FRAMES,
+} from "./formula-payloads";
+import { drawnCollisions, gotoProblemDetail, openPanel } from "./helpers";
+import {
+  EXACT_COVER_CROWDED_NESTED_FRAMES,
+  EXACT_COVER_DEEP_NESTED_FRAMES,
+  EXACT_COVER_NESTED_FRAMES,
+  EXACT_COVER_NO_ROOM_NESTED_FRAMES,
+  EXACT_COVER_RECURSIVE_NESTED_FRAMES,
+  HITTING_SET_NESTED_FRAMES,
+  SET_COVER_GREEDY_OVER_NESTED_FRAMES,
+  SET_COVER_MANY_ELEMENTS_NESTED_FRAMES,
+  SET_COVER_MANY_SETS_NESTED_FRAMES,
+  SET_COVER_NESTED_FRAMES,
+} from "./nested-set-payloads";
 import {
   ARC_SET_LAYERED_FRAMES,
   BIN_PACKING_FFD_SHORT_PACKING_FRAMES,
@@ -44,13 +99,20 @@ import {
   CLIQUE_COVER_GRAPH_FRAMES,
   CLIQUE_FAILED_GRAPH_FRAMES,
   CLIQUE_GRAPH_FRAMES,
+  CONVEX_HULL_GEOMETRY_FRAMES,
+  CONVEX_HULL_SMALL_GEOMETRY_FRAMES,
+  CONVEX_HULL_WIDE_GEOMETRY_FRAMES,
   DFA_ABC_GARBAGE_AUTOMATON_FRAMES,
   DFA_AUTOMATON_FRAMES,
   DFA_AUTOMATON_LIST,
   DFA_GARBAGE_AUTOMATON_FRAMES,
   DFA_TABLE_FRAMES,
   DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
+  DM3_BACKTRACKING_TRIPARTITE_FRAMES,
+  DM3_NONE_TRIPARTITE_FRAMES,
   DM3_SEARCH_TREE_FRAMES,
+  DM3_TRIPARTITE_FRAMES,
+  DM3_WIDE_TRIPARTITE_FRAMES,
   EXACT_COVER_BIPARTITE_FRAMES,
   GRAPH_COLORING_FAILED_SEARCH_TREE_FRAMES,
   GRAPH_COLORING_SEARCH_TREE_FRAMES,
@@ -100,6 +162,47 @@ import {
   TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES,
   TSP_SEARCH_TREE_FRAMES,
 } from "./picture-payloads";
+import {
+  BV_CLASSICAL_QUANTUM_FRAMES,
+  BV_QUANTUM_FRAMES,
+  DEUTSCH_CLASSICAL_QUANTUM_FRAMES,
+  DEUTSCH_JOZSA_QUANTUM_FRAMES,
+  DEUTSCH_QUANTUM_FRAMES,
+  GROVER_MISS_QUANTUM_FRAMES,
+  GROVER_QUANTUM_FRAMES,
+  SHOR_NO_CIRCUIT_QUANTUM_FRAMES,
+  SHOR_QUANTUM_FRAMES,
+  SHOR_TRIAL_DIVISION_QUANTUM_FRAMES,
+  SIMON_QUANTUM_FRAMES,
+  UNSTRUCTURED_CLASSICAL_QUANTUM_FRAMES,
+} from "./quantum-payloads";
+import {
+  JOB_SEQUENCING_NONE_SCHEDULE_FRAMES,
+  JOB_SEQUENCING_SCHEDULE_FRAMES,
+  JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES,
+  PUMP_CM_FRACTIONAL_SCHEDULE_FRAMES,
+  PUMP_CM_NONE_SCHEDULE_FRAMES,
+  PUMP_CM_ROUNDED_SCHEDULE_FRAMES,
+  PUMP_CM_SCHEDULE_FRAMES,
+  PUMP_EM_SCHEDULE_FRAMES,
+} from "./schedule-payloads";
+import {
+  DFA_ACCEPT_TABLE_FRAMES,
+  DFA_REJECT_TABLE_FRAMES,
+  EDIT_DISTANCE_EMPTY_TABLE_FRAMES,
+  EDIT_DISTANCE_KITTEN_TABLE_FRAMES,
+  EDIT_DISTANCE_TABLE_FRAMES,
+  ILP_NONE_TABLE_FRAMES,
+  ILP_SEVERAL_TABLE_FRAMES,
+  ILP_TABLE_FRAMES,
+  NFA_BACKTRACK_TABLE_FRAMES,
+  NFA_REJECT_TABLE_FRAMES,
+  NFA_SUBSET_TABLE_FRAMES,
+  SPSP_EARLY_TABLE_FRAMES,
+  SPSP_TABLE_FRAMES,
+  SSSP_TABLE_FRAMES,
+  SSSP_UNREACHABLE_TABLE_FRAMES,
+} from "./table-payloads";
 
 const PROBLEM = "DFA Acceptance";
 const TABLE_VIZ = "DFATableVisualization";
@@ -369,19 +472,20 @@ test("Committed draws apart from Solution, dashed, and has its own Legend entry"
   const committed = page.locator(`${TABLE_PREFIX}-r0`);
   await expect(committed).toHaveAttribute("data-state", "Committed");
   await expect(page.locator(`${TABLE_PREFIX}-r1`)).toHaveAttribute("data-state", "Solution");
-  const cellStyle = (row) =>
-    page.locator(`${TABLE_PREFIX}-${row}c1`).evaluate((cell) => {
-      const style = getComputedStyle(cell);
+  // A stated row is filled and outlined in its state's colors; Committed's outline is dashed.
+  const rowStyle = (row) =>
+    page.locator(`${TABLE_PREFIX}-${row}`).evaluate((group) => {
+      const line = group.querySelector("[data-row-line]");
       return {
-        fill: style.backgroundColor,
-        line: style.borderTopStyle,
-        lineColor: style.borderTopColor,
+        fill: getComputedStyle(group.querySelector("[data-row-fill]")).fill,
+        dash: line.getAttribute("stroke-dasharray"),
+        lineColor: getComputedStyle(line).stroke,
       };
     });
-  const kept = await cellStyle("r0");
-  const answer = await cellStyle("r1");
-  expect(kept.line).toBe("dashed");
-  expect(answer.line).toBe("solid");
+  const kept = await rowStyle("r0");
+  const answer = await rowStyle("r1");
+  expect(kept.dash).toMatch(/\d/);
+  expect(answer.dash).toBeNull();
   expect(kept.fill).not.toBe(answer.fill);
   expect(kept.lineColor).not.toBe(answer.lineColor);
 
@@ -576,6 +680,13 @@ test("Graph: the groups shape keeps each node's group color under its state, wit
   await expect(page.locator(`${GRAPH}-graph [data-phantom="2|3"]`)).toHaveCount(1);
   await expect(legendBody(page)).toContainText("Clique 1");
   await expect(legendBody(page)).toContainText("Missing edge");
+  // A try that leaves node 1 in no group (Redux #890) names it and marks it Rejected.
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "Try {2,3,4},{}: node 1 is in no clique.",
+  );
+  await expect(graphNode(page, "1")).toHaveAttribute("data-state", "Rejected");
+  await expect(graphNode(page, "3")).toHaveAttribute("data-state", "Background");
 });
 
 test("Graph: a directed tour draws arrows, order badges and both edges of an opposite pair", async ({
@@ -1581,6 +1692,18 @@ test("Layered Graph: the plain shortest-path picture names the source and target
   await expect(layeredNode(page, "1").locator("[data-distance]")).toHaveText("d = 0");
   await expect(layeredNode(page, "5").locator("[data-distance]")).toHaveText("∞");
   expect(await nodeCentres(page, `${LAYERED}-graph`)).toEqual(before);
+  // Settling the target (Redux #892): only the path so far is Solution, the rest of the tree
+  // Committed, and the target highlighted.
+  await runToFrame(page, capture, 5);
+  for (const id of ["1", "3"]) {
+    await expect(layeredNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  for (const id of ["2", "4"]) {
+    await expect(layeredNode(page, id)).toHaveAttribute("data-state", "Committed");
+  }
+  await expect(layeredNode(page, "5")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(layeredEdge(page, "3>5")).toHaveAttribute("data-state", "Solution");
+  await expect(layeredEdge(page, "2>4")).toHaveAttribute("data-state", "Committed");
 });
 
 test("Layered Graph: Topological Sort shows ready, Committed and placed nodes with order badges", async ({
@@ -4647,24 +4770,2932 @@ for (const key of ["sudoku", "queensConstructive"]) {
   });
 }
 
+// --- #212: the Geometry renderer (Convex Hull) ----------------------------------------------
+
+const GEOMETRY = "#workbench-source-frames-geometry";
+
+/**
+ * Each geometry capture. The catalog CI's backend serves has no Geometry visualization yet, so
+ * every capture is drawn on the 3SAT page (its visualization made to name Geometry): the picture
+ * is the capture's, whatever the page.
+ */
+const GEOMETRY_CASES = {
+  hull: CONVEX_HULL_GEOMETRY_FRAMES,
+  small: CONVEX_HULL_SMALL_GEOMETRY_FRAMES,
+  wide: CONVEX_HULL_WIDE_GEOMETRY_FRAMES,
+};
+
+async function openGeometry(page, capture) {
+  await setEveryPictureType(page, "Geometry");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${GEOMETRY}-geometry`)).toBeVisible();
+}
+
+const geometryPoint = (page, id) => page.locator(`${GEOMETRY}-geometry [data-point-id="${id}"]`);
+
+/** Frame `index`'s points, hulls, chain and answer, checked against the picture. */
+async function expectGeometryFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const picture = page.locator(`${GEOMETRY}-geometry`);
+  const drawn = await picture
+    .locator("[data-point-id]")
+    .evaluateAll((points) =>
+      Object.fromEntries(
+        points.map((point) => [
+          point.getAttribute("data-point-id"),
+          [point.getAttribute("data-state"), point.getAttribute("data-order")],
+        ]),
+      ),
+    );
+  for (const point of capture.payload.points) {
+    const order = frame.hull.indexOf(point.id);
+    expect(drawn[point.id], point.id).toEqual([
+      frame.points[point.id]?.state ?? "Background",
+      order >= 0 ? String(order + 1) : null,
+    ]);
+  }
+  const pieces = await picture
+    .locator("[data-piece-role]")
+    .evaluateAll((all) =>
+      all.map(
+        (piece) =>
+          `${piece.getAttribute("data-piece-role")}:${piece.getAttribute("data-piece-points")}`,
+      ),
+    );
+  expect(pieces).toEqual(frame.pieces.map((piece) => `${piece.role}:${piece.points.join(" ")}`));
+  if (frame.chain.length >= 2) {
+    await expect(picture.locator("[data-chain]")).toHaveAttribute(
+      "data-chain",
+      frame.chain.join(" "),
+    );
+  } else {
+    await expect(picture.locator("[data-chain]")).toHaveCount(0);
+  }
+  await expect(picture.locator("[data-hull]")).toHaveCount(frame.hull.length >= 2 ? 1 : 0);
+  await expect(picture.locator("[data-badge]")).toHaveCount(frame.hull.length);
+}
+
+for (const [key, capture] of Object.entries(GEOMETRY_CASES)) {
+  test(`Geometry: the ${key} capture draws every point to scale and every step's hulls`, async ({
+    page,
+  }) => {
+    test.slow();
+    const { payload } = capture;
+    await openGeometry(page, capture);
+    const picture = page.locator(`${GEOMETRY}-geometry`);
+    await expect(picture.locator("[data-point-id]")).toHaveCount(payload.points.length);
+    for (const point of payload.points) {
+      await expect(geometryPoint(page, point.id).locator("[data-label]")).toHaveText(point.id);
+    }
+    // Nothing here can be dragged (#250 leaves the points alone).
+    await expect(page.locator(`${GEOMETRY}-layout-reset`)).toHaveCount(0);
+    await expect(page.locator(`${GEOMETRY}-svg`)).not.toHaveAttribute("data-editable", /./);
+
+    await runToFrame(page, capture, 0);
+    await expectGeometryFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectGeometryFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^P\d+ at \(/);
+    }
+  });
+}
+
+/** Each point's drawn centre, by id, in viewBox units. */
+function pointCentres(page) {
+  return page.locator(`${GEOMETRY}-geometry [data-point-id]`).evaluateAll((points) =>
+    Object.fromEntries(
+      points.map((point) => {
+        const dot = point.querySelector("[data-body]");
+        return [
+          point.getAttribute("data-point-id"),
+          { x: Number(dot.getAttribute("cx")), y: Number(dot.getAttribute("cy")) },
+        ];
+      }),
+    ),
+  );
+}
+
+/**
+ * Every place where a Geometry point's label or order badge meets a drawn line (a hull's edge,
+ * the chain, a popped point's dashed line or a bold axis) or another point's dot, read off the
+ * screen. A line is its centre line; a label is its text's box, a badge its circle.
+ * @returns {Promise<string[]>} One line per collision; empty when every label is clear.
+ */
+function geometryLineCollisions(page) {
+  return page.locator(`${GEOMETRY}-svg`).evaluate((svg) => {
+    const found = [];
+    const toScreen = (element, x, y) => {
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      return point.matrixTransform(element.getScreenCTM());
+    };
+    const segments = [];
+    const addPath = (element, closed) => {
+      const corners = element
+        .getAttribute("points")
+        .trim()
+        .split(/\s+/)
+        .map((pair) => pair.split(",").map(Number))
+        .map(([x, y]) => toScreen(element, x, y));
+      const name = element.getAttribute("data-piece-role")
+        ? `the ${element.getAttribute("data-piece-role")} hull`
+        : element.hasAttribute("data-hull")
+          ? "the hull"
+          : "the chain";
+      const count = closed ? corners.length : corners.length - 1;
+      for (let i = 0; i < count; i += 1) {
+        segments.push({ name, a: corners[i], b: corners[(i + 1) % corners.length] });
+      }
+    };
+    for (const polygon of svg.querySelectorAll('[data-layer="hulls"] polygon')) {
+      addPath(polygon, true);
+    }
+    for (const polyline of svg.querySelectorAll('[data-layer="hulls"] polyline')) {
+      addPath(polyline, false);
+    }
+    for (const line of svg.querySelectorAll('[data-layer="hulls"] line, [data-axis-line]')) {
+      const value = (name) => Number(line.getAttribute(name));
+      segments.push({
+        name: line.hasAttribute("data-popped")
+          ? `the popped line to ${line.getAttribute("data-popped")}`
+          : `the ${line.getAttribute("data-axis-line")} axis`,
+        a: toScreen(line, value("x1"), value("y1")),
+        b: toScreen(line, value("x2"), value("y2")),
+      });
+    }
+    // Whether the segment a-b passes through the box (shrunk half a pixel): Liang-Barsky.
+    const crosses = ({ a, b }, box) => {
+      const left = box.left + 0.5;
+      const right = box.right - 0.5;
+      const top = box.top + 0.5;
+      const bottom = box.bottom - 0.5;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      let t0 = 0;
+      let t1 = 1;
+      for (const [p, q] of [
+        [-dx, a.x - left],
+        [dx, right - a.x],
+        [-dy, a.y - top],
+        [dy, bottom - a.y],
+      ]) {
+        if (p === 0) {
+          if (q < 0) return false;
+        } else {
+          const t = q / p;
+          if (p < 0) t0 = Math.max(t0, t);
+          else t1 = Math.min(t1, t);
+          if (t0 > t1) return false;
+        }
+      }
+      return true;
+    };
+    // How far the segment a-b passes from (x, y).
+    const distance = ({ a, b }, x, y) => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const length = dx * dx + dy * dy;
+      const t = length ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length)) : 0;
+      return Math.hypot(a.x + t * dx - x, a.y + t * dy - y);
+    };
+    const meets = (a, b) =>
+      a.left < b.right - 0.5 &&
+      b.left < a.right - 0.5 &&
+      a.top < b.bottom - 0.5 &&
+      b.top < a.bottom - 0.5;
+    const groups = [...svg.querySelectorAll("[data-point-id]")];
+    const dots = groups.map((group) => ({
+      id: group.getAttribute("data-point-id"),
+      box: group.querySelector("[data-body]").getBoundingClientRect(),
+    }));
+    for (const group of groups) {
+      const id = group.getAttribute("data-point-id");
+      const label = group.querySelector("[data-label]").getBoundingClientRect();
+      for (const segment of segments) {
+        if (crosses(segment, label)) found.push(`"${id}" is crossed by ${segment.name}`);
+      }
+      for (const dot of dots) {
+        if (dot.id !== id && meets(dot.box, label)) found.push(`"${id}" meets ${dot.id}'s dot`);
+      }
+      const badge = group.querySelector("[data-badge] circle");
+      if (badge) {
+        const box = badge.getBoundingClientRect();
+        const x = (box.left + box.right) / 2;
+        const y = (box.top + box.bottom) / 2;
+        const r = (box.right - box.left) / 2;
+        for (const segment of segments) {
+          if (distance(segment, x, y) < r - 0.5) {
+            found.push(`${id}'s badge is crossed by ${segment.name}`);
+          }
+        }
+        for (const dot of dots) {
+          if (dot.id !== id && meets(dot.box, box))
+            found.push(`${id}'s badge meets ${dot.id}'s dot`);
+        }
+      }
+    }
+    return found;
+  });
+}
+
+test("Geometry: the points are drawn to scale, one scale for both axes, y up", async ({ page }) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  const centres = await pointCentres(page);
+  const points = capture.payload.points;
+  const [a, b] = [points[0], points[1]];
+  const scaleX = (centres[b.id].x - centres[a.id].x) / (b.x - a.x);
+  for (const point of points) {
+    expect(centres[point.id].x - centres[a.id].x).toBeCloseTo((point.x - a.x) * scaleX, 0);
+    // The same scale for y, and y grows upward.
+    expect(centres[a.id].y - centres[point.id].y).toBeCloseTo((point.y - a.y) * scaleX, 0);
+  }
+  // The axes' numbers are outside the plot, and the lines at 0 are drawn heavier.
+  await expect(page.locator(`${GEOMETRY}-geometry [data-tick="x"]`).first()).toBeVisible();
+  await expect(page.locator(`${GEOMETRY}-geometry [data-tick="y"]`).first()).toBeVisible();
+  await expect(page.locator(`${GEOMETRY}-geometry [data-axis-line="x"]`)).toHaveCount(1);
+  await expect(page.locator(`${GEOMETRY}-geometry [data-axis-line="y"]`)).toHaveCount(1);
+});
+
+test("Geometry: before Run the picture is the plain points, and step 1 keeps every point in place", async ({
+  page,
+}) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  const picture = page.locator(`${GEOMETRY}-geometry`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(
+    picture.locator("[data-piece-role], [data-chain], [data-hull], [data-badge]"),
+  ).toHaveCount(0);
+  const before = await pointCentres(page);
+  await runToFrame(page, capture, 0);
+  expect(await pointCentres(page)).toEqual(before);
+});
+
+test("Geometry: a merge colors its left and right hulls, and walks its chain", async ({ page }) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  const index = capture.frames.findIndex(
+    (frame) => frame.chain.length >= 2 && frame.pieces.some((piece) => piece.role === "left"),
+  );
+  expect(index).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, index);
+  const frame = capture.frames[index];
+  const left = frame.pieces.find((piece) => piece.role === "left");
+  const right = frame.pieces.find((piece) => piece.role === "right");
+  await expect(geometryPoint(page, left.points[0])).toHaveAttribute("data-group", "0");
+  await expect(geometryPoint(page, right.points[0])).toHaveAttribute("data-group", "2");
+  await expect(legendBody(page)).toContainText("Left hull (being merged)");
+  await expect(legendBody(page)).toContainText("Right hull (being merged)");
+  await expect(legendBody(page)).toContainText("Blue line (the chain the merge has walked)");
+});
+
+test("Geometry: the answer's corners are green and numbered in order, the rest Covered", async ({
+  page,
+}) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const last = capture.frames.at(-1);
+  expect(last.ok).toBe(true);
+  for (const [position, id] of last.hull.entries()) {
+    await expect(geometryPoint(page, id)).toHaveAttribute("data-state", "Solution");
+    await expect(geometryPoint(page, id).locator("[data-badge]")).toHaveText(String(position + 1));
+  }
+  for (const point of capture.payload.points.filter((p) => !last.hull.includes(p.id))) {
+    await expect(geometryPoint(page, point.id)).toHaveAttribute("data-state", "Covered");
+  }
+  await expect(page.locator(`${GEOMETRY}-geometry [data-hull]`)).toHaveAttribute("data-ok", "true");
+  await expect(legendBody(page)).toContainText(
+    "Numbered badge (the corner's place in the answer's order)",
+  );
+});
+
+test("Geometry: hovering, focusing or tapping a point traces it, with its coordinates", async ({
+  page,
+}) => {
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const [first, second] = capture.payload.points;
+  await geometryPoint(page, first.id).hover();
+  await expect(geometryPoint(page, first.id)).toHaveAttribute("data-traced", "trace");
+  await expect(geometryPoint(page, second.id)).toHaveAttribute("data-traced", "faint");
+  const faded = await geometryPoint(page, second.id).evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  const round = (value) => String(Number(value.toFixed(3)));
+  await expect(page.locator(`${GEOMETRY}-geometry [data-tip]`)).toHaveText(
+    `${first.id} (${round(first.x)}, ${round(first.y)})`,
+  );
+  await page.mouse.move(0, 0);
+  await geometryPoint(page, second.id).focus();
+  await expect(geometryPoint(page, second.id)).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(geometryPoint(page, second.id)).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Geometry: on a phone a tap traces a point, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const capture = CONVEX_HULL_GEOMETRY_FRAMES;
+  await openGeometry(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${GEOMETRY}-svg`);
+  await page.locator(`${GEOMETRY}-zoom-in`).click();
+  await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  const [first, second] = capture.payload.points;
+  await geometryPoint(page, first.id).focus();
+  await geometryPoint(page, first.id).blur();
+  await geometryPoint(page, first.id).click();
+  await expect(geometryPoint(page, first.id)).toHaveAttribute("aria-pressed", "true");
+  await expect(geometryPoint(page, second.id)).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${GEOMETRY}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Geometry: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openGeometry(page, CONVEX_HULL_GEOMETRY_FRAMES);
+      const svg = page.locator(`${GEOMETRY}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${GEOMETRY}-svg`);
+      await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The numbers and the labels follow the theme: no dark-on-dark, no light-on-white.
+      for (const selector of ["[data-tick]", "[data-label]"]) {
+        const ink = await page
+          .locator(`${GEOMETRY}-geometry ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+    });
+  }
+}
+
+for (const [key, capture] of Object.entries(GEOMETRY_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Geometry: the ${key} capture's texts never meet each other, a line or a dot at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openGeometry(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${GEOMETRY}-svg`, null)),
+        ...(await geometryLineCollisions(page)),
+      ];
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["hull", "wide"]) {
+  test(`Geometry: on a 390 px phone the ${key} plot is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = GEOMETRY_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openGeometry(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${GEOMETRY}-geometry`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(680);
+    await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${GEOMETRY}-svg`);
+    const before = await smallestText(page, `${GEOMETRY}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, capture.frames.length - 1);
+    const after = await smallestText(page, `${GEOMETRY}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
+// --- #211: the Schedule renderer (Job Sequencing, Pump Scheduling) ------------------------------
+
+const SCHEDULE = "#workbench-source-frames-schedule";
+
+/**
+ * Each schedule capture. Every capture is drawn on the 3SAT page (its visualization made to name
+ * Schedule), as CI's backend may serve no Schedule visualization yet: the picture is the
+ * capture's, whatever the page.
+ */
+const JOB_CASES = {
+  jobs: JOB_SEQUENCING_SCHEDULE_FRAMES,
+  jobsSmall: JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES,
+  jobsNone: JOB_SEQUENCING_NONE_SCHEDULE_FRAMES,
+};
+const PUMP_CASES = {
+  pumpCm: PUMP_CM_SCHEDULE_FRAMES,
+  pumpEm: PUMP_EM_SCHEDULE_FRAMES,
+  pumpFractional: PUMP_CM_FRACTIONAL_SCHEDULE_FRAMES,
+  pumpRounded: PUMP_CM_ROUNDED_SCHEDULE_FRAMES,
+  pumpNone: PUMP_CM_NONE_SCHEDULE_FRAMES,
+};
+const SCHEDULE_CASES = { ...JOB_CASES, ...PUMP_CASES };
+
+async function openSchedule(page, capture) {
+  await setEveryPictureType(page, "Schedule");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${SCHEDULE}-schedule`)).toBeVisible();
+}
+
+const scheduleJob = (page, id) => page.locator(`${SCHEDULE}-schedule [data-job-id="${id}"]`);
+const scheduleHour = (page, id) => page.locator(`${SCHEDULE}-schedule [data-hour-id="${id}"]`);
+const scheduleHourHit = (page, id) => page.locator(`${SCHEDULE}-schedule [data-hour-hit="${id}"]`);
+
+/** Goes to frame `index` (0-based) of a run already started, with the step slider's keys. */
+async function toFrame(page, capture, index) {
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("Home");
+  for (let step = 0; step < index; step += 1) await page.keyboard.press("ArrowRight");
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+}
+
+/** Frame `index`'s jobs (state, start, end, late), checked job by job against the picture. */
+async function expectJobsFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const drawn = await page
+    .locator(`${SCHEDULE}-schedule [data-job-id]`)
+    .evaluateAll((jobs) =>
+      Object.fromEntries(
+        jobs.map((job) => [
+          job.getAttribute("data-job-id"),
+          [
+            job.getAttribute("data-state"),
+            job.getAttribute("data-start"),
+            job.getAttribute("data-end"),
+            job.getAttribute("data-late"),
+          ],
+        ]),
+      ),
+    );
+  const runs = new Map(frame.runs.map((run) => [run.job, run]));
+  for (const job of capture.payload.jobs) {
+    const run = runs.get(job.id);
+    expect(drawn[job.id], job.id).toEqual([
+      frame.jobs[job.id]?.state ?? "Background",
+      run ? String(run.start) : null,
+      run ? String(run.end) : null,
+      run ? String(run.late) : null,
+    ]);
+  }
+  await expect(page.locator(`${SCHEDULE}-schedule [data-late-part]`)).toHaveCount(
+    frame.runs.filter((run) => run.late && run.end > Math.max(run.start, 0)).length,
+  );
+}
+
+/**
+ * Frame `index`'s pumps, hours, band, tank line and costs, checked cell by cell against the
+ * picture.
+ */
+async function expectPumpsFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  const cells = await picture
+    .locator("[data-cell-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((cell) => [
+          cell.getAttribute("data-cell-id"),
+          [cell.getAttribute("data-on"), cell.getAttribute("data-state")],
+        ]),
+      ),
+    );
+  const hours = await picture
+    .locator("[data-hour-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((hour) => [
+          hour.getAttribute("data-hour-id"),
+          [hour.getAttribute("data-state"), hour.getAttribute("data-shown")],
+        ]),
+      ),
+    );
+  const { payload } = capture;
+  for (const [h, hour] of payload.hours.entries()) {
+    const run = frame.schedule[h];
+    expect(hours[hour.id], hour.id).toEqual([
+      frame.hours[hour.id]?.state ?? "Background",
+      run ? String(h <= frame.upTo) : null,
+    ]);
+    for (const pump of payload.pumps) {
+      const id = `${pump.id}${hour.id}`;
+      expect(cells[id], id).toEqual([
+        String(run?.on.includes(pump.id) ?? false),
+        frame.cells[id]?.state ?? "Background",
+      ]);
+    }
+  }
+  const shown = frame.schedule.slice(0, frame.upTo + 1);
+  await expect(picture.locator("[data-band]")).toHaveCount(
+    !frame.schedule.length && frame.reached.length ? 1 : 0,
+  );
+  if (shown.length) {
+    await expect(picture.locator("[data-tank-line]")).toHaveAttribute(
+      "data-tank-line",
+      String(shown.length),
+    );
+  } else {
+    await expect(picture.locator("[data-tank-line]")).toHaveCount(0);
+  }
+  await expect(picture.locator("[data-startup]")).toHaveCount(
+    shown.reduce((sum, hour) => sum + hour.starts.length, 0),
+  );
+  await expect(picture.locator("[data-cost]")).toHaveCount(
+    shown.filter((hour) => hour.energy > 0).length,
+  );
+  const { capacity, minimum } = payload.tank;
+  await expect(picture.locator("[data-tank-outside]")).toHaveCount(
+    shown.filter((hour) => hour.level < minimum || hour.level > capacity).length,
+  );
+  await expect(picture.locator("[data-focus-hour]")).toHaveCount(
+    frame.focus.filter((id) => payload.hours.some((hour) => hour.id === id)).length,
+  );
+}
+
+for (const [key, capture] of Object.entries(SCHEDULE_CASES)) {
+  test(`Schedule: the ${key} capture draws every row and every step as Redux sends it`, async ({
+    page,
+  }) => {
+    // Every step of the run (a sample of the default Job Sequencing's 152), checked piece by
+    // piece.
+    test.slow();
+    const { payload } = capture;
+    const jobs = payload.rule === "jobSequencing";
+    await openSchedule(page, capture);
+    const picture = page.locator(`${SCHEDULE}-schedule`);
+    await expect(picture).toHaveAttribute("data-rule", payload.rule);
+    if (jobs) {
+      await expect(picture.locator("[data-job-id]")).toHaveCount(payload.jobs.length);
+      for (const job of payload.jobs) {
+        await expect(scheduleJob(page, job.id).locator("[data-label]")).toHaveText(job.label);
+        await expect(scheduleJob(page, job.id).locator("[data-deadline]")).toHaveAttribute(
+          "data-deadline",
+          String(job.deadline),
+        );
+        await expect(scheduleJob(page, job.id).locator("[data-penalty]")).toHaveText(
+          String(job.penalty),
+        );
+      }
+    } else {
+      await expect(picture.locator("[data-pump-id]")).toHaveCount(payload.pumps.length);
+      await expect(picture.locator("[data-cell-id]")).toHaveCount(24 * payload.pumps.length);
+      await expect(picture.locator("[data-peak]")).toHaveCount(
+        payload.hours.filter((hour) => hour.peak).length,
+      );
+      for (const pump of payload.pumps) {
+        await expect(picture.locator(`[data-pump-id="${pump.id}"] [data-label]`)).toHaveText(
+          pump.name,
+        );
+      }
+    }
+    // Nothing here can be dragged (#250 leaves a schedule's time axis alone).
+    await expect(page.locator(`${SCHEDULE}-layout-reset`)).toHaveCount(0);
+    await expect(page.locator(`${SCHEDULE}-svg`)).not.toHaveAttribute("data-editable", /./);
+
+    const expectFrame = jobs ? expectJobsFrame : expectPumpsFrame;
+    const count = capture.frames.length;
+    if (count > 60) {
+      // Too long to walk: Run opens on the last frame; then the first and the middle.
+      await page.locator("#workbench-run").click();
+      await expect(page.locator("#workbench-steps-position")).toHaveText(
+        `Step ${count} of ${count}`,
+      );
+      await expectFrame(page, capture, count - 1);
+      await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+        capture.frames.at(-1).ok ? "Verdict: yes" : "Verdict: no",
+      );
+      for (const index of [0, Math.floor(count / 2)]) {
+        await toFrame(page, capture, index);
+        await expectFrame(page, capture, index);
+      }
+    } else {
+      await runToFrame(page, capture, 0);
+      await expectFrame(page, capture, 0);
+      for (let index = 1; index < count; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        await expectFrame(page, capture, index);
+      }
+      await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+        capture.frames.at(-1).ok ? "Verdict: yes" : "Verdict: no",
+      );
+    }
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", jobs ? /^Job \d+: takes / : /^Hour \d+ \(/);
+    }
+  });
+}
+
+/** Each job's row and each pump's cells, drawn boxes by id, in viewBox units. */
+function scheduleBoxes(page) {
+  return page
+    .locator(`${SCHEDULE}-schedule [data-job-id], ${SCHEDULE}-schedule [data-cell-id]`)
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((piece) => {
+          const box = piece.getBBox();
+          const id = piece.getAttribute("data-job-id") ?? piece.getAttribute("data-cell-id");
+          return [id, `${box.x},${box.y},${box.height}`];
+        }),
+      ),
+    );
+}
+
+test("Schedule: before Run the jobs are their deadlines alone, and step 1 keeps every row in place", async ({
+  page,
+}) => {
+  const capture = JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator("[data-run], [data-late-part]")).toHaveCount(0);
+  await expect(picture.locator("[data-deadline]")).toHaveCount(capture.payload.jobs.length);
+  // The axis runs to the payload's span.
+  await expect(picture.locator("[data-tick]").filter({ hasText: /^0$/ })).toHaveCount(1);
+  const before = await page
+    .locator(`${SCHEDULE}-schedule [data-job-id] [data-label]`)
+    .evaluateAll((labels) => labels.map((label) => label.getAttribute("y")));
+  await runToFrame(page, capture, 0);
+  expect(
+    await page
+      .locator(`${SCHEDULE}-schedule [data-job-id] [data-label]`)
+      .evaluateAll((labels) => labels.map((label) => label.getAttribute("y"))),
+  ).toEqual(before);
+});
+
+test("Schedule: before Run the pumps are all off with no tank line, and step 1 keeps every cell in place", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator('[data-on="true"]')).toHaveCount(0);
+  await expect(
+    picture.locator(
+      "[data-band], [data-tank-line], [data-cost], [data-startup], [data-budget-line]",
+    ),
+  ).toHaveCount(0);
+  // The tank's start, and its capacity marked on the axis.
+  await expect(picture.locator("[data-tank-start]")).toHaveCount(1);
+  await expect(picture.locator('[data-mark="capacity"]')).toHaveText("10,000");
+  const before = await scheduleBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await scheduleBoxes(page)).toEqual(before);
+});
+
+test("Schedule: a late job's bar turns solid red past its deadline, and its penalty counts", async ({
+  page,
+}) => {
+  const capture = JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  await runToFrame(page, capture, 0);
+  const frame = capture.frames[0];
+  const late = frame.runs.filter((run) => run.late);
+  expect(late.length).toBeGreaterThan(0);
+  for (const run of late) {
+    await expect(scheduleJob(page, run.job)).toHaveAttribute("data-state", "Rejected");
+    await expect(scheduleJob(page, run.job).locator("[data-late-part]")).toHaveCount(1);
+    await expect(scheduleJob(page, run.job).locator("[data-penalty]")).toHaveAttribute(
+      "font-weight",
+      "700",
+    );
+  }
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    `Late penalty ${frame.penalty} (K = ${capture.payload.k}). Hover or tap a job to read it.`,
+  );
+  await expect(legendBody(page)).toContainText(
+    "Tick (the job's deadline; red once the job runs past it)",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Solid red end (the part after the deadline: the job is late and its penalty counts)",
+  );
+  // The answer keeps its late job Rejected among the Solution ones.
+  await toFrame(page, capture, capture.frames.length - 1);
+  const last = capture.frames.at(-1);
+  for (const run of last.runs) {
+    await expect(scheduleJob(page, run.job)).toHaveAttribute(
+      "data-state",
+      run.late ? "Rejected" : "Solution",
+    );
+  }
+});
+
+test("Schedule: the forward pass grows its band hour by hour, and the replay draws the hours one at a time", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await runToFrame(page, capture, 3);
+  await expect(picture.locator("[data-band]")).toHaveAttribute("data-band", "4");
+  await expect(scheduleHour(page, "t3")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(picture.locator('[data-focus-hour="t3"]')).toHaveCount(1);
+  await expect(legendBody(page)).toContainText(
+    "Band (the tank levels the forward pass can still reach)",
+  );
+  // A replay step: the hours after it are faded by color and have no tank level or cost yet.
+  const replay = capture.frames.findIndex((frame) => frame.schedule.length && frame.upTo === 5);
+  expect(replay).toBeGreaterThan(0);
+  await toFrame(page, capture, replay);
+  await expect(picture.locator("[data-band]")).toHaveCount(0);
+  await expect(picture.locator("[data-tank-line]")).toHaveAttribute("data-tank-line", "6");
+  await expect(scheduleHour(page, "t9")).toHaveAttribute("data-shown", "false");
+  const faded = await scheduleHour(page, "t9").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(picture.locator('[data-cell-id="P1t9"]')).toHaveAttribute("data-state", "Committed");
+  // Hour 0 starts two pumps: a corner mark each, and a startup cap on its cost.
+  await expect(picture.locator("[data-startup]")).toHaveCount(2);
+  await expect(picture.locator('[data-startup-cost="t0"]')).toHaveCount(1);
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Hours 0 to 5: $11.36. Hover or tap an hour to read it.",
+  );
+  // The answer: every hour drawn, the pumps that run Solution.
+  await toFrame(page, capture, capture.frames.length - 1);
+  await expect(picture.locator('[data-cell-id="P1t0"]')).toHaveAttribute("data-state", "Solution");
+  await expect(picture.locator('[data-shown="false"]')).toHaveCount(0);
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Total $32.12. Hover or tap an hour to read it.",
+  );
+  for (const text of [
+    "Shaded hour (peak tariff: power costs more)",
+    "Dashed line (the tank's capacity)",
+    "Tank line (gallons at the end of each hour)",
+    "Corner mark and bar cap (a pump starts and pays its startup cost)",
+  ]) {
+    await expect(legendBody(page)).toContainText(text);
+  }
+});
+
+test("Schedule: Emergency Resilience marks its minimum and charts the share of its budget spent", async ({
+  page,
+}) => {
+  const capture = PUMP_EM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await expect(picture.locator('[data-mark="minimum"]')).toHaveText("2,000");
+  await expect(picture.locator('[data-limit="minimum"]')).toHaveCount(1);
+  await page.locator("#workbench-run").click();
+  const count = capture.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+  await expect(picture.locator("[data-budget-line]")).toHaveAttribute("data-budget-line", "24");
+  for (const text of ["0%", "50%", "100%"]) {
+    await expect(
+      picture.locator("[data-tick]").filter({ hasText: new RegExp(`^${text}$`) }),
+    ).toHaveCount(1);
+  }
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Total $55.55 of a $55.86 budget. Hover or tap an hour to read it.",
+  );
+  await expect(legendBody(page)).toContainText("Red dashed line (the tank's minimum)");
+  await expect(legendBody(page)).toContainText(
+    "Violet line, right axis (the share of the budget spent so far)",
+  );
+});
+
+test("Schedule: fractional gallons read as the instance wrote them, and a day ending at exactly 0 stays within the limits", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_FRACTIONAL_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await expect(picture.locator("[data-demand]").first()).toHaveText("0.3");
+  await expect(picture.locator('[data-pump-id="P1"]')).toContainText("0.1 gph");
+  await expect(picture.locator('[data-mark="capacity"]')).toHaveText("2.5");
+  await page.locator("#workbench-run").click();
+  const last = capture.frames.at(-1);
+  expect(last.schedule.at(-1).level).toBe(0);
+  await expect(picture.locator("[data-tank-outside]")).toHaveCount(0);
+  await expect(picture.locator('[data-hour-id][data-state="Rejected"]')).toHaveCount(0);
+  await scheduleHourHit(page, "t23").hover();
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Hour 23 (23:00, $0.06/kWh): demand 0.3 gal; no pump on; in 0, tank 0 gal; cost $0.00",
+  );
+});
+
+test("Schedule: a schedule that drains the tank shows its hours Rejected, with a red dot at each level", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_ROUNDED_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  await page.locator("#workbench-run").click();
+  const last = capture.frames.at(-1);
+  const rejected = Object.keys(last.hours).filter((id) => last.hours[id].state === "Rejected");
+  expect(rejected.length).toBeGreaterThan(0);
+  await expect(picture.locator('[data-hour-id][data-state="Rejected"]')).toHaveCount(
+    rejected.length,
+  );
+  await expect(picture.locator("[data-hour-tint]")).toHaveCount(rejected.length);
+  await expect(picture.locator("[data-tank-outside]")).toHaveCount(rejected.length);
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  // The tank's scale reaches down to the lowest level, so the line stays on the chart.
+  const lowest = Math.min(...last.schedule.map((hour) => hour.level));
+  const scale = picture.locator('[data-layer="tank"]');
+  expect(Number(await scale.getAttribute("data-low"))).toBeLessThanOrEqual(lowest);
+  await expect(picture.locator("[data-tick]").filter({ hasText: /^-5$/ })).toHaveCount(1);
+  await expect(legendBody(page)).toContainText(
+    "Red dot (the tank leaves its limits at the end of that hour)",
+  );
+});
+
+test("Schedule: a forward pass where no state survives ends with its last hour Rejected, and no", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_NONE_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  const picture = page.locator(`${SCHEDULE}-schedule`);
+  const dead = capture.frames.findIndex((frame) => frame.event === "Reject");
+  await runToFrame(page, capture, dead);
+  const hour = capture.frames[dead].focus[0];
+  await expect(scheduleHour(page, hour)).toHaveAttribute("data-state", "Rejected");
+  await expect(picture.locator(`[data-focus-hour="${hour}"] rect`).first()).toHaveAttribute(
+    "stroke",
+    /rejected/,
+  );
+  await expect(picture.locator("[data-band]")).toHaveAttribute(
+    "data-band",
+    String(capture.frames[dead].reached.length),
+  );
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(picture.locator("[data-tank-line]")).toHaveCount(0);
+});
+
+test("Schedule: hovering, focusing or tapping a job traces it and reads it out, the rest fading by color", async ({
+  page,
+}) => {
+  const capture = JOB_SEQUENCING_SMALL_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await scheduleJob(page, "J2").hover();
+  await expect(scheduleJob(page, "J2")).toHaveAttribute("data-traced", "trace");
+  await expect(scheduleJob(page, "J0")).toHaveAttribute("data-traced", "faint");
+  const faded = await scheduleJob(page, "J0").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Job 2: takes 4, due 4, penalty 6; runs 3 to 7, late",
+  );
+  await page.mouse.move(0, 0);
+  await scheduleJob(page, "J1").focus();
+  await expect(scheduleJob(page, "J1")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(scheduleJob(page, "J1")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Schedule: hovering, focusing or tapping an hour traces its column and reads it out", async ({
+  page,
+}) => {
+  const capture = PUMP_CM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-steps-position")).toHaveText(/^Step 50 of 50$/);
+  await scheduleHourHit(page, "t9").hover();
+  await expect(scheduleHour(page, "t9")).toHaveAttribute("data-traced", "trace");
+  await expect(scheduleHour(page, "t3")).toHaveAttribute("data-traced", "faint");
+  await expect(page.locator(`${SCHEDULE}-schedule [data-trace-hour="t9"]`)).toHaveCount(1);
+  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
+    "Hour 9 (09:00, peak, $0.12/kWh): demand 1,000 gal; PumpA and PumpB on; in 550, tank 3,700 gal; cost $1.62",
+  );
+  await page.mouse.move(0, 0);
+  await scheduleHourHit(page, "t2").focus();
+  await expect(scheduleHour(page, "t2")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(scheduleHourHit(page, "t2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Schedule: on a phone a tap traces an hour, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const capture = PUMP_EM_SCHEDULE_FRAMES;
+  await openSchedule(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${SCHEDULE}-svg`);
+  await page.locator(`${SCHEDULE}-zoom-in`).click();
+  await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await scheduleHourHit(page, "t12").focus();
+  await scheduleHourHit(page, "t12").blur();
+  await scheduleHourHit(page, "t12").click();
+  await expect(scheduleHourHit(page, "t12")).toHaveAttribute("aria-pressed", "true");
+  await expect(scheduleHour(page, "t0")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${SCHEDULE}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Schedule: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      for (const capture of [PUMP_EM_SCHEDULE_FRAMES, JOB_SEQUENCING_SCHEDULE_FRAMES]) {
+        await openSchedule(page, capture);
+        const svg = page.locator(`${SCHEDULE}-svg`);
+        await expect(svg).toBeVisible();
+        expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+        await expectFits(page, `${SCHEDULE}-svg`);
+        await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+        // The labels and the numbers follow the theme: no dark-on-dark, no light-on-white.
+        for (const selector of ["[data-label]", "[data-tick]", "[data-head]"]) {
+          const ink = await page
+            .locator(`${SCHEDULE}-schedule ${selector}`)
+            .first()
+            .evaluate((el) => getComputedStyle(el).fill);
+          const [r, g, b] = ink.match(/\d+/g).map(Number);
+          expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+        }
+      }
+    });
+  }
+}
+
+for (const [key, capture] of Object.entries(SCHEDULE_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Schedule: the ${key} capture's texts never meet each other, a line or a mark at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openSchedule(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${SCHEDULE}-svg`, null)),
+        ...(await drawnCollisions(page, `${SCHEDULE}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      const count = capture.frames.length;
+      if (count > 60) {
+        // Too long to walk: the first, the middle and the last frames.
+        await page.locator("#workbench-run").click();
+        await expect(page.locator("#workbench-steps-position")).toHaveText(
+          `Step ${count} of ${count}`,
+        );
+        expect(await clear()).toEqual([]);
+        for (const index of [0, Math.floor(count / 2)]) {
+          await toFrame(page, capture, index);
+          expect(await clear()).toEqual([]);
+        }
+        return;
+      }
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < count; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["jobs", "pumpCm", "pumpEm", "pumpFractional"]) {
+  test(`Schedule: on a 390 px phone the ${key} picture is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = SCHEDULE_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openSchedule(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${SCHEDULE}-schedule`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(760);
+    await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${SCHEDULE}-svg`);
+    const before = await smallestText(page, `${SCHEDULE}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await page.locator("#workbench-run").click();
+    const count = capture.frames.length;
+    await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+    const after = await smallestText(page, `${SCHEDULE}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
+// --- #213: the Tripartite Matching renderer (3-Dimensional Matching) ----------------------------
+
+const TRIPARTITE = "#workbench-source-frames-tripartitematching";
+
+/**
+ * Each 3-Dimensional Matching capture. Every capture is drawn on the 3SAT page (its
+ * visualization made to name TripartiteMatching), as CI's backend may serve no Tripartite
+ * Matching visualization yet: the picture is the capture's, whatever the page.
+ */
+const TRIPARTITE_CASES = {
+  bruteForce: DM3_TRIPARTITE_FRAMES,
+  backtracking: DM3_BACKTRACKING_TRIPARTITE_FRAMES,
+  wide: DM3_WIDE_TRIPARTITE_FRAMES,
+  none: DM3_NONE_TRIPARTITE_FRAMES,
+};
+
+async function openTripartite(page, capture) {
+  await setEveryPictureType(page, "TripartiteMatching");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${TRIPARTITE}-tripartite`)).toBeVisible();
+}
+
+const tripartiteElement = (page, id) =>
+  page.locator(`${TRIPARTITE}-tripartite [data-element-id="${id}"]`);
+const tripartiteRow = (page, id) =>
+  page.locator(`${TRIPARTITE}-tripartite [data-triple-id="${id}"]`);
+const tripartiteLine = (page, id) =>
+  page.locator(`${TRIPARTITE}-tripartite [data-triple-line="${id}"]`);
+
+/** Every name of a payload, X then Y then Z. */
+const namesOf = (payload) => [...payload.x, ...payload.y, ...payload.z];
+
+/** Frame `index`'s names, triples, badges and choices, checked one by one against the picture. */
+async function expectTripartiteFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const picture = page.locator(`${TRIPARTITE}-tripartite`);
+  const elements = await picture
+    .locator("[data-element-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((element) => [
+          element.getAttribute("data-element-id"),
+          [
+            element.getAttribute("data-state"),
+            element.querySelector("[data-repeat]")?.getAttribute("data-repeat") ?? null,
+          ],
+        ]),
+      ),
+    );
+  for (const element of namesOf(capture.payload)) {
+    expect(elements[element.id], element.id).toEqual([
+      frame.elements[element.id]?.state ?? "Background",
+      frame.repeats[element.id] ? String(frame.repeats[element.id]) : null,
+    ]);
+  }
+  const triples = await picture.locator("[data-triple-id]").evaluateAll((all) =>
+    Object.fromEntries(
+      all.map((row) => {
+        const id = row.getAttribute("data-triple-id");
+        const line = row.ownerSVGElement.querySelector(`[data-triple-line="${id}"]`);
+        return [
+          id,
+          [row.getAttribute("data-state"), line.getAttribute("data-state"), row.dataset.chosen],
+        ];
+      }),
+    ),
+  );
+  const chosen = new Set(frame.chosen);
+  for (const triple of capture.payload.triples) {
+    const state = frame.triples[triple.id]?.state ?? "Background";
+    expect(triples[triple.id], triple.id).toEqual([
+      state,
+      state,
+      chosen.has(triple.id) ? "true" : undefined,
+    ]);
+  }
+}
+
+for (const [key, capture] of Object.entries(TRIPARTITE_CASES)) {
+  test(`Tripartite Matching: the ${key} capture draws every name and triple, and every step`, async ({
+    page,
+  }) => {
+    test.slow();
+    const { payload } = capture;
+    await openTripartite(page, capture);
+    const picture = page.locator(`${TRIPARTITE}-tripartite`);
+    await expect(picture.locator("[data-element-id]")).toHaveCount(namesOf(payload).length);
+    await expect(picture.locator("[data-triple-id]")).toHaveCount(payload.triples.length);
+    await expect(picture.locator("[data-triple-line]")).toHaveCount(payload.triples.length);
+    for (const element of namesOf(payload)) {
+      await expect(tripartiteElement(page, element.id).locator("[data-label]")).toHaveText(
+        element.name,
+      );
+    }
+    const names = new Map(namesOf(payload).map((element) => [element.id, element.name]));
+    for (const triple of payload.triples) {
+      await expect(tripartiteRow(page, triple.id).locator("[data-names]")).toHaveText(
+        [triple.x, triple.y, triple.z].map((id) => names.get(id)).join(" · "),
+      );
+    }
+
+    await runToFrame(page, capture, 0);
+    await expectTripartiteFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectTripartiteFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^(T\d+: |\S+ in [XYZ], )/);
+    }
+  });
+}
+
+/** Each name's pill and each list row, drawn boxes by id, in viewBox units. */
+function tripartiteBoxes(page) {
+  return page
+    .locator(
+      `${TRIPARTITE}-tripartite [data-element-id], ${TRIPARTITE}-tripartite [data-triple-id]`,
+    )
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((piece) => {
+          const box = piece.querySelector("[data-body]").getBBox();
+          const id = piece.getAttribute("data-element-id") ?? piece.getAttribute("data-triple-id");
+          return [id, `${box.x},${box.y},${box.width},${box.height}`];
+        }),
+      ),
+    );
+}
+
+test("Tripartite Matching: before Run the picture is the plain instance, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  const capture = DM3_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  const picture = page.locator(`${TRIPARTITE}-tripartite`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator("[data-repeat], [data-chosen]")).toHaveCount(0);
+  // Wide enough at 1280 px for the list to sit beside the columns.
+  await expect(picture).toHaveAttribute("data-wide", "true");
+  const before = await tripartiteBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await tripartiteBoxes(page)).toEqual(before);
+});
+
+test("Tripartite Matching: a name used three times is Rejected with a ×3 badge, and the triples sharing a name are Blocked", async ({
+  page,
+}) => {
+  const capture = DM3_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  const index = capture.frames.findIndex((frame) =>
+    Object.values(frame.repeats).some((count) => count === 3),
+  );
+  expect(index).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, index);
+  const frame = capture.frames[index];
+  const [id] = Object.entries(frame.repeats).find(([, count]) => count === 3);
+  await expect(tripartiteElement(page, id)).toHaveAttribute("data-state", "Rejected");
+  await expect(tripartiteElement(page, id).locator("[data-repeat]")).toHaveText("×3");
+  const blocked = Object.keys(frame.triples).filter((t) => frame.triples[t].state === "Blocked");
+  expect(blocked.length).toBeGreaterThan(0);
+  for (const triple of blocked) {
+    await expect(tripartiteLine(page, triple)).toHaveAttribute("stroke-dasharray", "4 4");
+  }
+  await expect(legendBody(page)).toContainText("×2 badge (how many chosen triples use the name)");
+  await expect(legendBody(page)).toContainText(
+    "Line (a triple of M, through one name of each of X, Y and Z)",
+  );
+  await expect(legendBody(page)).toContainText("Blocked (can't be picked)");
+});
+
+test("Tripartite Matching: backtracking keeps its choices Committed, and the answer turns them Solution", async ({
+  page,
+}) => {
+  const capture = DM3_BACKTRACKING_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  const index = capture.frames.findIndex((frame) =>
+    Object.values(frame.triples).some((triple) => triple.state === "Committed"),
+  );
+  await runToFrame(page, capture, index);
+  const [committed] = Object.entries(capture.frames[index].triples).find(
+    ([, triple]) => triple.state === "Committed",
+  );
+  await expect(tripartiteLine(page, committed)).toHaveAttribute("stroke-dasharray", "8 4");
+  await expect(tripartiteRow(page, committed)).toHaveAttribute("data-chosen", "true");
+  await toFrame(page, capture, capture.frames.length - 1);
+  for (const id of capture.frames.at(-1).chosen) {
+    await expect(tripartiteRow(page, id)).toHaveAttribute("data-state", "Solution");
+    await expect(tripartiteLine(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Tripartite Matching: hovering, focusing or tapping a name traces its triples, the rest fading by color", async ({
+  page,
+}) => {
+  const capture = DM3_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  // Paul (x1) is in T1 and T2: T1's names and T2's stay, the rest fade.
+  await tripartiteElement(page, "x1").hover();
+  await expect(tripartiteElement(page, "x1")).toHaveAttribute("data-traced", "trace");
+  for (const id of ["y1", "z1", "y2", "z3"]) {
+    await expect(tripartiteElement(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(tripartiteElement(page, "x2")).toHaveAttribute("data-traced", "faint");
+  await expect(tripartiteLine(page, "T1")).toHaveAttribute("data-traced", "trace");
+  await expect(tripartiteLine(page, "T3")).toHaveAttribute("data-traced", "faint");
+  await expect(tripartiteRow(page, "T4")).toHaveAttribute("data-traced", "faint");
+  const faded = await tripartiteElement(page, "x2").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  // A list row traces its three names.
+  await page.mouse.move(0, 0);
+  await tripartiteRow(page, "T6").hover();
+  for (const id of ["x3", "y3", "z1"]) {
+    await expect(tripartiteElement(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(tripartiteElement(page, "x1")).toHaveAttribute("data-traced", "faint");
+  await page.mouse.move(0, 0);
+  await tripartiteRow(page, "T2").focus();
+  await expect(tripartiteRow(page, "T2")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(tripartiteRow(page, "T2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Tripartite Matching: on a phone the list goes under the columns, and a tap traces a name after zooming in", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const capture = DM3_WIDE_TRIPARTITE_FRAMES;
+  await openTripartite(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await expect(page.locator(`${TRIPARTITE}-tripartite`)).toHaveAttribute("data-wide", "false");
+  await expectFits(page, `${TRIPARTITE}-svg`);
+  await page.locator(`${TRIPARTITE}-zoom-in`).click();
+  await expect(page.locator(`${TRIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await tripartiteElement(page, "y3").focus();
+  await tripartiteElement(page, "y3").blur();
+  await tripartiteElement(page, "y3").click();
+  await expect(tripartiteElement(page, "y3")).toHaveAttribute("aria-pressed", "true");
+  await expect(tripartiteElement(page, "x1")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${TRIPARTITE}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Tripartite Matching: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openTripartite(page, DM3_TRIPARTITE_FRAMES);
+      const svg = page.locator(`${TRIPARTITE}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${TRIPARTITE}-svg`);
+      await expect(page.locator(`${TRIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The names, the heads and the list follow the theme: no dark-on-dark, no light-on-white.
+      for (const selector of ["[data-label]", "[data-head]", "[data-names]"]) {
+        const ink = await page
+          .locator(`${TRIPARTITE}-tripartite ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+    });
+  }
+}
+
+for (const [key, capture] of Object.entries(TRIPARTITE_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Tripartite Matching: the ${key} capture's texts never meet each other, a line or a badge at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openTripartite(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${TRIPARTITE}-svg`, null)),
+        ...(await drawnCollisions(page, `${TRIPARTITE}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["bruteForce", "wide"]) {
+  test(`Tripartite Matching: on a 390 px phone the ${key} picture is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = TRIPARTITE_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openTripartite(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${TRIPARTITE}-tripartite`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(790);
+    await expect(page.locator(`${TRIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${TRIPARTITE}-svg`);
+    const before = await smallestText(page, `${TRIPARTITE}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, capture.frames.length - 1);
+    const after = await smallestText(page, `${TRIPARTITE}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
+// --- #214: the Code Tree renderer (Lossless Data Compression) ----------------------------------
+
+const CODE_TREE = "#workbench-source-frames-codetree";
+
+/**
+ * Each Lossless Data Compression capture. Every capture is drawn on the 3SAT page (its
+ * visualization made to name CodeTree), as CI's backend may serve no Code Tree visualization
+ * yet: the picture is the capture's, whatever the page.
+ */
+const CODE_TREE_CASES = {
+  default: LDC_CODE_TREE_FRAMES,
+  small: LDC_SMALL_CODE_TREE_FRAMES,
+  one: LDC_ONE_CODE_TREE_FRAMES,
+};
+
+async function openCodeTree(page, capture) {
+  await setEveryPictureType(page, "CodeTree");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${CODE_TREE}-codetree`)).toBeVisible();
+}
+
+const treePiece = (page, id) => page.locator(`${CODE_TREE}-codetree [data-node-id="${id}"]`);
+const treeEdgeOf = (page, id) => page.locator(`${CODE_TREE}-codetree [data-edge-id="${id}"]`);
+
+/** Frame `index`'s merges, node and edge states and codes, checked one by one. */
+async function expectCodeTreeFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const picture = page.locator(`${CODE_TREE}-codetree`);
+  const nodes = await picture
+    .locator("[data-node-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((node) => [
+          node.getAttribute("data-node-id"),
+          [node.getAttribute("data-state"), node.getAttribute("data-code")],
+        ]),
+      ),
+    );
+  const expected = {};
+  for (const symbol of capture.payload.symbols) {
+    expected[symbol.id] = [
+      frame.nodes[symbol.id]?.state ?? "Background",
+      frame.codes[symbol.id] ?? null,
+    ];
+  }
+  for (const merge of frame.merged) {
+    expected[merge.id] = [frame.nodes[merge.id]?.state ?? "Background", null];
+  }
+  expect(nodes).toEqual(expected);
+  const edges = await picture
+    .locator("[data-edge-id]")
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((edge) => [edge.getAttribute("data-edge-id"), edge.getAttribute("data-state")]),
+      ),
+    );
+  const expectedEdges = {};
+  for (const merge of frame.merged) {
+    for (const bit of ["0", "1"]) {
+      const id = `${merge.id}.${bit}`;
+      expectedEdges[id] = frame.edges[id]?.state ?? "Background";
+    }
+  }
+  expect(edges).toEqual(expectedEdges);
+  for (const merge of frame.merged) {
+    await expect(treePiece(page, merge.id).locator("[data-label]")).toHaveText(
+      String(merge.weight),
+    );
+  }
+  await expect(page.locator(`${CODE_TREE}-strip`)).toHaveAttribute(
+    "data-encoded",
+    frame.bits === undefined ? "false" : "true",
+  );
+}
+
+for (const [key, capture] of Object.entries(CODE_TREE_CASES)) {
+  test(`Code Tree: the ${key} capture draws every character, and every step's merges, states and codes`, async ({
+    page,
+  }) => {
+    test.slow();
+    const { payload } = capture;
+    await openCodeTree(page, capture);
+    const picture = page.locator(`${CODE_TREE}-codetree`);
+    await expect(picture.locator("[data-leaf]")).toHaveCount(payload.symbols.length);
+    for (const symbol of payload.symbols) {
+      await expect(treePiece(page, symbol.id).locator("[data-label]")).toHaveText(symbol.label);
+      await expect(treePiece(page, symbol.id).locator("[data-count]")).toHaveText(
+        String(symbol.count),
+      );
+    }
+    await expect(page.locator(`${CODE_TREE}-strip li[data-cell]`)).toHaveCount(payload.text.length);
+
+    await runToFrame(page, capture, 0);
+    await expectCodeTreeFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectCodeTreeFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    await expect(page.locator(`${CODE_TREE}-strip-head`)).toHaveText(
+      `ENCODED · ${last.bits} ${last.bits === 1 ? "BIT" : "BITS"}`,
+    );
+    await expect(page.locator(`${CODE_TREE}-summary`)).toHaveText(
+      `${last.bits} bits vs ${8 * payload.text.length} at 8 bits each`,
+    );
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^(Character \S+, appears|Merged tree n)/);
+    }
+  });
+}
+
+/** Each node's drawn box by id, in viewBox units. */
+function codeTreeBoxes(page) {
+  return page.locator(`${CODE_TREE}-codetree [data-node-id]`).evaluateAll((all) =>
+    Object.fromEntries(
+      all.map((node) => {
+        const box = node.querySelector("[data-body]").getBBox();
+        return [node.getAttribute("data-node-id"), [box.x, box.y, box.width, box.height]];
+      }),
+    ),
+  );
+}
+
+test("Code Tree: before Run the characters stand alone in character order, and the run's steps never move a node", async ({
+  page,
+}) => {
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  const picture = page.locator(`${CODE_TREE}-codetree`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator("[data-edge-id], [data-code-text]")).toHaveCount(0);
+  await expect(picture.locator("[data-node-id]")).toHaveCount(capture.payload.symbols.length);
+  const plain = await codeTreeBoxes(page);
+  const order = capture.payload.symbols.map((symbol) => plain[symbol.id][0]);
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+  await expect(page.locator(`${CODE_TREE}-strip-head`)).toHaveText("INPUT · 70 CHARACTERS");
+  await expect(page.locator(`${CODE_TREE}-summary`)).toHaveText("19 one-node trees to merge");
+
+  // One layout for the whole run: a node drawn at one step is in the same place at every other.
+  await page.locator("#workbench-run").click();
+  const count = capture.frames.length;
+  await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+  const finished = await codeTreeBoxes(page);
+  expect(Object.keys(finished)).toHaveLength(capture.payload.symbols.length + 18);
+  for (const index of [0, 5, 12]) {
+    await toFrame(page, capture, index);
+    const boxes = await codeTreeBoxes(page);
+    for (const [id, box] of Object.entries(boxes)) expect(box, id).toEqual(finished[id]);
+  }
+  await expect(page.locator(`${CODE_TREE}-summary`)).toHaveText("7 trees left to merge");
+});
+
+test("Code Tree: the tree hangs tidily, each merged node centred over its children, 0 to the left and 1 to the right", async ({
+  page,
+}) => {
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const picture = page.locator(`${CODE_TREE}-codetree`);
+  await expect(picture).toHaveAttribute("data-orientation", "down");
+  const boxes = await codeTreeBoxes(page);
+  const centre = (id) => ({
+    x: boxes[id][0] + boxes[id][2] / 2,
+    y: boxes[id][1] + boxes[id][3] / 2,
+  });
+  const leafY = centre("c1").y;
+  for (const symbol of capture.payload.symbols) expect(centre(symbol.id).y).toBeCloseTo(leafY, 1);
+  for (const merge of capture.frames.at(-1).merged) {
+    const parent = centre(merge.id);
+    const left = centre(merge.left);
+    const right = centre(merge.right);
+    expect(parent.x).toBeCloseTo((left.x + right.x) / 2, 1);
+    expect(parent.y).toBeLessThan(Math.min(left.y, right.y));
+    expect(left.x).toBeLessThan(right.x);
+    await expect(treeEdgeOf(page, `${merge.id}.0`).locator("[data-bit]")).toHaveText("0");
+    await expect(treeEdgeOf(page, `${merge.id}.1`).locator("[data-bit]")).toHaveText("1");
+  }
+  // Each code is the path from the root: e (c5) is 1100, written under its leaf.
+  await expect(treePiece(page, "c5")).toHaveAttribute("data-code", "1100");
+  await expect(treePiece(page, "c5").locator("[data-code-text]")).toHaveText("1100");
+});
+
+test("Code Tree: a merge highlights its trees and their new parent, merges kept so far are Committed, and the finished tree turns Solution", async ({
+  page,
+}) => {
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await runToFrame(page, capture, 2);
+  // Step 3 merges c (c3) and d (c4) into n2; n1 (r and x) is kept so far.
+  for (const id of ["c3", "c4", "n2"]) {
+    await expect(treePiece(page, id)).toHaveAttribute("data-state", "ElementHighlight");
+    await expect(treePiece(page, id)).toHaveAttribute("data-focus", "true");
+  }
+  await expect(treePiece(page, "n1")).toHaveAttribute("data-state", "Committed");
+  await expect(treePiece(page, "n1").locator("circle")).toHaveAttribute("stroke-dasharray", "6 3");
+  await expect(treeEdgeOf(page, "n1.0").locator("line")).toHaveAttribute("stroke-dasharray", "6 3");
+  await expect(treePiece(page, "n3")).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("Committed (kept so far)");
+  await expect(legendBody(page)).toContainText(
+    "0 / 1 on an edge (going left adds 0 to a code, going right adds 1)",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Circle (a merged tree; its number is how many characters it holds)",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Code (a character's bits, read from the root down to it)",
+  );
+  await toFrame(page, capture, capture.frames.length - 1);
+  await expect(
+    page.locator(`${CODE_TREE}-codetree [data-node-id]:not([data-state="Solution"])`),
+  ).toHaveCount(0);
+  await expect(page.locator(`${CODE_TREE}-strip [data-cell-code]`).first()).toHaveText("01100");
+});
+
+test("Code Tree: a text of one character has no merge, and its code is 0", async ({ page }) => {
+  const capture = LDC_ONE_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await expect(page.locator(`${CODE_TREE}-codetree [data-edge-id]`)).toHaveCount(0);
+  await expect(treePiece(page, "c1")).toHaveAttribute("data-state", "Solution");
+  await expect(treePiece(page, "c1").locator("[data-code-text]")).toHaveText("0");
+  await expect(page.locator(`${CODE_TREE}-strip [data-cell-code]`)).toHaveText([
+    "0",
+    "0",
+    "0",
+    "0",
+  ]);
+  await expect(page.locator(`${CODE_TREE}-strip-head`)).toHaveText("ENCODED · 4 BITS");
+});
+
+test("Code Tree: hovering, focusing or tapping a node traces its path to the root and the tree under it, the rest fading by color", async ({
+  page,
+}) => {
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  // e (c5) hangs under n10, n15, n17 and the root n18.
+  await treePiece(page, "c5").hover();
+  for (const id of ["c5", "n10", "n15", "n17", "n18"]) {
+    await expect(treePiece(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(treePiece(page, "c9")).toHaveAttribute("data-traced", "faint");
+  await expect(treeEdgeOf(page, "n10.0")).toHaveAttribute("data-traced", "trace");
+  await expect(treeEdgeOf(page, "n10.1")).toHaveAttribute("data-traced", "faint");
+  const faded = await treePiece(page, "c9").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  // Every e in the text is traced too.
+  const cells = page.locator(`${CODE_TREE}-strip li[data-cell="c5"]`);
+  await expect(cells).toHaveCount(5);
+  for (const cell of await cells.all()) await expect(cell).toHaveAttribute("data-traced", "trace");
+  // A merged node traces the tree under it as well.
+  await page.mouse.move(0, 0);
+  await treePiece(page, "n10").hover();
+  for (const id of ["c5", "c9", "n10", "n18"]) {
+    await expect(treePiece(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(treePiece(page, "n11")).toHaveAttribute("data-traced", "faint");
+  // A character in the text traces its leaf.
+  await page.mouse.move(0, 0);
+  await page.locator(`${CODE_TREE}-strip li[data-cell="c12"]`).first().hover();
+  await expect(treePiece(page, "c12")).toHaveAttribute("data-traced", "trace");
+  await page.mouse.move(0, 0);
+  await treePiece(page, "n14").focus();
+  await expect(treePiece(page, "n14")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(treePiece(page, "n14")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Code Tree: on a phone the tree lies on its side, and a tap traces a node after zooming in", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const capture = LDC_CODE_TREE_FRAMES;
+  await openCodeTree(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const picture = page.locator(`${CODE_TREE}-codetree`);
+  await expect(picture).toHaveAttribute("data-orientation", "side");
+  await expectFits(page, `${CODE_TREE}-svg`);
+  // The leaves stand in one column, each merged node left of its children.
+  const boxes = await codeTreeBoxes(page);
+  const leafX = boxes.c1[0];
+  for (const symbol of capture.payload.symbols) expect(boxes[symbol.id][0]).toBeCloseTo(leafX, 1);
+  for (const merge of capture.frames.at(-1).merged) {
+    expect(boxes[merge.id][0]).toBeLessThan(Math.min(boxes[merge.left][0], boxes[merge.right][0]));
+  }
+  await page.locator(`${CODE_TREE}-zoom-in`).click();
+  await expect(page.locator(`${CODE_TREE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await treePiece(page, "c5").focus();
+  await treePiece(page, "c5").blur();
+  await treePiece(page, "c5").click();
+  await expect(treePiece(page, "c5")).toHaveAttribute("aria-pressed", "true");
+  await expect(treePiece(page, "c9")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${CODE_TREE}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Code Tree: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      const capture = LDC_CODE_TREE_FRAMES;
+      await openCodeTree(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      await runToFrame(page, capture, capture.frames.length - 1);
+      const svg = page.locator(`${CODE_TREE}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${CODE_TREE}-svg`);
+      await expect(page.locator(`${CODE_TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The heading and the bits follow the theme: no dark-on-dark, no light-on-white. (A
+      // node's label is drawn on its state's fill.)
+      for (const selector of ["[data-head]", "[data-bit]"]) {
+        const ink = await page
+          .locator(`${CODE_TREE}-codetree ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+      const cell = await page
+        .locator(`${CODE_TREE}-strip li[data-cell] span`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).color);
+      const [r, g, b] = cell.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128, "strip").toBe(scheme === "dark");
+    });
+  }
+}
+
+for (const [key, capture] of Object.entries(CODE_TREE_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Code Tree: the ${key} capture's texts never meet each other, a line or a node at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openCodeTree(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${CODE_TREE}-svg`, null)),
+        ...(await drawnCollisions(page, `${CODE_TREE}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["default", "small"]) {
+  test(`Code Tree: on a 390 px phone the ${key} tree is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = CODE_TREE_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openCodeTree(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${CODE_TREE}-codetree`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(400);
+    await expect(page.locator(`${CODE_TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${CODE_TREE}-svg`);
+    const before = await smallestText(page, `${CODE_TREE}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, capture.frames.length - 1);
+    const after = await smallestText(page, `${CODE_TREE}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    // The text strip under the tree lists every character's code at its own size too.
+    const strip = await page
+      .locator(`${CODE_TREE}-strip [data-cell-code]`)
+      .first()
+      .evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+    expect(strip).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
+// --- #210: the Quantum Circuit renderer (Deutsch, Deutsch-Jozsa, Bernstein-Vazirani, Simon,
+// Unstructured Search, Prime Factorization) --------------------------------------------------------
+
+const QUANTUM = "#workbench-source-frames-quantumcircuit";
+
+/**
+ * Each quantum capture. Every capture is drawn on the 3SAT page (its visualization made to name
+ * QuantumCircuit), as CI's backend may serve no Quantum Circuit visualization yet and has no
+ * quantum server: the picture is the capture's, whatever the page.
+ */
+const QUANTUM_CASES = {
+  bernsteinVazirani: BV_QUANTUM_FRAMES,
+  bernsteinVaziraniClassical: BV_CLASSICAL_QUANTUM_FRAMES,
+  deutsch: DEUTSCH_QUANTUM_FRAMES,
+  deutschClassical: DEUTSCH_CLASSICAL_QUANTUM_FRAMES,
+  deutschJozsa: DEUTSCH_JOZSA_QUANTUM_FRAMES,
+  simon: SIMON_QUANTUM_FRAMES,
+  grover: GROVER_QUANTUM_FRAMES,
+  groverMiss: GROVER_MISS_QUANTUM_FRAMES,
+  unstructuredClassical: UNSTRUCTURED_CLASSICAL_QUANTUM_FRAMES,
+  shor: SHOR_QUANTUM_FRAMES,
+  shorTrialDivision: SHOR_TRIAL_DIVISION_QUANTUM_FRAMES,
+  noCircuit: SHOR_NO_CIRCUIT_QUANTUM_FRAMES,
+};
+
+async function openQuantum(page, capture) {
+  await setEveryPictureType(page, "QuantumCircuit");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${QUANTUM}-quantum`)).toBeVisible();
+}
+
+const quantumGate = (page, id) => page.locator(`${QUANTUM}-quantum [data-gate-id="${id}"]`);
+const quantumWire = (page, id) => page.locator(`${QUANTUM}-quantum [data-qubit-id="${id}"]`);
+const quantumBar = (page, outcome) =>
+  page.locator(`${QUANTUM}-quantum [data-outcome="${outcome}"]`);
+
+/** Frame `index`'s columns, gates, qubits, bars, calls and answer, checked one by one. */
+async function expectQuantumFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const { payload } = capture;
+  const picture = page.locator(`${QUANTUM}-quantum`);
+  const drawn = await picture.evaluate((root) => ({
+    columns: Object.fromEntries(
+      [...root.querySelectorAll("[data-column-id]")].map((el) => [
+        el.getAttribute("data-column-id"),
+        [el.getAttribute("data-state"), el.getAttribute("data-future")],
+      ]),
+    ),
+    gates: Object.fromEntries(
+      [...root.querySelectorAll("[data-gate-id]")].map((el) => [
+        el.getAttribute("data-gate-id"),
+        el.getAttribute("data-state"),
+      ]),
+    ),
+    qubits: Object.fromEntries(
+      [...root.querySelectorAll("[data-qubit-id]")].map((el) => [
+        el.getAttribute("data-qubit-id"),
+        el.getAttribute("data-state"),
+      ]),
+    ),
+    bars: Object.fromEntries(
+      [...root.querySelectorAll("[data-outcome]")]
+        .filter((el) => el.hasAttribute("data-probability"))
+        .map((el) => [
+          el.getAttribute("data-outcome"),
+          Number(el.getAttribute("data-probability")),
+        ]),
+    ),
+    calls: root.querySelectorAll("[data-query]").length,
+    result: root.querySelector("[data-result]")?.getAttribute("data-result") ?? null,
+  }));
+  const columns = {};
+  const gates = {};
+  payload.columns.forEach((column, c) => {
+    const state = frame.columns[column.id]?.state ?? "Background";
+    columns[column.id] = [state, c >= frame.applied ? "true" : null];
+    for (const gate of column.gates) gates[gate.id] = frame.gates[gate.id]?.state ?? state;
+  });
+  expect(drawn.columns).toEqual(columns);
+  expect(drawn.gates).toEqual(gates);
+  expect(drawn.qubits).toEqual(
+    Object.fromEntries(
+      payload.qubits.map((q) => [q.id, frame.qubits[q.id]?.state ?? "Background"]),
+    ),
+  );
+  const bars = {};
+  for (const bar of frame.bars ?? []) {
+    if (bar.outcome < 2 ** payload.measure.length) bars[bar.outcome] = bar.probability;
+  }
+  if (frame.bars) {
+    for (let outcome = 0; outcome < 2 ** payload.measure.length; outcome += 1) {
+      bars[outcome] ??= 0;
+    }
+  }
+  expect(drawn.bars).toEqual(bars);
+  expect(drawn.calls).toBe(frame.queries.length);
+  expect(drawn.result).toBe(frame.result ?? null);
+  if (Number.isInteger(frame.outcome) && payload.measure.length) {
+    const read = frame.qubits[payload.qubits[payload.measure[0]].id]?.state;
+    if (read) await expect(quantumBar(page, frame.outcome)).toHaveAttribute("data-read", read);
+    const bits = frame.outcome.toString(2).padStart(payload.measure.length, "0");
+    for (const [i, k] of payload.measure.entries()) {
+      await expect(quantumWire(page, payload.qubits[k].id).locator("[data-bit-out]")).toHaveText(
+        bits[i],
+      );
+    }
+  }
+}
+
+/** Every picture state a frame names, as pictureStates.js statesInFrames finds them. */
+function quantumFrameStates(value, found = new Set()) {
+  if (Array.isArray(value)) {
+    for (const item of value) quantumFrameStates(item, found);
+  } else if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "state" && typeof child === "string") found.add(child);
+      else quantumFrameStates(child, found);
+    }
+  }
+  return found;
+}
+
+/**
+ * The Legend lists only what the step on screen draws (#210): frame `index`'s states, and the
+ * dashed gate only while a gate still to come is drawn dashed.
+ */
+async function expectQuantumLegend(page, capture, index) {
+  const keys = await legendBody(page)
+    .locator("[data-legend-key]")
+    .evaluateAll((all) => all.map((el) => el.getAttribute("data-legend-key")));
+  const states = keys.filter((key) => key.startsWith("state-")).map((key) => key.slice(6));
+  expect(states.sort(), `step ${index + 1}'s states`).toEqual(
+    [...quantumFrameStates(capture.frames[index])].sort(),
+  );
+  const dashed = await page
+    .locator(`${QUANTUM}-quantum [data-future="true"] [data-gate-id][data-state="Background"]`)
+    .count();
+  expect(keys.includes("note-future"), `step ${index + 1}'s dashed gate`).toBe(dashed > 0);
+}
+
+for (const [key, capture] of Object.entries(QUANTUM_CASES)) {
+  test(`Quantum Circuit: the ${key} capture draws every qubit and gate, and every step's states, bars, calls and answer`, async ({
+    page,
+  }) => {
+    test.slow();
+    const { payload } = capture;
+    await openQuantum(page, capture);
+    const picture = page.locator(`${QUANTUM}-quantum`);
+    await expect(picture.locator("[data-qubit-id]")).toHaveCount(payload.qubits.length);
+    await expect(picture.locator("[data-gate-id]")).toHaveCount(
+      payload.columns.reduce((sum, column) => sum + column.gates.length, 0),
+    );
+    for (const qubit of payload.qubits) {
+      await expect(quantumWire(page, qubit.id).locator("[data-label]")).toHaveText(qubit.name);
+    }
+    await expect(picture.locator("[data-outcome]")).toHaveCount(
+      payload.simulated ? 2 ** payload.measure.length : 0,
+    );
+    if (payload.note) await expect(picture.locator("[data-note]")).toHaveText(payload.note);
+
+    await runToFrame(page, capture, 0);
+    await expectQuantumFrame(page, capture, 0);
+    await expectQuantumLegend(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectQuantumFrame(page, capture, index);
+      await expectQuantumLegend(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await picture.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^(Qubit |Outcome |\S.* on \S)/);
+    }
+  });
+}
+
+/** Each gate's and wire's drawn box by id, in viewBox units. */
+function quantumBoxes(page) {
+  return page
+    .locator(`${QUANTUM}-quantum [data-gate-id], ${QUANTUM}-quantum [data-qubit-id]`)
+    .evaluateAll((all) =>
+      Object.fromEntries(
+        all.map((piece) => {
+          const box = piece.getBBox();
+          const id = piece.getAttribute("data-gate-id") ?? piece.getAttribute("data-qubit-id");
+          return [id, [box.x, box.y, box.width, box.height].map((v) => Math.round(v * 10) / 10)];
+        }),
+      ),
+    );
+}
+
+test("Quantum Circuit: before Run the circuit is the plain instance, and step 1 keeps it in place", async ({
+  page,
+}) => {
+  const capture = BV_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  const picture = page.locator(`${QUANTUM}-quantum`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(picture.locator("[data-future], [data-bar], [data-bit-out]")).toHaveCount(0);
+  await expect(picture.locator("[data-chart-empty]")).toHaveText("Bars appear once a column runs.");
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("4 qubits, 5 columns");
+  // Nothing is still to come before Run, so the Legend has no dashed gate.
+  await expect(legendBody(page).locator('[data-legend-key="note-future"]')).toHaveCount(0);
+  const before = await quantumBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await quantumBoxes(page)).toEqual(before);
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("1 of 5 columns run");
+});
+
+test("Quantum Circuit: the oracle flips signs, the last gates leave one outcome, and its read turns Solution", async ({
+  page,
+}) => {
+  const capture = BV_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, 2);
+  // Step 3 runs the oracle: half the outcomes' amplitudes turn negative, drawn in another color.
+  await expect(quantumGate(page, "g2_0")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(quantumGate(page, "g2_0")).toHaveAttribute("data-oracle", "true");
+  await expect(quantumGate(page, "g3_0")).toHaveAttribute("data-state", "Background");
+  await expect(page.locator(`${QUANTUM}-quantum [data-column-id="t3"]`)).toHaveAttribute(
+    "data-future",
+    "true",
+  );
+  await expect(quantumGate(page, "g3_0").locator("[data-body]")).toHaveAttribute(
+    "stroke-dasharray",
+    "3 2",
+  );
+  const fills = await page
+    .locator(`${QUANTUM}-quantum [data-outcome] [data-bar]`)
+    .evaluateAll((bars) => bars.map((bar) => bar.getAttribute("fill")));
+  expect(new Set(fills).size).toBe(2);
+  await expect(quantumBar(page, 1)).toHaveAttribute("data-sign", "-1");
+  await expect(quantumBar(page, 0)).toHaveAttribute("data-sign", "1");
+  for (const text of [
+    "Oracle (the black box holding the function f)",
+    "Blue bar (an outcome's probability; its amplitude is positive)",
+    "Orange bar (the same, with a negative amplitude)",
+    "Dashed grey gate (its column has not run)",
+  ]) {
+    await expect(legendBody(page)).toContainText(text);
+  }
+  await toFrame(page, capture, capture.frames.length - 1);
+  await expect(quantumBar(page, 5)).toHaveAttribute("data-probability", "1");
+  await expect(quantumBar(page, 5)).toHaveAttribute("data-read", "Solution");
+  await expect(quantumBar(page, 5).locator("[data-outcome-label]")).toHaveText("101");
+  for (const id of ["q0", "q1", "q2"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(quantumWire(page, "q3")).toHaveAttribute("data-state", "Background");
+  await expect(page.locator(`${QUANTUM}-quantum [data-result]`)).toHaveText("(1,0,1)");
+});
+
+test("Quantum Circuit: Grover's search finds the one marked item in 1 round, and the read turns Solution", async ({
+  page,
+}) => {
+  // quantumsolver #23: floor(pi/4 * sqrt(4)) = 1 round leaves the marked item at 100%, so a
+  // 2-qubit search can no longer miss; Redux #902: "1 round", not "1 rounds".
+  const capture = GROVER_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "Item 1 is marked, found with 1 round of Grover's algorithm.",
+  );
+  await expect(quantumBar(page, 1)).toHaveAttribute("data-probability", "1");
+  await expect(quantumBar(page, 1)).toHaveAttribute("data-read", "Solution");
+  for (const id of ["q0", "q1"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(page.locator(`${QUANTUM}-quantum [data-result]`)).toHaveText("1");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Quantum Circuit: a Grover measurement that misses the marked items reads Rejected, and the run ends on no", async ({
+  page,
+}) => {
+  const capture = GROVER_MISS_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const { outcome } = capture.frames.at(-1);
+  // Two of four items marked: one round leaves every item at 25%, and the quantum server read
+  // an unmarked one.
+  for (const item of [0, 1, 2, 3]) {
+    await expect(quantumBar(page, item)).toHaveAttribute("data-probability", "0.25");
+  }
+  await expect(quantumBar(page, outcome)).toHaveAttribute("data-read", "Rejected");
+  for (const id of ["q0", "q1"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-state", "Rejected");
+  }
+  await expect(quantumGate(page, "g3_0")).toHaveAttribute("data-state", "Rejected");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  // Redux #906: the miss gives the simulated chance a run finds a marked item, not "usually".
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "Item 0 is not marked: the measurement missed. A run finds a marked item about 50% of the time.",
+  );
+  // Redux #907: the Measure step names the four-way tie, not item 0.
+  await toFrame(page, capture, 3);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "Measure: every item is equally likely (25% each).",
+  );
+});
+
+test("Quantum Circuit: a classical solver's oracle calls are listed, and its circuit ends Untraveled", async ({
+  page,
+}) => {
+  const capture = BV_CLASSICAL_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, 1);
+  const calls = page.locator(`${QUANTUM}-quantum [data-query]`);
+  await expect(calls).toHaveText(["f(100) = 1", "f(010) = 0"]);
+  await expect(calls.nth(1)).toHaveAttribute("data-latest", "true");
+  await expect(quantumGate(page, "g2_0")).toHaveAttribute("data-state", "ElementHighlight");
+  await expect(page.locator(`${QUANTUM}-quantum [data-chart-empty]`)).toHaveText(
+    "A classical solver: no column runs.",
+  );
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("2 oracle calls");
+  await expect(legendBody(page)).toContainText("f(x) = y (an oracle call made classically)");
+  await toFrame(page, capture, capture.frames.length - 1);
+  for (const column of capture.payload.columns) {
+    await expect(
+      page.locator(`${QUANTUM}-quantum [data-column-id="${column.id}"]`),
+    ).toHaveAttribute("data-state", "Untraveled");
+  }
+  await expect(page.locator(`${QUANTUM}-quantum [data-result]`)).toHaveText("(1,0,1)");
+  // Simon's oracle answers with numbers.
+  await openQuantum(page, SIMON_QUANTUM_FRAMES);
+  await runToFrame(page, SIMON_QUANTUM_FRAMES, 2);
+  await expect(page.locator(`${QUANTUM}-quantum [data-query]`)).toHaveText([
+    "f(000) = 5",
+    "f(001) = 6",
+    "f(010) = 5",
+  ]);
+});
+
+test("Quantum Circuit: Shor's circuit is drawn with its note and no chart, and a number with no circuit shows only its note", async ({
+  page,
+}) => {
+  await openQuantum(page, SHOR_QUANTUM_FRAMES);
+  const picture = page.locator(`${QUANTUM}-quantum`);
+  await expect(picture.locator("[data-qubit-id]")).toHaveCount(12);
+  await expect(picture.locator("[data-stage]")).toHaveCount(4);
+  await expect(picture.locator("[data-outcome]")).toHaveCount(0);
+  await expect(picture.locator("[data-note]")).toHaveText(SHOR_QUANTUM_FRAMES.payload.note);
+  // The controlled multipliers are boxes over the work qubits, each with its control dot.
+  await expect(quantumGate(page, "g2_8")).toHaveAttribute(
+    "aria-label",
+    /^×2 on w0, w1, w2, w3, controlled by c7/,
+  );
+  // Redux #903: the run goes column by column, each multiplier's caption naming its own power.
+  await runToFrame(page, SHOR_QUANTUM_FRAMES, 3);
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "If c7 is 1, multiply the work register by 2^1 mod 15 = 2.",
+  );
+  await expect(picture.locator('[data-column-id="t2"]')).toHaveAttribute(
+    "data-state",
+    "ElementHighlight",
+  );
+  await expect(picture.locator('[data-column-id="t3"]')).toHaveAttribute("data-future", "true");
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("3 of 12 columns run");
+  await expect(legendBody(page)).toContainText("Highlighted (looked at now)");
+  await expect(legendBody(page)).toContainText("Dashed grey gate (its column has not run)");
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(
+    "If c6 is 1, multiply the work register by 2^2 mod 15 = 4.",
+  );
+  await expect(picture.locator('[data-column-id="t3"]')).toHaveAttribute(
+    "data-state",
+    "ElementHighlight",
+  );
+  await expect(picture.locator('[data-column-id="t3"]')).not.toHaveAttribute("data-future");
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("4 of 12 columns run");
+  // Its Done draws the circuit as run: no column Untraveled or still to come.
+  await toFrame(page, SHOR_QUANTUM_FRAMES, SHOR_QUANTUM_FRAMES.frames.length - 1);
+  await expect(picture.locator("[data-result]")).toHaveText("(3,5)");
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("12 of 12 columns run");
+  await expect(picture.locator("[data-column-id]")).toHaveCount(12);
+  await expect(picture.locator('[data-state="Untraveled"], [data-future]')).toHaveCount(0);
+  // Its Legend lists only what the Done draws: nothing highlighted, nothing still to come.
+  await expect(legendBody(page)).not.toContainText("Highlighted");
+  await expect(legendBody(page)).not.toContainText("Dashed grey gate");
+
+  await openQuantum(page, SHOR_NO_CIRCUIT_QUANTUM_FRAMES);
+  await expect(picture.locator("[data-qubit-id], [data-gate-id], [data-outcome]")).toHaveCount(0);
+  await expect(picture.locator("[data-note]")).toHaveText(
+    "No quantum circuit is needed for 12: the classical checks factor it completely.",
+  );
+  await runToFrame(page, SHOR_NO_CIRCUIT_QUANTUM_FRAMES, 1);
+  await expect(picture.locator("[data-result]")).toHaveText("(2,2)");
+});
+
+test("Quantum Circuit: a quantum server's counts are written under each outcome", async ({
+  page,
+}) => {
+  // Today's quantum server sends no counts; Redux passes them on when one does.
+  const capture = structuredClone(GROVER_QUANTUM_FRAMES);
+  capture.frames.at(-1).counts = { "01": 1000, 10: 24 };
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await expect(quantumBar(page, 1).locator("[data-count]")).toHaveText("×1000");
+  await expect(quantumBar(page, 2).locator("[data-count]")).toHaveText("×24");
+  await expect(quantumBar(page, 0).locator("[data-count]")).toHaveText("×0");
+  await expect(quantumBar(page, 1)).toHaveAttribute("aria-label", /came up 1000 times/);
+});
+
+test("Quantum Circuit: hovering, focusing or tapping a qubit, a gate or a bar traces what it touches, the rest fading by color", async ({
+  page,
+}) => {
+  const capture = BV_QUANTUM_FRAMES;
+  await openQuantum(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  // x0 (q0): its H gates, the oracle and its meter stay; y's X fades.
+  await quantumWire(page, "q0").locator("[data-label]").hover();
+  for (const id of ["g1_0", "g2_0", "g3_0", "g4_0"]) {
+    await expect(quantumGate(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(quantumGate(page, "g0_3")).toHaveAttribute("data-traced", "faint");
+  await expect(quantumWire(page, "q1")).toHaveAttribute("data-traced", "faint");
+  const faded = await quantumGate(page, "g0_3").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  // The oracle touches every wire.
+  await page.mouse.move(0, 0);
+  await quantumGate(page, "g2_0").hover();
+  for (const id of ["q0", "q1", "q2", "q3"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  // A bar traces the measured wires.
+  await page.mouse.move(0, 0);
+  await quantumBar(page, 5).hover();
+  for (const id of ["q0", "q1", "q2"]) {
+    await expect(quantumWire(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(quantumWire(page, "q3")).toHaveAttribute("data-traced", "faint");
+  await expect(quantumBar(page, 4)).toHaveAttribute("data-traced", "faint");
+  await page.mouse.move(0, 0);
+  await quantumGate(page, "g0_3").focus();
+  await expect(quantumGate(page, "g0_3")).toHaveAttribute("data-traced", "trace");
+  await page.keyboard.press("Enter");
+  await expect(quantumGate(page, "g0_3")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Quantum Circuit: on a phone a tap traces a gate after zooming in, and Shor's wide circuit zooms in to readable text", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openQuantum(page, BV_QUANTUM_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${QUANTUM}-svg`);
+  await page.locator(`${QUANTUM}-zoom-in`).click();
+  await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await quantumGate(page, "g2_0").focus();
+  await quantumGate(page, "g2_0").blur();
+  await quantumGate(page, "g2_0").click();
+  await expect(quantumGate(page, "g2_0")).toHaveAttribute("aria-pressed", "true");
+  await expect(quantumWire(page, "q3")).toHaveAttribute("data-traced", "trace");
+  await expect(quantumGate(page, "g0_3")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${QUANTUM}-svg`);
+
+  await openQuantum(page, SHOR_QUANTUM_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  await expectFits(page, `${QUANTUM}-svg`);
+  const atFit = await smallestText(page, `${QUANTUM}-svg`);
+  expect(atFit.px).toBeLessThan(PHONE_TEXT_PX);
+  for (let press = 0; press < 4; press += 1) {
+    if ((await smallestText(page, `${QUANTUM}-svg`)).px >= PHONE_TEXT_PX) break;
+    await page.locator(`${QUANTUM}-zoom-in`).click();
+  }
+  const zoomed = await smallestText(page, `${QUANTUM}-svg`);
+  expect(zoomed.px).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Quantum Circuit: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      const capture = BV_QUANTUM_FRAMES;
+      await openQuantum(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      await runToFrame(page, capture, 2);
+      const svg = page.locator(`${QUANTUM}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${QUANTUM}-svg`);
+      await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The names, the chart's title and its ticks follow the theme: no dark-on-dark, no
+      // light-on-white.
+      for (const selector of ["[data-label]", "[data-head]", "[data-tick]", "[data-role]"]) {
+        const ink = await page
+          .locator(`${QUANTUM}-quantum ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+    });
+  }
+}
+
+const QUANTUM_COLLISION_CASES = [
+  "bernsteinVazirani",
+  "bernsteinVaziraniClassical",
+  "simon",
+  "grover",
+  "groverMiss",
+  "shor",
+  "noCircuit",
+];
+
+for (const key of QUANTUM_COLLISION_CASES) {
+  const capture = QUANTUM_CASES[key];
+  for (const width of [1280, 390, 320]) {
+    test(`Quantum Circuit: the ${key} capture's texts never meet each other, a line or a gate at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openQuantum(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${QUANTUM}-svg`, null)),
+        ...(await drawnCollisions(page, `${QUANTUM}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["bernsteinVazirani", "deutsch", "simon", "grover"]) {
+  test(`Quantum Circuit: on a 390 px phone the ${key} circuit is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = QUANTUM_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openQuantum(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    const drawn = await page.locator(`${QUANTUM}-quantum`).getAttribute("data-drawing-width");
+    expect(Number(drawn)).toBeLessThan(400);
+    await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${QUANTUM}-svg`);
+    const before = await smallestText(page, `${QUANTUM}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, capture.frames.length - 1);
+    const after = await smallestText(page, `${QUANTUM}-svg`);
+    expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+  });
+}
+
+// --- #209: the Table renderer (Edit Distance, 0-1 ILP, and the step tables of DFA, NFA, SSSP
+// and SPSP) ------------------------------------------------------------------------------------
+
+const TABLE = TABLE_PREFIX;
+
+/**
+ * Each Table capture (tests/e2e/table-payloads.js). Every capture is drawn on the 3SAT page (its
+ * visualization made to name Table), as CI's backend serves none of these pictures yet: the
+ * picture is the capture's, whatever the page.
+ */
+const TABLE_CASES = {
+  editDistance: EDIT_DISTANCE_TABLE_FRAMES,
+  editDistanceKitten: EDIT_DISTANCE_KITTEN_TABLE_FRAMES,
+  editDistanceEmpty: EDIT_DISTANCE_EMPTY_TABLE_FRAMES,
+  ilp: ILP_TABLE_FRAMES,
+  ilpSeveral: ILP_SEVERAL_TABLE_FRAMES,
+  ilpNone: ILP_NONE_TABLE_FRAMES,
+  dfaAccept: DFA_ACCEPT_TABLE_FRAMES,
+  dfaReject: DFA_REJECT_TABLE_FRAMES,
+  nfaBacktrack: NFA_BACKTRACK_TABLE_FRAMES,
+  nfaSubset: NFA_SUBSET_TABLE_FRAMES,
+  nfaReject: NFA_REJECT_TABLE_FRAMES,
+  sssp: SSSP_TABLE_FRAMES,
+  ssspUnreachable: SSSP_UNREACHABLE_TABLE_FRAMES,
+  spsp: SPSP_TABLE_FRAMES,
+  spspEarly: SPSP_EARLY_TABLE_FRAMES,
+};
+
+async function openTable(page, capture) {
+  await setEveryPictureType(page, "Table");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${TABLE}-svg`)).toBeVisible();
+}
+
+const tableCell = (page, id) => page.locator(`${TABLE}-table [data-cell-id="${id}"]`);
+const tableRow = (page, id) => page.locator(`${TABLE}-table [data-row-id="${id}"]`);
+const tableReadout = (page) => page.locator(`${TABLE}-readout`);
+
+/** What `frame` should draw: each row's state, each cell's text, state and underline, and arrows. */
+function expectedTable(capture, frame) {
+  const { payload } = capture;
+  const values = frame.values ?? [];
+  const grid = payload.shape === "grid";
+  const count = grid ? payload.rows.length : Math.min(values.length, payload.rows.length);
+  const rows = {};
+  const cells = {};
+  for (let r = 0; r < count; r += 1) {
+    const rowId = payload.rows[r].id;
+    const rowState = frame.rows?.[rowId]?.state ?? "Background";
+    if (!grid) rows[rowId] = rowState;
+    payload.columns.forEach((_, c) => {
+      const id = `r${r}c${c}`;
+      cells[id] = [
+        values[r]?.[c] ?? "",
+        frame.cells?.[id]?.state ?? (grid ? "Background" : rowState),
+        (frame.changed ?? []).includes(id) ? "true" : null,
+      ];
+    });
+  }
+  return { rows, cells, arrows: grid ? (frame.arrows ?? []).length : 0 };
+}
+
+/** What the picture draws: each row's state, each cell's text, state and underline, and arrows. */
+function drawnTable(page) {
+  return page.locator(`${TABLE}-table`).evaluate((root) => ({
+    rows: Object.fromEntries(
+      [...root.querySelectorAll("[data-row-id]")].map((el) => [
+        el.getAttribute("data-row-id"),
+        el.getAttribute("data-state"),
+      ]),
+    ),
+    cells: Object.fromEntries(
+      [...root.querySelectorAll("[data-cell-id]")].map((el) => [
+        el.getAttribute("data-cell-id"),
+        [el.textContent, el.getAttribute("data-state"), el.getAttribute("data-changed")],
+      ]),
+    ),
+    arrows: root.querySelectorAll("[data-step-arrow]").length,
+  }));
+}
+
+/** The frames a long capture is checked on (all of a short one). */
+function tableIndices(capture) {
+  const count = capture.frames.length;
+  if (count <= 25) return [...Array(count).keys()];
+  return [0, 1, Math.floor(count / 2), count - 2, count - 1];
+}
+
+for (const [key, capture] of Object.entries(TABLE_CASES)) {
+  test(`Table: the ${key} capture draws its blank before Run, then every step's cells, states and arrows`, async ({
+    page,
+  }) => {
+    test.slow();
+    await openTable(page, capture);
+    await expect(page.locator(`${TABLE}-table`)).toHaveAttribute(
+      "data-table-shape",
+      capture.payload.shape,
+    );
+    expect(await drawnTable(page)).toEqual(
+      expectedTable(capture, { values: capture.payload.blank.values }),
+    );
+    const count = capture.frames.length;
+    await page.locator("#workbench-run").click();
+    await expect(page.locator("#workbench-steps-position")).toHaveText(`Step ${count} of ${count}`);
+    for (const index of tableIndices(capture)) {
+      await toFrame(page, capture, index);
+      expect(await drawnTable(page), `frame ${index}`).toEqual(
+        expectedTable(capture, capture.frames[index]),
+      );
+    }
+    const last = capture.frames.at(-1);
+    await page.locator("#workbench-steps-slider input").press("End");
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of (await page.locator(`${TABLE}-table [data-focusable]`).all()).slice(0, 8)) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^(Cell \(|Step |Node |x = |row \d)/);
+    }
+  });
+}
+
+/** Every cell's body box and each heading's place, in drawing units, and the drawing's size. */
+function tableBoxes(page) {
+  return page.locator(`${TABLE}-svg`).evaluate((svg) => {
+    const round = (v) => Math.round(v * 10) / 10;
+    return {
+      cells: Object.fromEntries(
+        [...svg.querySelectorAll("[data-cell-id]")].map((el) => {
+          const box = el.querySelector("[data-body]").getBBox();
+          return [
+            el.getAttribute("data-cell-id"),
+            [box.x, box.y, box.width, box.height].map(round).join(","),
+          ];
+        }),
+      ),
+      heads: Object.fromEntries(
+        [...svg.querySelectorAll("[data-head][data-column-id]")].map((el) => [
+          el.getAttribute("data-column-id"),
+          el.getAttribute("x"),
+        ]),
+      ),
+      width: svg.closest("[data-drawing-width]").getAttribute("data-drawing-width"),
+    };
+  });
+}
+
+for (const key of ["editDistance", "ilp", "nfaBacktrack", "sssp", "spspEarly"]) {
+  test(`Table: the ${key} table keeps every cell where it was before Run, and nothing moves while stepping`, async ({
+    page,
+  }) => {
+    test.slow();
+    const capture = TABLE_CASES[key];
+    await openTable(page, capture);
+    const before = await tableBoxes(page);
+    await runToFrame(page, capture, 0);
+    const first = await tableBoxes(page);
+    // The columns keep their places and widths from before Run; a trace only gains row slots.
+    expect(first.heads).toEqual(before.heads);
+    expect(first.width).toBe(before.width);
+    for (const [id, box] of Object.entries(before.cells)) expect(first.cells[id], id).toBe(box);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      const now = await tableBoxes(page);
+      expect(now.width).toBe(first.width);
+      expect(now.heads).toEqual(first.heads);
+      for (const [id, box] of Object.entries(now.cells)) {
+        if (first.cells[id]) expect(box, `${id} at step ${index + 1}`).toBe(first.cells[id]);
+      }
+    }
+  });
+}
+
+test("Table: an Edit Distance cell reads three cells, solid from the one it took, and the answer spells out its edits", async ({
+  page,
+}) => {
+  const capture = EDIT_DISTANCE_TABLE_FRAMES;
+  await openTable(page, capture);
+  await expect(page.locator(`${TABLE}-edits [data-edits-empty]`)).toBeVisible();
+  // (The page is 3SAT's, so the name before it is 3SAT's visualization.)
+  await expect(page.locator(`${TABLE}-table-caption`)).toHaveText(/: "horse" to "ros"$/);
+  await runToFrame(page, capture, 1);
+  const arrows = page.locator(`${TABLE}-table [data-step-arrow]`);
+  await expect(arrows).toHaveCount(3);
+  const best = page.locator(`${TABLE}-table [data-step-arrow][data-best="true"]`);
+  await expect(best).toHaveCount(1);
+  await expect(best).toHaveAttribute("data-step-arrow", "r0c0");
+  await expect(best.locator("line")).not.toHaveAttribute("stroke-dasharray", /./);
+  await expect(
+    page.locator(`${TABLE}-table [data-step-arrow][data-best="false"] line`).first(),
+  ).toHaveAttribute("stroke-dasharray", /\d/);
+  await expect(tableCell(page, "r0c0")).toHaveAttribute("data-arrow", "best");
+  await expect(tableCell(page, "r0c1")).toHaveAttribute("data-arrow", "read");
+  await expect(tableCell(page, "r1c0")).toHaveAttribute("data-arrow", "read");
+  await expect(tableCell(page, "r1c1")).toHaveAttribute("data-state", "ElementHighlight");
+  // The letters of the cell worked out are highlighted.
+  await expect(page.locator(`${TABLE}-table [data-current]`)).toHaveCount(2);
+  await expect(page.locator(`${TABLE}-table [data-letter="row-1"]`)).toHaveAttribute(
+    "data-current",
+    "true",
+  );
+
+  // The trace back keeps its path Committed, joined by arrows, until the answer turns it green.
+  const back = capture.frames.findIndex((frame) =>
+    Object.values(frame.cells).some((cell) => cell.state === "Committed"),
+  );
+  await toFrame(page, capture, back);
+  await expect(page.locator(`${TABLE}-table [data-step-arrow]`)).toHaveCount(0);
+  expect(await page.locator(`${TABLE}-table [data-path-arrow]`).count()).toBeGreaterThan(0);
+  await expect(page.locator(`${TABLE}-edits [data-edits-empty]`)).toBeVisible();
+
+  await page.locator("#workbench-steps-slider input").press("End");
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
+  await expect(page.locator(`${TABLE}-table [data-path-arrow]`)).toHaveCount(5);
+  // (horse, ros): replace h with r, keep o, delete r, keep s, delete e.
+  await expect(page.locator(`${TABLE}-edits`)).toHaveAttribute(
+    "data-edits",
+    "sub keep del keep del",
+  );
+  await expect(page.locator(`${TABLE}-edits`)).toContainText("R replace");
+  await expect(tableReadout(page)).toHaveText(
+    "The green path is one cheapest way: 1 replacement and 2 deletions. Hover or tap a cell to see what it was worked out from.",
+  );
+  await expect(legendBody(page)).toContainText("Solid arrow (the cell whose value this cell took)");
+});
+
+test("Table: an Edit Distance with an empty y is one column, and its answer is all deletions", async ({
+  page,
+}) => {
+  const capture = EDIT_DISTANCE_EMPTY_TABLE_FRAMES;
+  await openTable(page, capture);
+  await expect(page.locator(`${TABLE}-table [data-cell-id]`)).toHaveCount(4);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(page.locator(`${TABLE}-edits`)).toHaveAttribute("data-edits", "del del del");
+});
+
+test("Table: 0-1 ILP draws x as chips, shades the coefficients its 1s switch on, and a pill per row", async ({
+  page,
+}) => {
+  const capture = ILP_TABLE_FRAMES;
+  await openTable(page, capture);
+  // Before Run: every x is "?" in a dashed chip, nothing is shaded, and no row has a verdict.
+  const unset = page.locator(`${TABLE}-table [data-chip="?"]`);
+  await expect(unset).toHaveCount(3);
+  await expect(unset.first()).toHaveAttribute("stroke-dasharray", /\d/);
+  await expect(page.locator(`${TABLE}-table [data-on]`)).toHaveCount(0);
+  await expect(page.locator(`${TABLE}-table [data-pill]`)).toHaveCount(0);
+  // The caption counts the three constraints, not the x row above them.
+  await expect(page.locator(`${TABLE}-table-caption`)).toHaveText(/: 3 rows$/);
+
+  // The answer (0 1 0): x2's column is what every row adds up.
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(tableCell(page, "r0c1").locator("[data-chip]")).toHaveAttribute("data-chip", "1");
+  const on = await page
+    .locator(`${TABLE}-table [data-on]`)
+    .evaluateAll((cells) => cells.map((cell) => cell.getAttribute("data-cell-id")));
+  expect(on.sort()).toEqual(["r1c1", "r2c1", "r3c1"]);
+  await expect(page.locator(`${TABLE}-table [data-pill="yes"]`)).toHaveCount(3);
+  for (const row of ["r1", "r2", "r3"]) {
+    await expect(tableRow(page, row)).toHaveAttribute("data-state", "Solution");
+  }
+  // The first try breaks two rows.
+  await toFrame(page, capture, 0);
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-state", "Rejected");
+  await expect(page.locator(`${TABLE}-table [data-pill="no"]`)).toHaveCount(2);
+  await expect(legendBody(page)).toContainText("Shaded coefficient");
+});
+
+test("Table: a 0-1 ILP with no 0-1 solution ends on its last try, the rows it breaks Rejected, and no", async ({
+  page,
+}) => {
+  const capture = ILP_NONE_TABLE_FRAMES;
+  await openTable(page, capture);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  // Redux #905: the Done keeps the last try, (1 1 1), not the blank.
+  await expect(page.locator(`${TABLE}-table [data-chip="?"]`)).toHaveCount(0);
+  await expect(page.locator(`${TABLE}-table [data-chip="1"]`)).toHaveCount(3);
+  for (const x of ["r0c0", "r0c1", "r0c2"]) {
+    await expect(tableCell(page, x)).toHaveAttribute("data-state", "Rejected");
+  }
+  await expect(tableRow(page, "r2")).toHaveAttribute("data-state", "Rejected");
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-state", "Covered");
+  await expect(tableRow(page, "r3")).toHaveAttribute("data-state", "Covered");
+  await expect(tableCell(page, "r2c5").locator("[data-pill]")).toHaveAttribute("data-pill", "no");
+  await expect(page.locator(`${TABLE}-table [data-pill="yes"]`)).toHaveCount(2);
+  await expect(page.locator(`${TABLE}-table [data-row-id][data-state="Solution"]`)).toHaveCount(0);
+});
+
+test("Table: SPSP's step that settles the target marks only the path Solution, the rest Committed", async ({
+  page,
+}) => {
+  // Redux #904: settling 5 ends the run, but 2 and 4 are not on the path 1, 3, 5.
+  const capture = SPSP_TABLE_FRAMES;
+  const stop = capture.frames.length - 2;
+  await openTable(page, capture);
+  await page.locator("#workbench-run").click();
+  await toFrame(page, capture, stop);
+  await expect(tableRow(page, "r0")).toHaveAttribute("data-state", "Solution");
+  await expect(tableRow(page, "r2")).toHaveAttribute("data-state", "Solution");
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-state", "Committed");
+  await expect(tableRow(page, "r3")).toHaveAttribute("data-state", "Committed");
+  await expect(tableRow(page, "r4")).toHaveAttribute("data-state", "ElementHighlight");
+});
+
+test("Table: a DFA that falls into Garbage ends on a Rejected row, and an NFA's runs keep their slots", async ({
+  page,
+}) => {
+  await openTable(page, DFA_REJECT_TABLE_FRAMES);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(tableRow(page, "r4")).toHaveAttribute("data-state", "Rejected");
+  await expect(tableCell(page, "r4c3")).toHaveText("Garbage");
+
+  // NFA Backtracking draws one explored run at a time: a shorter run leaves the later slots empty.
+  const capture = NFA_BACKTRACK_TABLE_FRAMES;
+  await openTable(page, capture);
+  const shrinks = capture.frames.findIndex(
+    (frame, i) => i > 0 && frame.values.length < capture.frames[i - 1].values.length,
+  );
+  expect(shrinks).toBeGreaterThan(0);
+  await page.locator("#workbench-run").click();
+  await toFrame(page, capture, shrinks - 1);
+  const width = await page.locator(`${TABLE}-table`).getAttribute("data-drawing-width");
+  const longer = capture.frames[shrinks - 1].values.length;
+  await expect(page.locator(`${TABLE}-table [data-row-id]`)).toHaveCount(longer);
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${TABLE}-table [data-row-id]`)).toHaveCount(
+    capture.frames[shrinks].values.length,
+  );
+  await expect(page.locator(`${TABLE}-table`)).toHaveAttribute("data-drawing-width", width);
+});
+
+test("Table: Dijkstra's table writes a cost not settled yet in italics, and an unreachable node ends Untraveled", async ({
+  page,
+}) => {
+  const capture = SSSP_UNREACHABLE_TABLE_FRAMES;
+  await openTable(page, capture);
+  await expect(page.locator(`${TABLE}-table-caption`)).toHaveText("Shortest paths from 1");
+  await runToFrame(page, capture, 1);
+  await expect(tableCell(page, "r1c2")).toHaveAttribute("data-tentative", "true");
+  await expect(tableCell(page, "r1c2").locator("text")).toHaveAttribute("font-style", "italic");
+  await expect(tableCell(page, "r0c2")).not.toHaveAttribute("data-tentative", /./);
+  // This step lowered 2's and 3's costs: those cells are underlined.
+  await expect(tableCell(page, "r1c2").locator("[data-underline]")).toHaveCount(1);
+  await page.locator("#workbench-steps-slider input").press("End");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(tableRow(page, "r5")).toHaveAttribute("data-state", "Untraveled");
+  await expect(tableCell(page, "r5c1").locator("[data-pill]")).toHaveAttribute(
+    "data-pill",
+    "unreachable",
+  );
+  await expect(legendBody(page)).toContainText("Italic (a cost found but not settled yet");
+  await expect(legendBody(page)).toContainText("Untraveled");
+});
+
+test("Table: hovering, focusing or tapping an Edit Distance cell traces the cells it was worked out from", async ({
+  page,
+}) => {
+  const capture = EDIT_DISTANCE_TABLE_FRAMES;
+  await openTable(page, capture);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await tableCell(page, "r1c1").hover();
+  await expect(tableCell(page, "r1c1")).toHaveAttribute("data-traced", "trace");
+  await expect(tableCell(page, "r0c0")).toHaveAttribute("data-traced", "trace");
+  await expect(tableCell(page, "r3c3")).toHaveAttribute("data-traced", "faint");
+  const faded = await tableCell(page, "r3c3").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(page.locator(`${TABLE}-table [data-trace-source]`)).toHaveCount(3);
+  await expect(
+    page.locator(`${TABLE}-table [data-trace-source][data-kind="best"]`),
+  ).toHaveAttribute("data-trace-source", "r0c0");
+  await expect(tableReadout(page)).toHaveText(
+    "Cell (1,1) = 1: 'h' ≠ 'r', so the cheapest of replace 'h' with 'r' 1 + 0, delete 'h' 1 + 1, insert 'r' 1 + 1: replace, from (0,0).",
+  );
+  await page.mouse.move(0, 0);
+  await tableCell(page, "r2c2").focus();
+  await expect(page.locator(`${TABLE}-table [data-trace-source]`)).toHaveCount(1);
+  await expect(tableReadout(page)).toHaveText("Cell (2,2) = 1: 'o' = 'o', so it copies (1,1) (1).");
+  await page.keyboard.press("Enter");
+  await expect(tableCell(page, "r2c2")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Table: hovering a trace row traces the step it continues from, or a node's path back to the source", async ({
+  page,
+}) => {
+  await openTable(page, DFA_ACCEPT_TABLE_FRAMES);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await tableRow(page, "r3").hover();
+  await expect(tableRow(page, "r3")).toHaveAttribute("data-traced", "trace");
+  await expect(tableRow(page, "r2")).toHaveAttribute("data-traced", "trace");
+  await expect(tableRow(page, "r0")).toHaveAttribute("data-traced", "faint");
+  const marks = await page
+    .locator(`${TABLE}-table [data-trace-mark]`)
+    .evaluateAll((all) => all.map((el) => el.getAttribute("data-trace-mark")).sort());
+  expect(marks).toEqual(["r2c3", "r3c2"]);
+  await expect(tableReadout(page)).toHaveText(
+    "Step 3: read 'a', 3 → 2. It continues from step 2, which ended in 3.",
+  );
+
+  await openTable(page, SSSP_TABLE_FRAMES);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await tableRow(page, "r4").hover();
+  for (const row of ["r0", "r2", "r4"]) {
+    await expect(tableRow(page, row)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-traced", "faint");
+  await expect(tableReadout(page)).toHaveText("Node 5: cost 9, via 3, path 1 → 3 → 5, settled #5.");
+  await page.mouse.move(0, 0);
+  await tableRow(page, "r3").focus();
+  await page.keyboard.press("Enter");
+  await expect(tableRow(page, "r3")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Table: hovering an ILP row traces the x's that are 1 and the coefficients they switch on", async ({
+  page,
+}) => {
+  await openTable(page, ILP_TABLE_FRAMES);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await tableRow(page, "r2").hover();
+  const marks = await page
+    .locator(`${TABLE}-table [data-trace-mark]`)
+    .evaluateAll((all) => all.map((el) => el.getAttribute("data-trace-mark")).sort());
+  expect(marks).toEqual(["r0c1", "r2c1", "r2c3"]);
+  await expect(tableRow(page, "r0")).toHaveAttribute("data-traced", "trace");
+  await expect(tableRow(page, "r1")).toHaveAttribute("data-traced", "faint");
+  await expect(tableReadout(page)).toHaveText("row 2: -1 (x2) = -1, against its bound -1: holds.");
+});
+
+test("Table: on a phone a tap traces a row, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openTable(page, SSSP_TABLE_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${TABLE}-svg`);
+  await page.locator(`${TABLE}-zoom-in`).click();
+  await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await tableRow(page, "r1").focus();
+  await tableRow(page, "r1").blur();
+  await tableRow(page, "r1").click();
+  await expect(tableRow(page, "r1")).toHaveAttribute("aria-pressed", "true");
+  await expect(tableReadout(page)).toHaveText(/^Node 2: cost ∞/);
+  await expectFits(page, `${TABLE}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Table: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      for (const capture of [EDIT_DISTANCE_TABLE_FRAMES, ILP_TABLE_FRAMES, SSSP_TABLE_FRAMES]) {
+        await openTable(page, capture);
+        const svg = page.locator(`${TABLE}-svg`);
+        expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+        await expectFits(page, `${TABLE}-svg`);
+        await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+        // The headings and the cells' text follow the theme: no dark-on-dark, no light-on-white.
+        for (const selector of ["[data-head]", "[data-letter], [data-cell-id] text"]) {
+          const ink = await page
+            .locator(`${TABLE}-table`)
+            .locator(selector)
+            .first()
+            .evaluate((el) => getComputedStyle(el).fill);
+          const [r, g, b] = ink.match(/\d+/g).map(Number);
+          expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+        }
+      }
+    });
+  }
+}
+
+for (const [key, capture] of Object.entries(TABLE_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Table: the ${key} capture's texts never meet each other, a line or a mark at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openTable(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = async () => [
+        ...(await svgTextCollisions(page, `${TABLE}-svg`, "[data-cell-id]")),
+        ...(await drawnCollisions(page, `${TABLE}-svg`)),
+      ];
+      expect(await clear()).toEqual([]);
+      await page.locator("#workbench-run").click();
+      const count = capture.frames.length;
+      await expect(page.locator("#workbench-steps-position")).toHaveText(
+        `Step ${count} of ${count}`,
+      );
+      for (const index of tableIndices(capture)) {
+        await toFrame(page, capture, index);
+        expect(await clear(), `frame ${index}`).toEqual([]);
+      }
+    });
+  }
+}
+
+/**
+ * Whether the table is drawn no wider than its box (so at Fit its text is at its own size), and
+ * the box's width.
+ */
+function tableFitsBox(page) {
+  return page.locator(`${TABLE}-table`).evaluate((root) => ({
+    fits: Number(root.getAttribute("data-drawing-width")) <= root.clientWidth + 0.5,
+    box: root.clientWidth,
+  }));
+}
+
+/** Presses + until the table's smallest text reads at PHONE_TEXT_PX, or + is disabled. */
+async function zoomTableToReadable(page) {
+  const zoomIn = page.locator(`${TABLE}-zoom-in`);
+  for (let press = 0; press < 8; press += 1) {
+    if ((await smallestText(page, `${TABLE}-svg`)).px >= PHONE_TEXT_PX) return;
+    if (await zoomIn.isDisabled()) return;
+    await zoomIn.click();
+  }
+}
+
+/**
+ * The tables that tighten to a phone's box and keep their text at its own size: at 390 px every
+ * one but the four-variable ILP; at 320 px (a 230 px box) the narrow ones. The rest open at Fit
+ * and zoom in to readable text.
+ */
+const TABLE_PHONE_FITS = {
+  390: Object.keys(TABLE_CASES).filter((key) => key !== "ilpSeveral"),
+  320: ["editDistance", "editDistanceEmpty", "dfaAccept", "nfaBacktrack", "nfaReject"],
+};
+
+for (const width of [390, 320]) {
+  for (const [key, capture] of Object.entries(TABLE_CASES)) {
+    const fits = TABLE_PHONE_FITS[width].includes(key);
+    test(`Table: on a ${width} px phone the ${key} table ${fits ? `is drawn at its own size, every text at least ${PHONE_TEXT_PX} px` : "opens at fit, and + zooms it in to readable text"}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openTable(page, capture);
+      await page.locator("#workbench-panel-close").click();
+      await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      await expectFits(page, `${TABLE}-svg`);
+      await page.locator("#workbench-run").click();
+      const count = capture.frames.length;
+      await expect(page.locator("#workbench-steps-position")).toHaveText(
+        `Step ${count} of ${count}`,
+      );
+      expect((await tableFitsBox(page)).fits).toBe(fits);
+      if (fits) {
+        const after = await smallestText(page, `${TABLE}-svg`);
+        expect(after.px, `"${after.text}" is ${after.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+        // Before Run too.
+        await page.reload();
+        await expect(page.locator(`${TABLE}-svg`)).toBeVisible({ timeout: 20_000 });
+        await page.locator("#workbench-panel-close").click();
+        const before = await smallestText(page, `${TABLE}-svg`);
+        expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(
+          PHONE_TEXT_PX,
+        );
+        return;
+      }
+      await zoomTableToReadable(page);
+      const zoomed = await smallestText(page, `${TABLE}-svg`);
+      expect(zoomed.px, `"${zoomed.text}" is ${zoomed.px} px`).toBeGreaterThanOrEqual(
+        PHONE_TEXT_PX,
+      );
+      await expectFits(page, `${TABLE}-svg`);
+    });
+  }
+}
+
 // --- Every renderer opens at fit -------------------------------------------------------------
 //
 // Each registered picture type (components/pictures/registry.js), drawn from one capture on the
 // 3SAT page, opens at fit at a phone's and a desktop's width: before Run (where it draws the
-// plain instance) and after it. The Table is text with no zoom, and fits its box's width.
+// plain instance) and after it. The Table too (#209): it is drawn in SVG like the rest.
 
 /** One capture per registered picture type. */
 const FIT_CASES = {
   Automaton: DFA_AUTOMATON_FRAMES,
   BipartiteGraph: SET_COVER_BIPARTITE_FRAMES,
   Board: N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES,
+  CodeTree: LDC_CODE_TREE_FRAMES,
   FlowNetwork: MIN_CUT_FLOW_FRAMES,
+  Geometry: CONVEX_HULL_GEOMETRY_FRAMES,
   Graph: CLIQUE_GRAPH_FRAMES,
   GroupedGraph: SAT3_CLAUSE_GRAPH_FRAMES,
   LayeredGraph: TOPOLOGICAL_SORT_LAYERED_FRAMES,
   Packing: PARTITION_PACKING_FRAMES,
+  QuantumCircuit: BV_QUANTUM_FRAMES,
+  Schedule: PUMP_EM_SCHEDULE_FRAMES,
   SearchTree: TSP_SEARCH_TREE_FRAMES,
-  Table: DFA_TABLE_FRAMES,
+  Table: EDIT_DISTANCE_KITTEN_TABLE_FRAMES,
+  TripartiteMatching: DM3_TRIPARTITE_FRAMES,
 };
 
 for (const width of [390, 1280]) {
@@ -4679,14 +7710,6 @@ for (const width of [390, 1280]) {
       if (width < 600) await page.locator("#workbench-panel-close").click();
       const prefix = `#workbench-source-frames-${type.toLowerCase()}`;
       const atFit = async (when) => {
-        if (type === "Table") {
-          await expect(page.locator(`${prefix}-zoom`), `${type} ${when}`).toHaveCount(0);
-          const overflow = await page.evaluate(
-            () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-          );
-          expect(overflow, `${type} ${when}`).toBeLessThanOrEqual(0);
-          return;
-        }
         // The Search Tree has nothing to draw before Run.
         if (type === "SearchTree" && when === "before Run") return;
         await expect(page.locator(`${prefix}-zoom`), `${type} ${when}`).toHaveAttribute(
@@ -5239,3 +8262,1016 @@ test("Drag: a clause moves with its literals, and a literal stays inside its cla
   await wobblyClick(page, literal(page, "c1-0"));
   await expect(literal(page, "c1-0")).toHaveAttribute("aria-pressed", "true");
 });
+
+test("Drag: a Tripartite name only moves up and down its own column, and its triples follow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openTripartite(page, DM3_TRIPARTITE_FRAMES);
+  const austin = tripartiteElement(page, "y2");
+  const before = await drawnCentre(austin);
+  const line = tripartiteLine(page, "T2");
+  const d = await line.getAttribute("d");
+  await mouseDrag(page, austin, 120, 40);
+  const moved = await drawnCentre(austin);
+  expect(moved.x).toBeCloseTo(before.x, 1);
+  expect(moved.y - before.y).toBeGreaterThan(20);
+  // T2's line (Paul, Austin, Jake) now meets Austin where it is.
+  const ys = (await line.getAttribute("d")).match(/-?[\d.]+,-?[\d.]+/g).map((pair) => {
+    const [, y] = pair.split(",").map(Number);
+    return y;
+  });
+  expect(ys.some((y) => Math.abs(y - moved.y) < 10)).toBe(true);
+  expect(await line.getAttribute("d")).not.toEqual(d);
+  // Never above the first row, however far it is dragged.
+  await mouseDrag(page, austin, 0, -400);
+  const top = await drawnCentre(tripartiteElement(page, "y1"));
+  expect((await drawnCentre(austin)).y).toBeGreaterThanOrEqual(top.y - 0.5);
+  await page.locator(`${TRIPARTITE}-layout-reset`).click();
+  expect(await drawnCentre(austin)).toEqual(before);
+  await expect(line).toHaveAttribute("d", d);
+});
+
+// --- #270: the Formula renderer (SAT and 3SAT written as a CNF formula) ------------------------
+
+const FORMULA = "#workbench-source-frames-formula";
+const formulaLiteral = (page, id) => page.locator(`${FORMULA}-formula [data-node-id="${id}"]`);
+const formulaClause = (page, id) => page.locator(`${FORMULA}-formula [data-clause-id="${id}"]`);
+const formulaChip = (page, id) => page.locator(`${FORMULA}-formula [data-variable-id="${id}"]`);
+
+/** Opens `problem` with every picture answered by the Formula `capture`. */
+async function openFormula(page, problem, capture) {
+  await openPicture(page, problem, capture);
+  await expect(page.locator(`${FORMULA}-formula`)).toBeVisible();
+}
+
+/** Frame `index`'s states, piece by piece: literals, clauses and chips (absent = Background). */
+async function expectFormulaStates(page, capture, index) {
+  const frame = capture.frames[index];
+  for (const node of capture.payload.nodes) {
+    await expect(formulaLiteral(page, node.id)).toHaveAttribute(
+      "data-state",
+      frame.nodes[node.id]?.state ?? "Background",
+    );
+  }
+  for (const group of capture.payload.groups) {
+    await expect(formulaClause(page, group.id)).toHaveAttribute(
+      "data-state",
+      frame.groups[group.id]?.state ?? "Background",
+    );
+  }
+  for (const variable of capture.payload.variables) {
+    await expect(formulaChip(page, variable.id)).toHaveAttribute(
+      "data-state",
+      frame.variables[variable.id]?.state ?? "Background",
+    );
+    const value = frame.assignment[variable.id];
+    await expect(formulaChip(page, variable.id)).toHaveAttribute(
+      "data-value",
+      typeof value === "boolean" ? String(value) : "unassigned",
+    );
+  }
+}
+
+/** Every clause box, literal pill and connective, in screen px. */
+function formulaBoxes(page) {
+  return page.locator(`${FORMULA}-formula`).evaluate((root) => {
+    const rect = (element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+    };
+    const clauses = Object.fromEntries(
+      [...root.querySelectorAll("[data-clause-id]")].map((g) => [
+        g.getAttribute("data-clause-id"),
+        rect(g.querySelector("[data-body]")),
+      ]),
+    );
+    const literals = [...root.querySelectorAll("[data-node-id]")].map((g) => ({
+      id: g.getAttribute("data-node-id"),
+      body: rect(g.querySelector("[data-body]")),
+    }));
+    const operators = [...root.querySelectorAll("[data-connective]")].map((t) => ({
+      kind: t.getAttribute("data-connective"),
+      clause: t.getAttribute("data-piece-for"),
+      box: rect(t),
+    }));
+    return { clauses, literals, operators };
+  });
+}
+
+for (const [problem, capture] of [
+  ["SAT", SAT_FORMULA_FRAMES],
+  ["3SAT", SAT3_FORMULA_FRAMES],
+]) {
+  test(`Formula: ${problem} draws a box per clause, ∨ inside it, ∧ between, and a chip per variable`, async ({
+    page,
+  }) => {
+    await openFormula(page, problem, capture);
+    const { payload } = capture;
+    const root = page.locator(`${FORMULA}-formula`);
+    await expect(root.locator("[data-clause-id]")).toHaveCount(payload.groups.length);
+    await expect(root.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
+    await expect(root.locator("[data-variable-id]")).toHaveCount(payload.variables.length);
+    // ∧ joins the clauses (one fewer than there are), ∨ the literals inside each clause.
+    await expect(root.locator('[data-connective="and"]')).toHaveCount(payload.groups.length - 1);
+    const ors = payload.groups.reduce((sum, group) => sum + group.members.length - 1, 0);
+    await expect(root.locator('[data-connective="or"]')).toHaveCount(ors);
+    for (const text of await root.locator('[data-connective="and"]').allTextContents()) {
+      expect(text).toBe("∧");
+    }
+    for (const text of await root.locator('[data-connective="or"]').allTextContents()) {
+      expect(text).toBe("∨");
+    }
+    // CNF (#278): ∧ is the operator between the boxes, ∨ the one inside them.
+    await expect(root.locator('[data-join="outer"]:not([data-connective="and"])')).toHaveCount(0);
+    await expect(root.locator('[data-join="inner"]:not([data-connective="or"])')).toHaveCount(0);
+    await expect(legendBody(page)).toContainText(
+      "Boxes are clauses, joined by ∧; the literals inside are joined by ∨ (CNF).",
+    );
+    const { clauses, operators } = await formulaBoxes(page);
+    for (const op of operators) {
+      const box = clauses[op.clause];
+      const middle = (op.box.left + op.box.right) / 2;
+      // Each ∨ sits inside its own clause's box; each ∧ outside every box, before its clause.
+      if (op.kind === "or") {
+        expect(middle > box.left && middle < box.right, `∨ of ${op.clause}`).toBe(true);
+      } else {
+        expect(middle).toBeLessThan(box.left);
+        for (const other of Object.values(clauses)) {
+          expect(middle > other.left && middle < other.right).toBe(false);
+        }
+      }
+    }
+    for (const piece of await root.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute(
+        "aria-label",
+        /^(Clause C\d+: \S+( or \S+)*|Literal ¬?\S+ in C\d+|Variable \S+: (true|false|not assigned yet))/,
+      );
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // Ids are the Grouped Graph's, and every DOM id in the picture is unique.
+    const ids = await page
+      .locator(PICTURE)
+      .evaluate((el) => [...el.querySelectorAll("[id]")].map((node) => node.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    const literalIds = await root
+      .locator("[data-node-id]")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-node-id")));
+    expect(literalIds).toEqual(payload.nodes.map((node) => node.id));
+  });
+}
+
+test("Formula: before Run the formula is plain, and step 1 keeps every pill in place", async ({
+  page,
+}) => {
+  const capture = SAT3_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  const root = page.locator(`${FORMULA}-formula`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(root.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(root.locator('[data-variable-id]:not([data-value="unassigned"])')).toHaveCount(0);
+  await expect(root.locator("[data-strike]")).toHaveCount(0);
+  await expect(root.locator("[data-clause-mark]")).toHaveCount(0);
+  await expect(formulaChip(page, "v:x1").locator("[data-value-text]")).toHaveText("–");
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(legendBody(page)).toContainText(
+    "Boxes are clauses, joined by ∧; the literals inside are joined by ∨ (CNF).",
+  );
+  await expect(legendBody(page)).not.toContainText("T / F");
+
+  const before = await nodeCentres(page, `${FORMULA}-formula`);
+  await runToFrame(page, capture, 0);
+  await expectFormulaStates(page, capture, 0);
+  expect(await nodeCentres(page, `${FORMULA}-formula`)).toEqual(before);
+});
+
+test("Formula: the steps show tried, kept, false and failed literals, clause marks and the answer", async ({
+  page,
+}) => {
+  const capture = SAT3_LONG_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  await runToFrame(page, capture, 0);
+  let sawCommitted = false;
+  let sawRejected = false;
+  for (let index = 0; index < capture.frames.length; index += 1) {
+    if (index > 0) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+    }
+    await expectFormulaStates(page, capture, index);
+    const frame = capture.frames[index];
+    for (const [id, { state }] of Object.entries(frame.groups)) {
+      const mark = formulaClause(page, id).locator("[data-clause-mark]");
+      if (state === "Covered") await expect(mark).toHaveText("✓");
+      if (state === "Rejected") {
+        await expect(mark).toHaveText("✗");
+        sawRejected = true;
+      }
+    }
+    for (const node of capture.payload.nodes) {
+      const state = frame.nodes[node.id]?.state ?? "Background";
+      // A False literal is struck through; nothing else is.
+      await expect(formulaLiteral(page, node.id).locator("[data-strike]")).toHaveCount(
+        state === "False" ? 1 : 0,
+      );
+      if (state === "Committed") {
+        sawCommitted = true;
+        // Committed is dashed, never the answer's solid outline.
+        const dash = await formulaLiteral(page, node.id)
+          .locator("[data-body]")
+          .getAttribute("stroke-dasharray");
+        expect(dash).toBeTruthy();
+      }
+    }
+  }
+  expect(sawCommitted).toBe(true);
+  expect(sawRejected).toBe(true);
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  const legend = legendBody(page);
+  await expect(legend).toContainText("Committed (kept so far)");
+  await expect(legend).toContainText("Struck through (false; the letters only");
+  await expect(legend).toContainText("✓ / ✗ by a clause's name");
+  await expect(legend).toContainText("T / F / – (the variable's value so far)");
+});
+
+for (const [problem, capture] of [
+  ["3SAT", SAT3_UNSAT_FORMULA_FRAMES],
+  ["SAT", SAT_UNSAT_FORMULA_FRAMES],
+]) {
+  test(`Formula: an unsatisfiable ${problem} formula fails clause by clause and ends blank on no`, async ({
+    page,
+  }) => {
+    await openFormula(page, problem, capture);
+    const failing = capture.frames.findIndex((frame) =>
+      Object.values(frame.groups).some((entry) => entry.state === "Rejected"),
+    );
+    await runToFrame(page, capture, failing);
+    await expectFormulaStates(page, capture, failing);
+    const [id] = Object.entries(capture.frames[failing].groups).find(
+      ([, entry]) => entry.state === "Rejected",
+    );
+    await expect(formulaClause(page, id)).toHaveAttribute("aria-label", /Rejected/);
+    await expect(formulaClause(page, id).locator("[data-clause-mark]")).toHaveText("✗");
+    await page.locator("#workbench-steps-slider input").focus();
+    await page.keyboard.press("End");
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+    // Redux's SAT solvers end an unsatisfiable run with no assignment: a blank Done, never green.
+    await expect(
+      page.locator(`${FORMULA}-formula [data-state]:not([data-state="Background"])`),
+    ).toHaveCount(0);
+  });
+}
+
+test("Formula: letters-then-digits names get a real subscript, other names are plain, and False strikes only the letters", async ({
+  page,
+}) => {
+  const capture = SAT_NAMES_FORMULA_FRAMES;
+  await openFormula(page, "SAT", capture);
+  const sizes = (locator) =>
+    locator.evaluate((g) => {
+      const text = g.querySelector("text");
+      return {
+        base: Number(text.getAttribute("font-size")),
+        sub: g.querySelector("[data-label-sub]")?.getAttribute("font-size") ?? null,
+        text: text.textContent,
+      };
+    });
+  for (const node of capture.payload.nodes) {
+    const name = node.label.replace(/^¬/, "");
+    const got = await sizes(formulaLiteral(page, node.id));
+    if (/^[A-Za-z]+\d+$/.test(name)) {
+      expect(got.sub, node.label).not.toBeNull();
+      expect(Number(got.sub) / got.base).toBeGreaterThanOrEqual(0.75);
+    } else {
+      expect(got.sub, node.label).toBeNull();
+    }
+    expect(got.text).toBe(node.label);
+  }
+  // The answer makes some literals false: each strike ends before its subscript starts.
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const falses = Object.entries(capture.frames.at(-1).nodes).filter(
+    ([, entry]) => entry.state === "False",
+  );
+  expect(falses.length).toBeGreaterThan(0);
+  let withSub = 0;
+  for (const [id] of falses) {
+    const ends = await formulaLiteral(page, id).evaluate((g) => {
+      const strike = g.querySelector("[data-strike]").getBoundingClientRect();
+      const base = g.querySelector("[data-label-base]").getBoundingClientRect();
+      const sub = g.querySelector("[data-label-sub]")?.getBoundingClientRect() ?? null;
+      return {
+        strikeLeft: strike.left,
+        strikeRight: strike.right,
+        baseLeft: base.left,
+        baseRight: base.right,
+        subLeft: sub ? sub.left : null,
+      };
+    });
+    expect(ends.strikeLeft).toBeLessThanOrEqual(ends.baseLeft + 1);
+    expect(ends.strikeRight).toBeGreaterThan((ends.baseLeft + ends.baseRight) / 2);
+    if (ends.subLeft !== null) {
+      withSub += 1;
+      expect(ends.strikeRight).toBeLessThanOrEqual(ends.subLeft + 0.5);
+    }
+  }
+  expect(withSub).toBeGreaterThan(0);
+});
+
+test("Formula: a long formula wraps between clauses, and a clause too long for a line wraps at its ∨s", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const capture = SAT_LONG_FORMULA_FRAMES;
+  await openFormula(page, "SAT", capture);
+  const { clauses, literals, operators } = await formulaBoxes(page);
+  // More than one line of clauses.
+  const tops = new Set(Object.values(clauses).map((box) => Math.round(box.top)));
+  expect(tops.size).toBeGreaterThan(1);
+  // C1's twelve literals take more than one row inside one taller box.
+  const firstClause = literals.filter((literal) => literal.id.startsWith("c0-"));
+  const rows = [...new Set(firstClause.map((literal) => Math.round(literal.body.top)))].sort(
+    (a, b) => a - b,
+  );
+  expect(rows.length).toBeGreaterThan(1);
+  for (const literal of literals) {
+    const box = clauses[literal.id.split("-")[0]];
+    expect(literal.body.left).toBeGreaterThanOrEqual(box.left);
+    expect(literal.body.right).toBeLessThanOrEqual(box.right);
+    expect(literal.body.top).toBeGreaterThanOrEqual(box.top);
+    expect(literal.body.bottom).toBeLessThanOrEqual(box.bottom);
+  }
+  // A wrapped row of C1 starts with its ∨.
+  const secondRowFirst = Math.min(
+    ...firstClause
+      .filter((literal) => Math.round(literal.body.top) === rows[1])
+      .map((literal) => literal.body.left),
+  );
+  expect(
+    operators.some(
+      (op) =>
+        op.clause === "c0" &&
+        op.kind === "or" &&
+        op.box.right <= secondRowFirst &&
+        op.box.top >= rows[1] - 2,
+    ),
+  ).toBe(true);
+  // Pills never overlap, and no text meets another piece's line or mark.
+  for (const [i, a] of literals.entries()) {
+    for (const b of literals.slice(i + 1)) {
+      const meet =
+        a.body.left < b.body.right &&
+        b.body.left < a.body.right &&
+        a.body.top < b.body.bottom &&
+        b.body.top < a.body.bottom;
+      expect(meet, `${a.id} and ${b.id}`).toBe(false);
+    }
+  }
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+});
+
+test("Formula: hovering a literal traces its variable, a clause its literals, and the rest fade by color", async ({
+  page,
+}) => {
+  await openFormula(page, "3SAT", SAT3_FORMULA_FRAMES);
+  await formulaLiteral(page, "c0-0").hover();
+  // x1 is in c0-0, c1-0, c1-2 and c2-2.
+  for (const id of ["c0-0", "c1-0", "c1-2", "c2-2"]) {
+    await expect(formulaLiteral(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(formulaChip(page, "v:x1")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "faint");
+  await expect(formulaChip(page, "v:x2")).toHaveAttribute("data-traced", "faint");
+  const faded = await formulaLiteral(page, "c0-1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+    dash: el.querySelector("[data-body]").getAttribute("stroke-dasharray"),
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  expect(faded.dash).toBeTruthy();
+
+  // Keyboard: focusing a clause traces its literals and their variables; Enter pins it.
+  await page.mouse.move(0, 0);
+  await formulaClause(page, "c2").focus();
+  for (const id of ["c2-0", "c2-1", "c2-2"]) {
+    await expect(formulaLiteral(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(formulaChip(page, "v:x3")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(formulaClause(page, "c2")).toHaveAttribute("aria-pressed", "true");
+  // A tap on a chip traces that variable instead.
+  await formulaChip(page, "v:x2").click();
+  await expect(formulaLiteral(page, "c0-1")).toHaveAttribute("data-traced", "trace");
+  await expect(formulaLiteral(page, "c2-0")).toHaveAttribute("data-traced", "trace");
+});
+
+/** `capture` with its payload's `layout` set to `layout` (`undefined` drops the field). */
+function withFormulaLayout(capture, layout) {
+  const payload = { ...capture.payload };
+  if (layout === undefined) delete payload.layout;
+  else payload.layout = layout;
+  return { ...capture, payload };
+}
+
+/** Each piece's place in the drawing's own units, and each connective's: what a layout decides. */
+function formulaPlaces(page) {
+  return page.locator(`${FORMULA}-svg`).evaluate((svg) => {
+    const box = (element) => {
+      const b = element.getBBox();
+      return [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",");
+    };
+    const pieces = [...svg.querySelectorAll("[data-node-id], [data-clause-id], [data-variable-id]")]
+      .map((g) => [
+        g.getAttribute("data-node-id") ??
+          g.getAttribute("data-clause-id") ??
+          g.getAttribute("data-variable-id"),
+        box(g.querySelector("[data-body]")),
+      ])
+      .sort();
+    const joins = [...svg.querySelectorAll("[data-connective]")]
+      .map((t) => `${t.getAttribute("data-join")}:${t.getAttribute("x")},${t.getAttribute("y")}`)
+      .sort();
+    return { viewBox: svg.getAttribute("viewBox"), pieces, joins };
+  });
+}
+
+test("Formula: a DNF formula swaps the operators, ∧ inside a box and ∨ between, in the same places, and its Legend says DNF", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const cnf = SAT_LONG_FORMULA_FRAMES;
+  await openFormula(page, "SAT", cnf);
+  const cnfPlaces = await formulaPlaces(page);
+
+  const dnf = withFormulaLayout(cnf, "dnf");
+  await openFormula(page, "SAT", dnf);
+  const root = page.locator(`${FORMULA}-formula`);
+  const { payload } = dnf;
+  const inner = payload.groups.reduce((sum, group) => sum + group.members.length - 1, 0);
+  // ∨ joins the boxes (one fewer than there are), ∧ the literals inside each box.
+  await expect(root.locator('[data-join="outer"]')).toHaveCount(payload.groups.length - 1);
+  await expect(root.locator('[data-join="inner"]')).toHaveCount(inner);
+  await expect(root.locator('[data-join="outer"][data-connective="or"]')).toHaveCount(
+    payload.groups.length - 1,
+  );
+  await expect(root.locator('[data-join="inner"][data-connective="and"]')).toHaveCount(inner);
+  for (const text of await root.locator('[data-join="outer"]').allTextContents()) {
+    expect(text).toBe("∨");
+  }
+  for (const text of await root.locator('[data-join="inner"]').allTextContents()) {
+    expect(text).toBe("∧");
+  }
+  // The room an operator takes belongs to its place, not its symbol: the swap moves nothing,
+  // and on this formula (several lines, a box wrapped inside) nothing meets anything.
+  expect(await formulaPlaces(page)).toEqual(cnfPlaces);
+  expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+  const { clauses, operators } = await formulaBoxes(page);
+  for (const op of operators) {
+    const middle = (op.box.left + op.box.right) / 2;
+    const own = clauses[op.clause];
+    const inside = middle > own.left && middle < own.right;
+    expect(inside, `${op.kind} of ${op.clause}`).toBe(op.kind === "and");
+  }
+  // Said outside the drawing: the Legend, the picture's label and each box's label.
+  const legend = legendBody(page);
+  await expect(legend).toContainText(
+    "Boxes are terms, joined by ∨; the literals inside are joined by ∧ (DNF).",
+  );
+  await expect(legend).not.toContainText("CNF");
+  await expect(formulaClause(page, "c1")).toHaveAttribute("aria-label", /^Term C2: \S+( and \S+)+/);
+  await expect(page.locator(`${FORMULA}-svg`)).toHaveAttribute(
+    "aria-label",
+    /terms joined by OR and the literals in each term by AND/,
+  );
+});
+
+for (const [kind, layout] of [
+  ["an unknown", "rows"],
+  ["a missing", undefined],
+]) {
+  test(`Formula: ${kind} layout still draws its groups, and claims no form`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    const capture = withFormulaLayout(SAT3_FORMULA_FRAMES, layout);
+    await openFormula(page, "3SAT", capture);
+    const root = page.locator(`${FORMULA}-formula`);
+    const { payload } = capture;
+    await expect(root.locator("[data-clause-id]")).toHaveCount(payload.groups.length);
+    await expect(root.locator("[data-node-id]")).toHaveCount(payload.nodes.length);
+    await expect(root.locator("[data-variable-id]")).toHaveCount(payload.variables.length);
+    // The groups are drawn as CNF's are, symbols and all...
+    await expect(root.locator('[data-join="outer"][data-connective="and"]')).toHaveCount(
+      payload.groups.length - 1,
+    );
+    await expect(root.locator('[data-join="inner"][data-connective="or"]')).toHaveCount(
+      payload.groups.reduce((sum, group) => sum + group.members.length - 1, 0),
+    );
+    // ...but nothing outside it names a form or says what the operators mean.
+    const legend = legendBody(page);
+    await expect(legend).toContainText("Boxes are groups of literals.");
+    for (const claim of ["CNF", "DNF", "clause", "term", "joined by"]) {
+      await expect(legend).not.toContainText(claim);
+    }
+    const label = await page.locator(`${FORMULA}-svg`).getAttribute("aria-label");
+    expect(label).toMatch(/a formula of 3 groups of literals and 3 variables\.$/);
+    expect(label).not.toMatch(/CNF|DNF|clause|AND|OR/);
+    await expect(formulaClause(page, "c0")).toHaveAttribute("aria-label", /^Group C1: \S+(, \S+)+/);
+    expect(await drawnCollisions(page, `${FORMULA}-svg`)).toEqual([]);
+  });
+}
+
+test("Formula: every text in the drawing belongs to a piece; no heading, and ASSIGNMENT is the strip's own", async ({
+  page,
+}) => {
+  const capture = SAT3_FORMULA_FRAMES;
+  await openFormula(page, "3SAT", capture);
+  const svg = page.locator(`${FORMULA}-svg`);
+  const stray = await svg.evaluate((el) =>
+    [...el.querySelectorAll("text")]
+      .filter(
+        (text) =>
+          !text.closest(
+            "[data-clause-id], [data-node-id], [data-variable-id], [data-strip], [data-connective]",
+          ),
+      )
+      .map((text) => text.textContent),
+  );
+  expect(stray).toEqual([]);
+  await expect(svg).not.toContainText("FORMULA");
+  await expect(svg).not.toContainText("CNF");
+  // ASSIGNMENT is drawn once, in the strip's group with every chip, above them.
+  const strip = svg.locator('[data-strip="assignment"]');
+  await expect(strip).toHaveCount(1);
+  await expect(strip.locator("[data-strip-head]")).toHaveText("ASSIGNMENT");
+  await expect(svg.locator("text", { hasText: "ASSIGNMENT" })).toHaveCount(1);
+  await expect(strip.locator("[data-variable-id]")).toHaveCount(capture.payload.variables.length);
+  const { headBottom, chipTop } = await strip.evaluate((g) => ({
+    headBottom: (({ y, height }) => y + height)(g.querySelector("[data-strip-head]").getBBox()),
+    chipTop: Math.min(
+      ...[...g.querySelectorAll("[data-variable-id] [data-body]")].map((r) => r.getBBox().y),
+    ),
+  }));
+  expect(headBottom).toBeLessThanOrEqual(chipTop);
+
+  // A formula with no variables has no strip head.
+  await openFormula(page, "3SAT", {
+    ...capture,
+    payload: { ...capture.payload, variables: [] },
+  });
+  await expect(svg.locator("text", { hasText: "ASSIGNMENT" })).toHaveCount(0);
+  await expect(svg.locator("[data-clause-id]")).toHaveCount(capture.payload.groups.length);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Formula: at ${width} px in the ${scheme} theme it wraps to its box, with readable text and no sideways scroll`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openFormula(page, "SAT", SAT_LONG_FORMULA_FRAMES);
+      if (width < 1200) await page.locator("#workbench-panel-close").click();
+      const svg = `${FORMULA}-svg`;
+      await expect(page.locator(svg)).toBeVisible();
+      await expectFits(page, svg);
+      await expect(page.locator(`${FORMULA}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // Laid out at its box's own width (320 to 800), so the text isn't shrunk to fit.
+      await expect
+        .poll(async () => {
+          const root = page.locator(`${FORMULA}-formula`);
+          const drawn = Number(await root.getAttribute("data-drawing-width"));
+          const box = await root.evaluate((el) => el.clientWidth);
+          return Math.abs(drawn - Math.max(320, Math.min(800, box)));
+        })
+        .toBeLessThanOrEqual(1);
+      const smallest = await page.locator(svg).evaluate((el) => {
+        const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+        const sizes = [...el.querySelectorAll("[data-node-id] text")].map(
+          (text) => Number(text.getAttribute("font-size")) * scale,
+        );
+        return Math.min(...sizes);
+      });
+      // (The long formula is taller than a phone's screen, so it may be fitted smaller; zoom reads it.)
+      expect(smallest).toBeGreaterThanOrEqual(width < 700 ? 9 : 11);
+      expect(await drawnCollisions(page, svg)).toEqual([]);
+      // A short formula is drawn at its own size on a phone too.
+      if (width < 700) {
+        await openFormula(page, "3SAT", SAT3_FORMULA_FRAMES);
+        await page.locator("#workbench-panel-close").click();
+        const own = await page.locator(svg).evaluate((el) => {
+          const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+          return Math.min(
+            ...[...el.querySelectorAll("[data-node-id] text")].map(
+              (text) => Number(text.getAttribute("font-size")) * scale,
+            ),
+          );
+        });
+        expect(own).toBeGreaterThanOrEqual(13);
+      }
+      // The ∧ follows the theme: no dark-on-dark, no light-on-white.
+      const ink = await page
+        .locator(`${FORMULA}-formula [data-connective="and"]`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+// --- #271: the Nested Set renderer (the set problems' sets drawn as regions) -------------------
+
+const NESTED = "#workbench-source-frames-nestedset";
+const nestedRoot = (page) => page.locator(`${NESTED}-nestedset`);
+const nestedNode = (page, id) => nestedRoot(page).locator(`[data-node-id="${id}"]`);
+const nestedRegion = (page, id) => nestedRoot(page).locator(`[data-region-id="${id}"]`);
+
+const NESTED_CASES = [
+  { problem: "Set Cover", capture: SET_COVER_NESTED_FRAMES },
+  { problem: "Exact Cover", capture: EXACT_COVER_NESTED_FRAMES },
+  // ReduxISU/Redux#742 renamed Hitting Set to Karp's Exact Hitting Set.
+  { problem: "Exact Hitting Set", capture: HITTING_SET_NESTED_FRAMES },
+];
+
+/** Opens `problem` with every picture answered by the Nested Set `capture`. */
+async function openNested(page, problem, capture) {
+  await openPicture(page, problem, capture);
+  await expect(nestedRoot(page)).toBeVisible();
+}
+
+/** Frame `index`'s states on every element and set (absent = Background); a chip per member. */
+async function expectNestedStates(page, capture, index) {
+  const frame = capture.frames[index];
+  for (const piece of [...capture.payload.elements, ...capture.payload.sets]) {
+    const want = frame.nodes[piece.id]?.state ?? "Background";
+    for (const drawn of await nestedNode(page, piece.id).all()) {
+      await expect(drawn).toHaveAttribute("data-state", want);
+    }
+  }
+}
+
+/**
+ * Where the regions' names sit against everything else, in screen px: each name's box, every
+ * dot, and points along every region's outline (with whose it is), plus which dots fall inside
+ * each region.
+ */
+function nestedGeometry(page) {
+  return nestedRoot(page).evaluate((root) => {
+    const svg = root.querySelector("svg");
+    const toScreen = (element, x, y) => {
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      return point.matrixTransform(element.getScreenCTM());
+    };
+    const names = [...root.querySelectorAll('[data-layer="names"] [data-node-id]')].map((g) => {
+      const rect = g.querySelector("[data-body]").getBoundingClientRect();
+      const box = { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      return { id: g.getAttribute("data-node-id"), box };
+    });
+    const dots = [...root.querySelectorAll('[data-layer="elements"] [data-node-id]')].map((g) => {
+      const body = g.querySelector("circle");
+      return {
+        id: g.getAttribute("data-node-id"),
+        centre: (({ x, y }) => ({ x, y }))(
+          toScreen(body, Number(body.getAttribute("cx")), Number(body.getAttribute("cy"))),
+        ),
+        cx: Number(body.getAttribute("cx")),
+        cy: Number(body.getAttribute("cy")),
+        r: body.getBoundingClientRect().width / 2,
+      };
+    });
+    const outlines = [...root.querySelectorAll("[data-region-id]")].map((g) => {
+      const path = g.querySelector("[data-region-edge]");
+      const length = path.getTotalLength();
+      const points = [];
+      for (let at = 0; at < length; at += 2) {
+        const p = path.getPointAtLength(at);
+        const q = toScreen(path, p.x, p.y);
+        points.push({ x: q.x, y: q.y });
+      }
+      const inside = dots
+        .filter((dot) => {
+          const point = svg.createSVGPoint();
+          point.x = dot.cx;
+          point.y = dot.cy;
+          return path.isPointInFill(point);
+        })
+        .map((dot) => dot.id);
+      return { id: g.getAttribute("data-region-id"), points, inside };
+    });
+    return { names, dots, outlines };
+  });
+}
+
+for (const { problem, capture } of NESTED_CASES) {
+  test(`Nested Set: ${problem} draws its elements on a circle and every set as a region round them`, async ({
+    page,
+  }) => {
+    await openNested(page, problem, capture);
+    const { payload } = capture;
+    const root = nestedRoot(page);
+    await expect(root).toHaveAttribute("data-layout", "regions");
+    await expect(root).toHaveAttribute("data-pick-side", payload.pickSide);
+    await expect(root.locator('[data-layer="elements"] [data-node-id]')).toHaveCount(
+      payload.elements.length,
+    );
+    await expect(root.locator('[data-layer="names"] [data-node-id]')).toHaveCount(
+      payload.sets.length,
+    );
+    await expect(root.locator("[data-region-id]")).toHaveCount(payload.sets.length);
+    await expect(root.locator("[data-picked-head]")).toHaveText(
+      payload.pickSide === "elements" ? /PICKED: ELEMENTS/ : /PICKED: SETS/,
+    );
+    for (const piece of await root.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("aria-label", /^(Element \S+, |Set S\d+ \{)/);
+      await expect(piece).toHaveAttribute("tabindex", "0");
+    }
+    // Every member sits inside its set's region, and every other dot outside it.
+    const { outlines } = await nestedGeometry(page);
+    for (const set of payload.sets) {
+      const outline = outlines.find((candidate) => candidate.id === set.id);
+      expect(new Set(outline.inside), set.id).toEqual(new Set(set.members));
+    }
+    // The Bipartite Graph's ids, each piece once, and every DOM id in the picture unique.
+    const pieceIds = await root
+      .locator("[data-node-id]")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-node-id")));
+    expect(pieceIds.sort()).toEqual(
+      [...payload.elements, ...payload.sets].map((piece) => piece.id).sort(),
+    );
+    const ids = await page
+      .locator(PICTURE)
+      .evaluate((el) => [...el.querySelectorAll("[id]")].map((node) => node.id));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+}
+
+for (const { problem, capture } of [
+  ...NESTED_CASES,
+  { problem: "Exact Cover", capture: EXACT_COVER_RECURSIVE_NESTED_FRAMES },
+]) {
+  test(`Nested Set: ${problem}'s names (${capture.payload.sets.length} sets) clear every other name, every dot and every other outline`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await openNested(page, problem, capture);
+    const { names, dots, outlines } = await nestedGeometry(page);
+    const meet = (a, b) =>
+      a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    for (const [i, name] of names.entries()) {
+      for (const other of names.slice(i + 1)) {
+        expect(meet(name.box, other.box), `${name.id} and ${other.id}`).toBe(false);
+      }
+      for (const dot of dots) {
+        const dx = Math.max(name.box.left - dot.centre.x, 0, dot.centre.x - name.box.right);
+        const dy = Math.max(name.box.top - dot.centre.y, 0, dot.centre.y - name.box.bottom);
+        expect(Math.hypot(dx, dy), `${name.id} and dot ${dot.id}`).toBeGreaterThan(dot.r);
+      }
+      for (const outline of outlines) {
+        if (outline.id === name.id) continue;
+        const crossing = outline.points.some(
+          (p) =>
+            p.x > name.box.left &&
+            p.x < name.box.right &&
+            p.y > name.box.top &&
+            p.y < name.box.bottom,
+        );
+        expect(crossing, `${outline.id}'s outline under ${name.id}`).toBe(false);
+      }
+    }
+  });
+}
+
+test("Nested Set: before Run the regions are plain, and step 1 keeps every dot and name in place", async ({
+  page,
+}) => {
+  const capture = SET_COVER_NESTED_FRAMES;
+  await openNested(page, "Set Cover", capture);
+  const root = nestedRoot(page);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(root.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(root.locator("[data-hits]")).toHaveCount(0);
+  await expect(root.locator("[data-badge]")).toHaveCount(0);
+  await expect(page.locator(CAPTION)).toHaveCount(0);
+  await expect(legendBody(page)).not.toContainText("×N");
+  const before = await nodeCentres(page, `${NESTED}-nestedset`);
+  await runToFrame(page, capture, 0);
+  await expectNestedStates(page, capture, 0);
+  expect(await nodeCentres(page, `${NESTED}-nestedset`)).toEqual(before);
+});
+
+test("Nested Set: the steps walk the brute force's tries, the ×2 hits and the confirmed answer", async ({
+  page,
+}) => {
+  const capture = SET_COVER_NESTED_FRAMES;
+  await openNested(page, "Set Cover", capture);
+  // Frame 5 tries {S1,S2}: 2 is in both, and 5 is in neither.
+  await runToFrame(page, capture, 4);
+  await expectNestedStates(page, capture, 4);
+  await expect(nestedNode(page, "e:2")).toHaveAttribute("data-hits", "2");
+  await expect(nestedNode(page, "e:2").locator('[data-badge="hits"]')).toHaveText("×2");
+  await expect(nestedNode(page, "e:2")).toHaveAttribute("aria-label", /hit by 2 picked sets/);
+  await expect(nestedNode(page, "e:1").locator("[data-badge]")).toHaveCount(0);
+  await expect(legendBody(page)).toContainText("×N (hit by N picked sets)");
+  // The region's own outline says the set's state too.
+  await expect(nestedRegion(page, "S1")).toHaveAttribute("data-state", "ElementHighlight");
+  for (let index = 5; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+    await expectNestedStates(page, capture, index);
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+  await expect(nestedNode(page, "S1")).toHaveAttribute("data-state", "Solution");
+  await expect(nestedNode(page, "S4")).toHaveAttribute("data-state", "Solution");
+  await expect(nestedNode(page, "S2")).toHaveAttribute("data-state", "Background");
+});
+
+test("Nested Set: Exact Cover's kept sets are Committed and dashed, the ones that would double up Blocked", async ({
+  page,
+}) => {
+  const capture = EXACT_COVER_RECURSIVE_NESTED_FRAMES;
+  await openNested(page, "Exact Cover", capture);
+  await runToFrame(page, capture, 1);
+  await expectNestedStates(page, capture, 1);
+  await expect(nestedNode(page, "S1")).toHaveAttribute("data-state", "Committed");
+  await expect(nestedNode(page, "S4")).toHaveAttribute("data-state", "Blocked");
+  const dash = (id) =>
+    nestedRegion(page, id).locator("[data-region-edge]").getAttribute("stroke-dasharray");
+  expect(await dash("S1")).toBeTruthy();
+  expect(await dash("S4")).toBeTruthy();
+  expect(await dash("S1")).not.toBe(await dash("S4"));
+  const legend = legendBody(page);
+  await expect(legend).toContainText("Blocked (can't be picked)");
+  await expect(legend).toContainText("Committed (kept so far)");
+  for (let index = 2; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expectNestedStates(page, capture, index);
+  }
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Nested Set: Hitting Set picks elements and hits sets, and a greedy cover over K ends on no with nothing green", async ({
+  page,
+}) => {
+  const hitting = HITTING_SET_NESTED_FRAMES;
+  await openNested(page, "Exact Hitting Set", hitting);
+  await runToFrame(page, hitting, hitting.frames.length - 1);
+  await expectNestedStates(page, hitting, hitting.frames.length - 1);
+  const picked = Object.entries(hitting.frames.at(-1).nodes).find(
+    ([id, entry]) => id.startsWith("e:") && entry.state === "Solution",
+  );
+  expect(picked).toBeTruthy();
+  await expect(nestedNode(page, "S2")).toHaveAttribute("aria-label", /hit by 1 picked element/);
+
+  const over = SET_COVER_GREEDY_OVER_NESTED_FRAMES;
+  await openNested(page, "Set Cover", over);
+  await runToFrame(page, over, 2);
+  await expect(nestedNode(page, "S4")).toHaveAttribute("data-state", "Rejected");
+  await page.locator("#workbench-steps-next").click();
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(nestedRoot(page).locator('[data-state="Solution"]')).toHaveCount(0);
+  await expect(nestedRoot(page).locator('[data-state="Committed"]')).toHaveCount(0);
+});
+
+const FALLBACKS = [
+  { problem: "Set Cover", capture: SET_COVER_MANY_SETS_NESTED_FRAMES, why: /more than 8 sets/ },
+  {
+    problem: "Set Cover",
+    capture: SET_COVER_MANY_ELEMENTS_NESTED_FRAMES,
+    why: /more than 12 elements/,
+  },
+  {
+    problem: "Exact Cover",
+    capture: EXACT_COVER_DEEP_NESTED_FRAMES,
+    why: /an element sits in more than 4 overlapping sets/,
+  },
+  {
+    problem: "Exact Cover",
+    capture: EXACT_COVER_CROWDED_NESTED_FRAMES,
+    why: /S\d's region would run into \d/,
+  },
+  {
+    problem: "Exact Cover",
+    capture: EXACT_COVER_NO_ROOM_NESTED_FRAMES,
+    why: /no room for S\d's label/,
+  },
+];
+
+for (const { problem, capture, why } of FALLBACKS) {
+  test(`Nested Set: the set list is drawn when ${why.source.replace(/\\[a-z]|[\\^$]/g, "#")}, saying why`, async ({
+    page,
+  }) => {
+    await openNested(page, problem, capture);
+    const root = nestedRoot(page);
+    await expect(root).toHaveAttribute("data-layout", "list");
+    await expect(root).toHaveAttribute("data-fallback", why);
+    await expect(root.locator("[data-fallback-reason]")).toHaveText(/^REGIONS DON'T FIT: /);
+    await expect(root.locator("[data-region-id]")).toHaveCount(0);
+    const { payload } = capture;
+    // U first, every element once; then a row per set with a chip per member.
+    await expect(root.locator('[data-row="U"]')).toHaveCount(1);
+    await expect(
+      root.locator('[data-layer="chips"] [data-node-id]:not([data-in-set])'),
+    ).toHaveCount(payload.elements.length);
+    await expect(root.locator("[data-row]:not([data-row='U'])")).toHaveCount(payload.sets.length);
+    for (const set of payload.sets) {
+      await expect(root.locator(`[data-in-set="${set.label}"]`)).toHaveCount(set.members.length);
+    }
+    // Each chip carries its element's state at a step.
+    await runToFrame(page, capture, 0);
+    await expectNestedStates(page, capture, 0);
+    expect(await drawnCollisions(page, `${NESTED}-svg`)).toEqual([]);
+  });
+}
+
+test("Nested Set: the Layout switch forces the set list, and Regions (auto) brings the regions back", async ({
+  page,
+}) => {
+  await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
+  const root = nestedRoot(page);
+  await expect(page.locator(`${NESTED}-layout-auto`)).toHaveAttribute("aria-pressed", "true");
+  await page.locator(`${NESTED}-layout-list`).click();
+  await expect(page.locator(`${NESTED}-layout-list`)).toHaveAttribute("aria-pressed", "true");
+  await expect(root).toHaveAttribute("data-layout", "list");
+  await expect(root.locator("[data-fallback-reason]")).toHaveText("SET LIST CHOSEN BY HAND");
+  await expect(root.locator('[data-row="S1"]')).toHaveAttribute("aria-label", /^Set S1 \{1,2,3\}/);
+  // The choice holds while stepping.
+  await runToFrame(page, SET_COVER_NESTED_FRAMES, 4);
+  await expect(root).toHaveAttribute("data-layout", "list");
+  await expectNestedStates(page, SET_COVER_NESTED_FRAMES, 4);
+  await expect(root.locator('[data-node-id="e:2"] [data-badge="hits"]').first()).toHaveText("×2");
+  await page.locator(`${NESTED}-layout-auto`).click();
+  await expect(root).toHaveAttribute("data-layout", "regions");
+  await expect(root.locator("[data-fallback-reason]")).toHaveCount(0);
+});
+
+test("Nested Set: hovering a dot traces it and its sets, a set its region and elements, and the rest fade by color", async ({
+  page,
+}) => {
+  await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
+  // 4 is in S2, S3 and S4.
+  await nestedNode(page, "e:4").hover();
+  for (const id of ["e:4", "S2", "S3", "S4"]) {
+    await expect(nestedNode(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(nestedRegion(page, "S3")).toHaveAttribute("data-traced", "trace");
+  await expect(nestedNode(page, "S1")).toHaveAttribute("data-traced", "faint");
+  await expect(nestedRegion(page, "S1")).toHaveAttribute("data-traced", "faint");
+  await expect(nestedNode(page, "e:1")).toHaveAttribute("data-traced", "faint");
+  const faded = await nestedNode(page, "e:1").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+    dash: el.querySelector("[data-body]").getAttribute("stroke-dasharray"),
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  expect(faded.dash).toBeTruthy();
+  // Keyboard: focusing a set's name traces its elements; Enter pins it.
+  await page.mouse.move(0, 0);
+  await nestedNode(page, "S1").focus();
+  for (const id of ["e:1", "e:2", "e:3"]) {
+    await expect(nestedNode(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(nestedNode(page, "e:5")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(nestedNode(page, "S1")).toHaveAttribute("aria-pressed", "true");
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Nested Set: at ${width} px in the ${scheme} theme the regions and the set list fit with nothing to scroll`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openNested(page, "Set Cover", SET_COVER_NESTED_FRAMES);
+      if (width < 1200) await page.locator("#workbench-panel-close").click();
+      const svg = `${NESTED}-svg`;
+      await expect(page.locator(svg)).toBeVisible();
+      await expectFits(page, svg);
+      await expect(page.locator(`${NESTED}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The heading follows the theme: no dark-on-dark, no light-on-white.
+      const ink = await page
+        .locator(`${NESTED}-nestedset [data-layer="heads"] text`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+      // The set list is laid out at its box's width, so its chips wrap instead of shrinking.
+      await page.locator(`${NESTED}-layout-list`).click();
+      await expect(nestedRoot(page)).toHaveAttribute("data-layout", "list");
+      await expectFits(page, svg);
+      const smallest = await page.locator(svg).evaluate((el) => {
+        const scale = el.getBoundingClientRect().width / el.viewBox.baseVal.width;
+        return Math.min(
+          ...[...el.querySelectorAll("[data-node-id] text")].map(
+            (text) => Number(text.getAttribute("font-size")) * scale,
+          ),
+        );
+      });
+      expect(smallest).toBeGreaterThanOrEqual(width < 700 ? 9 : 11);
+      expect(await drawnCollisions(page, svg)).toEqual([]);
+    });
+  }
+}

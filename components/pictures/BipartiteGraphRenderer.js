@@ -20,6 +20,10 @@
 //
 // #250: the reader can drag a node up or down its own column (never across: the elements stay
 // on one side and the sets on the other) and bend any edge (diagramEdits.js).
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are marked: an element
+// (or a factor graph's variable) and a set (or clause) get a ring outside their body, and an
+// edge (a factor graph's literal) a band under its line.
 
 import Box from "@mui/material/Box";
 import { Fragment, useMemo, useState } from "react";
@@ -34,6 +38,7 @@ import {
   offsetAlongNormal,
   useDiagramEdits,
 } from "./diagramEdits";
+import { GadgetCircle, GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import {
   Badge,
   edgeLook,
@@ -66,6 +71,8 @@ function plural(count, word) {
  * @param {Object} props.payload The Bipartite Graph payload.
  * @param {Object} props.frame The frame to draw.
  * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
 export default function BipartiteGraphRenderer({
   idPrefix,
@@ -73,7 +80,10 @@ export default function BipartiteGraphRenderer({
   payload,
   frame,
   layoutKey = null,
+  highlightIds,
+  gadgetColors,
 }) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const layout = useMemo(() => layoutBipartite(payload), [payload]);
   const neighbours = useMemo(() => {
     const map = new Map([...layout.positions.keys()].map((id) => [id, new Set()]));
@@ -219,6 +229,12 @@ export default function BipartiteGraphRenderer({
             const negated = edge.positive === false;
             return (
               <Fragment key={edge.id}>
+                <GadgetUnderlay
+                  id={edge.id}
+                  color={gadgetOf(edge.id)}
+                  d={edge.path}
+                  width={look.width}
+                />
                 <path
                   data-edge-id={edge.id}
                   data-state={state}
@@ -303,6 +319,27 @@ export default function BipartiteGraphRenderer({
                     stroke={line}
                     strokeWidth={strokeWidth}
                     strokeDasharray={dash}
+                  />
+                )}
+                {pill ? (
+                  <GadgetRect
+                    id={element.id}
+                    color={gadgetOf(element.id)}
+                    x={element.x - element.half}
+                    y={element.y - ELEMENT_RADIUS}
+                    width={2 * element.half}
+                    height={2 * ELEMENT_RADIUS}
+                    rx={ELEMENT_RADIUS}
+                    gap={5}
+                  />
+                ) : (
+                  <GadgetCircle
+                    id={element.id}
+                    color={gadgetOf(element.id)}
+                    cx={element.x}
+                    cy={element.y}
+                    r={ELEMENT_RADIUS}
+                    gap={5}
                   />
                 )}
                 <text
@@ -393,6 +430,16 @@ export default function BipartiteGraphRenderer({
                   stroke={line}
                   strokeWidth={isTraced ? 3 : look.strokeWidth}
                   strokeDasharray={isTraced ? undefined : look.dash}
+                />
+                <GadgetRect
+                  id={set.id}
+                  color={gadgetOf(set.id)}
+                  x={set.x}
+                  y={top}
+                  width={set.width}
+                  height={2 * set.half}
+                  rx={8}
+                  gap={5}
                 />
                 <text
                   x={set.labelX}

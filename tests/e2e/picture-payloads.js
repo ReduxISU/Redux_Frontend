@@ -9,7 +9,9 @@
 // (#202) follow at the end, each with its instance and solver. The Packing pictures (#207) and
 // the Search Tree pictures (#217) come last, captured the same way on 2026-10-16 (Subset Sum's
 // FastApproximation, and the TSP and 3SAT trees, again after Redux #897-#900). The Board pictures
-// (#208) follow them, captured the same way on 2026-10-16.
+// (#208) and the Geometry pictures (#212) follow them, captured the same way on 2026-10-16, and the
+// Tripartite Matching pictures (#213) last, on 2026-10-17. The Schedule pictures (#211) are in
+// tests/e2e/schedule-payloads.js.
 
 /** format=frames for DFATableVisualization: picture type Table (has a renderer). */
 export const DFA_TABLE_FRAMES = {
@@ -651,7 +653,7 @@ export const DFA_AUTOMATON_LIST = [
 // #201: Graph pictures, one small instance per shape, captured the same way on 2026-10-14
 // (POST /ProblemProvider/visualize?visualization=<name>&format=frames&solver=<name>).
 
-/** format=frames, Clique, instance (({1,2,3,4},{{1,2},{1,3},{2,3},{3,4}}),3), CarraghanPardalos (branch and bound): subset shape; Committed nodes and edges, then the confirmed answer. */
+/** format=frames, Clique, instance (({1,2,3,4},{{1,2},{1,3},{2,3},{3,4}}),3), CarraghanPardalos (branch and bound): subset shape; Committed nodes and edges, then the confirmed answer (recaptured after Redux #889: "1 vertex", "No vertex"). */
 export const CLIQUE_GRAPH_FRAMES = {
   type: "Graph",
   payload: {
@@ -714,6 +716,7 @@ export const CLIQUE_GRAPH_FRAMES = {
       },
       edges: {},
       phantoms: [],
+      step: 0,
     },
     {
       event: "Accept",
@@ -726,10 +729,11 @@ export const CLIQUE_GRAPH_FRAMES = {
       },
       edges: {},
       phantoms: [],
+      step: 1,
     },
     {
       event: "Accept",
-      caption: "Add 2 to the clique. 1 vertices are joined to every member so far.",
+      caption: "Add 2 to the clique. 1 vertex is joined to every member so far.",
       focus: ["2"],
       nodes: {
         1: {
@@ -745,10 +749,11 @@ export const CLIQUE_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 2,
     },
     {
       event: "Accept",
-      caption: "Add 3 to the clique. 0 vertices are joined to every member so far.",
+      caption: "Add 3 to the clique. No vertex is joined to every member so far.",
       focus: ["3"],
       nodes: {
         1: {
@@ -773,6 +778,7 @@ export const CLIQUE_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 3,
     },
     {
       event: "Done",
@@ -801,6 +807,7 @@ export const CLIQUE_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 4,
       ok: true,
     },
   ],
@@ -1324,7 +1331,7 @@ export const MAX_CUT_GRAPH_FRAMES = {
   ],
 };
 
-/** format=frames, Clique Cover, instance (({1,2,3,4},{{1,2},{3,4}}),2), CliqueCoverBruteForce: groups shape; missing edges inside a group as Rejected phantoms. */
+/** format=frames, Clique Cover, instance (({1,2,3,4},{{1,2},{3,4}}),2), CliqueCoverBruteForce: groups shape; missing edges inside a group as Rejected phantoms, and a try that leaves node 1 in no clique with node 1 Rejected (recaptured after Redux #890). */
 export const CLIQUE_COVER_GRAPH_FRAMES = {
   type: "Graph",
   payload: {
@@ -1408,6 +1415,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
           state: "Rejected",
         },
       ],
+      step: 0,
       groups: {
         1: 0,
         2: 0,
@@ -1444,6 +1452,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
           state: "Rejected",
         },
       ],
+      step: 1,
       groups: {
         1: 1,
         2: 0,
@@ -1453,13 +1462,10 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
     },
     {
       event: "Reject",
-      caption: "Try {2,3,4},{}: 2 and 3 are in one group but aren't joined.",
-      focus: ["2", "3"],
+      caption: "Try {2,3,4},{}: node 1 is in no clique.",
+      focus: ["1"],
       nodes: {
-        2: {
-          state: "Rejected",
-        },
-        3: {
+        1: {
           state: "Rejected",
         },
       },
@@ -1480,6 +1486,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
           state: "Rejected",
         },
       ],
+      step: 2,
       groups: {
         2: 0,
         3: 0,
@@ -1515,6 +1522,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
           state: "Rejected",
         },
       ],
+      step: 3,
       groups: {
         1: 0,
         2: 1,
@@ -1536,6 +1544,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 4,
       groups: {
         1: 1,
         2: 1,
@@ -1557,6 +1566,7 @@ export const CLIQUE_COVER_GRAPH_FRAMES = {
         },
       },
       phantoms: [],
+      step: 5,
       ok: true,
       groups: {
         1: 1,
@@ -5973,7 +5983,7 @@ export const SSSP_UNREACHABLE_LAYERED_FRAMES = {
   ],
 };
 
-/** format=frames, Single Pair Shortest Path, the problem default ({1,2,3,4,5},{((1,2),4),((1,3),2),((2,3),1),((3,5),7),((2,4),3),((4,5),9)},1,5), SPSPSolver: source and target tags, weights, only the path 1, 3, 5 as the answer. */
+/** format=frames, Single Pair Shortest Path, the problem default ({1,2,3,4,5},{((1,2),4),((1,3),2),((2,3),1),((3,5),7),((2,4),3),((4,5),9)},1,5), SPSPSolver: source and target tags, weights, only the path 1, 3, 5 as the answer; when 5 is settled only the path so far is Solution and the rest of the tree Committed (recaptured after Redux #892). */
 export const SPSP_LAYERED_FRAMES = {
   type: "LayeredGraph",
   payload: {
@@ -6074,6 +6084,7 @@ export const SPSP_LAYERED_FRAMES = {
         },
       },
       edges: {},
+      step: 0,
       dist: {
         1: 0,
         2: null,
@@ -6106,6 +6117,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "ElementHighlight",
         },
       },
+      step: 1,
       dist: {
         1: 0,
         2: 4,
@@ -6147,6 +6159,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "ElementHighlight",
         },
       },
+      step: 2,
       dist: {
         1: 0,
         2: 4,
@@ -6195,6 +6208,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "Covered",
         },
       },
+      step: 3,
       dist: {
         1: 0,
         2: 4,
@@ -6247,6 +6261,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "ElementHighlight",
         },
       },
+      step: 4,
       dist: {
         1: 0,
         2: 4,
@@ -6270,13 +6285,13 @@ export const SPSP_LAYERED_FRAMES = {
           state: "Solution",
         },
         2: {
-          state: "Solution",
+          state: "Committed",
         },
         3: {
           state: "Solution",
         },
         4: {
-          state: "Solution",
+          state: "Committed",
         },
         5: {
           state: "ElementHighlight",
@@ -6284,18 +6299,19 @@ export const SPSP_LAYERED_FRAMES = {
       },
       edges: {
         "1>2": {
-          state: "Solution",
+          state: "Committed",
         },
         "1>3": {
           state: "Solution",
         },
         "2>4": {
-          state: "Solution",
+          state: "Committed",
         },
         "3>5": {
           state: "Solution",
         },
       },
+      step: 5,
       dist: {
         1: 0,
         2: 4,
@@ -6339,6 +6355,7 @@ export const SPSP_LAYERED_FRAMES = {
           state: "Solution",
         },
       },
+      step: 6,
       dist: {
         1: 0,
         2: 4,
@@ -18586,7 +18603,7 @@ export const DM3_SEARCH_TREE_FRAMES = {
     {
       event: "Accept",
       caption:
-        "Frank has one triple left that use no element twice. Choose T4 (Sally, Madison, Frank).",
+        "Frank has one triple left that uses no element twice. Choose T4 (Sally, Madison, Frank).",
       focus: ["n1"],
       nodes: [
         { id: "n0", parent: null, label: "start", kind: "explored", state: "Covered" },
@@ -18619,7 +18636,7 @@ export const DM3_SEARCH_TREE_FRAMES = {
     {
       event: "Accept",
       caption:
-        "Paul has one triple left that use no element twice. Choose T2 (Paul, Austin, Jake).",
+        "Paul has one triple left that uses no element twice. Choose T2 (Paul, Austin, Jake).",
       focus: ["n3"],
       nodes: [
         { id: "n0", parent: null, label: "start", kind: "explored", state: "Covered" },
@@ -18669,7 +18686,7 @@ export const DM3_SEARCH_TREE_FRAMES = {
     },
     {
       event: "Accept",
-      caption: "Dave has one triple left that use no element twice. Choose T6 (Dave, Bob, Chloe).",
+      caption: "Dave has one triple left that uses no element twice. Choose T6 (Dave, Bob, Chloe).",
       focus: ["n5"],
       nodes: [
         { id: "n0", parent: null, label: "start", kind: "explored", state: "Solution" },
@@ -21166,7 +21183,7 @@ export const SUDOKU_BOARD_FRAMES = {
     {
       event: "Done",
       caption:
-        "Every square is filled and no row, column or box repeats a digit. Solved after 429 tries. (396 not shown)",
+        "Every square is filled and no row, column or box repeats a digit. Solved after 429 tries (396 not shown).",
       focus: [],
       values: {
         r0c0: "6",
@@ -26029,6 +26046,7050 @@ export const N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES = {
       links: [],
       step: 9,
       ok: true,
+    },
+  ],
+};
+
+/** format=frames, Convex Hull, the problem default (ten points in the unit square), ConvexHullSolver: the points sorted and split, the smallest pieces' hulls, each merge's left and right hulls and the chain it walks (with the points it pops), and the answer's corners numbered in order, the rest Covered. */
+export const CONVEX_HULL_GEOMETRY_FRAMES = {
+  type: "Geometry",
+  payload: {
+    kind: "geometry",
+    points: [
+      {
+        id: "P1",
+        x: -0.49429993857731547,
+        y: -0.14539088193288174,
+      },
+      {
+        id: "P2",
+        x: 0.7674622377407927,
+        y: -0.21537444528240846,
+      },
+      {
+        id: "P3",
+        x: -0.9308276577586132,
+        y: -0.1423800479224624,
+      },
+      {
+        id: "P4",
+        x: -0.6984449872706371,
+        y: 0.3857380723376367,
+      },
+      {
+        id: "P5",
+        x: -0.27394905790800017,
+        y: -0.7488048223660126,
+      },
+      {
+        id: "P6",
+        x: 0.6681904385614421,
+        y: -0.11341930745315643,
+      },
+      {
+        id: "P7",
+        x: 0.6077591838324792,
+        y: 0.5288040272918157,
+      },
+      {
+        id: "P8",
+        x: 0.32371432910023556,
+        y: 0.12231914413229394,
+      },
+      {
+        id: "P9",
+        x: -0.32705115386597394,
+        y: 0.6744065707101621,
+      },
+      {
+        id: "P10",
+        x: 0.2723211656942368,
+        y: -0.8053758131859647,
+      },
+    ],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption:
+        "Sort the 10 points by x, then y: P3, P4, P1, P9, P5, P10, P8, P7, P6 and P2. Then split the list in half, again and again, until each piece has at most 3 points.",
+      focus: [],
+      pieces: [],
+      chain: [],
+      hull: [],
+      points: {},
+      step: 0,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P3 and P4. Its hull is the segment between them.",
+      focus: ["P3", "P4"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 1,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P1, P9 and P5. Its hull is the triangle they make.",
+      focus: ["P1", "P5", "P9"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P9: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 2,
+    },
+    {
+      event: "Try",
+      caption:
+        "Merge the left hull (P3 and P4) with the right hull (P1, P5 and P9). Walk their 5 corners left to right for the bottom edge, then back for the top edge, keeping only left turns.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 3,
+    },
+    {
+      event: "Try",
+      caption: "Add P3 to the bottom edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 4,
+    },
+    {
+      event: "Try",
+      caption: "Add P4 to the bottom edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 5,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P4 (from P3 to P1) is clockwise, so pop P4 from the bottom edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Rejected",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 6,
+    },
+    {
+      event: "Try",
+      caption: "Add P1 to the bottom edge.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 7,
+    },
+    {
+      event: "Try",
+      caption: "Add P9 to the bottom edge.",
+      focus: ["P9"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P1", "P9"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 8,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P9 (from P1 to P5) is clockwise, so pop P9 from the bottom edge.",
+      focus: ["P9"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Rejected",
+        },
+      },
+      step: 9,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P1 (from P3 to P5) is clockwise, so pop P1 from the bottom edge.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 10,
+    },
+    {
+      event: "Try",
+      caption: "Add P5 to the bottom edge.",
+      focus: ["P5"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 11,
+    },
+    {
+      event: "Try",
+      caption: "Add P9 to the top edge.",
+      focus: ["P9"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P9"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 12,
+    },
+    {
+      event: "Try",
+      caption: "Add P1 to the top edge.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P9", "P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 13,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P1 (from P9 to P4) is clockwise, so pop P1 from the top edge.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P9"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 14,
+    },
+    {
+      event: "Try",
+      caption: "Add P4 to the top edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P9", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 15,
+    },
+    {
+      event: "Try",
+      caption: "Back at P3: the top edge closes the hull.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P3", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P1", "P5", "P9"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P9", "P4", "P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 16,
+    },
+    {
+      event: "Try",
+      caption:
+        "The merged hull is P3, P5, P9 and P4. P1 is now inside it (or on an edge), so it is dropped.",
+      focus: ["P3", "P5", "P9", "P4"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P9: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 17,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P10 and P8. Its hull is the segment between them.",
+      focus: ["P10", "P8"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 18,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P7, P6 and P2. Its hull is the triangle they make.",
+      focus: ["P7", "P6", "P2"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "piece",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 19,
+    },
+    {
+      event: "Try",
+      caption:
+        "Merge the left hull (P10 and P8) with the right hull (P7, P6 and P2). Walk their 5 corners left to right for the bottom edge, then back for the top edge, keeping only left turns.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 20,
+    },
+    {
+      event: "Try",
+      caption: "Add P10 to the bottom edge.",
+      focus: ["P10"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 21,
+    },
+    {
+      event: "Try",
+      caption: "Add P8 to the bottom edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 22,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P8 (from P10 to P7) is clockwise, so pop P8 from the bottom edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Rejected",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 23,
+    },
+    {
+      event: "Try",
+      caption: "Add P7 to the bottom edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10", "P7"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 24,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P7 (from P10 to P6) is clockwise, so pop P7 from the bottom edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Rejected",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 25,
+    },
+    {
+      event: "Try",
+      caption: "Add P6 to the bottom edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10", "P6"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 26,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P6 (from P10 to P2) is clockwise, so pop P6 from the bottom edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 27,
+    },
+    {
+      event: "Try",
+      caption: "Add P2 to the bottom edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 28,
+    },
+    {
+      event: "Try",
+      caption: "Add P6 to the top edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10", "P2", "P6"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 29,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P6 (from P2 to P7) is clockwise, so pop P6 from the top edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 30,
+    },
+    {
+      event: "Try",
+      caption: "Add P7 to the top edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10", "P2", "P7"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 31,
+    },
+    {
+      event: "Try",
+      caption: "Add P8 to the top edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10", "P2", "P7", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 32,
+    },
+    {
+      event: "Try",
+      caption: "Back at P10: the top edge closes the hull.",
+      focus: ["P10"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P8"],
+          role: "left",
+        },
+        {
+          points: ["P7", "P6", "P2"],
+          role: "right",
+        },
+      ],
+      chain: ["P10", "P2", "P7", "P8", "P10"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 33,
+    },
+    {
+      event: "Try",
+      caption:
+        "The merged hull is P10, P2, P7 and P8. P6 is now inside it (or on an edge), so it is dropped.",
+      focus: ["P10", "P2", "P7", "P8"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "piece",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 34,
+    },
+    {
+      event: "Try",
+      caption:
+        "Merge the left hull (P3, P5, P9 and P4) with the right hull (P10, P2, P7 and P8). Walk their 8 corners left to right for the bottom edge, then back for the top edge, keeping only left turns.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 35,
+    },
+    {
+      event: "Try",
+      caption: "Add P3 to the bottom edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 36,
+    },
+    {
+      event: "Try",
+      caption: "Add P4 to the bottom edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 37,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P4 (from P3 to P9) is clockwise, so pop P4 from the bottom edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Rejected",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 38,
+    },
+    {
+      event: "Try",
+      caption: "Add P9 to the bottom edge.",
+      focus: ["P9"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P9"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 39,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P9 (from P3 to P5) is clockwise, so pop P9 from the bottom edge.",
+      focus: ["P9"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Rejected",
+        },
+      },
+      step: 40,
+    },
+    {
+      event: "Try",
+      caption: "Add P5 to the bottom edge.",
+      focus: ["P5"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 41,
+    },
+    {
+      event: "Try",
+      caption: "Add P10 to the bottom edge.",
+      focus: ["P10"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 42,
+    },
+    {
+      event: "Try",
+      caption: "Add P8 to the bottom edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 43,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P8 (from P10 to P7) is clockwise, so pop P8 from the bottom edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Rejected",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 44,
+    },
+    {
+      event: "Try",
+      caption: "Add P7 to the bottom edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P7"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 45,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P7 (from P10 to P2) is clockwise, so pop P7 from the bottom edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Rejected",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 46,
+    },
+    {
+      event: "Try",
+      caption: "Add P2 to the bottom edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 47,
+    },
+    {
+      event: "Try",
+      caption: "Add P7 to the top edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 48,
+    },
+    {
+      event: "Try",
+      caption: "Add P8 to the top edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 49,
+    },
+    {
+      event: "Try",
+      caption: "Add P10 to the top edge.",
+      focus: ["P10"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7", "P8", "P10"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 50,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P10 (from P8 to P5) is clockwise, so pop P10 from the top edge.",
+      focus: ["P10"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Rejected",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 51,
+    },
+    {
+      event: "Try",
+      caption: "Add P5 to the top edge.",
+      focus: ["P5"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7", "P8", "P5"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 52,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P5 (from P8 to P9) is clockwise, so pop P5 from the top edge.",
+      focus: ["P5"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Rejected",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 53,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P8 (from P7 to P9) is clockwise, so pop P8 from the top edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Rejected",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 54,
+    },
+    {
+      event: "Try",
+      caption: "Add P9 to the top edge.",
+      focus: ["P9"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7", "P9"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 55,
+    },
+    {
+      event: "Try",
+      caption: "Add P4 to the top edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7", "P9", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 56,
+    },
+    {
+      event: "Try",
+      caption: "Back at P3: the top edge closes the hull.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P9", "P4"],
+          role: "left",
+        },
+        {
+          points: ["P10", "P2", "P7", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P3", "P5", "P10", "P2", "P7", "P9", "P4", "P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+        P9: {
+          state: "Committed",
+        },
+      },
+      step: 57,
+    },
+    {
+      event: "Try",
+      caption:
+        "The merged hull is P3, P5, P10, P2, P7, P9 and P4. P8 is now inside it (or on an edge), so it is dropped.",
+      focus: ["P3", "P5", "P10", "P2", "P7", "P9", "P4"],
+      pieces: [
+        {
+          points: ["P3", "P5", "P10", "P2", "P7", "P9", "P4"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "Rejected",
+        },
+        P9: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 58,
+    },
+    {
+      event: "Accept",
+      caption: "The hull is P3, P5, P10, P2, P7, P9 and P4, counterclockwise from P3.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P3", "P5", "P10", "P2", "P7", "P9", "P4"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Rejected",
+        },
+        P10: {
+          state: "Solution",
+        },
+        P2: {
+          state: "Solution",
+        },
+        P3: {
+          state: "Solution",
+        },
+        P4: {
+          state: "Solution",
+        },
+        P5: {
+          state: "Solution",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Solution",
+        },
+        P8: {
+          state: "Rejected",
+        },
+        P9: {
+          state: "Solution",
+        },
+      },
+      step: 59,
+    },
+    {
+      event: "Done",
+      caption:
+        "Done. The hull has 7 corners, listed counterclockwise from P3: P3, P5, P10, P2, P7, P9 and P4. The other 3 points lie inside it or on an edge.",
+      focus: [],
+      pieces: [],
+      chain: [],
+      hull: ["P3", "P5", "P10", "P2", "P7", "P9", "P4"],
+      points: {
+        P1: {
+          state: "Covered",
+        },
+        P10: {
+          state: "Solution",
+        },
+        P2: {
+          state: "Solution",
+        },
+        P3: {
+          state: "Solution",
+        },
+        P4: {
+          state: "Solution",
+        },
+        P5: {
+          state: "Solution",
+        },
+        P6: {
+          state: "Covered",
+        },
+        P7: {
+          state: "Solution",
+        },
+        P8: {
+          state: "Covered",
+        },
+        P9: {
+          state: "Solution",
+        },
+      },
+      step: 60,
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Convex Hull, {(0,0),(4,0),(2,1),(4,3),(0,3)}, ConvexHullSolver: one merge, P3 dropped inside the hull. */
+export const CONVEX_HULL_SMALL_GEOMETRY_FRAMES = {
+  type: "Geometry",
+  payload: {
+    kind: "geometry",
+    points: [
+      {
+        id: "P1",
+        x: 0,
+        y: 0,
+      },
+      {
+        id: "P2",
+        x: 4,
+        y: 0,
+      },
+      {
+        id: "P3",
+        x: 2,
+        y: 1,
+      },
+      {
+        id: "P4",
+        x: 4,
+        y: 3,
+      },
+      {
+        id: "P5",
+        x: 0,
+        y: 3,
+      },
+    ],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption:
+        "Sort the 5 points by x, then y: P1, P5, P3, P2 and P4. Then split the list in half, again and again, until each piece has at most 3 points.",
+      focus: [],
+      pieces: [],
+      chain: [],
+      hull: [],
+      points: {},
+      step: 0,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P1 and P5. Its hull is the segment between them.",
+      focus: ["P1", "P5"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 1,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P3, P2 and P4. Its hull is the triangle they make.",
+      focus: ["P3", "P2", "P4"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "piece",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 2,
+    },
+    {
+      event: "Try",
+      caption:
+        "Merge the left hull (P1 and P5) with the right hull (P3, P2 and P4). Walk their 5 corners left to right for the bottom edge, then back for the top edge, keeping only left turns.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 3,
+    },
+    {
+      event: "Try",
+      caption: "Add P1 to the bottom edge.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 4,
+    },
+    {
+      event: "Try",
+      caption: "Add P5 to the bottom edge.",
+      focus: ["P5"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P5"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 5,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P5 (from P1 to P3) is clockwise, so pop P5 from the bottom edge.",
+      focus: ["P5"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Rejected",
+        },
+      },
+      step: 6,
+    },
+    {
+      event: "Try",
+      caption: "Add P3 to the bottom edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 7,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P3 (from P1 to P2) is clockwise, so pop P3 from the bottom edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Rejected",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 8,
+    },
+    {
+      event: "Try",
+      caption: "Add P2 to the bottom edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 9,
+    },
+    {
+      event: "Try",
+      caption: "Add P4 to the bottom edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 10,
+    },
+    {
+      event: "Try",
+      caption: "Add P2 to the top edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P4", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 11,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P2 (from P4 to P3) is clockwise, so pop P2 from the top edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Rejected",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 12,
+    },
+    {
+      event: "Try",
+      caption: "Add P3 to the top edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P4", "P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 13,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P3 (from P4 to P5) is clockwise, so pop P3 from the top edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Rejected",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 14,
+    },
+    {
+      event: "Try",
+      caption: "Add P5 to the top edge.",
+      focus: ["P5"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P4", "P5"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 15,
+    },
+    {
+      event: "Try",
+      caption: "Back at P1: the top edge closes the hull.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P1", "P5"],
+          role: "left",
+        },
+        {
+          points: ["P3", "P2", "P4"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P4", "P5", "P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+      },
+      step: 16,
+    },
+    {
+      event: "Try",
+      caption:
+        "The merged hull is P1, P2, P4 and P5. P3 is now inside it (or on an edge), so it is dropped.",
+      focus: ["P1", "P2", "P4", "P5"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P4", "P5"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Rejected",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 17,
+    },
+    {
+      event: "Accept",
+      caption: "The hull is P1, P2, P4 and P5, counterclockwise from P1.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P1", "P2", "P4", "P5"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Solution",
+        },
+        P2: {
+          state: "Solution",
+        },
+        P3: {
+          state: "Rejected",
+        },
+        P4: {
+          state: "Solution",
+        },
+        P5: {
+          state: "Solution",
+        },
+      },
+      step: 18,
+    },
+    {
+      event: "Done",
+      caption:
+        "Done. The hull has 4 corners, listed counterclockwise from P1: P1, P2, P4 and P5. The other 1 point lies inside it or on an edge.",
+      focus: [],
+      pieces: [],
+      chain: [],
+      hull: ["P1", "P2", "P4", "P5"],
+      points: {
+        P1: {
+          state: "Solution",
+        },
+        P2: {
+          state: "Solution",
+        },
+        P3: {
+          state: "Covered",
+        },
+        P4: {
+          state: "Solution",
+        },
+        P5: {
+          state: "Solution",
+        },
+      },
+      step: 19,
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Convex Hull, eight points from -1250 to 1800 across, ConvexHullSolver: axes in the hundreds, wider than tall. */
+export const CONVEX_HULL_WIDE_GEOMETRY_FRAMES = {
+  type: "Geometry",
+  payload: {
+    kind: "geometry",
+    points: [
+      {
+        id: "P1",
+        x: -1250,
+        y: 40,
+      },
+      {
+        id: "P2",
+        x: -300,
+        y: -875.5,
+      },
+      {
+        id: "P3",
+        x: 0,
+        y: 0,
+      },
+      {
+        id: "P4",
+        x: 450,
+        y: 1200,
+      },
+      {
+        id: "P5",
+        x: 1800,
+        y: -60,
+      },
+      {
+        id: "P6",
+        x: 925,
+        y: 310,
+      },
+      {
+        id: "P7",
+        x: -640,
+        y: 700,
+      },
+      {
+        id: "P8",
+        x: 1500,
+        y: 980,
+      },
+    ],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption:
+        "Sort the 8 points by x, then y: P1, P7, P2, P3, P4, P6, P8 and P5. Then split the list in half, again and again, until each piece has at most 3 points.",
+      focus: [],
+      pieces: [],
+      chain: [],
+      hull: [],
+      points: {},
+      step: 0,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P1 and P7. Its hull is the segment between them.",
+      focus: ["P1", "P7"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 1,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P2 and P3. Its hull is the segment between them.",
+      focus: ["P2", "P3"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+      },
+      step: 2,
+    },
+    {
+      event: "Try",
+      caption:
+        "Merge the left hull (P1 and P7) with the right hull (P2 and P3). Walk their 4 corners left to right for the bottom edge, then back for the top edge, keeping only left turns.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+      },
+      step: 3,
+    },
+    {
+      event: "Try",
+      caption: "Add P1 to the bottom edge.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: ["P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+      },
+      step: 4,
+    },
+    {
+      event: "Try",
+      caption: "Add P7 to the bottom edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P7"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 5,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P7 (from P1 to P2) is clockwise, so pop P7 from the bottom edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: ["P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Rejected",
+        },
+      },
+      step: 6,
+    },
+    {
+      event: "Try",
+      caption: "Add P2 to the bottom edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+      },
+      step: 7,
+    },
+    {
+      event: "Try",
+      caption: "Add P3 to the bottom edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+      },
+      step: 8,
+    },
+    {
+      event: "Try",
+      caption: "Add P2 to the top edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P3", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+      },
+      step: 9,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P2 (from P3 to P7) is clockwise, so pop P2 from the top edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Rejected",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+      },
+      step: 10,
+    },
+    {
+      event: "Try",
+      caption: "Add P7 to the top edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P3", "P7"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 11,
+    },
+    {
+      event: "Try",
+      caption: "Back at P1: the top edge closes the hull.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P1", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P2", "P3"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P3", "P7", "P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+      },
+      step: 12,
+    },
+    {
+      event: "Try",
+      caption: "The merged hull is P1, P2, P3 and P7. Every corner of both hulls stays.",
+      focus: ["P1", "P2", "P3", "P7"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 13,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P4 and P6. Its hull is the segment between them.",
+      focus: ["P4", "P6"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P6: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+      },
+      step: 14,
+    },
+    {
+      event: "Try",
+      caption: "Smallest piece: P8 and P5. Its hull is the segment between them.",
+      focus: ["P8", "P5"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "piece",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 15,
+    },
+    {
+      event: "Try",
+      caption:
+        "Merge the left hull (P4 and P6) with the right hull (P8 and P5). Walk their 4 corners left to right for the bottom edge, then back for the top edge, keeping only left turns.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 16,
+    },
+    {
+      event: "Try",
+      caption: "Add P4 to the bottom edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: ["P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 17,
+    },
+    {
+      event: "Try",
+      caption: "Add P6 to the bottom edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: ["P4", "P6"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 18,
+    },
+    {
+      event: "Try",
+      caption: "Add P8 to the bottom edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: ["P4", "P6", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 19,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P8 (from P6 to P5) is clockwise, so pop P8 from the bottom edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: ["P4", "P6"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Rejected",
+        },
+      },
+      step: 20,
+    },
+    {
+      event: "Try",
+      caption: "Add P5 to the bottom edge.",
+      focus: ["P5"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: ["P4", "P6", "P5"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 21,
+    },
+    {
+      event: "Try",
+      caption: "Add P8 to the top edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: ["P4", "P6", "P5", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 22,
+    },
+    {
+      event: "Try",
+      caption: "Add P6 to the top edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: ["P4", "P6", "P5", "P8", "P6"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 23,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P6 (from P8 to P4) is clockwise, so pop P6 from the top edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: ["P4", "P6", "P5", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 24,
+    },
+    {
+      event: "Try",
+      caption: "Back at P4: the top edge closes the hull.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6"],
+          role: "left",
+        },
+        {
+          points: ["P8", "P5"],
+          role: "right",
+        },
+      ],
+      chain: ["P4", "P6", "P5", "P8", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 25,
+    },
+    {
+      event: "Try",
+      caption: "The merged hull is P4, P6, P5 and P8. Every corner of both hulls stays.",
+      focus: ["P4", "P6", "P5", "P8"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "piece",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P6: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 26,
+    },
+    {
+      event: "Try",
+      caption:
+        "Merge the left hull (P1, P2, P3 and P7) with the right hull (P4, P6, P5 and P8). Walk their 8 corners left to right for the bottom edge, then back for the top edge, keeping only left turns.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 27,
+    },
+    {
+      event: "Try",
+      caption: "Add P1 to the bottom edge.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 28,
+    },
+    {
+      event: "Try",
+      caption: "Add P7 to the bottom edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P7"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 29,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P7 (from P1 to P2) is clockwise, so pop P7 from the bottom edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Rejected",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 30,
+    },
+    {
+      event: "Try",
+      caption: "Add P2 to the bottom edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 31,
+    },
+    {
+      event: "Try",
+      caption: "Add P3 to the bottom edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 32,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P3 (from P2 to P4) is clockwise, so pop P3 from the bottom edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Rejected",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 33,
+    },
+    {
+      event: "Try",
+      caption: "Add P4 to the bottom edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 34,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P4 (from P2 to P6) is clockwise, so pop P4 from the bottom edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Rejected",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 35,
+    },
+    {
+      event: "Try",
+      caption: "Add P6 to the bottom edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P6"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 36,
+    },
+    {
+      event: "Try",
+      caption: "Add P8 to the bottom edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P6", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 37,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P8 (from P6 to P5) is clockwise, so pop P8 from the bottom edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P6"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Rejected",
+        },
+      },
+      step: 38,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P6 (from P2 to P5) is clockwise, so pop P6 from the bottom edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 39,
+    },
+    {
+      event: "Try",
+      caption: "Add P5 to the bottom edge.",
+      focus: ["P5"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 40,
+    },
+    {
+      event: "Try",
+      caption: "Add P8 to the top edge.",
+      focus: ["P8"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 41,
+    },
+    {
+      event: "Try",
+      caption: "Add P6 to the top edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8", "P6"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "ElementHighlight",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 42,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P6 (from P8 to P4) is clockwise, so pop P6 from the top edge.",
+      focus: ["P6"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 43,
+    },
+    {
+      event: "Try",
+      caption: "Add P4 to the top edge.",
+      focus: ["P4"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 44,
+    },
+    {
+      event: "Try",
+      caption: "Add P3 to the top edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8", "P4", "P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "ElementHighlight",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 45,
+    },
+    {
+      event: "Try",
+      caption: "Add P2 to the top edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8", "P4", "P3", "P2"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 46,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P2 (from P3 to P7) is clockwise, so pop P2 from the top edge.",
+      focus: ["P2"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8", "P4", "P3"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Rejected",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 47,
+    },
+    {
+      event: "Reject",
+      caption: "The turn at P3 (from P4 to P7) is clockwise, so pop P3 from the top edge.",
+      focus: ["P3"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8", "P4"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Rejected",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 48,
+    },
+    {
+      event: "Try",
+      caption: "Add P7 to the top edge.",
+      focus: ["P7"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8", "P4", "P7"],
+      hull: [],
+      points: {
+        P1: {
+          state: "Committed",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 49,
+    },
+    {
+      event: "Try",
+      caption: "Back at P1: the top edge closes the hull.",
+      focus: ["P1"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P3", "P7"],
+          role: "left",
+        },
+        {
+          points: ["P4", "P6", "P5", "P8"],
+          role: "right",
+        },
+      ],
+      chain: ["P1", "P2", "P5", "P8", "P4", "P7", "P1"],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "Committed",
+        },
+        P3: {
+          state: "Committed",
+        },
+        P4: {
+          state: "Committed",
+        },
+        P5: {
+          state: "Committed",
+        },
+        P6: {
+          state: "Committed",
+        },
+        P7: {
+          state: "Committed",
+        },
+        P8: {
+          state: "Committed",
+        },
+      },
+      step: 50,
+    },
+    {
+      event: "Try",
+      caption:
+        "The merged hull is P1, P2, P5, P8, P4 and P7. P3 and P6 are now inside it (or on an edge), so they are dropped.",
+      focus: ["P1", "P2", "P5", "P8", "P4", "P7"],
+      pieces: [
+        {
+          points: ["P1", "P2", "P5", "P8", "P4", "P7"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "ElementHighlight",
+        },
+        P2: {
+          state: "ElementHighlight",
+        },
+        P3: {
+          state: "Rejected",
+        },
+        P4: {
+          state: "ElementHighlight",
+        },
+        P5: {
+          state: "ElementHighlight",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "ElementHighlight",
+        },
+        P8: {
+          state: "ElementHighlight",
+        },
+      },
+      step: 51,
+    },
+    {
+      event: "Accept",
+      caption: "The hull is P1, P2, P5, P8, P4 and P7, counterclockwise from P1.",
+      focus: [],
+      pieces: [
+        {
+          points: ["P1", "P2", "P5", "P8", "P4", "P7"],
+          role: "piece",
+        },
+      ],
+      chain: [],
+      hull: [],
+      points: {
+        P1: {
+          state: "Solution",
+        },
+        P2: {
+          state: "Solution",
+        },
+        P3: {
+          state: "Rejected",
+        },
+        P4: {
+          state: "Solution",
+        },
+        P5: {
+          state: "Solution",
+        },
+        P6: {
+          state: "Rejected",
+        },
+        P7: {
+          state: "Solution",
+        },
+        P8: {
+          state: "Solution",
+        },
+      },
+      step: 52,
+    },
+    {
+      event: "Done",
+      caption:
+        "Done. The hull has 6 corners, listed counterclockwise from P1: P1, P2, P5, P8, P4 and P7. The other 2 points lie inside it or on an edge.",
+      focus: [],
+      pieces: [],
+      chain: [],
+      hull: ["P1", "P2", "P5", "P8", "P4", "P7"],
+      points: {
+        P1: {
+          state: "Solution",
+        },
+        P2: {
+          state: "Solution",
+        },
+        P3: {
+          state: "Covered",
+        },
+        P4: {
+          state: "Solution",
+        },
+        P5: {
+          state: "Solution",
+        },
+        P6: {
+          state: "Covered",
+        },
+        P7: {
+          state: "Solution",
+        },
+        P8: {
+          state: "Solution",
+        },
+      },
+      step: 53,
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, 3-Dimensional Matching, the problem default (three names in each of X, Y and Z, six triples), ThreeDimensionalMatchingBruteForce: every three triples it tries, names used twice Rejected with a ×2 or ×3 badge and the triples sharing a name Blocked, until T2, T4 and T6 match every name once. */
+export const DM3_TRIPARTITE_FRAMES = {
+  type: "TripartiteMatching",
+  payload: {
+    kind: "tripartite",
+    x: [
+      { id: "x1", name: "Paul" },
+      { id: "x2", name: "Sally" },
+      { id: "x3", name: "Dave" },
+    ],
+    y: [
+      { id: "y1", name: "Madison" },
+      { id: "y2", name: "Austin" },
+      { id: "y3", name: "Bob" },
+    ],
+    z: [
+      { id: "z1", name: "Chloe" },
+      { id: "z2", name: "Frank" },
+      { id: "z3", name: "Jake" },
+    ],
+    triples: [
+      { id: "T1", x: "x1", y: "y1", z: "z1" },
+      { id: "T2", x: "x1", y: "y2", z: "z3" },
+      { id: "T3", x: "x2", y: "y3", z: "z1" },
+      { id: "T4", x: "x2", y: "y1", z: "z2" },
+      { id: "T5", x: "x3", y: "y2", z: "z1" },
+      { id: "T6", x: "x3", y: "y3", z: "z1" },
+    ],
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try T1, T2 and T3: Paul and Chloe are used twice.",
+      focus: ["x1", "z1"],
+      chosen: ["T1", "T2", "T3"],
+      repeats: { x1: 2, z1: 2 },
+      elements: {
+        x1: { state: "Rejected" },
+        x2: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Rejected" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Rejected" },
+        T3: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Blocked" },
+      },
+      step: 0,
+    },
+    {
+      event: "Reject",
+      caption: "Try T1, T2 and T4: Paul and Madison are used twice.",
+      focus: ["x1", "y1"],
+      chosen: ["T1", "T2", "T4"],
+      repeats: { x1: 2, y1: 2 },
+      elements: {
+        x1: { state: "Rejected" },
+        x2: { state: "Covered" },
+        y1: { state: "Rejected" },
+        y2: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Rejected" },
+        T3: { state: "Blocked" },
+        T4: { state: "Rejected" },
+        T5: { state: "Blocked" },
+        T6: { state: "Blocked" },
+      },
+      step: 1,
+    },
+    {
+      event: "Reject",
+      caption: "Try T1, T2 and T5: Paul, Austin and Chloe are used twice.",
+      focus: ["x1", "y2", "z1"],
+      chosen: ["T1", "T2", "T5"],
+      repeats: { x1: 2, y2: 2, z1: 2 },
+      elements: {
+        x1: { state: "Rejected" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Rejected" },
+        z1: { state: "Rejected" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Rejected" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Rejected" },
+        T6: { state: "Blocked" },
+      },
+      step: 2,
+    },
+    {
+      event: "Reject",
+      caption: "Try T1, T2 and T6: Paul and Chloe are used twice.",
+      focus: ["x1", "z1"],
+      chosen: ["T1", "T2", "T6"],
+      repeats: { x1: 2, z1: 2 },
+      elements: {
+        x1: { state: "Rejected" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Rejected" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Rejected" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Rejected" },
+      },
+      step: 3,
+    },
+    {
+      event: "Reject",
+      caption: "Try T1, T3 and T4: Sally, Madison and Chloe are used twice.",
+      focus: ["x2", "y1", "z1"],
+      chosen: ["T1", "T3", "T4"],
+      repeats: { x2: 2, y1: 2, z1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Rejected" },
+        y1: { state: "Rejected" },
+        y3: { state: "Covered" },
+        z1: { state: "Rejected" },
+        z2: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Blocked" },
+        T3: { state: "Rejected" },
+        T4: { state: "Rejected" },
+        T5: { state: "Blocked" },
+        T6: { state: "Blocked" },
+      },
+      step: 4,
+    },
+    {
+      event: "Reject",
+      caption: "Try T1, T3 and T5: Chloe is used 3 times.",
+      focus: ["z1"],
+      chosen: ["T1", "T3", "T5"],
+      repeats: { z1: 3 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Rejected" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Blocked" },
+        T3: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T5: { state: "Rejected" },
+        T6: { state: "Blocked" },
+      },
+      step: 5,
+    },
+    {
+      event: "Reject",
+      caption: "Try T1, T3 and T6: Chloe is used 3 times, and Bob twice.",
+      focus: ["y3", "z1"],
+      chosen: ["T1", "T3", "T6"],
+      repeats: { y3: 2, z1: 3 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y3: { state: "Rejected" },
+        z1: { state: "Rejected" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Blocked" },
+        T3: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Rejected" },
+      },
+      step: 6,
+    },
+    {
+      event: "Reject",
+      caption: "Try T1, T4 and T5: Madison and Chloe are used twice.",
+      focus: ["y1", "z1"],
+      chosen: ["T1", "T4", "T5"],
+      repeats: { y1: 2, z1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Rejected" },
+        y2: { state: "Covered" },
+        z1: { state: "Rejected" },
+        z2: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Blocked" },
+        T3: { state: "Blocked" },
+        T4: { state: "Rejected" },
+        T5: { state: "Rejected" },
+        T6: { state: "Blocked" },
+      },
+      step: 7,
+    },
+    {
+      event: "Reject",
+      caption: "Try T1, T4 and T6: Madison and Chloe are used twice.",
+      focus: ["y1", "z1"],
+      chosen: ["T1", "T4", "T6"],
+      repeats: { y1: 2, z1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Rejected" },
+        y3: { state: "Covered" },
+        z1: { state: "Rejected" },
+        z2: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Blocked" },
+        T3: { state: "Blocked" },
+        T4: { state: "Rejected" },
+        T5: { state: "Blocked" },
+        T6: { state: "Rejected" },
+      },
+      step: 8,
+    },
+    {
+      event: "Reject",
+      caption: "Try T1, T5 and T6: Chloe is used 3 times, and Dave twice.",
+      focus: ["x3", "z1"],
+      chosen: ["T1", "T5", "T6"],
+      repeats: { x3: 2, z1: 3 },
+      elements: {
+        x1: { state: "Covered" },
+        x3: { state: "Rejected" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Rejected" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Blocked" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Rejected" },
+        T6: { state: "Rejected" },
+      },
+      step: 9,
+    },
+    {
+      event: "Reject",
+      caption: "Try T2, T3 and T4: Sally is used twice.",
+      focus: ["x2"],
+      chosen: ["T2", "T3", "T4"],
+      repeats: { x2: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Rejected" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "ElementHighlight" },
+        T3: { state: "Rejected" },
+        T4: { state: "Rejected" },
+        T5: { state: "Blocked" },
+        T6: { state: "Blocked" },
+      },
+      step: 10,
+    },
+    {
+      event: "Reject",
+      caption: "Try T2, T3 and T5: Austin and Chloe are used twice.",
+      focus: ["y2", "z1"],
+      chosen: ["T2", "T3", "T5"],
+      repeats: { y2: 2, z1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y2: { state: "Rejected" },
+        y3: { state: "Covered" },
+        z1: { state: "Rejected" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "Rejected" },
+        T3: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T5: { state: "Rejected" },
+        T6: { state: "Blocked" },
+      },
+      step: 11,
+    },
+    {
+      event: "Reject",
+      caption: "Try T2, T3 and T6: Bob and Chloe are used twice.",
+      focus: ["y3", "z1"],
+      chosen: ["T2", "T3", "T6"],
+      repeats: { y3: 2, z1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Rejected" },
+        z1: { state: "Rejected" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "ElementHighlight" },
+        T3: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Rejected" },
+      },
+      step: 12,
+    },
+    {
+      event: "Reject",
+      caption: "Try T2, T4 and T5: Austin is used twice.",
+      focus: ["y2"],
+      chosen: ["T2", "T4", "T5"],
+      repeats: { y2: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Rejected" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "Rejected" },
+        T3: { state: "Blocked" },
+        T4: { state: "ElementHighlight" },
+        T5: { state: "Rejected" },
+        T6: { state: "Blocked" },
+      },
+      step: 13,
+    },
+    {
+      event: "Accept",
+      caption:
+        "Try T2, T4 and T6: every element of X, Y and Z is used exactly once, so the verifier accepts it.",
+      focus: [],
+      chosen: ["T2", "T4", "T6"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "Solution" },
+        T3: { state: "Blocked" },
+        T4: { state: "Solution" },
+        T5: { state: "Blocked" },
+        T6: { state: "Solution" },
+      },
+      step: 14,
+    },
+    {
+      event: "Done",
+      caption:
+        "T2 (Paul, Austin, Jake), T4 (Sally, Madison, Frank) and T6 (Dave, Bob, Chloe) use every element of X, Y and Z exactly once. Found after 15 tries.",
+      focus: [],
+      chosen: ["T2", "T4", "T6"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "Solution" },
+        T3: { state: "Blocked" },
+        T4: { state: "Solution" },
+        T5: { state: "Blocked" },
+        T6: { state: "Solution" },
+      },
+      step: 15,
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, 3-Dimensional Matching, the problem default, ThreeDimensionalMatchingBacktracking: a triple chosen at a time (Committed once kept), the ones that would use a name twice Rejected, and the confirmed answer. */
+export const DM3_BACKTRACKING_TRIPARTITE_FRAMES = {
+  type: "TripartiteMatching",
+  payload: {
+    kind: "tripartite",
+    x: [
+      { id: "x1", name: "Paul" },
+      { id: "x2", name: "Sally" },
+      { id: "x3", name: "Dave" },
+    ],
+    y: [
+      { id: "y1", name: "Madison" },
+      { id: "y2", name: "Austin" },
+      { id: "y3", name: "Bob" },
+    ],
+    z: [
+      { id: "z1", name: "Chloe" },
+      { id: "z2", name: "Frank" },
+      { id: "z3", name: "Jake" },
+    ],
+    triples: [
+      { id: "T1", x: "x1", y: "y1", z: "z1" },
+      { id: "T2", x: "x1", y: "y2", z: "z3" },
+      { id: "T3", x: "x2", y: "y3", z: "z1" },
+      { id: "T4", x: "x2", y: "y1", z: "z2" },
+      { id: "T5", x: "x3", y: "y2", z: "z1" },
+      { id: "T6", x: "x3", y: "y3", z: "z1" },
+    ],
+  },
+  frames: [
+    {
+      event: "Accept",
+      caption:
+        "Frank has one triple left that uses no element twice. Choose T4 (Sally, Madison, Frank).",
+      focus: ["T4"],
+      chosen: ["T4"],
+      repeats: {},
+      elements: { x2: { state: "Covered" }, y1: { state: "Covered" }, z2: { state: "Covered" } },
+      triples: {
+        T1: { state: "Blocked" },
+        T3: { state: "Blocked" },
+        T4: { state: "ElementHighlight" },
+      },
+      step: 0,
+    },
+    {
+      event: "Reject",
+      caption: "T1 (Paul, Madison, Chloe) would use Madison twice: T4 already uses it.",
+      focus: ["T1", "y1"],
+      chosen: ["T1", "T4"],
+      repeats: { y1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        y1: { state: "Rejected" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T2: { state: "Blocked" },
+        T3: { state: "Blocked" },
+        T4: { state: "Rejected" },
+        T5: { state: "Blocked" },
+        T6: { state: "Blocked" },
+      },
+      step: 1,
+    },
+    {
+      event: "Accept",
+      caption:
+        "Paul has one triple left that uses no element twice. Choose T2 (Paul, Austin, Jake).",
+      focus: ["T2"],
+      chosen: ["T2", "T4"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "ElementHighlight" },
+        T3: { state: "Blocked" },
+        T4: { state: "Committed" },
+        T5: { state: "Blocked" },
+      },
+      step: 2,
+    },
+    {
+      event: "Reject",
+      caption: "T5 (Dave, Austin, Chloe) would use Austin twice: T2 already uses it.",
+      focus: ["T5", "y2"],
+      chosen: ["T2", "T4", "T5"],
+      repeats: { y2: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Rejected" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "Rejected" },
+        T3: { state: "Blocked" },
+        T4: { state: "Committed" },
+        T5: { state: "Rejected" },
+        T6: { state: "Blocked" },
+      },
+      step: 3,
+    },
+    {
+      event: "Accept",
+      caption: "Dave has one triple left that uses no element twice. Choose T6 (Dave, Bob, Chloe).",
+      focus: ["T6"],
+      chosen: ["T2", "T4", "T6"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "Solution" },
+        T3: { state: "Blocked" },
+        T4: { state: "Solution" },
+        T5: { state: "Blocked" },
+        T6: { state: "ElementHighlight" },
+      },
+      step: 4,
+    },
+    {
+      event: "Done",
+      caption:
+        "T2 (Paul, Austin, Jake), T4 (Sally, Madison, Frank) and T6 (Dave, Bob, Chloe) use every element of X, Y and Z exactly once. Found after 3 choices.",
+      focus: [],
+      chosen: ["T2", "T4", "T6"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "Solution" },
+        T3: { state: "Blocked" },
+        T4: { state: "Solution" },
+        T5: { state: "Blocked" },
+        T6: { state: "Solution" },
+      },
+      step: 5,
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, 3-Dimensional Matching with four long names in each set and eleven triples, ThreeDimensionalMatchingBacktracking: choices taken back, and a matching of four triples. */
+export const DM3_WIDE_TRIPARTITE_FRAMES = {
+  type: "TripartiteMatching",
+  payload: {
+    kind: "tripartite",
+    x: [
+      { id: "x1", name: "Alexandra" },
+      { id: "x2", name: "Bob" },
+      { id: "x3", name: "Cy" },
+      { id: "x4", name: "Dee" },
+    ],
+    y: [
+      { id: "y1", name: "Bo" },
+      { id: "y2", name: "Ed" },
+      { id: "y3", name: "Florentina" },
+      { id: "y4", name: "Gus" },
+    ],
+    z: [
+      { id: "z1", name: "Hal" },
+      { id: "z2", name: "Ivy" },
+      { id: "z3", name: "Jo" },
+      { id: "z4", name: "Kim" },
+    ],
+    triples: [
+      { id: "T1", x: "x1", y: "y2", z: "z1" },
+      { id: "T2", x: "x1", y: "y1", z: "z2" },
+      { id: "T3", x: "x2", y: "y3", z: "z3" },
+      { id: "T4", x: "x2", y: "y1", z: "z1" },
+      { id: "T5", x: "x3", y: "y4", z: "z4" },
+      { id: "T6", x: "x3", y: "y2", z: "z3" },
+      { id: "T7", x: "x4", y: "y3", z: "z2" },
+      { id: "T8", x: "x4", y: "y4", z: "z3" },
+      { id: "T9", x: "x3", y: "y1", z: "z4" },
+      { id: "T10", x: "x4", y: "y3", z: "z4" },
+      { id: "T11", x: "x2", y: "y4", z: "z1" },
+    ],
+  },
+  frames: [
+    {
+      event: "Accept",
+      caption:
+        "Alexandra has 2 triples left that use no element twice. Choose T1 (Alexandra, Ed, Hal).",
+      focus: ["T1"],
+      chosen: ["T1"],
+      repeats: {},
+      elements: { x1: { state: "Covered" }, y2: { state: "Covered" }, z1: { state: "Covered" } },
+      triples: {
+        T1: { state: "ElementHighlight" },
+        T11: { state: "Blocked" },
+        T2: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T6: { state: "Blocked" },
+      },
+      step: 0,
+    },
+    {
+      event: "Accept",
+      caption:
+        "Bob has one triple left that uses no element twice. Choose T3 (Bob, Florentina, Jo).",
+      focus: ["T3"],
+      chosen: ["T1", "T3"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z1: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Committed" },
+        T10: { state: "Blocked" },
+        T11: { state: "Blocked" },
+        T2: { state: "Blocked" },
+        T3: { state: "ElementHighlight" },
+        T4: { state: "Blocked" },
+        T6: { state: "Blocked" },
+        T7: { state: "Blocked" },
+        T8: { state: "Blocked" },
+      },
+      step: 1,
+    },
+    {
+      event: "Reject",
+      caption: "T7 (Dee, Florentina, Ivy) would use Florentina twice: T3 already uses it.",
+      focus: ["T7", "y3"],
+      chosen: ["T1", "T3", "T7"],
+      repeats: { y3: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x4: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Rejected" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Committed" },
+        T10: { state: "Blocked" },
+        T11: { state: "Blocked" },
+        T2: { state: "Blocked" },
+        T3: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T6: { state: "Blocked" },
+        T7: { state: "Rejected" },
+        T8: { state: "Blocked" },
+      },
+      step: 2,
+    },
+    {
+      event: "Reject",
+      caption: "T8 (Dee, Gus, Jo) would use Jo twice: T3 already uses it.",
+      focus: ["T8", "z3"],
+      chosen: ["T1", "T3", "T8"],
+      repeats: { z3: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x4: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        y4: { state: "Covered" },
+        z1: { state: "Covered" },
+        z3: { state: "Rejected" },
+      },
+      triples: {
+        T1: { state: "Committed" },
+        T10: { state: "Blocked" },
+        T11: { state: "Blocked" },
+        T2: { state: "Blocked" },
+        T3: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Blocked" },
+        T7: { state: "Blocked" },
+        T8: { state: "Rejected" },
+      },
+      step: 3,
+    },
+    {
+      event: "Reject",
+      caption: "T10 (Dee, Florentina, Kim) would use Florentina twice: T3 already uses it.",
+      focus: ["T10", "y3"],
+      chosen: ["T1", "T3", "T10"],
+      repeats: { y3: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x4: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Rejected" },
+        z1: { state: "Covered" },
+        z3: { state: "Covered" },
+        z4: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Committed" },
+        T10: { state: "Rejected" },
+        T11: { state: "Blocked" },
+        T2: { state: "Blocked" },
+        T3: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Blocked" },
+        T7: { state: "Blocked" },
+        T8: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 4,
+    },
+    {
+      event: "Backtrack",
+      caption: "No matching of the rest goes with T3 (Bob, Florentina, Jo), so take it back.",
+      focus: ["T3"],
+      chosen: ["T1"],
+      repeats: {},
+      elements: { x1: { state: "Covered" }, y2: { state: "Covered" }, z1: { state: "Covered" } },
+      triples: {
+        T1: { state: "Committed" },
+        T11: { state: "Blocked" },
+        T2: { state: "Blocked" },
+        T3: { state: "ElementHighlight" },
+        T4: { state: "Blocked" },
+        T6: { state: "Blocked" },
+      },
+      step: 5,
+    },
+    {
+      event: "Reject",
+      caption: "T4 (Bob, Bo, Hal) would use Hal twice: T1 already uses it.",
+      focus: ["T4", "z1"],
+      chosen: ["T1", "T4"],
+      repeats: { z1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        z1: { state: "Rejected" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T11: { state: "Blocked" },
+        T2: { state: "Blocked" },
+        T3: { state: "Blocked" },
+        T4: { state: "Rejected" },
+        T6: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 6,
+    },
+    {
+      event: "Reject",
+      caption: "T11 (Bob, Gus, Hal) would use Hal twice: T1 already uses it.",
+      focus: ["T11", "z1"],
+      chosen: ["T1", "T11"],
+      repeats: { z1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        y2: { state: "Covered" },
+        y4: { state: "Covered" },
+        z1: { state: "Rejected" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T11: { state: "Rejected" },
+        T2: { state: "Blocked" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Blocked" },
+        T8: { state: "Blocked" },
+      },
+      step: 7,
+    },
+    {
+      event: "Backtrack",
+      caption: "No matching of the rest goes with T1 (Alexandra, Ed, Hal), so take it back.",
+      focus: ["T1"],
+      chosen: [],
+      repeats: {},
+      elements: {},
+      triples: { T1: { state: "ElementHighlight" } },
+      step: 8,
+    },
+    {
+      event: "Accept",
+      caption:
+        "Alexandra has 2 triples left that use no element twice. Choose T2 (Alexandra, Bo, Ivy).",
+      focus: ["T2"],
+      chosen: ["T2"],
+      repeats: {},
+      elements: { x1: { state: "Covered" }, y1: { state: "Covered" }, z2: { state: "Covered" } },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "ElementHighlight" },
+        T4: { state: "Blocked" },
+        T7: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 9,
+    },
+    {
+      event: "Reject",
+      caption: "T1 (Alexandra, Ed, Hal) would use Alexandra twice: T2 already uses it.",
+      focus: ["T1", "x1"],
+      chosen: ["T1", "T2"],
+      repeats: { x1: 2 },
+      elements: {
+        x1: { state: "Rejected" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Rejected" },
+        T11: { state: "Blocked" },
+        T2: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T6: { state: "Blocked" },
+        T7: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 10,
+    },
+    {
+      event: "Accept",
+      caption: "Ed has one triple left that uses no element twice. Choose T6 (Cy, Ed, Jo).",
+      focus: ["T6"],
+      chosen: ["T2", "T6"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "Committed" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "ElementHighlight" },
+        T7: { state: "Blocked" },
+        T8: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 11,
+    },
+    {
+      event: "Reject",
+      caption: "T3 (Bob, Florentina, Jo) would use Jo twice: T6 already uses it.",
+      focus: ["T3", "z3"],
+      chosen: ["T2", "T3", "T6"],
+      repeats: { z3: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Rejected" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T10: { state: "Blocked" },
+        T11: { state: "Blocked" },
+        T2: { state: "Committed" },
+        T3: { state: "Rejected" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Rejected" },
+        T7: { state: "Blocked" },
+        T8: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 12,
+    },
+    {
+      event: "Reject",
+      caption: "T4 (Bob, Bo, Hal) would use Bo twice: T2 already uses it.",
+      focus: ["T4", "y1"],
+      chosen: ["T2", "T4", "T6"],
+      repeats: { y1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Rejected" },
+        y2: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T11: { state: "Blocked" },
+        T2: { state: "Rejected" },
+        T3: { state: "Blocked" },
+        T4: { state: "Rejected" },
+        T5: { state: "Blocked" },
+        T6: { state: "Committed" },
+        T7: { state: "Blocked" },
+        T8: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 13,
+    },
+    {
+      event: "Accept",
+      caption: "Bob has one triple left that uses no element twice. Choose T11 (Bob, Gus, Hal).",
+      focus: ["T11"],
+      chosen: ["T2", "T6", "T11"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y4: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T11: { state: "ElementHighlight" },
+        T2: { state: "Committed" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Committed" },
+        T7: { state: "Blocked" },
+        T8: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 14,
+    },
+    {
+      event: "Reject",
+      caption: "T7 (Dee, Florentina, Ivy) would use Ivy twice: T2 already uses it.",
+      focus: ["T7", "z2"],
+      chosen: ["T2", "T6", "T7", "T11"],
+      repeats: { z2: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        x4: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        y4: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Rejected" },
+        z3: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T10: { state: "Blocked" },
+        T11: { state: "Committed" },
+        T2: { state: "Rejected" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Committed" },
+        T7: { state: "Rejected" },
+        T8: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 15,
+    },
+    {
+      event: "Reject",
+      caption: "T8 (Dee, Gus, Jo) would use Gus twice: T11 already uses it.",
+      focus: ["T8", "y4"],
+      chosen: ["T2", "T6", "T8", "T11"],
+      repeats: { y4: 2, z3: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        x4: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y4: { state: "Rejected" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Rejected" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T10: { state: "Blocked" },
+        T11: { state: "Rejected" },
+        T2: { state: "Committed" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Rejected" },
+        T7: { state: "Blocked" },
+        T8: { state: "Rejected" },
+        T9: { state: "Blocked" },
+      },
+      step: 16,
+    },
+    {
+      event: "Accept",
+      caption:
+        "Dee has one triple left that uses no element twice. Choose T10 (Dee, Florentina, Kim).",
+      focus: ["T10"],
+      chosen: ["T2", "T6", "T10", "T11"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        x4: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        y4: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+        z4: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T10: { state: "ElementHighlight" },
+        T11: { state: "Solution" },
+        T2: { state: "Solution" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Solution" },
+        T7: { state: "Blocked" },
+        T8: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 17,
+    },
+    {
+      event: "Done",
+      caption:
+        "T2 (Alexandra, Bo, Ivy), T6 (Cy, Ed, Jo), T10 (Dee, Florentina, Kim) and T11 (Bob, Gus, Hal) use every element of X, Y and Z exactly once. Found after 6 choices.",
+      focus: [],
+      chosen: ["T2", "T6", "T10", "T11"],
+      repeats: {},
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        x3: { state: "Covered" },
+        x4: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        y3: { state: "Covered" },
+        y4: { state: "Covered" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+        z3: { state: "Covered" },
+        z4: { state: "Covered" },
+      },
+      triples: {
+        T1: { state: "Blocked" },
+        T10: { state: "Solution" },
+        T11: { state: "Solution" },
+        T2: { state: "Solution" },
+        T3: { state: "Blocked" },
+        T4: { state: "Blocked" },
+        T5: { state: "Blocked" },
+        T6: { state: "Solution" },
+        T7: { state: "Blocked" },
+        T8: { state: "Blocked" },
+        T9: { state: "Blocked" },
+      },
+      step: 18,
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, 3-Dimensional Matching {a,b}{c,d}{e,f}{a,c,e}{b,c,f}{a,d,f}, ThreeDimensionalMatchingBacktracking: the only choice is taken back, and the run ends on no. */
+export const DM3_NONE_TRIPARTITE_FRAMES = {
+  type: "TripartiteMatching",
+  payload: {
+    kind: "tripartite",
+    x: [
+      { id: "x1", name: "a" },
+      { id: "x2", name: "b" },
+    ],
+    y: [
+      { id: "y1", name: "c" },
+      { id: "y2", name: "d" },
+    ],
+    z: [
+      { id: "z1", name: "e" },
+      { id: "z2", name: "f" },
+    ],
+    triples: [
+      { id: "T1", x: "x1", y: "y1", z: "z1" },
+      { id: "T2", x: "x2", y: "y1", z: "z2" },
+      { id: "T3", x: "x1", y: "y2", z: "z2" },
+    ],
+  },
+  frames: [
+    {
+      event: "Accept",
+      caption: "b has one triple left that uses no element twice. Choose T2 (b, c, f).",
+      focus: ["T2"],
+      chosen: ["T2"],
+      repeats: {},
+      elements: { x2: { state: "Covered" }, y1: { state: "Covered" }, z2: { state: "Covered" } },
+      triples: {
+        T1: { state: "Blocked" },
+        T2: { state: "ElementHighlight" },
+        T3: { state: "Blocked" },
+      },
+      step: 0,
+    },
+    {
+      event: "Reject",
+      caption: "T1 (a, c, e) would use c twice: T2 already uses it.",
+      focus: ["T1", "y1"],
+      chosen: ["T1", "T2"],
+      repeats: { y1: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        y1: { state: "Rejected" },
+        z1: { state: "Covered" },
+        z2: { state: "Covered" },
+      },
+      triples: { T1: { state: "Rejected" }, T2: { state: "Rejected" }, T3: { state: "Blocked" } },
+      step: 1,
+    },
+    {
+      event: "Reject",
+      caption: "T3 (a, d, f) would use f twice: T2 already uses it.",
+      focus: ["T3", "z2"],
+      chosen: ["T2", "T3"],
+      repeats: { z2: 2 },
+      elements: {
+        x1: { state: "Covered" },
+        x2: { state: "Covered" },
+        y1: { state: "Covered" },
+        y2: { state: "Covered" },
+        z2: { state: "Rejected" },
+      },
+      triples: { T1: { state: "Blocked" }, T2: { state: "Rejected" }, T3: { state: "Rejected" } },
+      step: 2,
+    },
+    {
+      event: "Backtrack",
+      caption: "No matching of the rest goes with T2 (b, c, f), so take it back.",
+      focus: ["T2"],
+      chosen: [],
+      repeats: {},
+      elements: {},
+      triples: { T2: { state: "ElementHighlight" } },
+      step: 3,
+    },
+    {
+      event: "Done",
+      caption:
+        "Every way of choosing the triples uses an element twice or leaves one out, so there is no perfect matching.",
+      focus: [],
+      chosen: [],
+      repeats: {},
+      elements: {},
+      triples: {},
+      step: 4,
+      ok: false,
     },
   ],
 };

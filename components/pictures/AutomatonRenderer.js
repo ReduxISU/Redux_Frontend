@@ -26,6 +26,10 @@
 // #250: the reader can move any state, Garbage included, bend any arrow and turn a loop around
 // its state (diagramEdits.js), freely. The arrows keep the bow or side the layout chose, plus
 // the reader's bend; the entry arrow and the fall into Garbage follow the states they join.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) get a ring around
+// their state (Garbage included), outside the "current state" ring, and a band under their
+// arrow (a loop's too), drawn inside the piece's own group.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
@@ -47,6 +51,7 @@ import {
   offsetAlongNormal,
   useDiagramEdits,
 } from "./diagramEdits";
+import { GadgetCircle, GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import { outlineDistance } from "./graphLayout";
 import {
   edgeLook,
@@ -73,6 +78,28 @@ const FALL_DASH = "6 4";
 
 /** How far outside a state (or Garbage) the "current state" ring sits. */
 const CURRENT_GAP = 6;
+/** How far outside a state a gadget's ring sits: clear of the "current state" ring. */
+const GADGET_GAP = 11;
+
+/** A gadget's ring around a state (a circle, or a pill) or Garbage's pill. */
+function StateGadgetRing({ id, color, x, y, width, radius }) {
+  if (!color) return null;
+  if (width > 2 * radius) {
+    return (
+      <GadgetRect
+        id={id}
+        color={color}
+        x={x - width / 2}
+        y={y - radius}
+        width={width}
+        height={2 * radius}
+        rx={radius}
+        gap={GADGET_GAP}
+      />
+    );
+  }
+  return <GadgetCircle id={id} color={color} cx={x} cy={y} r={radius} gap={GADGET_GAP} />;
+}
 
 /**
  * Where a DFA falls into Garbage on its input, from the payload alone: run the input from the
@@ -471,6 +498,8 @@ function PathPicker({ id, runs }) {
  * @param {number|null} props.frameIndex The step, or null before Run.
  * @param {Object|null} [props.runs] An NFA's paths to follow instead (see the header).
  * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
 export default function AutomatonRenderer({
   idPrefix,
@@ -480,8 +509,11 @@ export default function AutomatonRenderer({
   frameIndex,
   runs,
   layoutKey = null,
+  highlightIds,
+  gadgetColors,
 }) {
   const layout = useMemo(() => layoutAutomaton(payload), [payload]);
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const labels = useMemo(
     () => new Map(layout.states.map((state) => [state.id, state.label])),
     [layout],
@@ -610,6 +642,12 @@ export default function AutomatonRenderer({
                 data-loop={arrow.loop ? "true" : undefined}
                 data-traced={traced ? (faint ? "faint" : "trace") : undefined}
               >
+                <GadgetUnderlay
+                  id={arrow.id}
+                  color={gadgetOf(arrow.id)}
+                  d={arrow.path}
+                  width={look.width}
+                />
                 <path
                   d={arrow.path}
                   fill="none"
@@ -757,6 +795,14 @@ export default function AutomatonRenderer({
                     testId="fell-ring"
                   />
                 )}
+                <StateGadgetRing
+                  id={node.id}
+                  color={gadgetOf(node.id)}
+                  x={node.x}
+                  y={node.y}
+                  width={node.width}
+                  radius={STATE_RADIUS}
+                />
                 <StateBody
                   state={node}
                   look={
@@ -829,6 +875,14 @@ export default function AutomatonRenderer({
                       testId="current"
                     />
                   )}
+                  <StateGadgetRing
+                    id={garbage.id}
+                    color={gadgetOf(garbage.id)}
+                    x={garbage.x}
+                    y={garbage.y}
+                    width={garbage.width}
+                    radius={GARBAGE_HEIGHT / 2}
+                  />
                   <rect
                     x={garbage.x - garbage.width / 2}
                     y={garbage.y - GARBAGE_HEIGHT / 2}

@@ -24,11 +24,17 @@
 // #250: nothing here can be dragged. The pool is the instance's order and the rows are drawn to
 // scale from each frame's placement, so a moved piece would only say something the solver
 // didn't.
+//
+// #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are marked wherever
+// they are drawn: an item's tile in the pool gets a ring just outside it (inside the gap between
+// tiles), its piece in a container's row a ring just inside the piece (pieces sit edge to edge),
+// and a container's track (every row of it) a ring just outside the track.
 
 import Box from "@mui/material/Box";
 import { Fragment, useMemo, useRef, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
+import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, groupColors, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import {
   beamTilt,
@@ -102,8 +108,18 @@ function rowVerdict(row, containerState, total) {
  * @param {string} props.name The visualization's name, for the diagram's label.
  * @param {Object} props.payload The Packing payload.
  * @param {Object} props.frame The frame to draw.
+ * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
+ * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-export default function PackingRenderer({ idPrefix, name, payload, frame }) {
+export default function PackingRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  highlightIds,
+  gadgetColors,
+}) {
+  const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
   const layout = useMemo(() => layoutPacking(payload, boxWidth ?? undefined), [payload, boxWidth]);
@@ -233,6 +249,16 @@ export default function PackingRenderer({ idPrefix, name, payload, frame }) {
                   stroke={traced ? TRACE_COLOR : look.line}
                   strokeWidth={traced ? 3 : look.strokeWidth}
                   strokeDasharray={traced ? undefined : look.dash}
+                />
+                <GadgetRect
+                  id={item.id}
+                  color={gadgetOf(item.id)}
+                  x={item.x}
+                  y={item.y}
+                  width={item.width}
+                  height={item.height}
+                  rx={7}
+                  gap={2.5}
                 />
                 <text
                   x={item.x + item.width / 2}
@@ -364,6 +390,16 @@ export default function PackingRenderer({ idPrefix, name, payload, frame }) {
                   strokeWidth={stated ? 2.4 : 1.2}
                   strokeDasharray={style.dash}
                 />
+                <GadgetRect
+                  id={row.container}
+                  color={gadgetOf(row.container)}
+                  x={layout.trackX}
+                  y={row.trackY}
+                  width={row.trackWidth}
+                  height={TRACK_HEIGHT}
+                  rx={6}
+                  gap={2}
+                />
                 {pieces.map((piece) => {
                   const item = layout.items.find((candidate) => candidate.id === piece.id);
                   const itemState = stateOf(frame?.items, item.id);
@@ -401,6 +437,19 @@ export default function PackingRenderer({ idPrefix, name, payload, frame }) {
                           strokeWidth={traced ? 3 : 1.4}
                           strokeDasharray={traced || over ? undefined : look.dash}
                         />
+                        {piece.width > 8 && (
+                          <GadgetRect
+                            id={piece.id}
+                            color={gadgetOf(piece.id)}
+                            x={piece.x}
+                            y={row.trackY + 3}
+                            width={piece.width}
+                            height={24}
+                            // rx + gap: corners rounded 2 units inside the piece's own 4.
+                            rx={4.5}
+                            gap={-2.5}
+                          />
+                        )}
                         {fits && (
                           <text
                             x={piece.x + room / 2}

@@ -12,17 +12,24 @@
 //
 // Adding a renderer (phase B, #200):
 //   1. Write components/pictures/<Type>Renderer.js. It receives
-//        { idPrefix, name, payload, frame, frameIndex, frameCount, frames, highlightIds }
+//        { idPrefix, name, payload, frame, frameIndex, frameCount, frames, highlightIds,
+//          gadgetColors }
 //      where `payload` is the response's static part, `frame` is `frames[frameIndex]`, `name`
 //      is the visualization's name (for labels), `frames` is every frame the steps walk (empty
 //      before Run; only a picture whose layout must hold still over a growing run, the Search
-//      Tree's, needs it) and `highlightIds` are gadget piece ids (#239; ignore them until then).
+//      Tree's, needs it). `highlightIds` are gadget piece ids and `gadgetColors` a color per
+//      piece id (#239): mark each of those pieces with gadgetRings.js (a ring, an inset box or a
+//      band under a line, in the color gadgetRings.js's useGadgetMarks gives it, drawn inside the
+//      piece's own group so its fade covers it, never by opacity). Every piece a renderer marks
+//      with a data-*-id attribute (lib/reductionView.js PIECE_ID_ATTRIBUTES) takes a mark.
+//      `boxSoFar` (the Reduction View) asks a picture whose box spans the run (the Search Tree)
+//      to size it to the steps so far instead, without moving any piece.
 //      Before Run, `frame` is the plain frame (plainFrame() below; `{}` unless the type
 //      registers one) and `frameIndex` is null: the renderer must draw the whole instance from
 //      the payload alone, every piece in Background, and place it exactly where the run's steps
 //      will (a layout that is a pure function of the payload).
 //      Draw with React-owned SVG inside DiagramZoom.js (DiagramSvg.js with fit, zoom and pan;
-//      or plain HTML when the picture is text, as the Table is), take every color from
+//      the Table too, though it is text), take every color from
 //      pictureStates.js's pictureStateStyle(), and give every focusable piece an aria-label.
 //      A node-link picture also gets `layoutKey` (the instance and visualization drawn) and
 //      lets the reader move its nodes and bend its edges (#250): keep the changes with
@@ -31,9 +38,11 @@
 //      DiagramZoom an `editor` (makeEditor) with the type's own limits.
 //   2. Add it to PICTURE_RENDERERS below under the exact `type` Redux sends.
 //   3. If the picture draws annotations that are not states (group colors, order badges,
-//      missing edges), export a function (payload, frames) => [{key, text, swatch}] from the
-//      renderer's file and add it to PICTURE_ANNOTATIONS below, so the Legend lists them
-//      (swatch kinds: components/workbench/Legend.js).
+//      missing edges), export a function (payload, frames, {plain}) => [{key, text, swatch}]
+//      from the renderer's file and add it to PICTURE_ANNOTATIONS below, so the Legend lists
+//      them (swatch kinds: components/workbench/Legend.js). `plain` is true before Run. If the
+//      Legend should list only what the step on screen draws, not the whole run's, add the
+//      type to LEGEND_BY_STEP below too.
 //   4. Only if the type keeps instance data in its frames rather than its payload (the Table's
 //      cell text): add a function (payload, frames) => frame to PICTURE_PLAIN_FRAMES below that
 //      keeps that data and drops every state and step annotation.
@@ -50,26 +59,40 @@
 import AutomatonRenderer, { automatonAnnotations, automatonRuns } from "./AutomatonRenderer";
 import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
 import BoardRenderer, { boardAnnotations } from "./BoardRenderer";
+import CodeTreeRenderer, { codeTreeAnnotations } from "./CodeTreeRenderer";
 import FlowNetworkRenderer, { flowAnnotations } from "./FlowNetworkRenderer";
+import FormulaRenderer, { formulaAnnotations } from "./FormulaRenderer";
+import GeometryRenderer, { geometryAnnotations } from "./GeometryRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
+import NestedSetRenderer, { nestedSetAnnotations } from "./NestedSetRenderer";
 import PackingRenderer, { packingAnnotations } from "./PackingRenderer";
+import QuantumRenderer, { quantumAnnotations } from "./QuantumRenderer";
+import ScheduleRenderer, { scheduleAnnotations } from "./ScheduleRenderer";
 import SearchTreeRenderer, { searchTreeAnnotations } from "./SearchTreeRenderer";
-import TableRenderer, { tablePlainFrame } from "./TableRenderer";
+import TableRenderer, { tableAnnotations, tablePlainFrame } from "./TableRenderer";
+import TripartiteRenderer, { tripartiteAnnotations } from "./TripartiteRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
 export const PICTURE_RENDERERS = {
   Automaton: AutomatonRenderer,
   BipartiteGraph: BipartiteGraphRenderer,
   Board: BoardRenderer,
+  CodeTree: CodeTreeRenderer,
   FlowNetwork: FlowNetworkRenderer,
+  Formula: FormulaRenderer,
+  Geometry: GeometryRenderer,
   Graph: GraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
+  NestedSet: NestedSetRenderer,
   Packing: PackingRenderer,
+  QuantumCircuit: QuantumRenderer,
+  Schedule: ScheduleRenderer,
   SearchTree: SearchTreeRenderer,
   GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
+  TripartiteMatching: TripartiteRenderer,
 };
 
 /** Picture type -> the Legend entries for its annotations (see step 3 above). */
@@ -77,13 +100,41 @@ const PICTURE_ANNOTATIONS = {
   Automaton: automatonAnnotations,
   BipartiteGraph: bipartiteAnnotations,
   Board: boardAnnotations,
+  CodeTree: codeTreeAnnotations,
   FlowNetwork: flowAnnotations,
+  Formula: formulaAnnotations,
+  Geometry: geometryAnnotations,
   Graph: graphAnnotations,
   LayeredGraph: layeredAnnotations,
+  NestedSet: nestedSetAnnotations,
   Packing: packingAnnotations,
+  QuantumCircuit: quantumAnnotations,
+  Schedule: scheduleAnnotations,
   SearchTree: searchTreeAnnotations,
+  Table: tableAnnotations,
+  TripartiteMatching: tripartiteAnnotations,
   GroupedGraph: groupedGraphAnnotations,
 };
+
+/**
+ * Picture types whose Legend lists only what the step on screen draws (see step 3 above). The
+ * rest list what any step of the run draws, so their key holds still while stepping. A Quantum
+ * Circuit's run changes what it draws from end to end (highlighted columns, dashed columns still
+ * to come, bars of each sign), so a whole-run key would list pieces its Done no longer draws.
+ */
+const LEGEND_BY_STEP = new Set(["QuantumCircuit"]);
+
+/**
+ * The frames a picture's Legend is listed from: the step on screen for a LEGEND_BY_STEP type,
+ * else every frame of the run (`frames`), or the plain frame before Run.
+ * @param {string} type The response's picture type.
+ * @param {Object} frame The frame on screen (the plain frame before Run).
+ * @param {Object[]|null} frames The run's frames, or null before Run.
+ * @returns {Object[]}
+ */
+export function pictureLegendFrames(type, frame, frames) {
+  return frames && !LEGEND_BY_STEP.has(type) ? frames : [frame];
+}
 
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
 const PICTURE_PLAIN_FRAMES = {
@@ -111,12 +162,17 @@ export function plainFrame(type, payload, frames) {
 }
 
 /**
- * The Legend entries for what a picture draws besides its states, over a run's frames.
+ * The Legend entries for what a picture draws besides its states, over the frames pictureLegendFrames
+ * gives.
+ * @param {string} type The response's picture type.
+ * @param {Object|null} payload The response's static part.
+ * @param {Object[]} frames The frames the Legend is listed from.
+ * @param {{plain?: boolean}} [options] `plain`: the picture is drawn before Run.
  * @returns {Array<{key: string, text: string, swatch: Object}>}
  */
-export function pictureAnnotations(type, payload, frames) {
+export function pictureAnnotations(type, payload, frames, { plain = false } = {}) {
   const annotate = Object.hasOwn(PICTURE_ANNOTATIONS, type) ? PICTURE_ANNOTATIONS[type] : null;
-  return annotate ? annotate(payload, frames) : [];
+  return annotate ? annotate(payload, frames, { plain }) : [];
 }
 
 /** True when this site draws `type` from a format=frames response. */

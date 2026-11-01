@@ -27,7 +27,7 @@ const PAD = 20;
 
 /** The narrowest drawing box (so a two-node tree isn't blown up). */
 const MIN_WIDTH = 480;
-const MIN_HEIGHT = 160;
+export const MIN_HEIGHT = 160;
 
 /**
  * A note is one line up to NOTE_LINE characters (`2 clauses left`). A bound longer than

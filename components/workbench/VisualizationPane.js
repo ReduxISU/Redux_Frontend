@@ -10,6 +10,10 @@
 //     recorded steps, otherwise one line saying what the picture is;
 //   - the Legend, open by default.
 //
+// #215: in Reduce mode, once Redux has sent a Reduction View, the two pictures are that view
+// (components/pictures/ReductionView.js) instead, and its phase bar sits above the step controls.
+// Each of its pictures keeps its Visualization Type dropdown at its top right (#912).
+//
 // The pictures themselves come from the renderers: a format=frames picture through
 // components/pictures/PictureCanvas.js (#199), every other one through the older
 // VisualizationCanvas. This file only lays them out.
@@ -19,6 +23,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import StepScrubber from "../detail/StepScrubber";
 import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import PictureCanvas from "../pictures/PictureCanvas";
+import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
 import Legend from "./Legend";
 import { COMPACT_MEDIA, cardSx, SHARED_CONTROL_WIDTH, secondaryButtonSx } from "./layout";
 import TaggedSelect from "./TaggedSelect";
@@ -51,7 +56,7 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
  *     highlightIds?: string[]}
  *   | {kind: "picture", type: string, payload: Object|null, layoutKey?: string, frame: Object,
  *      frameIndex: number|null, frameCount: number, frames?: Object[], name: string,
- *      showCaption: boolean, runs?: {options: Array<{id: string, label: string, accepted?: boolean}>,
+ *      showCaption: boolean, highlightIds?: string[], runs?: {options: Array<{id: string, label: string, accepted?: boolean}>,
  *        value: string|null, onChange: Function}|null}
  *   | {kind: "loading", text: string}
  *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
@@ -96,6 +101,7 @@ function PictureBox({ idPrefix, content }) {
         frameCount={content.frameCount}
         frames={content.frames ?? null}
         showCaption={content.showCaption}
+        highlightIds={content.highlightIds}
         runs={content.runs ?? null}
       />
     );
@@ -146,7 +152,9 @@ function PictureBox({ idPrefix, content }) {
       data-picture-kind={content.kind}
       data-picture-type={content.kind === "picture" ? content.type : undefined}
       data-gadget-highlight-count={
-        content.kind === "frame" && content.highlightIds ? content.highlightIds.length : undefined
+        (content.kind === "frame" || content.kind === "picture") && content.highlightIds
+          ? content.highlightIds.length
+          : undefined
       }
       sx={{
         minHeight: content.compact ? 160 : PICTURE_MIN_HEIGHT,
@@ -218,6 +226,11 @@ function PictureColumn({ idPrefix, title, typeControl, content, basis }) {
  *   uses (#199), for the Legend.
  * @param {Array<{key: string, text: string, swatch: Object}>|null} [props.legendAnnotations]
  *   What a format=frames picture draws besides states (#201), for the Legend.
+ * @param {{view: Object, activeGadget: Object|null, runId: number, loading?: string|null,
+ *   types?: {source: Object|null, target: Object|null}}|null} [props.reduction] A Reduction
+ *   View to draw in place of `source` and `target` (#215); `steps` walk its frames. `types` are
+ *   its sides' Visualization Type dropdowns (ReduxISU/Redux#912), shaped as `source.type`;
+ *   `loading` is said in place of the pictures while another picture is drawn.
  */
 export default function VisualizationPane({
   idPrefix,
@@ -232,6 +245,7 @@ export default function VisualizationPane({
   legendFrames,
   legendStates,
   legendAnnotations,
+  reduction = null,
 }) {
   const basis = target && stack ? "100%" : "380px";
   const noteColor =
@@ -336,33 +350,70 @@ export default function VisualizationPane({
         )}
       </Box>
 
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
-        <PictureColumn
-          idPrefix={`${idPrefix}-source`}
-          title={source.title}
-          basis={basis}
-          content={source.content}
-          typeControl={
-            source.type && (
-              <VisualizationTypeControl id={`${idPrefix}-source-type`} {...source.type} />
-            )
-          }
+      {reduction ? (
+        <ReductionView
+          // A new run, or another picture on either side, starts with nothing pointed at.
+          key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
+          idPrefix={`${idPrefix}-reduction`}
+          view={reduction.view}
+          frameIndex={steps?.currentStep ?? 0}
+          stack={stack}
+          activeGadget={reduction.activeGadget}
+          loading={reduction.loading ?? null}
+          colorMode={reduction.colorMode ?? "plain"}
+          onColorMode={reduction.onColorMode ?? null}
+          typeControls={{
+            source: reduction.types?.source && (
+              <VisualizationTypeControl
+                id={`${idPrefix}-source-type`}
+                {...reduction.types.source}
+              />
+            ),
+            target: reduction.types?.target && (
+              <VisualizationTypeControl
+                id={`${idPrefix}-target-type`}
+                {...reduction.types.target}
+              />
+            ),
+          }}
         />
-        {target && (
+      ) : (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
           <PictureColumn
-            idPrefix={`${idPrefix}-target`}
-            title={target.title}
+            idPrefix={`${idPrefix}-source`}
+            title={source.title}
             basis={basis}
-            content={target.content}
+            content={source.content}
             typeControl={
-              target.type && (
-                <VisualizationTypeControl id={`${idPrefix}-target-type`} {...target.type} />
+              source.type && (
+                <VisualizationTypeControl id={`${idPrefix}-source-type`} {...source.type} />
               )
             }
           />
-        )}
-      </Box>
+          {target && (
+            <PictureColumn
+              idPrefix={`${idPrefix}-target`}
+              title={target.title}
+              basis={basis}
+              content={target.content}
+              typeControl={
+                target.type && (
+                  <VisualizationTypeControl id={`${idPrefix}-target-type`} {...target.type} />
+                )
+              }
+            />
+          )}
+        </Box>
+      )}
 
+      {reduction && steps && (
+        <ReductionPhaseBar
+          idPrefix={`${idPrefix}-phases`}
+          frames={reduction.view.frames}
+          frameIndex={steps.currentStep}
+          onStepChange={steps.onStepChange}
+        />
+      )}
       {steps && steps.frameCount > 1 && (
         <StepScrubber
           idPrefix={`${idPrefix}-steps`}
