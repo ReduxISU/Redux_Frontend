@@ -4,9 +4,9 @@
 // (local/viz-integration) on 2026-10-14, so tests/e2e/picture-renderers.spec.js can answer the
 // picture requests itself and CI needs no backend that serves format=frames.
 // DFA Acceptance: the problem's default instance, 3 frames with the DFASolver. The Graph
-// pictures (#201), the Bipartite Graph pictures (#203), the Layered Graph pictures (#205), the
-// Automaton pictures (#204), the Flow Network pictures (#206) and the Grouped Graph pictures
-// (#202) follow at the end, each with its instance and solver.
+// pictures (#201), Grouped Graph pictures (#202), Bipartite Graph pictures (#203), Layered Graph
+// pictures (#205), Automaton pictures (#204) and Flow Network pictures (#206) follow at the end,
+// each with its instance and solver.
 
 /** format=frames for DFATableVisualization: picture type Table (has a renderer). */
 export const DFA_TABLE_FRAMES = {

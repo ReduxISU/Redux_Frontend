@@ -61,6 +61,7 @@ export const PICTURE_RENDERERS = {
   Graph: GraphRenderer,
   GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
+  GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
 };
 
@@ -72,6 +73,7 @@ const PICTURE_ANNOTATIONS = {
   Graph: graphAnnotations,
   GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
+  GroupedGraph: groupedGraphAnnotations,
 };
 
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
