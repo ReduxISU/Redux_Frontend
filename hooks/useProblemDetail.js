@@ -49,7 +49,7 @@
 // and rejected (a generic decision-problem answer sentence).
 
 import { useEffect, useState } from "react";
-import { mergeProblemInfoTags, mergeVisualStyle } from "../data/mergeSupplementalTags";
+import { mergeProblemInfoTags } from "../data/mergeSupplementalTags";
 import { tagList } from "../data/tagList";
 import {
   REDUCTION_COST_MAP,
@@ -163,7 +163,6 @@ function buildVisualizations(visualizationClassNames, info, visualizationTypesBy
     return {
       className,
       name: visualizationInfo.visualizationName ?? className,
-      type: mergeVisualStyle(className, undefined),
       backendType:
         visualizationTypesByInstance[className] ?? visualizationInfo.visualizationType ?? "",
       caption: visualizationInfo.visualizationDefinition ?? "",

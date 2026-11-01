@@ -72,7 +72,8 @@ function FrameCaption({ id, frame }) {
  * @param {string} props.type The response's picture type.
  * @param {Object|null} props.payload The response's static part.
  * @param {Object|null} props.frame The frame to draw.
- * @param {number} props.frameIndex Which frame it is.
+ * @param {number|null} props.frameIndex Which frame it is, or null for the plain frame of the
+ *   default picture before Run (registry.js plainFrame(): every piece in Background).
  * @param {number} props.frameCount How many frames the response has.
  * @param {boolean} [props.showCaption] Show the step's caption (during a run, not for the
  *   default picture before Run, where the caption would describe a run nobody started).
@@ -103,7 +104,8 @@ export default function PictureCanvas({
     <Box
       id={idPrefix}
       data-picture-type={type}
-      data-frame-index={frameIndex}
+      data-frame-index={frameIndex ?? undefined}
+      data-plain={frameIndex === null ? "true" : undefined}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1.5 }}
     >
       <Renderer
