@@ -28,6 +28,7 @@ By submitting a contribution (pull request, patch, or code submission), you conf
 ## Branching Strategy
 
 ### `main`
+
 - **Branch name:** `main`
 - This is the default branch, and where day-to-day pull requests land.
 - Branch off `main` for your work, and open your pull request back into `main`.
@@ -35,6 +36,7 @@ By submitting a contribution (pull request, patch, or code submission), you conf
 - Merging requires **1 approving review**. There is currently no required status check gating the merge — the CI workflow runs on every pull request, but it's report-only and won't block you.
 
 ### `production`
+
 - **Branch name:** `production`
 - This is what's actually deployed. It is **never** the target of a pull request — it only moves forward when the project owner deliberately promotes finished work from `main`.
 - As of this writing, `production` has no GitHub ruleset configured, so it isn't technically protected against a direct push, force-push, or deletion. Treat it as off-limits by convention regardless: don't push to it, don't target it with a pull request, and don't rely on GitHub to stop you if you try.
@@ -51,22 +53,27 @@ By submitting a contribution (pull request, patch, or code submission), you conf
 ## How to Contribute
 
 ### 1. Fork the repository
+
 Create your own fork of the project.
 
 ### 2. Create a branch
+
 Use a descriptive branch name:
 
 ### 3. Make your changes
+
 - Keep changes focused and minimal
 - Follow existing code style and conventions
 - Add comments where helpful
 
 ### 4. Test your changes
+
 - Ensure the project builds successfully
 - Run any existing tests
 - Add tests if applicable
 
 ### 5. Submit a Pull Request (PR)
+
 Include:
 - A clear description of what you changed
 - Why the change is needed
