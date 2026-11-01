@@ -82,7 +82,9 @@ function slugify(name) {
 // carried too: `description` (solverDefinition), `solverTypeName` and `complexityBucketName`
 // (the backend's own enum members, labelled through data/taxonomy.js's backendEnumLabel),
 // and `timeComplexity` / `spaceComplexity` (see normalizeComplexity). No solver declares
-// `spaceComplexity` yet, so it is null today.
+// `spaceComplexity` yet, so it is null today. #295: `solverTypeNames` is every type the solver
+// declares (`solverTypes`, null from a backend that sends only `solverType`), so the command
+// bar can tell a randomized ("Stochastic") solver by any of them (lib/runSeed.js).
 function buildSolvers(solverClassNames, info) {
   return (solverClassNames ?? []).map((className) => {
     const solverInfo = info[className] ?? {};
@@ -94,6 +96,7 @@ function buildSolvers(solverClassNames, info) {
       bigO: solverInfo.complexity || undefined,
       description: solverInfo.solverDefinition || "",
       solverTypeName: solverInfo.solverType ?? null,
+      solverTypeNames: Array.isArray(solverInfo.solverTypes) ? solverInfo.solverTypes : null,
       complexityBucketName: solverInfo.complexityBucket ?? null,
       timeComplexity: normalizeComplexity(solverInfo.timeComplexity),
       spaceComplexity: normalizeComplexity(solverInfo.spaceComplexity),
