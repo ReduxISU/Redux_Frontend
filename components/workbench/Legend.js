@@ -17,7 +17,8 @@
 // such as group colors, order badges or missing edges. Each names its swatch's kind:
 //   fill   {fill, line}       a box like a state's
 //   line   {color, dash?}     a short stroke (an edge kind)
-//   badge                     a round position badge with a number
+//   badge  {text?}            a round badge with a number (or `text`, such as "×2")
+//   text   {text}             a short label drawn as the picture draws it (T, #1, d = 2)
 //   ring   {color?}           a circle inside an outer ring (a terminal, the tried variable)
 //   arrow                     an arrowhead (a directed edge)
 
@@ -80,7 +81,11 @@ function AnnotationSwatch({ swatch }) {
   } else if (swatch.kind === "badge") {
     inner = (
       <>
-        <circle cx={11} cy={8} r={7.5} fill={paletteVars.text.primary} />
+        {String(swatch.text ?? "3").length > 1 ? (
+          <rect x={0} y={0.5} width={22} height={15} rx={7.5} fill={paletteVars.text.primary} />
+        ) : (
+          <circle cx={11} cy={8} r={7.5} fill={paletteVars.text.primary} />
+        )}
         <text
           x={11}
           y={8}
@@ -90,9 +95,23 @@ function AnnotationSwatch({ swatch }) {
           fontWeight={700}
           fill={paletteVars.surface.input}
         >
-          3
+          {swatch.text ?? "3"}
         </text>
       </>
+    );
+  } else if (swatch.kind === "text") {
+    inner = (
+      <text
+        x={11}
+        y={8}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight={700}
+        fill={paletteVars.text.primary}
+      >
+        {swatch.text}
+      </text>
     );
   } else if (swatch.kind === "ring") {
     inner = (

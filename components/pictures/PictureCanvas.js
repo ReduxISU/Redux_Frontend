@@ -78,6 +78,9 @@ function FrameCaption({ id, frame }) {
  * @param {boolean} [props.showCaption] Show the step's caption (during a run, not for the
  *   default picture before Run, where the caption would describe a run nobody started).
  * @param {string[]} [props.highlightIds] Gadget piece ids (#239).
+ * @param {{options: Array<{id: string, label: string, accepted?: boolean}>,
+ *   value: string|null, onChange: Function}|null} [props.runs] The other runs the steps can
+ *   follow (registry.js pictureRuns; #204), during a run only.
  */
 export default function PictureCanvas({
   idPrefix,
@@ -89,6 +92,7 @@ export default function PictureCanvas({
   frameCount,
   showCaption,
   highlightIds,
+  runs = null,
 }) {
   // Read straight off the module's table (not through a function) so React sees one stable
   // component per type.
@@ -116,6 +120,7 @@ export default function PictureCanvas({
         frameIndex={frameIndex}
         frameCount={frameCount}
         highlightIds={highlightIds}
+        runs={runs}
       />
       {showCaption && typeof frame.caption === "string" && frame.caption && (
         <FrameCaption id={`${idPrefix}-caption`} frame={frame} />
