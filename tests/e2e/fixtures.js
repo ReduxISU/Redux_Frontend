@@ -35,8 +35,20 @@ import { test as base, expect } from "@playwright/test";
 
 const API_PATH_PATTERN = /\/api\//;
 
+// #252: ProblemProvider/visualizeRun (ReduxISU/Redux#895), one solver run with every picture.
+const VISUALIZE_RUN_REQUEST = /\/api\/redux\/ProblemProvider\/visualizeRun\?/;
+
 function isApiRequest(url) {
   return API_PATH_PATTERN.test(new URL(url).pathname);
+}
+
+/**
+ * A backend without visualizeRun answers it 404 or 405, and the workbench takes that as "ask
+ * for one picture as before" (lib/pictureRequest.js). That answer is the fallback working, not
+ * a quiet failure.
+ */
+function isRunRouteMissing(response) {
+  return VISUALIZE_RUN_REQUEST.test(response.url()) && [404, 405].includes(response.status());
 }
 
 export const test = base.extend({
@@ -64,7 +76,7 @@ export const test = base.extend({
     };
 
     const onResponse = (response) => {
-      if (isApiRequest(response.url()) && !response.ok()) {
+      if (isApiRequest(response.url()) && !response.ok() && !isRunRouteMissing(response)) {
         failures.push(
           `${response.request().method()} ${response.url()} -- responded ${response.status()}`,
         );
@@ -82,6 +94,14 @@ export const test = base.extend({
     // test is its own visitor, which is what the limit is meant to model.
     const octet = () => Math.floor(Math.random() * 250) + 1;
     await page.setExtraHTTPHeaders({ "x-forwarded-for": `10.${octet()}.${octet()}.${octet()}` });
+
+    // #252: every spec runs as against a backend without visualizeRun (404), whether or not the
+    // backend behind the suite has it, so each one's answers to the older picture requests are
+    // what the workbench draws. A spec about visualizeRun answers it itself (a route added later
+    // wins), as tests/e2e/one-run.spec.js does.
+    await page.route(VISUALIZE_RUN_REQUEST, (route) =>
+      route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
+    );
 
     await provideFixture(page);
 
