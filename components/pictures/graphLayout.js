@@ -141,20 +141,21 @@ function cropBox(nodes, widths, positions, width, height) {
 
 /**
  * How far from a node's centre its outline is, in the direction (dx, dy): the circle's radius,
- * or where the ray leaves a pill of the given width.
+ * or where the ray leaves a pill of the given width. `radius` is the circle's (and the pill's
+ * end caps'); pictures with bigger nodes (the Automaton's states) pass their own.
  */
-export function outlineDistance(dx, dy, width) {
+export function outlineDistance(dx, dy, width, radius = NODE_RADIUS) {
   const half = width / 2;
-  if (half <= NODE_RADIUS + 0.01) return NODE_RADIUS;
+  if (half <= radius + 0.01) return radius;
   const length = Math.hypot(dx, dy) || 1;
   const ux = Math.abs(dx / length);
   const uy = Math.abs(dy / length);
   // The pill is a rectangle with round ends: leave through the flat top or bottom, or the end
   // cap's circle (centred half - r in from the end).
-  const toFlat = uy > 1e-6 ? NODE_RADIUS / uy : Number.POSITIVE_INFINITY;
-  if (toFlat * ux <= half - NODE_RADIUS) return toFlat;
-  const c = half - NODE_RADIUS;
+  const toFlat = uy > 1e-6 ? radius / uy : Number.POSITIVE_INFINITY;
+  if (toFlat * ux <= half - radius) return toFlat;
+  const c = half - radius;
   // Solve |t*u - (c, 0)| = r for the far root.
   const b = c * ux;
-  return b + Math.sqrt(Math.max(0, b * b - c * c + NODE_RADIUS * NODE_RADIUS));
+  return b + Math.sqrt(Math.max(0, b * b - c * c + radius * radius));
 }
