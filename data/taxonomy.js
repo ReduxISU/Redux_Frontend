@@ -551,30 +551,6 @@ export function backendEnumLabel(facetKey, memberName) {
   return buildOptionsFromBackendNames(facetKey, [memberName])[0]?.label;
 }
 
-// #229: the backend's `pictureType` (what a visualization draws under
-// `visualize?format=frames`, e.g. "Graph", "GroupedGraph"; /info sends it beside
-// `visualizationType`) -> its display label. Shown as the Visualization Type dropdown's tag
-// and in that type's info card. A picture type missing here is labelled from its own name.
-export const PICTURE_TYPE_LABELS = {
-  Automaton: "Automaton",
-  BipartiteGraph: "Bipartite Graph",
-  Board: "Board",
-  CodeTree: "Code Tree",
-  FlowNetwork: "Flow Network",
-  Formula: "Formula",
-  Geometry: "Geometry",
-  Graph: "Graph",
-  GroupedGraph: "Grouped Graph",
-  LayeredGraph: "Layered Graph",
-  NestedSet: "Nested Set",
-  Packing: "Packing",
-  QuantumCircuit: "Quantum Circuit",
-  Schedule: "Schedule",
-  SearchTree: "Search Tree",
-  Table: "Table",
-  TripartiteMatching: "Tripartite Matching",
-};
-
 // The backend's `pictureType` (what a visualization draws under `visualize?format=frames`,
 // Navigation/Batch/allInfo, ReduxISU/Redux#841) -> the Visualization Type facet's option key.
 // `GraphLaTeX` and `QuantumCircuitQjs` are the same pictures drawn another way, so they share
