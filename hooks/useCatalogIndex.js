@@ -116,6 +116,7 @@ import {
   SOLVER_COMPLEXITY_MAP,
   SOLVER_TYPE_MAP,
 } from "../data/taxonomy";
+import { problemDisplayName } from "../lib/problemNames";
 import {
   requestAllInfo,
   requestAllProblems,
@@ -204,7 +205,7 @@ function buildProblemTags(
   reductionEdgesByProblem,
 ) {
   const problemInfo = info[problemCode] ?? {};
-  const problemName = problemInfo.problemName ?? problemCode;
+  const problemName = problemDisplayName(info, problemCode);
 
   const { problemType, problemVariant, computationalModel, complexityClass } = mergeProblemInfoTags(
     problemName,

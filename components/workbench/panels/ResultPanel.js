@@ -8,6 +8,11 @@
 //     ProblemProvider/reduce), and "Map a solution across": pick a solver for the source
 //     problem's answer and map that answer onto the target (ProblemProvider/mapSolution). The
 //     mapped certificate gets its own Verify This Answer, checked against the target.
+//   - A randomized solver's seed (Solve mode, #295, ReduxISU/Redux#932): the run says which
+//     seed it ran with (SeedLine, below), with Run again with this seed to see the same steps
+//     again; it also puts the seed in the command bar's Seed box. A solver without a seed shows
+//     neither. Solve's answer is that same run's whenever ProblemProvider/visualizeRun gave one
+//     (Workbench.js), so the answer and the steps agree.
 //   - Verify at the bottom (./VerifyBox.js), which works before anything has run.
 //   - Gadgets (Reduce mode, stage 4, ./GadgetsSection.js): what the reduction built for each
 //     piece of the source, at the bottom of the reduction's result; hidden when it lists none.
@@ -83,13 +88,53 @@ function CodeBlock({ id, label, children, maxHeight }) {
 }
 
 /**
+ * The seed a randomized solver's run reported, and Run again with this seed (#295).
+ * @param {{id: string, seed: {seed: number, onRerun: () => void, disabled?: boolean}|null}} props
+ *   The button's id is `${id}-rerun`.
+ */
+export function SeedLine({ id, seed }) {
+  if (!seed) return null;
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "4px 12px",
+        fontSize: "0.875rem",
+        minWidth: 0,
+      }}
+    >
+      <Box component="span" id={id} sx={{ color: "text.primary" }}>
+        Seed:{" "}
+        <Box component="span" id={`${id}-value`} sx={{ fontFamily: MONO_FONT }}>
+          {seed.seed}
+        </Box>
+      </Box>
+      <Box
+        id={`${id}-rerun`}
+        component="button"
+        type="button"
+        onClick={seed.onRerun}
+        disabled={Boolean(seed.disabled)}
+        aria-describedby={id}
+        sx={{ ...secondaryButtonSx, minHeight: 40 }}
+      >
+        Run again with this seed
+      </Box>
+    </Box>
+  );
+}
+
+/**
  * @param {Object} props
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {Object} props.problem The problem, as hooks/useProblemDetail.js builds it.
  * @param {"solve"|"reduce"} props.mode The command bar's mode.
  * @param {string} props.instance The current instance text.
  * @param {Object|null} props.solveResult The last solve: `{solverName, output, elapsedMs,
- *   instance, stepCount}` (`stepCount` null when the picture did not come back).
+ *   instance, stepCount, seed}` (`stepCount` null when the picture did not come back; `seed`
+ *   as SeedLine takes it, null when there is none to show).
  * @param {Object|null} props.reduceResult The last reduction: `{targetName, reductionName,
  *   solverName, certificate, elapsedMs, instance, targetInstance, mappedBack}` (`targetInstance`
  *   null when Redux did not send it; `mappedBack`, `{text, ok}`, only for a Reduction View
@@ -148,6 +193,7 @@ export default function ResultPanel({
           <CodeBlock id={`${idPrefix}-answer`} label="Answer (certificate)">
             {solveAnswer || "The solver returned an empty answer."}
           </CodeBlock>
+          <SeedLine id={`${idPrefix}-seed`} seed={solveResult.seed ?? null} />
           <Box
             id={`${idPrefix}-verify-answer`}
             component="button"

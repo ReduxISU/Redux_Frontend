@@ -144,7 +144,7 @@ function smallestText(page, side) {
 // --- Drawing and phases ------------------------------------------------------------------------
 
 for (const key of Object.keys(CASES)) {
-  test(`${key}: Run draws the source and the target side by side, each at Fit, on Build's first step`, async ({
+  test(`${key}: Run draws the source and the target side by side, each at Fit, opening on Map back's last step`, async ({
     page,
   }) => {
     const { view } = CASES[key];
@@ -174,7 +174,15 @@ for (const key of Object.keys(CASES)) {
     expect(target.x).toBeGreaterThan(source.x + source.width);
     expect(Math.abs(target.y - source.y)).toBeLessThan(2);
 
+    // #274: a finished reduction opens on its last step, the end of Map back, as a solve opens on
+    // its result.
+    await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "map");
+    await expect(phaseButton(page, "map")).toHaveAttribute("aria-current", "step");
+    await expect(position(page)).toHaveText(`Step ${view.frames.length} of ${view.frames.length}`);
+    await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
+
     // Build's first step, with the phase named in three places: the bar, the caption, the view.
+    await toStep(page, 0);
     await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "build");
     await expect(phaseButton(page, "build")).toHaveAttribute("aria-current", "step");
     await expect(phaseButton(page, "solve")).not.toHaveAttribute("aria-current", "step");
@@ -276,6 +284,10 @@ for (const key of ["satTo3sat", "sat3ToClique", "subsetSumToPartition"]) {
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, key);
     await page.locator("#workbench-panel-close").click();
+    await toStep(page, 0);
+    // #274: the run now opens on its last step, and the pointer left over a piece would ring it
+    // (a hover link), so it is moved off the pictures before anything is measured.
+    await page.mouse.move(0, 0);
     // The panes' sizes and where the target sits from the source, which no page scroll changes.
     const panes = async () => {
       const source = await pane(page, "source").boundingBox();

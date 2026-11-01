@@ -207,6 +207,7 @@ test("a target picture without the build's pieces is shown whole during Build, w
 }) => {
   await answerViews(page);
   await runSatTo3sat(page);
+  await page.locator("#workbench-phases-build").click();
   await expect(page.locator(VIEW)).toHaveAttribute("data-build-reveal", "pieces");
   await expect(pane(page, "target")).not.toHaveAttribute("data-hidden-count", "0");
   await expect(page.locator(`${VIEW}-target-note`)).toHaveCount(0);

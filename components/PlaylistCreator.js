@@ -35,7 +35,7 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useProblemDetail } from "../hooks/useProblemDetail";
 import {
   MAX_CUSTOM_PLAYLIST_PROBLEMS,
@@ -43,6 +43,7 @@ import {
   MAX_NOTE_LENGTH,
   MAX_TITLE_LENGTH,
 } from "../lib/playlistQuery";
+import { problemOptionFilter } from "../lib/problemNames";
 import { REDUX_API_BASE_URL } from "../lib/redux";
 import { thinScrollbarSx } from "./theme";
 
@@ -65,6 +66,7 @@ function PlaylistCreatorStep({
   onRemove,
   canRemove,
   problemNames,
+  filterProblems,
   loading,
 }) {
   const { problem, loading: detailLoading } = useProblemDetail(REDUX_API_BASE_URL, step.name);
@@ -85,6 +87,7 @@ function PlaylistCreatorStep({
         <Autocomplete
           id={`playlist-creator-problem-${index}`}
           options={problemNames}
+          filterOptions={filterProblems}
           value={step.name}
           // Clears any solver/visualization already picked -- a name scoped
           // to the previous problem is meaningless (and likely wrong) for
@@ -151,11 +154,15 @@ function PlaylistCreatorStep({
  * @param {Object} props
  * @param {string[]} props.problemNames Every real problem name currently in
  *   the catalog index, used as each step's problem picker options.
+ * @param {Map<string, string>} [props.codeToName] #279: problem key -> display name
+ *   (useCatalogIndex()'s `codeToName`), so typing a key finds its problem.
  * @param {boolean} [props.loading] Disables the problem pickers while the
  *   catalog is still loading -- there's nothing real to pick yet.
  * @param {(playlist: {title: string, description: string, problems: {name: string, note?: string, solver?: string, visualization?: string}[]}) => void} props.onCreate
  */
-export default function PlaylistCreator({ problemNames, loading = false, onCreate }) {
+export default function PlaylistCreator({ problemNames, codeToName, loading = false, onCreate }) {
+  // #279: each step's picker finds a problem by its key too ("SAT3" -> 3SAT).
+  const filterProblems = useMemo(() => problemOptionFilter(codeToName), [codeToName]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [steps, setSteps] = useState([emptyStep()]);
@@ -247,6 +254,7 @@ export default function PlaylistCreator({ problemNames, loading = false, onCreat
             onRemove={() => removeStep(index)}
             canRemove={steps.length > 1}
             problemNames={problemNames}
+            filterProblems={filterProblems}
             loading={loading}
           />
         ))}
