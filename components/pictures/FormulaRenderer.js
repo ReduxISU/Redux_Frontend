@@ -395,14 +395,7 @@ function useTrace() {
  * @param {string[]} [props.highlightIds] Gadget piece ids to mark (#239).
  * @param {Object<string, string>} [props.gadgetColors] Color mode's marks, by piece id (#239).
  */
-function FlatFormula({
-  idPrefix,
-  name,
-  payload,
-  frame,
-  highlightIds,
-  gadgetColors,
-}) {
+function FlatFormula({ idPrefix, name, payload, frame, highlightIds, gadgetColors }) {
   const gadgetOf = useGadgetMarks(highlightIds, gadgetColors);
   const boxRef = useRef(null);
   const boxWidth = useBoxWidth(boxRef);
