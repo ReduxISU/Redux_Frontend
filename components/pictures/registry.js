@@ -43,6 +43,7 @@
 import AutomatonRenderer, { automatonAnnotations, automatonRuns } from "./AutomatonRenderer";
 import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
+import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
 
@@ -52,6 +53,7 @@ export const PICTURE_RENDERERS = {
   BipartiteGraph: BipartiteGraphRenderer,
   Graph: GraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
+  GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
 };
 
@@ -61,6 +63,7 @@ const PICTURE_ANNOTATIONS = {
   BipartiteGraph: bipartiteAnnotations,
   Graph: graphAnnotations,
   LayeredGraph: layeredAnnotations,
+  GroupedGraph: groupedGraphAnnotations,
 };
 
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
