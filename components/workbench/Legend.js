@@ -19,6 +19,7 @@
 //   line   {color, dash?}     a short stroke (an edge kind)
 //   badge  {text?}            a round badge with a number (or `text`, such as "×2")
 //   text   {text}             a short label drawn as the picture draws it (T, #1, d = 2)
+//   strike {text, sub?}       a label struck through its letters, not its subscript (#270)
 //   ring   {color?}           a circle inside an outer ring (a terminal, the tried variable)
 //   arrow                     an arrowhead (a directed edge)
 
@@ -112,6 +113,21 @@ function AnnotationSwatch({ swatch }) {
       >
         {swatch.text}
       </text>
+    );
+  } else if (swatch.kind === "strike") {
+    // #270: a Formula's False literal, struck through its letters and not its subscript.
+    inner = (
+      <>
+        <text x={4} y={7} dominantBaseline="central" fontSize={12} fill={paletteVars.text.primary}>
+          {swatch.text ?? "x"}
+          {swatch.sub && (
+            <tspan fontSize={9.5} dy={3.5}>
+              {swatch.sub}
+            </tspan>
+          )}
+        </text>
+        <line x1={3} y1={8} x2={11} y2={8} stroke={paletteVars.text.primary} strokeWidth={1.4} />
+      </>
     );
   } else if (swatch.kind === "ring") {
     inner = (

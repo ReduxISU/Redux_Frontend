@@ -195,6 +195,24 @@ function pairsFor(t) {
     add(`group ${name}: line on surface`, group.line, s.main, UI);
   }
   add("table header text on raised", t.text.primary, s.raised, TEXT);
+  // #270, #271: the tints behind a box or a region that holds other pieces (a Formula clause, a
+  // Nested Set region). What sits on them: every state's outline, the hover trace, the gadget
+  // marks, the muted ∨ and clause names, the ∧ (primary text), and each state's own text.
+  for (const [tintName, tint] of Object.entries(v.tint)) {
+    for (const [name, state] of Object.entries(v.state)) {
+      add(`tint ${tintName}: state ${name} line on it`, state.line, tint, UI);
+    }
+    add(`tint ${tintName}: hover trace on it`, t.brand.line, tint, UI);
+    add(`tint ${tintName}: gadget gold on it`, v.gadget, tint, UI);
+    for (const [key, color] of Object.entries(v.gadgetPalette)) {
+      add(`tint ${tintName}: gadget color ${key} on it`, color, tint, UI);
+    }
+    add(`tint ${tintName}: muted text on it`, t.text.muted, tint, TEXT);
+    add(`tint ${tintName}: primary text on it`, t.text.primary, tint, TEXT);
+    if (v.state[tintName]) {
+      add(`tint ${tintName}: its state's text on it`, v.state[tintName].text, tint, TEXT);
+    }
+  }
   return pairs;
 }
 

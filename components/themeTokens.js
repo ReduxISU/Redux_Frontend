@@ -174,6 +174,27 @@ const LIGHT_PICTURE_STATES = {
   false: { line: "#8A8A8A", fill: "#E6E6E6", ink: "#525252", text: "#525252" },
 };
 
+// #270, #271: the tints behind a box or a region that holds other pieces (a Formula clause around
+// its literals, a Nested Set region around its elements), by the state of the box. A state's own
+// fill is a piece's body; drawn behind other pieces it would leave some of their outlines under 3:1
+// (the light theme's Committed green on the Covered fill is 2.9:1, the dark theme's Untraveled
+// grey on it 2.5:1), so these are lighter in the light theme and darker in the dark one: every
+// state's line, the hover trace, the gadget marks and the muted text all stay at their minimums on
+// them (scripts/check-contrast.mjs).
+const DARK_PICTURE_TINTS = {
+  covered: "#0C2515",
+  committed: "#0E2416",
+  elementHighlight: "#11203A",
+  rejected: "#341313",
+};
+
+const LIGHT_PICTURE_TINTS = {
+  covered: "#EEF9F2",
+  committed: "#F3FDF6",
+  elementHighlight: "#F3F6FF",
+  rejected: "#FFF3F3",
+};
+
 // #201: group colors for the Graph picture's cut sides, color classes and clique-cover groups
 // (a node's group is an annotation, not a state, so it has its own colors). The Okabe-Ito hues
 // the design mockup uses: `fill` is a node's body, `ink` its label (at least 4.5:1 on the fill)
@@ -254,6 +275,7 @@ export const THEME_TOKENS = {
       // canvas, and far enough apart to tell by eye (check-contrast.mjs measures both).
       gadgetPalette: { c0: ISU_GOLD, c1: "#F472B6", c2: "#22D3EE", c3: "#C084FC" },
       state: DARK_PICTURE_STATES,
+      tint: DARK_PICTURE_TINTS,
       group: groupFamilies(GROUP_FILLS),
       label: WHITE,
       blue: "#60A5FA",
@@ -330,6 +352,7 @@ export const THEME_TOKENS = {
       gadget: "#7A6300",
       gadgetPalette: { c0: "#7A6300", c1: "#BE185D", c2: "#0E7490", c3: "#7E22CE" },
       state: LIGHT_PICTURE_STATES,
+      tint: LIGHT_PICTURE_TINTS,
       group: groupFamilies(LIGHT_GROUP_LINES),
       label: BLACK,
       blue: "#1D4ED8",
