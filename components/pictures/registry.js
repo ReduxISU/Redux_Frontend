@@ -51,6 +51,7 @@ import FlowNetworkRenderer, { flowAnnotations } from "./FlowNetworkRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
+import PackingRenderer, { packingAnnotations } from "./PackingRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
@@ -61,6 +62,7 @@ export const PICTURE_RENDERERS = {
   Graph: GraphRenderer,
   GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
+  Packing: PackingRenderer,
   Table: TableRenderer,
 };
 
@@ -72,6 +74,7 @@ const PICTURE_ANNOTATIONS = {
   Graph: graphAnnotations,
   GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
+  Packing: packingAnnotations,
 };
 
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
