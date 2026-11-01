@@ -51,12 +51,15 @@ import AutomatonRenderer, { automatonAnnotations, automatonRuns } from "./Automa
 import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
 import BoardRenderer, { boardAnnotations } from "./BoardRenderer";
 import FlowNetworkRenderer, { flowAnnotations } from "./FlowNetworkRenderer";
+import GeometryRenderer, { geometryAnnotations } from "./GeometryRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
 import PackingRenderer, { packingAnnotations } from "./PackingRenderer";
+import ScheduleRenderer, { scheduleAnnotations } from "./ScheduleRenderer";
 import SearchTreeRenderer, { searchTreeAnnotations } from "./SearchTreeRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
+import TripartiteRenderer, { tripartiteAnnotations } from "./TripartiteRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
 export const PICTURE_RENDERERS = {
@@ -64,12 +67,15 @@ export const PICTURE_RENDERERS = {
   BipartiteGraph: BipartiteGraphRenderer,
   Board: BoardRenderer,
   FlowNetwork: FlowNetworkRenderer,
+  Geometry: GeometryRenderer,
   Graph: GraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
   Packing: PackingRenderer,
+  Schedule: ScheduleRenderer,
   SearchTree: SearchTreeRenderer,
   GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
+  TripartiteMatching: TripartiteRenderer,
 };
 
 /** Picture type -> the Legend entries for its annotations (see step 3 above). */
@@ -78,10 +84,13 @@ const PICTURE_ANNOTATIONS = {
   BipartiteGraph: bipartiteAnnotations,
   Board: boardAnnotations,
   FlowNetwork: flowAnnotations,
+  Geometry: geometryAnnotations,
   Graph: graphAnnotations,
   LayeredGraph: layeredAnnotations,
   Packing: packingAnnotations,
+  Schedule: scheduleAnnotations,
   SearchTree: searchTreeAnnotations,
+  TripartiteMatching: tripartiteAnnotations,
   GroupedGraph: groupedGraphAnnotations,
 };
 
