@@ -126,46 +126,13 @@
 // having a Grover-based solver (SATGroverSolver) makes SAT's model quantum.
 // See the handback summary -- this is a judgment call, not backend data.
 //
-// visualStyle is also fully hand-researched (no backend field on any
-// branch). Keyed per VISUALIZATION INSTANCE, not per problem (a problem can
-// have several visualizations of different conceptual styles) -- the real
-// instance names returned by Navigation/Batch/allVisualizations (e.g.
-// "ArcSetDefaultVisualization"), the same names Navigation/Batch/
-// allVisualizationTypes keys its renderer values by. 48 visualization
-// instances exist across the 49 problems today (queried 2026-09-02).
-// GraphD3/GraphLaTeX instances are mapped to "nodeLinkDiagram" by default
-// (TAXONOMY_REFERENCE.md §9's direct mapping for GraphLaTeX; for GraphD3,
-// checked each problem's actual graph structure rather than guessing) with
-// one exception: Topological Sort's graph is a DAG by definition (topological
-// sort is undefined on a graph with cycles), so its visualization is tagged
-// "dag" instead of the generic node-link label. QuantumCircuitD3/
-// QuantumCircuitQjs -> "quantumCircuit" (direct). PumpSchedule ->
-// "ganttChart" (direct-ish, per §9). BooleanSatisfiability, SetD3,
-// DynamicTable, and Unimplemented instances are left UNCLASSIFIED --
-// checked the actual renderer source (ReduxISU/Redux_GUI's
-// StandardSATSvgReact.js and StandardSetSvgReact.js) rather than guessing
-// from the enum name alone:
-//   - BooleanSatisfiability draws literal clause boxes joined by "∧" with
-//     true/false literal highlighting -- not a gate-and-wire circuit
-//     (Logic Gate Schematic) and not a branching decision structure (BDD),
-//     so it fits neither of the two candidates TAXONOMY_REFERENCE.md §9
-//     floated. No option in the ratified 12-value list actually matches a
-//     literal clause/literal view.
-//   - SetD3 draws a literal recursive set-membership diagram (nested boxes
-//     of elements) -- not geometric (Voronoi Map) and not a graph
-//     (Bipartite Factor Graph). §9 already flags this as unrepresented in
-//     the ratified list; confirmed rather than assumed.
-//   - DynamicTable is the same step-table ambiguity data/fixtures.js's own
-//     3-SAT "Assignment Table" instance already documents as an open,
-//     unresolved gap -- not re-litigated here.
-//   - Unimplemented means no renderer is registered at all (see
-//     Redux_GUI's Visualizations.js doc comment) -- there is no picture to
-//     classify, so "no conceptual style" is the honest value, same as the
-//     other three.
-// This is 13 of the 48 instances (2 BooleanSatisfiability + 4 SetD3 + 4
-// DynamicTable + 3 Unimplemented) -- see the handback summary.
-
-import { UNCLASSIFIED } from "./taxonomy";
+// visualStyle (a per-visualization conceptual style, 12 hand-tagged labels
+// from #6 q3) used to live here too, as SUPPLEMENTAL_VISUAL_STYLE. Removed
+// once the Visualization Type facet switched to the backend's own picture
+// types (`pictureType`, ReduxISU/Redux#841, read through data/taxonomy.js's
+// derivePictureTypeOption()): the list was frozen on 2026-09-02, so every
+// visualization added after that had no entry and its card showed "No
+// visualizations". See TAXONOMY_REFERENCE.md §9.
 
 /**
  * @typedef {Object} SupplementalProblemTags
@@ -296,74 +263,3 @@ export const SUPPLEMENTAL_TAGS = {
 // Reduction Type: intentionally no entries anywhere in this file. Retargeted
 // to the real backend's ReductionType field (issue #31, 2026-09-02) -- see
 // data/taxonomy.js's reductionType facet comment and REDUCTION_TYPE_MAP.
-
-/**
- * Visualization-instance-keyed conceptual visual style. Keys are the exact
- * strings Navigation/Batch/allVisualizations returns (e.g.
- * "ArcSetDefaultVisualization"), NOT problem names -- see file header.
- * @type {Object<string, string>}
- */
-export const SUPPLEMENTAL_VISUAL_STYLE = {
-  // -- GraphD3 / GraphLaTeX -> Node-Link Diagram (checked each problem's
-  // actual graph structure; none of these are inherently bipartite or
-  // acyclic-by-definition the way Topological Sort is) --
-  ArcSetDefaultVisualization: "nodeLinkDiagram",
-  CliqueDefaultVisualization: "nodeLinkDiagram",
-  CliqueLatexVisualization: "nodeLinkDiagram",
-  CliqueCoverDefaultVisualization: "nodeLinkDiagram",
-  CutDefaultVisualization: "nodeLinkDiagram",
-  DirectedHamiltonianDefaultVisualization: "nodeLinkDiagram",
-  DominatingSetDefaultVisualization: "nodeLinkDiagram",
-  GraphColoringDefaultVisualization: "nodeLinkDiagram",
-  HamiltonianDefaultVisualization: "nodeLinkDiagram",
-  IndependentSetDefaultVisualization: "nodeLinkDiagram",
-  MaxCutVisualization: "nodeLinkDiagram",
-  MinCutVisualization: "nodeLinkDiagram",
-  MinimumSpanningTreeVisualization: "nodeLinkDiagram",
-  MinSTCutVisualization: "nodeLinkDiagram",
-  NodeSetDefaultVisualization: "nodeLinkDiagram",
-  SPSPVisualization: "nodeLinkDiagram",
-  SSSPVisualization: "nodeLinkDiagram",
-  SteinerTreeDefaultVisualization: "nodeLinkDiagram",
-  TSPDefaultVisualization: "nodeLinkDiagram",
-  VertexCoverDefaultVisualization: "nodeLinkDiagram",
-  WeightedCutDefaultVisualization: "nodeLinkDiagram",
-  DFAVisualization: "nodeLinkDiagram",
-  NFAVisualization: "nodeLinkDiagram",
-
-  // -- The one genuine DAG: topological sort is undefined on a cyclic graph --
-  TopologicalSortDefaultVisualization: "dag",
-
-  // -- QuantumCircuitD3 / QuantumCircuitQjs -> Quantum Circuit (direct) --
-  BernsteinVaziraniD3Visualization: "quantumCircuit",
-  BernsteinVaziraniDefaultVisualization: "quantumCircuit",
-  DeutschD3Visualization: "quantumCircuit",
-  DeutschDefaultVisualization: "quantumCircuit",
-  DeutschJozsaD3Visualization: "quantumCircuit",
-  DeutschJozsaDefaultVisualization: "quantumCircuit",
-  ShorsDefaultVisualization: "quantumCircuit",
-  SATGroverVisualization: "quantumCircuit",
-  UnstructuredSearchVisualization: "quantumCircuit",
-
-  // -- PumpSchedule -> Gantt Chart (direct-ish, TAXONOMY_REFERENCE.md §9) --
-  PumpSchedulingCMVisualization: "ganttChart",
-  PumpSchedulingEMVisualization: "ganttChart",
-
-  // -- Checked the actual Redux_GUI renderer source; genuinely doesn't match
-  // any of the 12 ratified conceptual labels -- see file header. --
-  SatDefaultVisualization: UNCLASSIFIED,
-  Sat3DefaultVisualization: UNCLASSIFIED,
-  ExactCoverDefaultVisualization: UNCLASSIFIED,
-  HittingSetDefaultVisualization: UNCLASSIFIED,
-  PartitionDefaultVisualization: UNCLASSIFIED,
-  SetCoverDefaultVisualization: UNCLASSIFIED,
-  DFATableVisualization: UNCLASSIFIED,
-  NFATableVisualization: UNCLASSIFIED,
-  SPSPTableVisualization: UNCLASSIFIED,
-  SSSPTableVisualization: UNCLASSIFIED,
-
-  // -- Unimplemented: no renderer registered, nothing to classify --
-  ConvexHullVisualization: UNCLASSIFIED,
-  LosslessDataCompressionVisualization: UNCLASSIFIED,
-  SudokuVisualization: UNCLASSIFIED,
-};

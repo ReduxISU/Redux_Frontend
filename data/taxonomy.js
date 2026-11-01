@@ -192,24 +192,37 @@ export const TAXONOMY = [
     label: "Visualization Type",
     accentColor: "green",
     sidebar: true,
-    // Each visualization declares exactly one conceptual style.
+    // Each visualization draws exactly one picture type.
     multiValued: false,
-    // #6 q3 (2026-08-31): conceptual labels supplied by the `visualStyle`
-    // overlay field, NOT the backend's renderer-implementation enum
-    // (TAXONOMY_REFERENCE.md §9 conflict C4).
+    // Picture types, read from the backend's `pictureType` on each
+    // visualization (Navigation/Batch/allInfo, ReduxISU/Redux#841) through
+    // derivePictureTypeOption() below. This supersedes #6 q3 (2026-08-31),
+    // which filled this facet with 12 hand-tagged conceptual labels from a
+    // `visualStyle` overlay (TAXONOMY_REFERENCE.md §9 conflict C4): that
+    // overlay was frozen on 2026-09-02, so every visualization added since
+    // showed "No visualizations" on its card while its page drew it fine.
+    // Project owner: these picture types should show whenever one is
+    // available, and a handwritten type this list doesn't know is tagged
+    // "Unclassified" but still offered as a visualization.
     options: [
-      { key: "nodeLinkDiagram", label: "Node-Link Diagram" },
-      { key: "dag", label: "DAG" },
-      { key: "bipartiteFactorGraph", label: "Bipartite Factor Graph" },
-      { key: "logicGateSchematic", label: "Logic Gate Schematic" },
-      { key: "bdd", label: "BDD" },
+      { key: "graph", label: "Graph" },
+      { key: "groupedGraph", label: "Grouped Graph" },
+      { key: "bipartiteGraph", label: "Bipartite Graph" },
+      { key: "layeredGraph", label: "Layered Graph" },
+      { key: "flowNetwork", label: "Flow Network" },
+      { key: "automaton", label: "Automaton" },
       { key: "searchTree", label: "Search Tree" },
-      { key: "ganttChart", label: "Gantt Chart" },
-      { key: "spaceTimeDiagram", label: "Space-Time Diagram" },
-      { key: "voronoiMap", label: "Voronoi Map" },
-      { key: "threeDSurfacePlot", label: "3D Surface Plot" },
-      { key: "lossLandscape", label: "Loss Landscape" },
+      { key: "formula", label: "Formula" },
+      { key: "nestedSet", label: "Nested Set" },
+      { key: "packing", label: "Packing" },
+      { key: "board", label: "Board" },
+      { key: "table", label: "Table" },
+      { key: "schedule", label: "Schedule" },
+      { key: "geometry", label: "Geometry" },
+      { key: "tripartiteMatching", label: "Tripartite Matching" },
+      { key: "codeTree", label: "Code Tree" },
       { key: "quantumCircuit", label: "Quantum Circuit" },
+      { key: "unclassified", label: UNCLASSIFIED },
     ],
   },
 ];
@@ -538,27 +551,87 @@ export function backendEnumLabel(facetKey, memberName) {
   return buildOptionsFromBackendNames(facetKey, [memberName])[0]?.label;
 }
 
-// #229: the backend's `pictureType` (what a visualization draws under
-// `visualize?format=frames`, e.g. "Graph", "GroupedGraph"; /info sends it beside
-// `visualizationType`) -> its display label. Shown as the Visualization Type dropdown's tag
-// and in that type's info card. A picture type missing here is labelled from its own name.
-export const PICTURE_TYPE_LABELS = {
-  Automaton: "Automaton",
-  BipartiteGraph: "Bipartite Graph",
-  Board: "Board",
-  CodeTree: "Code Tree",
-  FlowNetwork: "Flow Network",
-  Geometry: "Geometry",
-  Graph: "Graph",
-  GroupedGraph: "Grouped Graph",
-  LayeredGraph: "Layered Graph",
-  Packing: "Packing",
-  QuantumCircuit: "Quantum Circuit",
-  Schedule: "Schedule",
-  SearchTree: "Search Tree",
-  Table: "Table",
-  TripartiteMatching: "Tripartite Matching",
+// The backend's `pictureType` (what a visualization draws under `visualize?format=frames`,
+// Navigation/Batch/allInfo, ReduxISU/Redux#841) -> the Visualization Type facet's option key.
+// `GraphLaTeX` and `QuantumCircuitQjs` are the same pictures drawn another way, so they share
+// the Graph and Quantum Circuit options, and a card showing both lists the type once.
+// `Formula` and `NestedSet` are still being designed in the backend; they are listed now so
+// the first visualization that sends one gets its own chip rather than "Unclassified".
+export const PICTURE_TYPE_MAP = {
+  Graph: "graph",
+  GraphLaTeX: "graph",
+  GroupedGraph: "groupedGraph",
+  BipartiteGraph: "bipartiteGraph",
+  LayeredGraph: "layeredGraph",
+  FlowNetwork: "flowNetwork",
+  Automaton: "automaton",
+  SearchTree: "searchTree",
+  Formula: "formula",
+  NestedSet: "nestedSet",
+  Packing: "packing",
+  Board: "board",
+  Table: "table",
+  Schedule: "schedule",
+  Geometry: "geometry",
+  TripartiteMatching: "tripartiteMatching",
+  CodeTree: "codeTree",
+  QuantumCircuit: "quantumCircuit",
+  QuantumCircuitQjs: "quantumCircuit",
 };
+
+// The legacy `visualizationType` (Navigation/Batch/allVisualizationTypes, or allInfo's own
+// field) -> the picture type it draws, for a visualization with no `pictureType`: one that
+// only serves the old flat frame list, or any visualization on a backend older than #841.
+// `Unimplemented` is the backend saying nothing draws it, so it maps to no option at all and
+// the visualization is not counted (the workbench leaves the same ones out of its
+// Visualization Type dropdown, through data/visualizationTypes.js's VISUALIZATION_TYPE_MAP).
+export const LEGACY_VISUALIZATION_TYPE_MAP = {
+  GraphD3: "graph",
+  GraphLaTeX: "graph",
+  BooleanSatisfiability: "formula",
+  SetD3: "nestedSet",
+  DynamicTable: "table",
+  QuantumCircuitD3: "quantumCircuit",
+  QuantumCircuitQjs: "quantumCircuit",
+  PumpSchedule: "schedule",
+  Unimplemented: null,
+};
+
+/**
+ * One visualization's Visualization Type option key, or `null` when it draws nothing. This is
+ * the one test for "does this problem have a visualization" (hooks/useCatalogIndex.js uses it
+ * for both the card's chips and its complete check, so the two always agree).
+ *
+ * A legacy type of `Unimplemented` wins over everything, matching the workbench, which never
+ * offers such a visualization. Otherwise a `pictureType` names the option, then the legacy
+ * type does. A type neither map knows (a handwritten one), or a visualization that names no
+ * type at all, is "unclassified": it is still a visualization, and the workbench still offers
+ * it, it just has no picture type this site has a label for.
+ *
+ * @param {string|null|undefined} pictureType The backend's `pictureType`.
+ * @param {string|null|undefined} legacyVisualizationType The backend's `visualizationType`.
+ * @returns {string|null}
+ */
+export function derivePictureTypeOption(pictureType, legacyVisualizationType) {
+  if (legacyVisualizationType === "Unimplemented") return null;
+  if (typeof pictureType === "string" && pictureType) {
+    return PICTURE_TYPE_MAP[pictureType] ?? "unclassified";
+  }
+  if (typeof legacyVisualizationType === "string" && legacyVisualizationType) {
+    return LEGACY_VISUALIZATION_TYPE_MAP[legacyVisualizationType] ?? "unclassified";
+  }
+  return "unclassified";
+}
+
+// #229: the backend's `pictureType` -> its display label, the same label the catalog's
+// Visualization Type chip shows. Shown as the Visualization Type dropdown's tag and in that
+// type's info card. A picture type missing here is labelled from its own name.
+export const PICTURE_TYPE_LABELS = Object.fromEntries(
+  Object.entries(PICTURE_TYPE_MAP).map(([pictureType, optionKey]) => [
+    pictureType,
+    optionLabel("visualizationType", optionKey),
+  ]),
+);
 
 /**
  * @param {string|null|undefined} pictureType The backend's `pictureType`.
