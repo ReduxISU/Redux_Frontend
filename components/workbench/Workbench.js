@@ -55,6 +55,7 @@ import {
 } from "../../lib/redux";
 import ComputeStatus from "../detail/ComputeStatus";
 import { statesInFrames } from "../pictures/pictureStates";
+import { pictureAnnotations } from "../pictures/registry";
 import CommandBar from "./CommandBar";
 import {
   reductionCard,
@@ -628,9 +629,10 @@ export default function Workbench({ problem }) {
       kind: "picture",
       type: defaultPicture.picture.type,
       payload: defaultPicture.picture.payload,
+      // The plain frame (hooks/useDefaultPicture.js): the instance, not a step of a run.
       frame: defaultPicture.picture.frame,
-      frameIndex: 0,
-      frameCount: 1,
+      frameIndex: null,
+      frameCount: 0,
       name: selectedViz.name,
       showCaption: false,
     };
@@ -825,8 +827,11 @@ export default function Workbench({ problem }) {
   // #199: a format=frames picture's key lists the states its whole run uses, so the key does
   // not change while stepping.
   let legendStates = null;
+  let legendAnnotations = null;
   if (sourceContent.kind === "picture") {
-    legendStates = statesInFrames(showingRunPicture ? pictureResult.frames : [sourceContent.frame]);
+    const frames = showingRunPicture ? pictureResult.frames : [sourceContent.frame];
+    legendStates = statesInFrames(frames);
+    legendAnnotations = pictureAnnotations(sourceContent.type, sourceContent.payload, frames);
   }
 
   // --- Status under the command bar ------------------------------------------------------
@@ -1237,6 +1242,7 @@ export default function Workbench({ problem }) {
             note={note}
             legendFrames={legendFrames}
             legendStates={legendStates}
+            legendAnnotations={legendAnnotations}
           />
         </Box>
       </Box>

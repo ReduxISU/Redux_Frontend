@@ -2,13 +2,22 @@
 //
 // #229: the workbench draws the instance before anything runs ("Not run yet. Showing the
 // default picture of the instance."). The backend has no separate "just draw it" call, so
-// this asks `ProblemProvider/visualize` for the chosen visualization and keeps only the
-// first frame, which is the base picture of the instance (VISUALIZATION_TYPE_CONTRACTS.md
-// section 2: base state, then steps, then the solved state).
+// this asks `ProblemProvider/visualize` for the chosen visualization and draws the instance
+// from that answer.
 //
 // #199: the picture is asked for through lib/pictureRequest.js, so a picture type with a
-// format=frames renderer comes back as that response (its first frame is the default picture)
-// and every other type as the old flat list, as before.
+// format=frames renderer comes back as that response and every other type as the old flat
+// list, as before:
+//   - The old flat list: its first frame is the base picture of the instance
+//     (VISUALIZATION_TYPE_CONTRACTS.md section 2), and is kept as the default picture.
+//   - format=frames (#201): Redux sends no base frame; `frames[0]` is already the solver's first
+//     step. So the default picture is the payload (the instance's structure) drawn with a
+//     synthesized plain frame instead: `plainFrame()` in components/pictures/registry.js, an
+//     empty frame for every type unless the type registers its own. A frame names only the
+//     pieces that are not Background, so an empty one draws every piece in Background, with no
+//     caption, no groups, order badges, assignment or focus taken from a step. After Run the
+//     step controls walk the run's frames over the same payload, and every layout is a pure
+//     function of the payload, so nothing moves between the default picture and step 1.
 //
 // That call is a compute request, so it counts toward the proxy's 10-a-minute limit. Two
 // things keep it from eating a visitor's Run budget:
@@ -22,6 +31,7 @@
 // dot on the Instance rail button.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { plainFrame } from "../components/pictures/registry";
 import { requestPicture } from "../lib/pictureRequest";
 import {
   COMPUTE_DONE,
@@ -56,8 +66,9 @@ function cacheKey(className, instance) {
  *   failure: {headline: string, detail: string, expected?: string, code?: string}|null,
  *   instanceError: {headline: string, detail: string, expected?: string}|null,
  *   retry: () => void,
- * }} `frame` is the first frame of an old flat-list picture and `picture` the first frame of
- *   a format=frames one (#199); at most one of them is set. `instance` is the text the frame
+ * }} `frame` is the first frame of an old flat-list picture and `picture` a format=frames one
+ *   (#199) with its plain frame (no step's states or annotations; see the header); at most one
+ *   of them is set. `instance` is the text the frame
  *   was drawn from (needed to turn a diagram edit back into instance text).
  */
 export function useDefaultPicture({ visualization, instance, enabled = true }) {
@@ -86,16 +97,20 @@ export function useDefaultPicture({ visualization, instance, enabled = true }) {
             instance: requestInstance,
             signal,
           });
-          const first = response.frames[0] ?? null;
+          const hasPicture = response.payload !== null || response.frames.length > 0;
           const entry =
             response.format === "frames"
               ? {
                   frame: null,
-                  picture: first
-                    ? { type: response.type, payload: response.payload, frame: first }
+                  picture: hasPicture
+                    ? {
+                        type: response.type,
+                        payload: response.payload,
+                        frame: plainFrame(response.type, response.payload, response.frames),
+                      }
                     : null,
                 }
-              : { frame: first, picture: null };
+              : { frame: response.frames[0] ?? null, picture: null };
           pictureCache.set(requestKey, entry);
           return { key: requestKey, ...entry };
         } catch (error) {
