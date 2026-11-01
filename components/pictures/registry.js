@@ -56,8 +56,10 @@ import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
 import PackingRenderer, { packingAnnotations } from "./PackingRenderer";
+import ScheduleRenderer, { scheduleAnnotations } from "./ScheduleRenderer";
 import SearchTreeRenderer, { searchTreeAnnotations } from "./SearchTreeRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
+import TripartiteRenderer, { tripartiteAnnotations } from "./TripartiteRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
 export const PICTURE_RENDERERS = {
@@ -70,8 +72,10 @@ export const PICTURE_RENDERERS = {
   GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
   Packing: PackingRenderer,
+  Schedule: ScheduleRenderer,
   SearchTree: SearchTreeRenderer,
   Table: TableRenderer,
+  TripartiteMatching: TripartiteRenderer,
 };
 
 /** Picture type -> the Legend entries for its annotations (see step 3 above). */
@@ -85,7 +89,9 @@ const PICTURE_ANNOTATIONS = {
   GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
   Packing: packingAnnotations,
+  Schedule: scheduleAnnotations,
   SearchTree: searchTreeAnnotations,
+  TripartiteMatching: tripartiteAnnotations,
 };
 
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
