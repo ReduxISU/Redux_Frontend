@@ -17,15 +17,18 @@
 // that's genuinely single-valued per problem). A value with no known real or
 // overlay value is omitted from its array rather than appearing as a bare
 // "Unclassified" entry, matching fixtures.js's own convention and this
-// issue's done-when.
+// issue's done-when. visualizationType is the one exception: its
+// "unclassified" is a real option (a visualization whose picture type this
+// frontend has no label for), shown because that visualization still draws.
 //
 // `completeness` is a same-keyed `Map<problemName, {hasSolver,
 // hasVisualization, hasVerifier}>` — added by T25 (#34) so Home's cards can
 // drive components/StatusIcon.js's isProblemComplete() rule from real
-// declared-item presence, since `tags` alone can't: a solver/visualization
-// with a backend type this hook doesn't map to a taxonomy option is still a
-// declared item for completeness purposes even though it contributes
-// nothing to `tags`. Deliberately a second Map rather than extra keys on
+// declared-item presence, since `tags` alone can't: a solver with a backend
+// type this hook doesn't map to a taxonomy option is still a declared item
+// for completeness purposes even though it contributes nothing to `tags`.
+// (A visualization now always contributes a chip when it counts, see
+// buildCompleteness.) Deliberately a second Map rather than extra keys on
 // `tags` itself, so the shape contract above stays exact.
 //
 // The Map is keyed by the real backend's human-readable `problemName`
@@ -56,12 +59,18 @@
 // SOLVER_TYPE_MAP / SOLVER_COMPLEXITY_MAP.
 //
 // visualizationType — aggregated across every visualization the problem
-// declares (Navigation/Batch/allVisualizations), through
-// mergeVisualStyle(visualizationName, undefined) (T22/#31). This facet is
-// wholly overlay-driven per the #6 decision (TAXONOMY_REFERENCE.md §9) — the
-// backend's VisualizationType enum is a renderer-implementation contract,
-// not the conceptual style this facet shows, so no real value is ever passed
-// through here.
+// declares (Navigation/Batch/allVisualizations), as picture types:
+// data/taxonomy.js's derivePictureTypeOption() reads each visualization's
+// own `pictureType` (Navigation/Batch/allInfo, ReduxISU/Redux#841, the same
+// field hooks/useProblemDetail.js and lib/pictureRequest.js read), falls
+// back to its legacy `visualizationType` (allVisualizationTypes, else
+// allInfo) when it has none, and tags a type it doesn't know "unclassified".
+// This replaces the hand-written SUPPLEMENTAL_VISUAL_STYLE overlay the #6
+// decision (TAXONOMY_REFERENCE.md §9) put here: frozen on 2026-09-02, it had
+// no entry for any visualization added since and none of its 12 labels fit
+// the SAT, set or table pictures, so those cards said "No visualizations"
+// beside a green complete check for a page that drew them fine.
+// buildCompleteness reads the same option, so the chips and the check agree.
 //
 // reductionCost, reductionType — aggregated across every reduction edge
 // touching the problem (Navigation/Reductions), in either direction: a
@@ -90,15 +99,14 @@
 // endpoint actually grows it. See this task's handback summary.
 
 import { useEffect, useState } from "react";
-import { mergeSupplementalTags, mergeVisualStyle } from "../data/mergeSupplementalTags";
+import { mergeSupplementalTags } from "../data/mergeSupplementalTags";
 import {
+  derivePictureTypeOption,
   REDUCTION_COST_MAP,
   REDUCTION_TYPE_MAP,
   SOLVER_COMPLEXITY_MAP,
   SOLVER_TYPE_MAP,
-  UNCLASSIFIED,
 } from "../data/taxonomy";
-import { VISUALIZATION_TYPE_MAP } from "../data/visualizationTypes";
 import {
   requestAllInfo,
   requestAllProblems,
@@ -174,6 +182,7 @@ function indexReductionEdgesByProblem(reductionGraph) {
  * @param {Object} info Full `requestAllInfo` result.
  * @param {Object} solversByProblem Full `requestAllSolvers` result.
  * @param {Object} visualizationsByProblem Full `requestAllVisualizations` result.
+ * @param {Object} visualizationTypesByClassName Full `requestAllVisualizationTypes` result.
  * @param {Map<string, Object[]>} reductionEdgesByProblem From `indexReductionEdgesByProblem`.
  * @returns {{problemName: string, tags: Object}}
  */
@@ -182,6 +191,7 @@ function buildProblemTags(
   info,
   solversByProblem,
   visualizationsByProblem,
+  visualizationTypesByClassName,
   reductionEdgesByProblem,
 ) {
   const problemInfo = info[problemCode] ?? {};
@@ -203,8 +213,12 @@ function buildProblemTags(
 
   const visualizationType = new Set();
   for (const visualizationClassName of visualizationsByProblem[problemCode] ?? []) {
-    const style = mergeVisualStyle(visualizationClassName, undefined);
-    if (style !== UNCLASSIFIED) visualizationType.add(style);
+    const pictureType = visualizationPictureType(
+      visualizationClassName,
+      info,
+      visualizationTypesByClassName,
+    );
+    if (pictureType) visualizationType.add(pictureType);
   }
 
   const reductionCost = new Set();
@@ -232,21 +246,23 @@ function buildProblemTags(
 }
 
 /**
- * True unless `visualizationTypesByClassName` explicitly names this class's
- * backend type as one `VISUALIZATION_TYPE_MAP` maps to `null` (today, only
- * "Unimplemented" — a real, confirmed "no renderer exists for this" from the
- * backend itself, e.g. ConvexHullVisualization, checked directly against the
- * live production catalog 2026-09-15: 4 of 49 declared visualizations are
- * this). A backend type this map has never heard of at all still counts —
- * unlike a confirmed Unimplemented stub, an unmapped type is just something
- * this frontend hasn't classified yet, not something known not to render.
+ * One visualization's Visualization Type option key (data/taxonomy.js's
+ * derivePictureTypeOption), or `null` when the backend says nothing draws it
+ * (a legacy `visualizationType` of "Unimplemented"). The legacy type is read
+ * the way hooks/useProblemDetail.js reads it: allVisualizationTypes first,
+ * then the class's own allInfo entry, since T40 found some deployments
+ * without the batch endpoint.
+ * @param {string} className
+ * @param {Object} info Full `requestAllInfo` result.
+ * @param {Object} visualizationTypesByClassName Full `requestAllVisualizationTypes` result.
+ * @returns {string|null}
  */
-function isRenderableVisualizationClass(className, visualizationTypesByClassName) {
-  const backendType = visualizationTypesByClassName[className];
-  if (!Object.hasOwn(VISUALIZATION_TYPE_MAP, backendType)) {
-    return true;
-  }
-  return VISUALIZATION_TYPE_MAP[backendType] !== null;
+function visualizationPictureType(className, info, visualizationTypesByClassName) {
+  const visualizationInfo = info[className] ?? {};
+  return derivePictureTypeOption(
+    visualizationInfo.pictureType,
+    visualizationTypesByClassName[className] ?? visualizationInfo.visualizationType,
+  );
 }
 
 /**
@@ -256,9 +272,11 @@ function isRenderableVisualizationClass(className, visualizationTypesByClassName
  * declared visualization only counts if it can actually render something.
  * Checked directly (2026-09-15) after Convex Hull's card showed a green
  * "fully catalogued" check despite having no real visualization — its one
- * declared class, ConvexHullVisualization, is backend-confirmed
+ * declared class, ConvexHullVisualization, was then backend-confirmed
  * "Unimplemented", so `hasVisualization` was true on nothing but a
- * registered-but-empty class name. A solver whose backend-reported type has
+ * registered-but-empty class name. A visualization counts exactly when it
+ * gets a Visualization Type chip (visualizationPictureType above), so a card
+ * can never show the complete check beside "No visualizations". A solver whose backend-reported type has
  * no entry in SOLVER_TYPE_MAP is still a declared solver for completeness
  * purposes even though it contributes nothing to `tags` — solvers have no
  * backend-declared "this does nothing" value the way visualizations do, so
@@ -267,6 +285,7 @@ function isRenderableVisualizationClass(className, visualizationTypesByClassName
  */
 function buildCompleteness(
   problemCode,
+  info,
   solversByProblem,
   visualizationsByProblem,
   visualizationTypesByClassName,
@@ -274,8 +293,9 @@ function buildCompleteness(
 ) {
   return {
     hasSolver: (solversByProblem[problemCode]?.length ?? 0) > 0,
-    hasVisualization: (visualizationsByProblem[problemCode] ?? []).some((className) =>
-      isRenderableVisualizationClass(className, visualizationTypesByClassName),
+    hasVisualization: (visualizationsByProblem[problemCode] ?? []).some(
+      (className) =>
+        visualizationPictureType(className, info, visualizationTypesByClassName) !== null,
     ),
     hasVerifier: (verifiersByProblem[problemCode]?.length ?? 0) > 0,
   };
@@ -359,6 +379,7 @@ export function useCatalogIndex(url) {
             info ?? {},
             solversByProblem ?? {},
             visualizationsByProblem ?? {},
+            visualizationTypesByClassName ?? {},
             reductionEdgesByProblem,
           );
           map.set(problemName, tags);
@@ -366,6 +387,7 @@ export function useCatalogIndex(url) {
             problemName,
             buildCompleteness(
               problemCode,
+              info ?? {},
               solversByProblem ?? {},
               visualizationsByProblem ?? {},
               visualizationTypesByClassName ?? {},
