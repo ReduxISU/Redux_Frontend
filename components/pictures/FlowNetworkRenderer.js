@@ -19,12 +19,23 @@
 // Layout is flowLayout.js's pure function of the payload. Hovering, focusing or tapping a node
 // traces its edges, everything not touching it faded by color. The diagram opens fitted to its
 // box and zooms and pans with DiagramZoom.js.
+//
+// #250: the reader can move any node and bend any edge (diagramEdits.js); the source can't go
+// right of any other node, nor the sink left of one, so the flow still reads left to right.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
-import { FLOW_RADIUS, layoutFlow } from "./flowLayout";
+import {
+  EdgeHandles,
+  editedPositions,
+  makeEditor,
+  nodeDragProps,
+  offsetAlongNormal,
+  useDiagramEdits,
+} from "./diagramEdits";
+import { FLOW_RADIUS, layoutFlow, shapeFlowEdges } from "./flowLayout";
 import {
   edgeLook,
   FAINT_EDGE,
@@ -82,8 +93,16 @@ function flowEdgeLook(state, units, capacity) {
  * @param {Object} props.payload The Flow Network payload.
  * @param {Object} props.frame The frame to draw.
  * @param {number|null} props.frameIndex The step, or null before Run.
+ * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
  */
-export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, frameIndex }) {
+export default function FlowNetworkRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  frameIndex,
+  layoutKey = null,
+}) {
   const layout = useMemo(() => layoutFlow(payload), [payload]);
   const labels = useMemo(
     () => new Map(layout.nodes.map((node) => [node.id, node.label])),
@@ -110,6 +129,38 @@ export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, fr
         ...links.get(traced).in.map((edge) => edge.a),
       ])
     : null;
+
+  // The reader's moves, and the edges reshaped from where the nodes are now.
+  const edits = useDiagramEdits([layoutKey ?? payload]);
+  const pos = editedPositions(layout.positions, edits.nodes);
+  const nodes = layout.nodes.map((node) => ({ ...node, ...pos.get(node.id) }));
+  const edges = shapeFlowEdges(layout.graph, pos, edits.bends);
+  const sourceId = layout.nodes.find((node) => node.role === "source")?.id ?? null;
+  const sinkId = layout.nodes.find((node) => node.role === "sink")?.id ?? null;
+  const editor = makeEditor({
+    edits,
+    nodeAt: (id) => pos.get(id) ?? null,
+    // Free, except that the source stays leftmost and the sink rightmost.
+    moveNode: (id, point) => {
+      const others = nodes.filter((node) => node.id !== id).map((node) => node.x);
+      let x = point.x;
+      if (id === sourceId && others.length) x = Math.min(x, Math.min(...others));
+      else if (id === sinkId && others.length) x = Math.max(x, Math.max(...others));
+      else {
+        if (sourceId !== null && pos.has(sourceId)) x = Math.max(x, pos.get(sourceId).x);
+        if (sinkId !== null && pos.has(sinkId)) x = Math.min(x, pos.get(sinkId).x);
+      }
+      edits.setNode(id, { x, y: point.y });
+    },
+    dragEdge: (id, point) => {
+      const spec = layout.graph.specs.find((candidate) => candidate.id === id);
+      const a = pos.get(spec?.a);
+      const b = pos.get(spec?.b);
+      if (!a || !b) return;
+      // The layout bows to the left of travel, the opposite of offsetAlongNormal's side.
+      edits.setBend(id, -offsetAlongNormal(a, b, point) - spec.offset);
+    },
+  });
 
   const running = frameIndex !== null;
   const flow = running && frame?.flow && typeof frame.flow === "object" ? frame.flow : null;
@@ -140,7 +191,7 @@ export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, fr
     const value = Number.isFinite(frame.value) ? frame.value : 0;
     summary = `Flow value: ${value}.`;
     if (done && groups) {
-      const cutEdges = layout.edges.filter((edge) => cut.has(edge.id));
+      const cutEdges = edges.filter((edge) => cut.has(edge.id));
       const capacity = cutEdges.reduce((sum, edge) => sum + edge.capacity, 0);
       const side = (index) =>
         layout.nodes
@@ -158,9 +209,7 @@ export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, fr
   const showResidual = residual === "on" && running && !done;
   const backArcs = traced
     ? []
-    : layout.edges.filter(
-        (edge) => backLegs.has(edge.id) || (showResidual && unitsOf(edge.id) > 0),
-      );
+    : edges.filter((edge) => backLegs.has(edge.id) || (showResidual && unitsOf(edge.id) > 0));
 
   return (
     <Box
@@ -173,6 +222,7 @@ export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, fr
         label={label}
         drawing={layout}
         resetOn={[payload]}
+        editor={editor}
         toolbar={
           running ? (
             <PictureToggle
@@ -186,7 +236,7 @@ export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, fr
         }
       >
         <g data-layer="edges">
-          {layout.edges.map((edge) => {
+          {edges.map((edge) => {
             const state = stateOf(frame?.edges, edge.id);
             const touches = edge.a === traced || edge.b === traced;
             const faint = traced !== null && !touches;
@@ -216,6 +266,7 @@ export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, fr
             );
           })}
         </g>
+        <EdgeHandles edges={edges.map((edge) => ({ id: edge.id, d: edge.path }))} />
         <g data-layer="back-arcs">
           {backArcs.map((edge) => {
             const used = backLegs.has(edge.id);
@@ -251,10 +302,11 @@ export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, fr
           })}
         </g>
         <g data-layer="labels">
-          {layout.edges.map((edge) => (
+          {edges.map((edge) => (
             <StatePill
               key={edge.id}
               forId={edge.id}
+              dragId={edge.id}
               x={edge.label.x}
               y={edge.label.y}
               text={edgeText(edge)}
@@ -268,7 +320,7 @@ export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, fr
           ))}
         </g>
         <g data-layer="nodes">
-          {layout.nodes.map((node) => {
+          {nodes.map((node) => {
             const state = stateOf(frame?.nodes, node.id);
             const group = Number.isInteger(groups?.[node.id]) ? groups[node.id] : undefined;
             const look = nodeLook(state, group);
@@ -302,6 +354,7 @@ export default function FlowNetworkRenderer({ idPrefix, name, payload, frame, fr
               <g
                 key={node.id}
                 data-node-id={node.id}
+                {...nodeDragProps(node.id)}
                 data-state={state}
                 data-group={group}
                 data-role={node.role ?? undefined}

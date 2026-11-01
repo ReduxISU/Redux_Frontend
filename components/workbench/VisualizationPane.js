@@ -49,7 +49,7 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
  * What goes inside one picture box.
  * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object,
  *     highlightIds?: string[]}
- *   | {kind: "picture", type: string, payload: Object|null, frame: Object,
+ *   | {kind: "picture", type: string, payload: Object|null, layoutKey?: string, frame: Object,
  *      frameIndex: number|null, frameCount: number, name: string, showCaption: boolean,
  *      runs?: {options: Array<{id: string, label: string, accepted?: boolean}>,
  *        value: string|null, onChange: Function}|null}
@@ -88,6 +88,7 @@ function PictureBox({ idPrefix, content }) {
         name={content.name}
         type={content.type}
         payload={content.payload}
+        layoutKey={content.layoutKey}
         frame={content.frame}
         frameIndex={content.frameIndex}
         frameCount={content.frameCount}

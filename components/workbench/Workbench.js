@@ -92,6 +92,21 @@ const ARROW = "→";
 const CERTIFICATE_DRAWING_SUPPORTED = false;
 const CERTIFICATE_DRAWING_REASON = "Redux can't draw a certificate on this picture yet.";
 
+/**
+ * The step a run's picture opens on: its last frame, the finished result. The step controls
+ * still go back through the steps, and Play from the last frame replays them from the first.
+ * @param {Object[]|undefined} frames The run's frames.
+ */
+function openingStep(frames) {
+  return Math.max((Array.isArray(frames) ? frames.length : 0) - 1, 0);
+}
+
+/** A reduction's target picture: the last of visualizeReduction's frames (source, then target). */
+function reducedTargetFrame(result) {
+  const frames = Array.isArray(result?.frames) ? result.frames : [];
+  return frames.length > 1 ? frames[frames.length - 1] : null;
+}
+
 function findIndexByName(items, name) {
   if (typeof name !== "string" || !name) return 0;
   const index = items.findIndex((item) => item.name === name);
@@ -215,11 +230,11 @@ export default function Workbench({ problem }) {
   // is the run's own frames.
   const [runView, setRunView] = useState(null);
 
-  // A new run's picture starts at its first step, on its own frames.
+  // A new run's picture opens on its last step (the finished result), on its own frames.
   const [stepsFor, setStepsFor] = useState(pictureRun.result);
   if (stepsFor !== pictureRun.result) {
     setStepsFor(pictureRun.result);
-    setCurrentStep(0);
+    setCurrentStep(openingStep(pictureRun.result?.frames));
     setRunView(null);
   }
 
@@ -243,9 +258,11 @@ export default function Workbench({ problem }) {
       : [];
   const chosenRun = otherRuns.find((run) => run.id === runView) ?? null;
   const runFrames = showingRunPicture ? (chosenRun ? chosenRun.frames : pictureResult.frames) : [];
+  // Following another run (or all branches again) opens it on its last step too.
   function chooseRun(id) {
     setRunView(id);
-    setCurrentStep(0);
+    const run = otherRuns.find((candidate) => candidate.id === id);
+    setCurrentStep(openingStep(run ? run.frames : pictureResult?.frames));
   }
   const edits = useFrameEdits({
     backendType: selectedViz?.backendType,
@@ -627,6 +644,8 @@ export default function Workbench({ problem }) {
         kind: "picture",
         type: pictureResult.type,
         payload: pictureResult.payload,
+        // #250: the picture's hand-made layout is kept for this instance and visualization.
+        layoutKey: `${instance}\u0000${selectedViz.className}`,
         frame,
         frameIndex: currentStep,
         frameCount: runFrames.length,
@@ -653,6 +672,7 @@ export default function Workbench({ problem }) {
       kind: "picture",
       type: defaultPicture.picture.type,
       payload: defaultPicture.picture.payload,
+      layoutKey: `${instance}\u0000${selectedViz.className}`,
       // The plain frame (hooks/useDefaultPicture.js): the instance, not a step of a run.
       frame: defaultPicture.picture.frame,
       frameIndex: null,
@@ -716,7 +736,7 @@ export default function Workbench({ problem }) {
     if (!selectedReduction) {
       content = { kind: "message", text: `No reductions from ${problem.name} are declared yet.` };
     } else if (reduceCurrent) {
-      const frame = reduceResult.frames[1] ?? null;
+      const frame = reducedTargetFrame(reduceResult);
       content = frame
         ? {
             kind: "frame",
@@ -1162,7 +1182,7 @@ export default function Workbench({ problem }) {
                       runId: reduceResult.runId,
                       gadgets: reduceGadgets,
                       sourceFrame: sourceContent.kind === "frame" ? sourceContent.frame : null,
-                      targetFrame: reduceResult.frames[1] ?? null,
+                      targetFrame: reducedTargetFrame(reduceResult),
                       activeIndex: activeGadget ? gadgetHighlight.index : null,
                       onHighlight: handleGadgetHighlight,
                     }

@@ -20,11 +20,24 @@
 // Layout is layeredLayout.js's pure function of the payload. Hovering, focusing or tapping a
 // node traces it: its edges in the trace color, everything not touching it faded by color. The
 // diagram opens fitted to its box and zooms and pans with DiagramZoom.js.
+//
+// #250: the reader can move a node up and down within its layer (its layer's x stays, so the
+// left-to-right order holds), bend any edge (a back edge runs deeper or shallower under the
+// rows) and turn a loop around its node (diagramEdits.js).
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
 import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
+import {
+  angleTowards,
+  EdgeHandles,
+  editedPositions,
+  makeEditor,
+  nodeDragProps,
+  offsetAlongNormal,
+  useDiagramEdits,
+} from "./diagramEdits";
 import { NODE_RADIUS } from "./graphLayout";
 import {
   Badge,
@@ -40,7 +53,7 @@ import {
   TRACE_COLOR,
   WeightTag,
 } from "./graphPieces";
-import { layoutLayered } from "./layeredLayout";
+import { layoutLayered, shapeLayeredEdges } from "./layeredLayout";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 
 /** The states in which a Feedback Arc Set edge is one the candidate removes. */
@@ -67,8 +80,9 @@ function plural(count, word) {
  * @param {string} props.name The visualization's name, for the diagram's label.
  * @param {Object} props.payload The Layered Graph payload.
  * @param {Object} props.frame The frame to draw.
+ * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
  */
-export default function LayeredGraphRenderer({ idPrefix, name, payload, frame }) {
+export default function LayeredGraphRenderer({ idPrefix, name, payload, frame, layoutKey = null }) {
   const layout = useMemo(() => layoutLayered(payload), [payload]);
   const labels = useMemo(
     () => new Map(layout.nodes.map((node) => [node.id, node.label])),
@@ -103,6 +117,36 @@ export default function LayeredGraphRenderer({ idPrefix, name, payload, frame })
   if (typeof payload?.source === "string") fixedTags.set(payload.source, "source");
   if (typeof payload?.target === "string") fixedTags.set(payload.target, "target");
 
+  // The reader's moves: a node keeps its layer's x; the edges are reshaped from where it is.
+  const edits = useDiagramEdits([layoutKey ?? payload]);
+  const pos = editedPositions(layout.positions, edits.nodes);
+  const nodes = layout.nodes.map((node) => ({ ...node, y: pos.get(node.id).y }));
+  const edges = shapeLayeredEdges(layout.graph, pos, edits.bends, edits.loops);
+  const editor = makeEditor({
+    edits,
+    nodeAt: (id) => pos.get(id) ?? null,
+    moveNode: (id, point) => {
+      const base = layout.positions.get(id);
+      if (base) edits.setNode(id, { x: base.x, y: point.y });
+    },
+    dragEdge: (id, point) => {
+      const spec = layout.graph.specs.find((candidate) => candidate.id === id);
+      const a = pos.get(spec?.a);
+      const b = pos.get(spec?.b);
+      if (!a || !b) return;
+      if (spec.loop) {
+        edits.setLoop(id, angleTowards(a, point));
+      } else if (spec.back) {
+        // Run under the rows so the curve's middle (where its weight sits) is at the pointer.
+        const ends = a.y + b.y + 2 * NODE_RADIUS + 1;
+        edits.setBend(id, (8 * point.y - ends) / 6 - spec.under);
+      } else {
+        // The layout bows to the right of travel, the opposite of offsetAlongNormal's side.
+        edits.setBend(id, -offsetAlongNormal(a, b, point) - spec.offset);
+      }
+    },
+  });
+
   const touches = (edge) => edge.a === traced || edge.b === traced;
   const label = `${name}: a ${layout.directed ? "directed " : ""}graph of ${plural(layout.nodes.length, "node")} and ${plural(layout.edges.length, "edge")} in ${plural(layout.layerCount, "layer")}, left to right.`;
 
@@ -113,9 +157,15 @@ export default function LayeredGraphRenderer({ idPrefix, name, payload, frame })
       data-graph-rule={payload?.rule ?? ""}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
     >
-      <DiagramZoom idPrefix={idPrefix} label={label} drawing={layout} resetOn={[payload]}>
+      <DiagramZoom
+        idPrefix={idPrefix}
+        label={label}
+        drawing={layout}
+        resetOn={[payload]}
+        editor={editor}
+      >
         <g data-layer="edges">
-          {layout.edges.map((edge) => {
+          {edges.map((edge) => {
             const state = stateOf(frame?.edges, edge.id);
             const faint = traced !== null && !touches(edge);
             const removed = arcSet && REMOVED_STATES.has(state);
@@ -146,11 +196,13 @@ export default function LayeredGraphRenderer({ idPrefix, name, payload, frame })
             );
           })}
         </g>
+        <EdgeHandles edges={edges.map((edge) => ({ id: edge.id, d: edge.path }))} />
         <g data-layer="weights">
-          {layout.edges.map((edge) =>
+          {edges.map((edge) =>
             edge.tag === null ? null : (
               <WeightTag
                 key={edge.id}
+                dragId={edge.id}
                 x={edge.label.x}
                 y={edge.label.y}
                 text={edge.tag}
@@ -161,7 +213,7 @@ export default function LayeredGraphRenderer({ idPrefix, name, payload, frame })
           )}
         </g>
         <g data-layer="nodes">
-          {layout.nodes.map((node) => {
+          {nodes.map((node) => {
             const state = stateOf(frame?.nodes, node.id);
             const group = Number.isInteger(groups?.[node.id]) ? groups[node.id] : undefined;
             const look = nodeLook(state, group);
@@ -195,6 +247,7 @@ export default function LayeredGraphRenderer({ idPrefix, name, payload, frame })
               <g
                 key={node.id}
                 data-node-id={node.id}
+                {...nodeDragProps(node.id)}
                 data-state={state}
                 data-group={group}
                 data-order={position}

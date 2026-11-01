@@ -16,6 +16,9 @@
 // left (with room for their T / F value), clauses on the right, one edge per literal. A clause
 // that uses a variable twice has two edges between the same two nodes; each repeat is bowed to
 // one side so both stay visible.
+//
+// #250: the reader can drag a node up or down its own column; bipartiteEdge redraws its edges
+// from wherever it is, so the two sides stay apart.
 
 /** An element's (or variable's) radius, in viewBox units. */
 export const ELEMENT_RADIUS = 17;
@@ -30,6 +33,9 @@ const LINE_HEIGHT = 15;
 export const HITS_ROOM = 62;
 
 const HEAD_Y = 28;
+
+/** The highest a dragged node's top may go: under the column heads. */
+export const TOP_LIMIT = HEAD_Y + 20;
 
 /** "{1,2,3}", for a set's members. */
 export function braces(items) {
@@ -197,27 +203,16 @@ export function layoutBipartite(payload) {
   // One edge per membership (per literal), from the element's right edge to the box's left.
   const repeats = new Map();
   const placedEdges = edges.map((edge) => {
-    const a = positions.get(edge.a);
-    const b = positions.get(edge.b);
-    const x1 = a.x + halves.get(edge.a);
-    const y1 = a.y;
-    const x2 = b.x;
-    const y2 = b.y;
     const pair = `${edge.a}\u0000${edge.b}`;
     const repeat = repeats.get(pair) ?? 0;
     repeats.set(pair, repeat + 1);
-    let path;
-    if (repeat === 0) {
-      path = `M${round(x1)},${round(y1)} L${round(x2)},${round(y2)}`;
-    } else {
-      // A repeat of the same variable in one clause: bowed 22 units to one side per repeat.
-      const length = Math.hypot(x2 - x1, y2 - y1) || 1;
-      const offset = 22 * repeat;
-      const mx = (x1 + x2) / 2 - ((y2 - y1) / length) * offset;
-      const my = (y1 + y2) / 2 + ((x2 - x1) / length) * offset;
-      path = `M${round(x1)},${round(y1)} Q${round(mx)},${round(my)} ${round(x2)},${round(y2)}`;
-    }
-    return { id: edge.id, a: edge.a, b: edge.b, positive: edge.positive, path, x1, y1, x2, y2 };
+    const shape = bipartiteEdge(
+      positions.get(edge.a),
+      halves.get(edge.a),
+      positions.get(edge.b),
+      repeat,
+    );
+    return { id: edge.id, a: edge.a, b: edge.b, positive: edge.positive, repeat, ...shape };
   });
 
   const pickSide = typeof payload?.pickSide === "string" ? payload.pickSide : "sets";
@@ -260,4 +255,32 @@ export function layoutBipartite(payload) {
 
 function round(value) {
   return Math.round(value * 10) / 10;
+}
+
+/**
+ * An edge from the element at `a` (`half` its drawn half width) to the set box whose left edge
+ * is at `b`: a straight line, or, for a repeat of the same variable in one clause, bowed 11 units
+ * per repeat to one side. `extra` (#250) bows it further by hand: drawing units along the normal
+ * (-dy, dx), either side. Returns the path, its ends and the curve's middle.
+ * @returns {{path: string, x1: number, y1: number, x2: number, y2: number,
+ *   middle: {x: number, y: number}}}
+ */
+export function bipartiteEdge(a, half, b, repeat, extra = 0) {
+  const x1 = a.x + half;
+  const y1 = a.y;
+  const x2 = b.x;
+  const y2 = b.y;
+  const offset = 11 * repeat + extra;
+  const length = Math.hypot(x2 - x1, y2 - y1) || 1;
+  const nx = -(y2 - y1) / length;
+  const ny = (x2 - x1) / length;
+  const middle = { x: (x1 + x2) / 2 + nx * offset, y: (y1 + y2) / 2 + ny * offset };
+  let path = `M${round(x1)},${round(y1)} L${round(x2)},${round(y2)}`;
+  if (offset !== 0) {
+    // A quadratic through `middle` at t = 0.5 has its control point twice as far off the line.
+    const cx = (x1 + x2) / 2 + nx * offset * 2;
+    const cy = (y1 + y2) / 2 + ny * offset * 2;
+    path = `M${round(x1)},${round(y1)} Q${round(cx)},${round(cy)} ${round(x2)},${round(y2)}`;
+  }
+  return { path, x1, y1, x2, y2, middle };
 }

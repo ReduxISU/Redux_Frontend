@@ -17,12 +17,23 @@
 // Layout is bipartiteLayout.js's pure function of the payload. Hovering, focusing or tapping a
 // node traces it: its edges in the trace color, its neighbours as they are, everything else
 // faded by color. The diagram opens fitted to its box and zooms and pans with DiagramZoom.js.
+//
+// #250: the reader can drag a node up or down its own column (never across: the elements stay
+// on one side and the sets on the other) and bend any edge (diagramEdits.js).
 
 import Box from "@mui/material/Box";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { paletteVars } from "../theme";
-import { ELEMENT_RADIUS, layoutBipartite } from "./bipartiteLayout";
+import { bipartiteEdge, ELEMENT_RADIUS, layoutBipartite, TOP_LIMIT } from "./bipartiteLayout";
 import DiagramZoom from "./DiagramZoom";
+import {
+  EdgeHandle,
+  editedPositions,
+  makeEditor,
+  nodeDragProps,
+  offsetAlongNormal,
+  useDiagramEdits,
+} from "./diagramEdits";
 import {
   Badge,
   edgeLook,
@@ -54,8 +65,15 @@ function plural(count, word) {
  * @param {string} props.name The visualization's name, for the diagram's label.
  * @param {Object} props.payload The Bipartite Graph payload.
  * @param {Object} props.frame The frame to draw.
+ * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
  */
-export default function BipartiteGraphRenderer({ idPrefix, name, payload, frame }) {
+export default function BipartiteGraphRenderer({
+  idPrefix,
+  name,
+  payload,
+  frame,
+  layoutKey = null,
+}) {
   const layout = useMemo(() => layoutBipartite(payload), [payload]);
   const neighbours = useMemo(() => {
     const map = new Map([...layout.positions.keys()].map((id) => [id, new Set()]));
@@ -85,6 +103,42 @@ export default function BipartiteGraphRenderer({ idPrefix, name, payload, frame 
     frame?.assignment && typeof frame.assignment === "object" ? frame.assignment : {};
   const { assignment: factor, pickSide } = layout;
   const pickSets = pickSide === "sets";
+
+  // The reader's moves: a node keeps its column's x and takes the y it was dragged to.
+  const edits = useDiagramEdits([layoutKey ?? payload]);
+  const pos = editedPositions(layout.positions, edits.nodes);
+  const elements = layout.elements.map((element) => ({ ...element, y: pos.get(element.id).y }));
+  const sets = layout.sets.map((set) => ({ ...set, y: pos.get(set.id).y }));
+  const halves = new Map(layout.elements.map((element) => [element.id, element.half]));
+  const edges = layout.edges.map((edge) => ({
+    ...edge,
+    ...bipartiteEdge(
+      pos.get(edge.a),
+      halves.get(edge.a),
+      pos.get(edge.b),
+      edge.repeat,
+      edits.bends[edge.id] ?? 0,
+    ),
+  }));
+  const setHalves = new Map(layout.sets.map((set) => [set.id, set.half]));
+  const editor = makeEditor({
+    edits,
+    nodeAt: (id) => pos.get(id) ?? null,
+    // Up and down its own column only, and never over the column heads.
+    moveNode: (id, point) => {
+      const base = layout.positions.get(id);
+      if (!base) return;
+      const half = setHalves.get(id) ?? ELEMENT_RADIUS;
+      edits.setNode(id, { x: base.x, y: Math.max(point.y, TOP_LIMIT + half) });
+    },
+    dragEdge: (id, point) => {
+      const edge = edges.find((candidate) => candidate.id === id);
+      if (!edge) return;
+      const a = { x: edge.x1, y: edge.y1 };
+      const b = { x: edge.x2, y: edge.y2 };
+      edits.setBend(id, offsetAlongNormal(a, b, point) - 11 * edge.repeat);
+    },
+  });
 
   const traceHandlers = (id) => {
     const press = () => setPinned((current) => (current === id ? null : id));
@@ -124,7 +178,13 @@ export default function BipartiteGraphRenderer({ idPrefix, name, payload, frame 
       data-rule={payload?.rule ?? ""}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
     >
-      <DiagramZoom idPrefix={idPrefix} label={label} drawing={layout} resetOn={[payload]}>
+      <DiagramZoom
+        idPrefix={idPrefix}
+        label={label}
+        drawing={layout}
+        resetOn={[payload]}
+        editor={editor}
+      >
         <g data-layer="heads">
           {layout.heads.map((head) => (
             <text
@@ -148,7 +208,7 @@ export default function BipartiteGraphRenderer({ idPrefix, name, payload, frame 
           ))}
         </g>
         <g data-layer="edges">
-          {layout.edges.map((edge) => {
+          {edges.map((edge) => {
             const state = stateOf(frame?.edges, edge.id);
             const touches = traced !== null && (edge.a === traced || edge.b === traced);
             const faint = traced !== null && !touches;
@@ -158,24 +218,26 @@ export default function BipartiteGraphRenderer({ idPrefix, name, payload, frame 
             if (faint) look = FAINT_EDGE;
             const negated = edge.positive === false;
             return (
-              <path
-                key={edge.id}
-                data-edge-id={edge.id}
-                data-state={state}
-                data-positive={edge.positive === undefined ? undefined : String(edge.positive)}
-                data-traced={traced ? (faint ? "faint" : "trace") : undefined}
-                d={edge.path}
-                fill="none"
-                stroke={look.line}
-                strokeWidth={look.width}
-                strokeDasharray={negated && !faint ? NEGATED_DASH : look.dash}
-                strokeLinecap="round"
-              />
+              <Fragment key={edge.id}>
+                <path
+                  data-edge-id={edge.id}
+                  data-state={state}
+                  data-positive={edge.positive === undefined ? undefined : String(edge.positive)}
+                  data-traced={traced ? (faint ? "faint" : "trace") : undefined}
+                  d={edge.path}
+                  fill="none"
+                  stroke={look.line}
+                  strokeWidth={look.width}
+                  strokeDasharray={negated && !faint ? NEGATED_DASH : look.dash}
+                  strokeLinecap="round"
+                />
+                <EdgeHandle id={edge.id} d={edge.path} />
+              </Fragment>
             );
           })}
         </g>
         <g data-layer="elements">
-          {layout.elements.map((element) => {
+          {elements.map((element) => {
             const state = stateOf(frame?.nodes, element.id);
             const look = nodeLook(state);
             const faint = near !== null && !near.has(element.id);
@@ -204,6 +266,7 @@ export default function BipartiteGraphRenderer({ idPrefix, name, payload, frame 
               <g
                 key={element.id}
                 data-node-id={element.id}
+                {...nodeDragProps(element.id)}
                 data-side="left"
                 data-state={state}
                 data-hits={count || undefined}
@@ -284,7 +347,7 @@ export default function BipartiteGraphRenderer({ idPrefix, name, payload, frame 
           })}
         </g>
         <g data-layer="sets">
-          {layout.sets.map((set) => {
+          {sets.map((set) => {
             const state = stateOf(frame?.nodes, set.id);
             const look = nodeLook(state);
             const faint = near !== null && !near.has(set.id);
@@ -306,6 +369,7 @@ export default function BipartiteGraphRenderer({ idPrefix, name, payload, frame 
               <g
                 key={set.id}
                 data-node-id={set.id}
+                {...nodeDragProps(set.id)}
                 data-side="right"
                 data-state={state}
                 data-hits={count || undefined}

@@ -180,8 +180,9 @@ test("Check keeps the solved picture and its current step, and a new Run retires
 
   await page.locator("#workbench-run").click();
   const position = page.locator("#workbench-steps-position");
-  await expect(position).toContainText("Step 1 of 3");
-  await page.locator("#workbench-steps-next").click();
+  // A run opens on its last step, the finished result.
+  await expect(position).toContainText("Step 3 of 3");
+  await page.locator("#workbench-steps-previous").click();
   await expect(position).toContainText("Step 2 of 3");
 
   await openPanel(page, "result", { expect });
@@ -199,7 +200,7 @@ test("Check keeps the solved picture and its current step, and a new Run retires
 
   // A new Run takes the verdict off the picture.
   await page.locator("#workbench-run").click();
-  await expect(position).toContainText("Step 1 of 3");
+  await expect(position).toContainText("Step 3 of 3");
   await expect(verdict(page)).toHaveCount(0);
 });
 
@@ -210,7 +211,7 @@ test("after a Run, an invalid certificate offers Show where it fails (disabled w
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-steps-position")).toContainText("Step 1 of 3");
+  await expect(page.locator("#workbench-steps-position")).toContainText("Step 3 of 3");
   await openPanel(page, "result", { expect });
 
   await check(page, WRONG);

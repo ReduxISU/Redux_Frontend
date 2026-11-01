@@ -13,6 +13,10 @@
 // bowed when the opposite edge is drawn too or when the straight line would pass through
 // another node. Each edge also has its backward arc ready (bowed further, from its head back to
 // its tail), drawn when an augmenting path sends flow back against the edge.
+//
+// #250: the edges are drawn by shapeFlowEdges from the nodes' current positions, so the reader
+// can move a node (the source stays leftmost and the sink rightmost) and bend an edge, and the
+// edges, their labels and their backward arcs follow.
 
 import { outlineDistance } from "./graphLayout";
 
@@ -206,10 +210,10 @@ export function layoutFlow(payload) {
     (edge) => typeof edge?.id === "string" && ids.has(edge.a) && ids.has(edge.b),
   );
   const pairs = new Set(edges.map((edge) => `${edge.a}\u0000${edge.b}`));
-  const shaped = edges.map((edge) => {
+  const specs = edges.map((edge) => {
     const a = positions.get(edge.a);
     const b = positions.get(edge.b);
-    const pair = pairs.has(`${edge.b} ${edge.a}`);
+    const pair = pairs.has(`${edge.b}\u0000${edge.a}`);
     let offset = pair ? 22 : 0;
     // A straight line through another node would hide it: bow around it. The mockup always
     // bows to the left of travel; here the side whose curve keeps further from the other nodes
@@ -223,25 +227,52 @@ export function layoutFlow(payload) {
         offset = -offset;
       }
     }
-    const forward = arc(a, b, widths.get(edge.a), widths.get(edge.b), offset);
-    // The backward arc bows further, on the other side of the edge.
-    const backOffset = offset < 0 ? offset - 26 : offset + 26;
     return {
       id: edge.id,
       a: edge.a,
       b: edge.b,
       capacity: Number.isFinite(edge.capacity) ? edge.capacity : 0,
       parts: typeof edge.label === "string" ? edge.label : null,
-      ...forward,
-      back: arc(b, a, widths.get(edge.b), widths.get(edge.a), backOffset),
+      offset,
     };
   });
+  const graph = { widths, specs };
+  const shaped = shapeFlowEdges(graph, positions);
 
   return {
     ...cropBox(placed, shaped, height),
     columnCount,
     nodes: placed,
     edges: shaped,
+    graph,
     positions,
   };
+}
+
+/**
+ * Every edge's shape from the nodes' current `positions` (#250): bowed by the layout's `offset`
+ * plus `bends[id]` drawn by hand (drawing units, to the left of travel like the layout's), with
+ * its backward arc bowed further on the same side.
+ * @param {{widths: Map<string, number>, specs: Object[]}} graph The layout's `graph`.
+ * @param {Map<string, {x: number, y: number}>} positions
+ * @param {Object} [bends] Edge id -> drawing units.
+ */
+export function shapeFlowEdges({ widths, specs }, positions, bends = {}) {
+  return specs.map((spec) => {
+    const a = positions.get(spec.a);
+    const b = positions.get(spec.b);
+    const offset = spec.offset + (bends[spec.id] ?? 0);
+    const forward = arc(a, b, widths.get(spec.a), widths.get(spec.b), offset);
+    // The backward arc bows further, on the other side of the edge.
+    const backOffset = offset < 0 ? offset - 26 : offset + 26;
+    return {
+      id: spec.id,
+      a: spec.a,
+      b: spec.b,
+      capacity: spec.capacity,
+      parts: spec.parts,
+      ...forward,
+      back: arc(b, a, widths.get(spec.b), widths.get(spec.a), backOffset),
+    };
+  });
 }
