@@ -60,8 +60,8 @@ export const PICTURE_RENDERERS = {
   BipartiteGraph: BipartiteGraphRenderer,
   FlowNetwork: FlowNetworkRenderer,
   Graph: GraphRenderer,
-  GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
+  GroupedGraph: GroupedGraphRenderer,
   Packing: PackingRenderer,
   Table: TableRenderer,
 };
@@ -72,8 +72,8 @@ const PICTURE_ANNOTATIONS = {
   BipartiteGraph: bipartiteAnnotations,
   FlowNetwork: flowAnnotations,
   Graph: graphAnnotations,
-  GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
+  GroupedGraph: groupedGraphAnnotations,
   Packing: packingAnnotations,
 };
 
