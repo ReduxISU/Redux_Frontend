@@ -42,6 +42,7 @@ import { useRouter } from "next/router";
 import { useMemo } from "react";
 import ComparisonColumn from "../components/ComparisonColumn";
 import NavBar from "../components/NavBar";
+import PageTitle from "../components/PageTitle";
 import { optionLabel } from "../data/taxonomy";
 import { useProblemDetail } from "../hooks/useProblemDetail";
 import { MIN_COMPARE_PROBLEMS, parseCompareNames } from "../lib/compareQuery";
@@ -145,11 +146,15 @@ export default function ComparePage() {
   const columnB = useProblemDetail(REDUX_API_BASE_URL, nameB);
   const columnC = useProblemDetail(REDUX_API_BASE_URL, nameC);
 
+  // #279: a column is named by its problem's display name once it loads, so a URL that names a
+  // problem by its key ("?problems=SAT3,CLIQUE") still reads "3SAT vs. Clique".
   const columns = [
-    { name: nameA, ...columnA },
-    { name: nameB, ...columnB },
-    { name: nameC, ...columnC },
-  ].filter((column) => column.name);
+    { route: nameA, ...columnA },
+    { route: nameB, ...columnB },
+    { route: nameC, ...columnC },
+  ]
+    .filter((column) => column.route)
+    .map((column) => ({ ...column, name: column.problem?.name ?? column.route }));
 
   // Not memoized: at most 3 columns, so the cross-check below is a handful
   // of comparisons -- cheap enough that recomputing it every render is
@@ -169,8 +174,11 @@ export default function ComparePage() {
     return <NothingToCompare />;
   }
 
+  const columnNames = columns.map((column) => column.name).join(" vs. ");
+
   return (
     <PageShell>
+      <PageTitle title={`${columnNames} · Compare`} />
       <Box
         component="main"
         sx={{
@@ -187,7 +195,7 @@ export default function ComparePage() {
             Compare Problems
           </Typography>
           <Typography variant="body1" sx={{ color: "text.secondary", mt: 0.5 }}>
-            {names.join(" vs. ")}
+            {columnNames}
           </Typography>
         </Box>
 
@@ -201,7 +209,7 @@ export default function ComparePage() {
         <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 3 }}>
           {columns.map((column) => (
             <ComparisonColumn
-              key={column.name}
+              key={column.route}
               problemName={column.name}
               problem={column.problem}
               loading={column.loading}

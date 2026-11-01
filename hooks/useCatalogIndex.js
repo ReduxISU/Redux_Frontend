@@ -99,6 +99,7 @@ import {
   UNCLASSIFIED,
 } from "../data/taxonomy";
 import { VISUALIZATION_TYPE_MAP } from "../data/visualizationTypes";
+import { problemDisplayName } from "../lib/problemNames";
 import {
   requestAllInfo,
   requestAllProblems,
@@ -185,7 +186,7 @@ function buildProblemTags(
   reductionEdgesByProblem,
 ) {
   const problemInfo = info[problemCode] ?? {};
-  const problemName = problemInfo.problemName ?? problemCode;
+  const problemName = problemDisplayName(info, problemCode);
 
   const { problemType, computationalModel, complexityClass } = mergeSupplementalTags(problemName, {
     complexityClass: problemInfo.complexityClass,

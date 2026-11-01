@@ -141,11 +141,14 @@ function tagValueAsArray(tagValue) {
 // internal key happens to start with those two letters. Checked across
 // every facet a problem has a tag for, not just the sidebar-visible ones,
 // since the ask is "any tag", not "any filterable tag".
-function matchesSearchTerm(name, tags, query) {
+//
+// #279: the problem's Redux key ("VERTEXCOVER", "SAT3") matches too, so someone who knows a
+// problem by its key still finds it, though the card only ever shows the display name.
+function matchesSearchTerm(name, tags, query, key) {
   if (!query) {
     return true;
   }
-  if (name.toLowerCase().includes(query)) {
+  if (name.toLowerCase().includes(query) || key?.toLowerCase().includes(query)) {
     return true;
   }
   for (const facetKey of Object.keys(tags)) {
@@ -262,6 +265,8 @@ function buildFacetOptions(index, enumCatalog) {
  *   case-insensitive substring of the problem name OR of any tag the problem
  *   carries (its real display label, e.g. "NP" matches a problem tagged
  *   "NP-Complete" — see matchesSearchTerm).
+ * @param {Map<string, string>} [options.codeToName] #279: useCatalogIndex()'s problem key ->
+ *   display name map, so the search also matches a problem's key ("SAT3" finds 3SAT).
  * @param {Object} [options.reductionGraph] T59 (#134). `{ [fromName]:
  *   { [toName]: edge[] } }`, from useCatalogIndex()'s `reductionGraphByName`.
  *   Ignored when `reachabilitySource` is null.
@@ -295,6 +300,7 @@ export function useCatalogFilters(
   {
     selected = {},
     searchValue = "",
+    codeToName,
     reductionGraph = {},
     reachabilitySource = null,
     reachabilityMode = "oneHop",
@@ -331,9 +337,11 @@ export function useCatalogFilters(
 
   const results = useMemo(() => {
     const query = searchValue.trim().toLowerCase();
+    const nameToKey = new Map();
+    for (const [key, name] of codeToName ?? []) nameToKey.set(name, key);
     const matched = [];
     for (const [name, tags] of index.entries()) {
-      if (!matchesSearchTerm(name, tags, query)) {
+      if (!matchesSearchTerm(name, tags, query, nameToKey.get(name))) {
         continue;
       }
       if (!matchesSelectedFacets(tags, selected)) {
@@ -350,7 +358,7 @@ export function useCatalogFilters(
       matched.push({ name, tags });
     }
     return matched;
-  }, [index, selected, searchValue, reachableSet]);
+  }, [index, selected, searchValue, codeToName, reachableSet]);
 
   return { results, facetOptions, matchedTags: selected };
 }

@@ -45,7 +45,7 @@ import { REDUX_API_BASE_URL } from "../../lib/redux";
 
 export default function PlaylistIndex() {
   const router = useRouter();
-  const { index, loading } = useCatalogIndex(REDUX_API_BASE_URL);
+  const { index, codeToName, loading } = useCatalogIndex(REDUX_API_BASE_URL);
   const myPlaylists = useSyncExternalStore(
     subscribeMyPlaylists,
     getMyPlaylistsSnapshot,
@@ -115,7 +115,12 @@ export default function PlaylistIndex() {
           ))}
         </Box>
 
-        <PlaylistCreator problemNames={problemNames} loading={loading} onCreate={handleCreate} />
+        <PlaylistCreator
+          problemNames={problemNames}
+          codeToName={codeToName}
+          loading={loading}
+          onCreate={handleCreate}
+        />
 
         {myPlaylists.length > 0 && (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
