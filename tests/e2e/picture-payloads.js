@@ -4,6 +4,7 @@
 // (local/viz-integration) on 2026-10-14, so tests/e2e/picture-renderers.spec.js can answer the
 // picture requests itself and CI needs no backend that serves format=frames.
 // DFA Acceptance: the problem's default instance, 3 frames with the DFASolver. The Graph
+// pictures (#201), the Bipartite Graph pictures (#203) and the Layered Graph pictures (#205)
 // pictures (#201), the Grouped Graph pictures (#202) and the Bipartite Graph pictures (#203)
 // follow at the end, each with its instance and solver.
 
@@ -99,7 +100,7 @@ export const DFA_TABLE_FRAMES = {
   ],
 };
 
-/** format=frames for DFAVisualization: picture type Automaton (no renderer here yet). */
+/** format=frames for DFAVisualization: picture type Automaton (#204 draws it). */
 export const DFA_AUTOMATON_FRAMES = {
   type: "Automaton",
   payload: {
@@ -3507,6 +3508,4725 @@ export const SAT3_FACTOR_GRAPH_FRAMES = {
         "v:x2": true,
         "v:x3": false,
       },
+      ok: true,
+    },
+  ],
+};
+
+// #205: Layered Graph pictures (Topological Sort, Feedback Arc Set, Feedback Node Set, Strongly
+// Connected Components, Single Source and Single Pair Shortest Path), captured the same way on
+// 2026-10-15 from the published local build of local/viz-integration.
+
+/** format=frames, Topological Sort, the problem default ({1,2,3,4,5,6},{(1,2),(1,3),(2,4),(3,4),(4,5),(3,6)}), KahnsAlgorithm: order shape; ready nodes Covered, placed nodes Committed with order badges, then the answer. */
+export const TOPOLOGICAL_SORT_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "order",
+    rule: "topologicalSort",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 1,
+        row: 1,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "6",
+        label: "6",
+        layer: 2,
+        row: 1,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "1>3",
+        a: "1",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "2>4",
+        a: "2",
+        b: "4",
+        back: false,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+      },
+      {
+        id: "3>6",
+        a: "3",
+        b: "6",
+        back: false,
+      },
+    ],
+    layers: [["1"], ["2", "3"], ["4", "6"], ["5"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Ready to place (no incoming edges): 1.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      order: [],
+    },
+    {
+      event: "Accept",
+      caption: "Place 1 at position 1. That frees 2 and 3. Ready: 2 and 3.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Covered",
+        },
+        "1>3": {
+          state: "Covered",
+        },
+      },
+      order: ["1"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 2 at position 2. Ready: 3.",
+      focus: ["2"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Covered",
+        },
+        "2>4": {
+          state: "Covered",
+        },
+      },
+      order: ["1", "2"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 3 at position 3. That frees 4 and 6. Ready: 4 and 6.",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Committed",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+        6: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "Covered",
+        },
+        "3>4": {
+          state: "Covered",
+        },
+        "3>6": {
+          state: "Covered",
+        },
+      },
+      order: ["1", "2", "3"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 4 at position 4. That frees 5. Ready: 6 and 5.",
+      focus: ["4"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Committed",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+        6: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "Committed",
+        },
+        "3>4": {
+          state: "Committed",
+        },
+        "3>6": {
+          state: "Covered",
+        },
+        "4>5": {
+          state: "Covered",
+        },
+      },
+      order: ["1", "2", "3", "4"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 6 at position 5. Ready: 5.",
+      focus: ["6"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Committed",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "Committed",
+        },
+        5: {
+          state: "Covered",
+        },
+        6: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "Committed",
+        },
+        "3>4": {
+          state: "Committed",
+        },
+        "3>6": {
+          state: "Committed",
+        },
+        "4>5": {
+          state: "Covered",
+        },
+      },
+      order: ["1", "2", "3", "4", "6"],
+    },
+    {
+      event: "Accept",
+      caption: "Place 5 at position 6.",
+      focus: ["5"],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Solution",
+        },
+        5: {
+          state: "ElementHighlight",
+        },
+        6: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>4": {
+          state: "Solution",
+        },
+        "3>6": {
+          state: "Solution",
+        },
+        "4>5": {
+          state: "Solution",
+        },
+      },
+      order: ["1", "2", "3", "4", "6", "5"],
+    },
+    {
+      event: "Done",
+      caption: "Every node is placed and every edge points forward: 1, 2, 3, 4, 6, 5.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Solution",
+        },
+        5: {
+          state: "Solution",
+        },
+        6: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>4": {
+          state: "Solution",
+        },
+        "3>6": {
+          state: "Solution",
+        },
+        "4>5": {
+          state: "Solution",
+        },
+      },
+      order: ["1", "2", "3", "4", "6", "5"],
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Topological Sort, ({1,2,3,4,5},{(1,2),(2,3),(3,4),(4,2),(3,5)}) (a cycle 2, 3, 4), KahnsAlgorithm: the back edge 4>2 under the rows, the stuck nodes and the cycle Rejected, a Done that is not ok. */
+export const TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "order",
+    rule: "topologicalSort",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 3,
+        row: 1,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+      {
+        id: "4>2",
+        a: "4",
+        b: "2",
+        back: true,
+      },
+      {
+        id: "3>5",
+        a: "3",
+        b: "5",
+        back: false,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"], ["4", "5"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Ready to place (no incoming edges): 1.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      order: [],
+    },
+    {
+      event: "Accept",
+      caption: "Place 1 at position 1.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Covered",
+        },
+      },
+      order: ["1"],
+    },
+    {
+      event: "Reject",
+      caption: "2, 3, 4 and 5 never lose their last incoming edge, because of a cycle.",
+      focus: ["2", "3", "4", "5"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Rejected",
+        },
+        3: {
+          state: "Rejected",
+        },
+        4: {
+          state: "Rejected",
+        },
+        5: {
+          state: "Rejected",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Covered",
+        },
+      },
+      order: ["1"],
+    },
+    {
+      event: "Done",
+      caption: "The graph has a cycle, so no topological order exists.",
+      focus: [],
+      nodes: {
+        2: {
+          state: "Rejected",
+        },
+        3: {
+          state: "Rejected",
+        },
+        4: {
+          state: "Rejected",
+        },
+        5: {
+          state: "Rejected",
+        },
+      },
+      edges: {
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>4": {
+          state: "Rejected",
+        },
+        "4>2": {
+          state: "Rejected",
+        },
+      },
+      order: [],
+      ok: false,
+    },
+  ],
+};
+
+/** format=frames, Feedback Arc Set, the problem default (({1,2,3,4,5},{(1,2),(2,3),(3,1),(4,5),(5,2),(3,4)}),1), ArcSetBruteForce: removedSet shape; surviving cycles Rejected, the removed edge dashed. */
+export const ARC_SET_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "removedSet",
+    rule: "feedbackArcSet",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 4,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "3>1",
+        a: "3",
+        b: "1",
+        back: true,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+      },
+      {
+        id: "5>2",
+        a: "5",
+        b: "2",
+        back: true,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"], ["4"], ["5"]],
+    k: 1,
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try removing nothing: the cycle 1 → 2 → 3 → 1 is there.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1>2": {
+          state: "Rejected",
+        },
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>1": {
+          state: "Rejected",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption: "Try removing {(1,2)}: the cycle 2 → 3 → 4 → 5 → 2 is still there.",
+      focus: ["1>2"],
+      nodes: {},
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>4": {
+          state: "Rejected",
+        },
+        "4>5": {
+          state: "Rejected",
+        },
+        "5>2": {
+          state: "Rejected",
+        },
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Try removing {(2,3)}. No cycle is left.",
+      focus: ["2>3"],
+      nodes: {},
+      edges: {
+        "2>3": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Done",
+      caption: "Removing {(2,3)} leaves no cycle, within K = 1. Found after 3 tries.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "2>3": {
+          state: "Solution",
+        },
+      },
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Feedback Node Set, the problem default (({1,2,3,4,5},{(1,2),(2,3),(3,1),(4,5),(5,2),(3,4)}),1), NodeSetBruteForce: removedSet shape; a removed node's edges Untraveled. */
+export const NODE_SET_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "removedSet",
+    rule: "feedbackNodeSet",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 4,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "3>1",
+        a: "3",
+        b: "1",
+        back: true,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+      },
+      {
+        id: "5>2",
+        a: "5",
+        b: "2",
+        back: true,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"], ["4"], ["5"]],
+    k: 1,
+  },
+  frames: [
+    {
+      event: "Reject",
+      caption: "Try removing nothing: the cycle 1 → 2 → 3 → 1 is there.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1>2": {
+          state: "Rejected",
+        },
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>1": {
+          state: "Rejected",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption: "Try removing {1}: the cycle 2 → 3 → 4 → 5 → 2 is still there.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Untraveled",
+        },
+        "2>3": {
+          state: "Rejected",
+        },
+        "3>1": {
+          state: "Untraveled",
+        },
+        "3>4": {
+          state: "Rejected",
+        },
+        "4>5": {
+          state: "Rejected",
+        },
+        "5>2": {
+          state: "Rejected",
+        },
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Try removing {2}. No cycle is left.",
+      focus: ["2"],
+      nodes: {
+        2: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Untraveled",
+        },
+        "2>3": {
+          state: "Untraveled",
+        },
+        "5>2": {
+          state: "Untraveled",
+        },
+      },
+    },
+    {
+      event: "Done",
+      caption: "Removing {2} leaves no cycle, within K = 1. Found after 3 tries.",
+      focus: [],
+      nodes: {
+        2: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Untraveled",
+        },
+        "2>3": {
+          state: "Untraveled",
+        },
+        "5>2": {
+          state: "Untraveled",
+        },
+      },
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Strongly Connected Components, the problem default ({1,2,3,4,5},{(1,2),(2,3),(3,1),(3,4),(4,5),(5,4)}), KosarajuSolver: groups shape; pass 1 Covered with finish numbers, pass 2 component colors. */
+export const SCC_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "groups",
+    rule: "stronglyConnectedComponents",
+    directed: true,
+    weighted: false,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 4,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+      },
+      {
+        id: "3>1",
+        a: "3",
+        b: "1",
+        back: true,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+      },
+      {
+        id: "5>4",
+        a: "5",
+        b: "4",
+        back: true,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"], ["4"], ["5"]],
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Pass 1: visit 1.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: visit 2.",
+      focus: ["2"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: visit 3.",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: visit 4.",
+      focus: ["4"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: visit 5.",
+      focus: ["5"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: [],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 5 is finished (number 1).",
+      focus: ["5"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5"],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 4 is finished (number 2).",
+      focus: ["4"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5", "4"],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 3 is finished (number 3).",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5", "4", "3"],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 2 is finished (number 4).",
+      focus: ["2"],
+      nodes: {
+        1: {
+          state: "Covered",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5", "4", "3", "2"],
+    },
+    {
+      event: "Try",
+      caption: "Pass 1: 1 is finished (number 5).",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {},
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: 1 has the highest finish number left, so it starts component 1.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {},
+      groups: {
+        1: 0,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: follow the edge 3 → 1 backward, so 3 joins component 1.",
+      focus: ["3", "3>1"],
+      nodes: {
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "3>1": {
+          state: "ElementHighlight",
+        },
+      },
+      groups: {
+        1: 0,
+        3: 0,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: follow the edge 2 → 3 backward, so 2 joins component 1.",
+      focus: ["2", "2>3"],
+      nodes: {
+        2: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "2>3": {
+          state: "ElementHighlight",
+        },
+        "3>1": {
+          state: "Committed",
+        },
+      },
+      groups: {
+        1: 0,
+        2: 0,
+        3: 0,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: 4 has the highest finish number left, so it starts component 2.",
+      focus: ["4"],
+      nodes: {
+        4: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "2>3": {
+          state: "Committed",
+        },
+        "3>1": {
+          state: "Committed",
+        },
+      },
+      groups: {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 1,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Accept",
+      caption: "Pass 2: follow the edge 5 → 4 backward, so 5 joins component 2.",
+      focus: ["5", "5>4"],
+      nodes: {
+        5: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+        "3>1": {
+          state: "Solution",
+        },
+        "4>5": {
+          state: "Solution",
+        },
+        "5>4": {
+          state: "ElementHighlight",
+        },
+      },
+      groups: {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 1,
+        5: 1,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+    },
+    {
+      event: "Done",
+      caption: "2 strongly connected components: {1,2,3}, {4,5}.",
+      focus: [],
+      nodes: {},
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+        "3>1": {
+          state: "Solution",
+        },
+        "4>5": {
+          state: "Solution",
+        },
+        "5>4": {
+          state: "Solution",
+        },
+      },
+      groups: {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 1,
+        5: 1,
+      },
+      finish: ["5", "4", "3", "2", "1"],
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Single Source Shortest Path, ({1,2,3,4,5,6},{((1,2),4),((1,3),2),((3,2),1),((2,4),5),((3,4),8),((6,5),1)},1), SSSPSolver: distances shape; d = n under each node, ∞ until reached, 5 and 6 Untraveled at the end. */
+export const SSSP_UNREACHABLE_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "distances",
+    rule: "singleSourceShortestPath",
+    directed: true,
+    weighted: true,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 3,
+        row: 0,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 1,
+        row: 1,
+      },
+      {
+        id: "6",
+        label: "6",
+        layer: 0,
+        row: 1,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+        weight: 4,
+      },
+      {
+        id: "1>3",
+        a: "1",
+        b: "3",
+        back: false,
+        weight: 2,
+      },
+      {
+        id: "3>2",
+        a: "3",
+        b: "2",
+        back: false,
+        weight: 1,
+      },
+      {
+        id: "2>4",
+        a: "2",
+        b: "4",
+        back: false,
+        weight: 5,
+      },
+      {
+        id: "3>4",
+        a: "3",
+        b: "4",
+        back: false,
+        weight: 8,
+      },
+      {
+        id: "6>5",
+        a: "6",
+        b: "5",
+        back: false,
+        weight: 1,
+      },
+    ],
+    layers: [["1", "6"], ["3", "5"], ["2"], ["4"]],
+    source: "1",
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start at 1 with distance 0. Every other node starts at ∞.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      dist: {
+        1: 0,
+        2: null,
+        3: null,
+        4: null,
+        5: null,
+        6: null,
+      },
+      pred: {},
+    },
+    {
+      event: "Accept",
+      caption: "Settle 1 at distance 0. Shorter routes found: 2: ∞ → 4, 3: ∞ → 2.",
+      focus: ["1", "1>2", "1>3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "1>3": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: null,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 3 at distance 2. Shorter routes found: 2: 4 → 3, 4: ∞ → 10.",
+      focus: ["3", "3>2", "3>4"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        4: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Committed",
+        },
+        "3>2": {
+          state: "ElementHighlight",
+        },
+        "3>4": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 3,
+        3: 2,
+        4: 10,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "3",
+        3: "1",
+        4: "3",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 2 at distance 3. Shorter routes found: 4: 10 → 8.",
+      focus: ["2", "2>4"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "ElementHighlight",
+        },
+        "3>2": {
+          state: "Committed",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 3,
+        3: 2,
+        4: 8,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "3",
+        3: "1",
+        4: "2",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 4 at distance 8. No shorter routes from here.",
+      focus: ["4"],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>2": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 3,
+        3: 2,
+        4: 8,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "3",
+        3: "1",
+        4: "2",
+      },
+    },
+    {
+      event: "Done",
+      caption:
+        "Every node that can be reached is settled; the shortest paths from 1 form a tree. 5 and 6 can't be reached.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Solution",
+        },
+        5: {
+          state: "Untraveled",
+        },
+        6: {
+          state: "Untraveled",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>2": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 3,
+        3: 2,
+        4: 8,
+        5: null,
+        6: null,
+      },
+      pred: {
+        2: "3",
+        3: "1",
+        4: "2",
+      },
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Single Pair Shortest Path, the problem default ({1,2,3,4,5},{((1,2),4),((1,3),2),((2,3),1),((3,5),7),((2,4),3),((4,5),9)},1,5), SPSPSolver: source and target tags, weights, only the path 1, 3, 5 as the answer. */
+export const SPSP_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "distances",
+    rule: "singlePairShortestPath",
+    directed: true,
+    weighted: true,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+      {
+        id: "4",
+        label: "4",
+        layer: 2,
+        row: 1,
+      },
+      {
+        id: "5",
+        label: "5",
+        layer: 3,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+        weight: 4,
+      },
+      {
+        id: "1>3",
+        a: "1",
+        b: "3",
+        back: false,
+        weight: 2,
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+        weight: 1,
+      },
+      {
+        id: "3>5",
+        a: "3",
+        b: "5",
+        back: false,
+        weight: 7,
+      },
+      {
+        id: "2>4",
+        a: "2",
+        b: "4",
+        back: false,
+        weight: 3,
+      },
+      {
+        id: "4>5",
+        a: "4",
+        b: "5",
+        back: false,
+        weight: 9,
+      },
+    ],
+    layers: [["1"], ["2"], ["3", "4"], ["5"]],
+    source: "1",
+    target: "5",
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start at 1 with distance 0. Every other node starts at ∞.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      dist: {
+        1: 0,
+        2: null,
+        3: null,
+        4: null,
+        5: null,
+      },
+      pred: {},
+    },
+    {
+      event: "Accept",
+      caption: "Settle 1 at distance 0. Shorter routes found: 2: ∞ → 4, 3: ∞ → 2.",
+      focus: ["1", "1>2", "1>3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "1>3": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: null,
+        5: null,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 3 at distance 2. Shorter routes found: 5: ∞ → 9.",
+      focus: ["3", "3>5"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Covered",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "3>5": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: null,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        5: "3",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 2 at distance 4. Shorter routes found: 4: ∞ → 7.",
+      focus: ["2", "2>4"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "ElementHighlight",
+        },
+        "3>5": {
+          state: "Covered",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: 7,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        4: "2",
+        5: "3",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 4 at distance 7. No shorter routes from here.",
+      focus: ["4", "4>5"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "Committed",
+        },
+        3: {
+          state: "Committed",
+        },
+        4: {
+          state: "ElementHighlight",
+        },
+        5: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "1>3": {
+          state: "Committed",
+        },
+        "2>4": {
+          state: "Committed",
+        },
+        "3>5": {
+          state: "Covered",
+        },
+        "4>5": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: 7,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        4: "2",
+        5: "3",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 5 at distance 9. It is the target, so the search stops.",
+      focus: ["5"],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Solution",
+        },
+        5: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "1>3": {
+          state: "Solution",
+        },
+        "2>4": {
+          state: "Solution",
+        },
+        "3>5": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: 7,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        4: "2",
+        5: "3",
+      },
+    },
+    {
+      event: "Done",
+      caption: "The shortest path is 1 → 3 → 5, with total 9.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Solution",
+        },
+        4: {
+          state: "Covered",
+        },
+        5: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>3": {
+          state: "Solution",
+        },
+        "3>5": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 4,
+        3: 2,
+        4: 7,
+        5: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+        4: "2",
+        5: "3",
+      },
+      ok: true,
+    },
+  ],
+};
+
+/** format=frames, Single Source Shortest Path, ({1,2,3},{((1,2),5),((1,2),2),((2,3),1),((1,3),9)},1), SSSPSolver: parallel edges 1 to 2 merged into one edge labelled 5,2 (the lighter one counts), and an edge that skips a layer bowed. */
+export const SSSP_PARALLEL_LAYERED_FRAMES = {
+  type: "LayeredGraph",
+  payload: {
+    kind: "layeredGraph",
+    layout: "ranked",
+    shape: "distances",
+    rule: "singleSourceShortestPath",
+    directed: true,
+    weighted: true,
+    nodes: [
+      {
+        id: "1",
+        label: "1",
+        layer: 0,
+        row: 0,
+      },
+      {
+        id: "2",
+        label: "2",
+        layer: 1,
+        row: 0,
+      },
+      {
+        id: "3",
+        label: "3",
+        layer: 2,
+        row: 0,
+      },
+    ],
+    edges: [
+      {
+        id: "1>2",
+        a: "1",
+        b: "2",
+        back: false,
+        weight: 2,
+        label: "5,2",
+      },
+      {
+        id: "2>3",
+        a: "2",
+        b: "3",
+        back: false,
+        weight: 1,
+      },
+      {
+        id: "1>3",
+        a: "1",
+        b: "3",
+        back: false,
+        weight: 9,
+      },
+    ],
+    layers: [["1"], ["2"], ["3"]],
+    source: "1",
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start at 1 with distance 0. Every other node starts at ∞.",
+      focus: ["1"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+      dist: {
+        1: 0,
+        2: null,
+        3: null,
+      },
+      pred: {},
+    },
+    {
+      event: "Accept",
+      caption: "Settle 1 at distance 0. Shorter routes found: 2: ∞ → 5, 2: 5 → 2, 3: ∞ → 9.",
+      focus: ["1", "1>2", "1>3"],
+      nodes: {
+        1: {
+          state: "ElementHighlight",
+        },
+        2: {
+          state: "Covered",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "ElementHighlight",
+        },
+        "1>3": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 2,
+        3: 9,
+      },
+      pred: {
+        2: "1",
+        3: "1",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 2 at distance 2. Shorter routes found: 3: 9 → 3.",
+      focus: ["2", "2>3"],
+      nodes: {
+        1: {
+          state: "Committed",
+        },
+        2: {
+          state: "ElementHighlight",
+        },
+        3: {
+          state: "Covered",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Committed",
+        },
+        "2>3": {
+          state: "ElementHighlight",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 2,
+        3: 3,
+      },
+      pred: {
+        2: "1",
+        3: "2",
+      },
+    },
+    {
+      event: "Accept",
+      caption: "Settle 3 at distance 3. No shorter routes from here.",
+      focus: ["3"],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 2,
+        3: 3,
+      },
+      pred: {
+        2: "1",
+        3: "2",
+      },
+    },
+    {
+      event: "Done",
+      caption: "Every node that can be reached is settled; the shortest paths from 1 form a tree.",
+      focus: [],
+      nodes: {
+        1: {
+          state: "Solution",
+        },
+        2: {
+          state: "Solution",
+        },
+        3: {
+          state: "Solution",
+        },
+      },
+      edges: {
+        "1>2": {
+          state: "Solution",
+        },
+        "2>3": {
+          state: "Solution",
+        },
+      },
+      dist: {
+        1: 0,
+        2: 2,
+        3: 3,
+      },
+      pred: {
+        2: "1",
+        3: "2",
+      },
+      ok: true,
+    },
+  ],
+};
+
+// #204: Automaton pictures (DFA and NFA), captured the same way on 2026-10-15 from the published
+// local build of local/viz-integration. (DFA_AUTOMATON_FRAMES above is the DFA default, DFASolver.)
+
+// DFA Acceptance, DFASolver, instance (({1,2,3},{a,b},{(1,a,2),(2,b,3),(3,a,3)},1,{3}),abb): 1 has
+// no move on b, 2 none on a, 3 none on b, so the payload has a Garbage state, and the run falls
+// into it on the last b.
+export const DFA_GARBAGE_AUTOMATON_FRAMES = {
+  type: "Automaton",
+  payload: {
+    kind: "dfa",
+    layout: "layered",
+    states: [
+      {
+        id: "q:1",
+        label: "1",
+        layer: 0,
+      },
+      {
+        id: "q:2",
+        label: "2",
+        layer: 1,
+      },
+      {
+        id: "q:3",
+        label: "3",
+        layer: 2,
+      },
+    ],
+    start: "q:1",
+    accepting: ["q:3"],
+    alphabet: ["a", "b"],
+    transitions: [
+      {
+        id: "q:1>q:2",
+        a: "q:1",
+        b: "q:2",
+        label: "a",
+        symbols: ["a"],
+        epsilon: false,
+      },
+      {
+        id: "q:2>q:3",
+        a: "q:2",
+        b: "q:3",
+        label: "b",
+        symbols: ["b"],
+        epsilon: false,
+      },
+      {
+        id: "q:3>q:3",
+        a: "q:3",
+        b: "q:3",
+        label: "a",
+        symbols: ["a"],
+        epsilon: false,
+      },
+    ],
+    input: ["a", "b", "b"],
+    garbage: {
+      id: "garbage",
+      label: "Garbage",
+      missing: [
+        {
+          state: "q:1",
+          symbol: "b",
+        },
+        {
+          state: "q:2",
+          symbol: "a",
+        },
+        {
+          state: "q:3",
+          symbol: "b",
+        },
+      ],
+    },
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start in 1.",
+      focus: ["q:1"],
+      position: 0,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Try",
+      caption: "Read 'a': move from 1 to 2.",
+      focus: ["q:1>q:2"],
+      position: 1,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'b': move from 2 to 3.",
+      focus: ["q:2>q:3"],
+      position: 2,
+      active: ["q:3"],
+      nodes: {
+        "q:3": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:2>q:3": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption: "3 has no move on 'b', so the DFA falls into the Garbage state and stays there.",
+      focus: ["garbage"],
+      position: 2,
+      active: ["garbage"],
+      nodes: {
+        garbage: {
+          state: "Rejected",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Done",
+      caption: "Rejected: 3 has no move on 'b', so the run ends in the Garbage state.",
+      focus: [],
+      position: 2,
+      active: ["garbage"],
+      nodes: {
+        garbage: {
+          state: "Rejected",
+        },
+      },
+      edges: {},
+      ok: false,
+    },
+  ],
+};
+
+// DFA Acceptance, DFASolver, the DFA default instance on abc:
+// (({1,2,3},{a,b},{(1,a,2),(1,b,3),(2,a,2),(2,b,2),(3,a,2),(3,b,3)},1,{2}),abc). The machine is
+// complete, but c is not in the alphabet: 2 has no move on it, so the payload has a Garbage state
+// whose only missing move is (2, c), and the run falls into it on the c. Captured on 2026-10-15
+// from the published local build of local/viz-integration.
+export const DFA_ABC_GARBAGE_AUTOMATON_FRAMES = {
+  type: "Automaton",
+  payload: {
+    kind: "dfa",
+    layout: "layered",
+    states: [
+      {
+        id: "q:1",
+        label: "1",
+        layer: 0,
+      },
+      {
+        id: "q:2",
+        label: "2",
+        layer: 1,
+      },
+      {
+        id: "q:3",
+        label: "3",
+        layer: 1,
+      },
+    ],
+    start: "q:1",
+    accepting: ["q:2"],
+    alphabet: ["a", "b"],
+    transitions: [
+      {
+        id: "q:1>q:2",
+        a: "q:1",
+        b: "q:2",
+        label: "a",
+        symbols: ["a"],
+        epsilon: false,
+      },
+      {
+        id: "q:1>q:3",
+        a: "q:1",
+        b: "q:3",
+        label: "b",
+        symbols: ["b"],
+        epsilon: false,
+      },
+      {
+        id: "q:2>q:2",
+        a: "q:2",
+        b: "q:2",
+        label: "a,b",
+        symbols: ["a", "b"],
+        epsilon: false,
+      },
+      {
+        id: "q:3>q:2",
+        a: "q:3",
+        b: "q:2",
+        label: "a",
+        symbols: ["a"],
+        epsilon: false,
+      },
+      {
+        id: "q:3>q:3",
+        a: "q:3",
+        b: "q:3",
+        label: "b",
+        symbols: ["b"],
+        epsilon: false,
+      },
+    ],
+    input: ["a", "b", "c"],
+    garbage: {
+      id: "garbage",
+      label: "Garbage",
+      missing: [
+        {
+          state: "q:2",
+          symbol: "c",
+        },
+      ],
+    },
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start in 1.",
+      focus: ["q:1"],
+      position: 0,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Try",
+      caption: "Read 'a': move from 1 to 2.",
+      focus: ["q:1>q:2"],
+      position: 1,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'b': move from 2 to 2.",
+      focus: ["q:2>q:2"],
+      position: 2,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:2>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption:
+        "'c' is not in the alphabet, so 2 has no move on it, and the DFA falls into the Garbage state and stays there.",
+      focus: ["garbage"],
+      position: 2,
+      active: ["garbage"],
+      nodes: {
+        garbage: {
+          state: "Rejected",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Done",
+      caption:
+        "Rejected: 'c' is not in the alphabet, so 2 has no move on it and the run ends in the Garbage state.",
+      focus: [],
+      position: 2,
+      active: ["garbage"],
+      nodes: {
+        garbage: {
+          state: "Rejected",
+        },
+        "q:3": {
+          state: "Untraveled",
+        },
+      },
+      edges: {},
+      ok: false,
+    },
+  ],
+};
+
+// NFA Acceptance, NFASubsetSolver (every active state at once), instance
+// (({0,1,2,3},{a,b},{(0,ε,1),(0,a,0),(0,b,0),(1,a,2),(2,b,3)},0,{3}),aab): an ε-move from 0 to 1;
+// accepted, with four paths for the picker.
+export const NFA_SUBSET_AUTOMATON_FRAMES = {
+  type: "Automaton",
+  payload: {
+    kind: "nfa",
+    layout: "layered",
+    states: [
+      {
+        id: "q:0",
+        label: "0",
+        layer: 0,
+      },
+      {
+        id: "q:1",
+        label: "1",
+        layer: 1,
+      },
+      {
+        id: "q:2",
+        label: "2",
+        layer: 2,
+      },
+      {
+        id: "q:3",
+        label: "3",
+        layer: 3,
+      },
+    ],
+    start: "q:0",
+    accepting: ["q:3"],
+    alphabet: ["a", "b"],
+    transitions: [
+      {
+        id: "q:0>q:1",
+        a: "q:0",
+        b: "q:1",
+        label: "ε",
+        symbols: ["ε"],
+        epsilon: true,
+      },
+      {
+        id: "q:0>q:0",
+        a: "q:0",
+        b: "q:0",
+        label: "a,b",
+        symbols: ["a", "b"],
+        epsilon: false,
+      },
+      {
+        id: "q:1>q:2",
+        a: "q:1",
+        b: "q:2",
+        label: "a",
+        symbols: ["a"],
+        epsilon: false,
+      },
+      {
+        id: "q:2>q:3",
+        a: "q:2",
+        b: "q:3",
+        label: "b",
+        symbols: ["b"],
+        epsilon: false,
+      },
+    ],
+    input: ["a", "a", "b"],
+    paths: [
+      {
+        id: "p1",
+        label: "Path 1: 0 → 0 ⇢ 1 → 2 → 3, accepts",
+        accepted: true,
+        outcome: "accepts",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 0.",
+            focus: ["q:0"],
+            position: 0,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 1,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 0 to 1.",
+            focus: ["q:0>q:1"],
+            position: 1,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:1": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 2,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'b': move from 2 to 3.",
+            focus: ["q:2>q:3"],
+            position: 3,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:2>q:3": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 3, an accept state. Accepted.",
+            focus: [],
+            position: 3,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "Solution",
+              },
+            },
+            edges: {},
+            ok: true,
+          },
+        ],
+      },
+      {
+        id: "p2",
+        label: "Path 2: 0 ⇢ 1 → 2, dies at symbol 2",
+        accepted: false,
+        outcome: "dies",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 0.",
+            focus: ["q:0"],
+            position: 0,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 0 to 1.",
+            focus: ["q:0>q:1"],
+            position: 0,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:1": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "No 'a' move from 2, so this path dies. Rejected.",
+            focus: [],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "Rejected",
+              },
+              "q:3": {
+                state: "Untraveled",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+      {
+        id: "p3",
+        label: "Path 3: 0 → 0 → 0 ⇢ 1, dies at symbol 3",
+        accepted: false,
+        outcome: "dies",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 0.",
+            focus: ["q:0"],
+            position: 0,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 1,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 2,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 0 to 1.",
+            focus: ["q:0>q:1"],
+            position: 2,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:1": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "No 'b' move from 1, so this path dies. Rejected.",
+            focus: [],
+            position: 2,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "Rejected",
+              },
+              "q:2": {
+                state: "Untraveled",
+              },
+              "q:3": {
+                state: "Untraveled",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+      {
+        id: "p4",
+        label: "Path 4: 0 → 0 → 0 → 0 ⇢ 1, rejects",
+        accepted: false,
+        outcome: "rejects",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 0.",
+            focus: ["q:0"],
+            position: 0,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 1,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 2,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'b': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 3,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 0 to 1.",
+            focus: ["q:0>q:1"],
+            position: 3,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:1": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 1, which is not an accept state. Rejected.",
+            focus: [],
+            position: 3,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "Rejected",
+              },
+              "q:2": {
+                state: "Untraveled",
+              },
+              "q:3": {
+                state: "Untraveled",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+    ],
+    pathsTruncated: false,
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start in 0, and follow ε to 1. The active states are {0, 1}.",
+      focus: ["q:0", "q:0>q:1"],
+      position: 0,
+      active: ["q:0", "q:1"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'a'. The active states are now {0, 2, 1}, including ε moves.",
+      focus: ["q:0>q:0", "q:1>q:2", "q:0>q:1"],
+      position: 1,
+      active: ["q:0", "q:1", "q:2"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+        "q:1": {
+          state: "ElementHighlight",
+        },
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:0": {
+          state: "ElementHighlight",
+        },
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'a'. The active states are now {0, 2, 1}, including ε moves.",
+      focus: ["q:0>q:0", "q:1>q:2", "q:0>q:1"],
+      position: 2,
+      active: ["q:0", "q:1", "q:2"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+        "q:1": {
+          state: "ElementHighlight",
+        },
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:0": {
+          state: "ElementHighlight",
+        },
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'b'. The active states are now {0, 3, 1}, including ε moves.",
+      focus: ["q:0>q:0", "q:2>q:3", "q:0>q:1"],
+      position: 3,
+      active: ["q:0", "q:1", "q:3"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+        "q:1": {
+          state: "ElementHighlight",
+        },
+        "q:3": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:0": {
+          state: "ElementHighlight",
+        },
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+        "q:2>q:3": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Accept",
+      caption:
+        "The input is used up with {0, 3, 1} active; 3 is an accept state, so a run accepts.",
+      focus: ["q:3"],
+      position: 3,
+      active: ["q:3"],
+      nodes: {
+        "q:3": {
+          state: "Solution",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Done",
+      caption: "Accepted: a run ends in an accept state.",
+      focus: [],
+      position: 3,
+      active: ["q:3"],
+      nodes: {
+        "q:3": {
+          state: "Solution",
+        },
+      },
+      edges: {},
+      ok: true,
+    },
+  ],
+};
+
+// NFA Acceptance, NFASolver (backtracking, one branch at a time), the same machine on aba:
+// rejected; its Done frame has no active state.
+export const NFA_BACKTRACK_REJECTED_AUTOMATON_FRAMES = {
+  type: "Automaton",
+  payload: {
+    kind: "nfa",
+    layout: "layered",
+    states: [
+      {
+        id: "q:0",
+        label: "0",
+        layer: 0,
+      },
+      {
+        id: "q:1",
+        label: "1",
+        layer: 1,
+      },
+      {
+        id: "q:2",
+        label: "2",
+        layer: 2,
+      },
+      {
+        id: "q:3",
+        label: "3",
+        layer: 3,
+      },
+    ],
+    start: "q:0",
+    accepting: ["q:3"],
+    alphabet: ["a", "b"],
+    transitions: [
+      {
+        id: "q:0>q:1",
+        a: "q:0",
+        b: "q:1",
+        label: "ε",
+        symbols: ["ε"],
+        epsilon: true,
+      },
+      {
+        id: "q:0>q:0",
+        a: "q:0",
+        b: "q:0",
+        label: "a,b",
+        symbols: ["a", "b"],
+        epsilon: false,
+      },
+      {
+        id: "q:1>q:2",
+        a: "q:1",
+        b: "q:2",
+        label: "a",
+        symbols: ["a"],
+        epsilon: false,
+      },
+      {
+        id: "q:2>q:3",
+        a: "q:2",
+        b: "q:3",
+        label: "b",
+        symbols: ["b"],
+        epsilon: false,
+      },
+    ],
+    input: ["a", "b", "a"],
+    paths: [
+      {
+        id: "p1",
+        label: "Path 1: 0 ⇢ 1 → 2 → 3, dies at symbol 3",
+        accepted: false,
+        outcome: "dies",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 0.",
+            focus: ["q:0"],
+            position: 0,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 0 to 1.",
+            focus: ["q:0>q:1"],
+            position: 0,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:1": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'b': move from 2 to 3.",
+            focus: ["q:2>q:3"],
+            position: 2,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:2>q:3": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "No 'a' move from 3, so this path dies. Rejected.",
+            focus: [],
+            position: 2,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "Rejected",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+      {
+        id: "p2",
+        label: "Path 2: 0 → 0 ⇢ 1, dies at symbol 2",
+        accepted: false,
+        outcome: "dies",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 0.",
+            focus: ["q:0"],
+            position: 0,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 1,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 0 to 1.",
+            focus: ["q:0>q:1"],
+            position: 1,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:1": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "No 'b' move from 1, so this path dies. Rejected.",
+            focus: [],
+            position: 1,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "Rejected",
+              },
+              "q:2": {
+                state: "Untraveled",
+              },
+              "q:3": {
+                state: "Untraveled",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+      {
+        id: "p3",
+        label: "Path 3: 0 → 0 → 0 ⇢ 1 → 2, rejects",
+        accepted: false,
+        outcome: "rejects",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 0.",
+            focus: ["q:0"],
+            position: 0,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 1,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'b': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 2,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 0 to 1.",
+            focus: ["q:0>q:1"],
+            position: 2,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:1": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 3,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 2, which is not an accept state. Rejected.",
+            focus: [],
+            position: 3,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "Rejected",
+              },
+              "q:3": {
+                state: "Untraveled",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+      {
+        id: "p4",
+        label: "Path 4: 0 → 0 → 0 → 0 ⇢ 1, rejects",
+        accepted: false,
+        outcome: "rejects",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 0.",
+            focus: ["q:0"],
+            position: 0,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 1,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'b': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 2,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 0 to 0.",
+            focus: ["q:0>q:0"],
+            position: 3,
+            active: ["q:0"],
+            nodes: {
+              "q:0": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:0": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 0 to 1.",
+            focus: ["q:0>q:1"],
+            position: 3,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:0>q:1": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 1, which is not an accept state. Rejected.",
+            focus: [],
+            position: 3,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "Rejected",
+              },
+              "q:2": {
+                state: "Untraveled",
+              },
+              "q:3": {
+                state: "Untraveled",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+    ],
+    pathsTruncated: false,
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start in 0.",
+      focus: ["q:0"],
+      position: 0,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Try",
+      caption: "Take an ε-move from 0 to 1.",
+      focus: ["q:0>q:1"],
+      position: 0,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'a': move from 1 to 2.",
+      focus: ["q:1>q:2"],
+      position: 1,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'b': move from 2 to 3.",
+      focus: ["q:2>q:3"],
+      position: 2,
+      active: ["q:3"],
+      nodes: {
+        "q:3": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:2>q:3": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption: "3 has no move on 'a': this run is a dead end.",
+      focus: ["q:3"],
+      position: 2,
+      active: ["q:3"],
+      nodes: {
+        "q:3": {
+          state: "Rejected",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 3 to 2 to try another move.",
+      focus: ["q:2>q:3"],
+      position: 1,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:2>q:3": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 2 to 1 to try another move.",
+      focus: ["q:1>q:2"],
+      position: 0,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 1 to 0 to try another move.",
+      focus: ["q:0>q:1"],
+      position: 0,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'a': move from 0 to 0.",
+      focus: ["q:0>q:0"],
+      position: 1,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:0": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Take an ε-move from 0 to 1.",
+      focus: ["q:0>q:1"],
+      position: 1,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption: "1 has no move on 'b': this run is a dead end.",
+      focus: ["q:1"],
+      position: 1,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "Rejected",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 1 to 0 to try another move.",
+      focus: ["q:0>q:1"],
+      position: 1,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'b': move from 0 to 0.",
+      focus: ["q:0>q:0"],
+      position: 2,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:0": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Take an ε-move from 0 to 1.",
+      focus: ["q:0>q:1"],
+      position: 2,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'a': move from 1 to 2.",
+      focus: ["q:1>q:2"],
+      position: 3,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption: "The input is used up in 2, which is not an accept state: this run is a dead end.",
+      focus: ["q:2"],
+      position: 3,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "Rejected",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 2 to 1 to try another move.",
+      focus: ["q:1>q:2"],
+      position: 2,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 1 to 0 to try another move.",
+      focus: ["q:0>q:1"],
+      position: 2,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'a': move from 0 to 0.",
+      focus: ["q:0>q:0"],
+      position: 3,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:0": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Take an ε-move from 0 to 1.",
+      focus: ["q:0>q:1"],
+      position: 3,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Reject",
+      caption: "The input is used up in 1, which is not an accept state: this run is a dead end.",
+      focus: ["q:1"],
+      position: 3,
+      active: ["q:1"],
+      nodes: {
+        "q:1": {
+          state: "Rejected",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 1 to 0 to try another move.",
+      focus: ["q:0>q:1"],
+      position: 3,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:1": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 0 to 0 to try another move.",
+      focus: ["q:0>q:0"],
+      position: 2,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:0": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 0 to 0 to try another move.",
+      focus: ["q:0>q:0"],
+      position: 1,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:0": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Backtrack",
+      caption: "Back out of 0 to 0 to try another move.",
+      focus: ["q:0>q:0"],
+      position: 0,
+      active: ["q:0"],
+      nodes: {
+        "q:0": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:0>q:0": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Done",
+      caption: "Rejected: no run accepts the input.",
+      focus: [],
+      position: 3,
+      active: [],
+      nodes: {},
+      edges: {},
+      ok: false,
+    },
+  ],
+};
+
+// NFA Acceptance, NFASubsetSolver, the problem default instance
+// (({1,2,3},{a,b},{(1,a,2),(1,ε,2),(1,b,3),(2,a,2),(2,ε,3),(2,b,2),(3,a,2),(3,b,3)},1,{2}),a): an
+// arrow that reads a and ε (1>2), loops, opposite arrows, and six paths.
+export const NFA_DEFAULT_AUTOMATON_FRAMES = {
+  type: "Automaton",
+  payload: {
+    kind: "nfa",
+    layout: "layered",
+    states: [
+      {
+        id: "q:1",
+        label: "1",
+        layer: 0,
+      },
+      {
+        id: "q:2",
+        label: "2",
+        layer: 1,
+      },
+      {
+        id: "q:3",
+        label: "3",
+        layer: 1,
+      },
+    ],
+    start: "q:1",
+    accepting: ["q:2"],
+    alphabet: ["a", "b"],
+    transitions: [
+      {
+        id: "q:1>q:2",
+        a: "q:1",
+        b: "q:2",
+        label: "a,ε",
+        symbols: ["a", "ε"],
+        epsilon: false,
+      },
+      {
+        id: "q:1>q:3",
+        a: "q:1",
+        b: "q:3",
+        label: "b",
+        symbols: ["b"],
+        epsilon: false,
+      },
+      {
+        id: "q:2>q:2",
+        a: "q:2",
+        b: "q:2",
+        label: "a,b",
+        symbols: ["a", "b"],
+        epsilon: false,
+      },
+      {
+        id: "q:2>q:3",
+        a: "q:2",
+        b: "q:3",
+        label: "ε",
+        symbols: ["ε"],
+        epsilon: true,
+      },
+      {
+        id: "q:3>q:2",
+        a: "q:3",
+        b: "q:2",
+        label: "a",
+        symbols: ["a"],
+        epsilon: false,
+      },
+      {
+        id: "q:3>q:3",
+        a: "q:3",
+        b: "q:3",
+        label: "b",
+        symbols: ["b"],
+        epsilon: false,
+      },
+    ],
+    input: ["a"],
+    paths: [
+      {
+        id: "p1",
+        label: "Path 1: 1 ⇢ 2 ⇢ 3 → 2, accepts",
+        accepted: true,
+        outcome: "accepts",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 1.",
+            focus: ["q:1"],
+            position: 0,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 0,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 2 to 3.",
+            focus: ["q:2>q:3"],
+            position: 0,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:2>q:3": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 3 to 2.",
+            focus: ["q:3>q:2"],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:3>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 2, an accept state. Accepted.",
+            focus: [],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "Solution",
+              },
+            },
+            edges: {},
+            ok: true,
+          },
+        ],
+      },
+      {
+        id: "p2",
+        label: "Path 2: 1 ⇢ 2 → 2, accepts",
+        accepted: true,
+        outcome: "accepts",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 1.",
+            focus: ["q:1"],
+            position: 0,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 0,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 2 to 2.",
+            focus: ["q:2>q:2"],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:2>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 2, an accept state. Accepted.",
+            focus: [],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "Solution",
+              },
+              "q:3": {
+                state: "Untraveled",
+              },
+            },
+            edges: {},
+            ok: true,
+          },
+        ],
+      },
+      {
+        id: "p3",
+        label: "Path 3: 1 → 2, accepts",
+        accepted: true,
+        outcome: "accepts",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 1.",
+            focus: ["q:1"],
+            position: 0,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 2, an accept state. Accepted.",
+            focus: [],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "Solution",
+              },
+              "q:3": {
+                state: "Untraveled",
+              },
+            },
+            edges: {},
+            ok: true,
+          },
+        ],
+      },
+      {
+        id: "p4",
+        label: "Path 4: 1 ⇢ 2 ⇢ 3 → 2 ⇢ 3, rejects",
+        accepted: false,
+        outcome: "rejects",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 1.",
+            focus: ["q:1"],
+            position: 0,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 0,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 2 to 3.",
+            focus: ["q:2>q:3"],
+            position: 0,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:2>q:3": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 3 to 2.",
+            focus: ["q:3>q:2"],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:3>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 2 to 3.",
+            focus: ["q:2>q:3"],
+            position: 1,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:2>q:3": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 3, which is not an accept state. Rejected.",
+            focus: [],
+            position: 1,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "Rejected",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+      {
+        id: "p5",
+        label: "Path 5: 1 ⇢ 2 → 2 ⇢ 3, rejects",
+        accepted: false,
+        outcome: "rejects",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 1.",
+            focus: ["q:1"],
+            position: 0,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 0,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 2 to 2.",
+            focus: ["q:2>q:2"],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:2>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 2 to 3.",
+            focus: ["q:2>q:3"],
+            position: 1,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:2>q:3": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 3, which is not an accept state. Rejected.",
+            focus: [],
+            position: 1,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "Rejected",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+      {
+        id: "p6",
+        label: "Path 6: 1 → 2 ⇢ 3, rejects",
+        accepted: false,
+        outcome: "rejects",
+        frames: [
+          {
+            event: "Try",
+            caption: "Start in 1.",
+            focus: ["q:1"],
+            position: 0,
+            active: ["q:1"],
+            nodes: {
+              "q:1": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {},
+          },
+          {
+            event: "Try",
+            caption: "Read 'a': move from 1 to 2.",
+            focus: ["q:1>q:2"],
+            position: 1,
+            active: ["q:2"],
+            nodes: {
+              "q:2": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:1>q:2": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Try",
+            caption: "Take an ε-move from 2 to 3.",
+            focus: ["q:2>q:3"],
+            position: 1,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "ElementHighlight",
+              },
+            },
+            edges: {
+              "q:2>q:3": {
+                state: "ElementHighlight",
+              },
+            },
+          },
+          {
+            event: "Done",
+            caption: "This path ends in 3, which is not an accept state. Rejected.",
+            focus: [],
+            position: 1,
+            active: ["q:3"],
+            nodes: {
+              "q:3": {
+                state: "Rejected",
+              },
+            },
+            edges: {},
+            ok: false,
+          },
+        ],
+      },
+    ],
+    pathsTruncated: false,
+  },
+  frames: [
+    {
+      event: "Try",
+      caption: "Start in 1, and follow ε to 2 and 3. The active states are {1, 2, 3}.",
+      focus: ["q:1", "q:1>q:2", "q:2>q:3"],
+      position: 0,
+      active: ["q:1", "q:2", "q:3"],
+      nodes: {
+        "q:1": {
+          state: "ElementHighlight",
+        },
+        "q:2": {
+          state: "ElementHighlight",
+        },
+        "q:3": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+        "q:2>q:3": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Try",
+      caption: "Read 'a'. The active states are now {2, 3}, including ε moves.",
+      focus: ["q:1>q:2", "q:2>q:2", "q:3>q:2", "q:2>q:3"],
+      position: 1,
+      active: ["q:2", "q:3"],
+      nodes: {
+        "q:2": {
+          state: "ElementHighlight",
+        },
+        "q:3": {
+          state: "ElementHighlight",
+        },
+      },
+      edges: {
+        "q:1>q:2": {
+          state: "ElementHighlight",
+        },
+        "q:2>q:2": {
+          state: "ElementHighlight",
+        },
+        "q:2>q:3": {
+          state: "ElementHighlight",
+        },
+        "q:3>q:2": {
+          state: "ElementHighlight",
+        },
+      },
+    },
+    {
+      event: "Accept",
+      caption: "The input is used up with {2, 3} active; 2 is an accept state, so a run accepts.",
+      focus: ["q:2"],
+      position: 1,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "Solution",
+        },
+      },
+      edges: {},
+    },
+    {
+      event: "Done",
+      caption: "Accepted: a run ends in an accept state.",
+      focus: [],
+      position: 1,
+      active: ["q:2"],
+      nodes: {
+        "q:2": {
+          state: "Solution",
+        },
+      },
+      edges: {},
       ok: true,
     },
   ],
