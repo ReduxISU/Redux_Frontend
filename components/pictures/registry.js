@@ -65,10 +65,10 @@ export const PICTURE_RENDERERS = {
   Board: BoardRenderer,
   FlowNetwork: FlowNetworkRenderer,
   Graph: GraphRenderer,
-  GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
   Packing: PackingRenderer,
   SearchTree: SearchTreeRenderer,
+  GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
 };
 
@@ -79,10 +79,10 @@ const PICTURE_ANNOTATIONS = {
   Board: boardAnnotations,
   FlowNetwork: flowAnnotations,
   Graph: graphAnnotations,
-  GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
   Packing: packingAnnotations,
   SearchTree: searchTreeAnnotations,
+  GroupedGraph: groupedGraphAnnotations,
 };
 
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */

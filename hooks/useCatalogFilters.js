@@ -67,10 +67,11 @@ import { buildOptionsFromBackendNames, optionLabel, TAXONOMY } from "../data/tax
 
 // Facet keys backed by a real backend enum (one of the six
 // Navigation/*Types-and-friends endpoints, via hooks/useEnumCatalog.js).
-// computationalModel and visualizationType have no backend equivalent at
-// all (data/taxonomy.js's own facet comments) and are deliberately left out
-// -- they always use their hardcoded `options` array, unconditionally, per
-// this task's own instructions.
+// computationalModel has no backend equivalent at all, and visualizationType
+// reads each visualization's backend `pictureType` but has no enum endpoint
+// listing every picture type (data/taxonomy.js's own facet comments), so
+// both are deliberately left out -- they always use their hardcoded
+// `options` array, unconditionally, per this task's own instructions.
 //
 // The value each key maps to is the matching property name on
 // useEnumCatalog()'s return value, so buildFacetOptions can look the live
@@ -208,7 +209,7 @@ function matchesSelectedFacets(tags, selected) {
 // backend-backed facets whenever useEnumCatalog() has actually resolved a
 // non-empty array for it, falling back to the facet's own hardcoded
 // `options` otherwise -- whether that's because the facet has no backend
-// equivalent at all (computationalModel, visualizationType), the live fetch
+// enum endpoint (computationalModel, visualizationType), the live fetch
 // hasn't resolved yet, it errored, or the endpoint returned nothing. This is
 // the "never regress to blank just because a fetch is in flight" rule this
 // task's instructions call for; it costs nothing on facets that were never
@@ -276,7 +277,7 @@ function buildFacetOptions(index, enumCatalog) {
  *   loaded yet falls back to that facet's hardcoded `options` from
  *   data/taxonomy.js — see `facetOptionList` above. computationalModel and
  *   visualizationType always use their hardcoded `options` regardless, since
- *   they have no backend equivalent at all.
+ *   neither has a backend enum endpoint to list its options.
  * @returns {{
  *   results: Array<{name: string, tags: Object}>,
  *   facetOptions: Object,
