@@ -69,11 +69,11 @@ export const PICTURE_RENDERERS = {
   FlowNetwork: FlowNetworkRenderer,
   Geometry: GeometryRenderer,
   Graph: GraphRenderer,
-  GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
   Packing: PackingRenderer,
   Schedule: ScheduleRenderer,
   SearchTree: SearchTreeRenderer,
+  GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
   TripartiteMatching: TripartiteRenderer,
 };
@@ -86,12 +86,12 @@ const PICTURE_ANNOTATIONS = {
   FlowNetwork: flowAnnotations,
   Geometry: geometryAnnotations,
   Graph: graphAnnotations,
-  GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
   Packing: packingAnnotations,
   Schedule: scheduleAnnotations,
   SearchTree: searchTreeAnnotations,
   TripartiteMatching: tripartiteAnnotations,
+  GroupedGraph: groupedGraphAnnotations,
 };
 
 /** Picture type -> the plain frame for its default picture, when not `{}` (see step 4 above). */
