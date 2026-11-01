@@ -52,6 +52,11 @@ export const PICTURE_TYPE_INFO = {
     draws: "A directed graph drawn in layers, left to right.",
     bestFor: "Orderings, paths and anything that moves rank by rank",
   },
+  NestedSet: {
+    draws:
+      "Each set as a region drawn round its elements, or a list of the sets when there are too many.",
+    bestFor: "Seeing which sets overlap and which contain others, and what an answer covers",
+  },
   Packing: {
     draws: "Items with their sizes, and the bins or targets they go into.",
     bestFor: "Seeing which items an answer picks and how full each bin gets",

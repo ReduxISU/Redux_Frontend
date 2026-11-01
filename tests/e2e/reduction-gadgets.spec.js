@@ -24,6 +24,7 @@ import { LDC_SMALL_CODE_TREE_FRAMES } from "./code-tree-payloads";
 import { expect, test } from "./fixtures";
 import { SAT_TO_3SAT_FORMULA_VIEW, SAT3_FORMULA_FRAMES } from "./formula-payloads";
 import { openPanel } from "./helpers";
+import { EXACT_COVER_RECURSIVE_NESTED_FRAMES } from "./nested-set-payloads";
 import {
   CLIQUE_GRAPH_FRAMES,
   CONVEX_HULL_SMALL_GEOMETRY_FRAMES,
@@ -173,6 +174,7 @@ const PICTURES = {
   GroupedGraph: SAT3_CLAUSE_GRAPH_FRAMES,
   Formula: SAT3_FORMULA_FRAMES,
   BipartiteGraph: EXACT_COVER_BIPARTITE_FRAMES,
+  NestedSet: EXACT_COVER_RECURSIVE_NESTED_FRAMES,
   TripartiteMatching: DM3_TRIPARTITE_FRAMES,
   LayeredGraph: TOPOLOGICAL_SORT_LAYERED_FRAMES,
   FlowNetwork: MIN_CUT_FLOW_FRAMES,
