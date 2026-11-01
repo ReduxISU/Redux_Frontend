@@ -309,3 +309,16 @@ test("an edge rule highlights its node on the source and its edges on the target
   await expect(sourcePicture(page).locator('[data-gadget-highlighted="true"]')).toHaveCount(0);
   await expect(targetPicture(page).locator('[data-gadget-highlighted="true"]')).toHaveCount(0);
 });
+
+test("a Reduce run opens its target picture on the last frame, the finished result", async ({
+  page,
+}) => {
+  // The captured reduction with a frame this picture can't draw put in the middle: the old
+  // second-frame pick would draw it; the last frame is the reduced, solved target.
+  const [base, target] = SAT3.visualizeReduction;
+  await answerCompute(page, { ...SAT3, visualizeReduction: [base, { kind: "nothing" }, target] });
+  await openReduce(page, "3SAT", SAT3.instance, /clique/i);
+  await runReduction(page);
+  await expect(targetPicture(page)).not.toContainText("Cannot render");
+  await expect(targetPicture(page).locator("svg").first()).toBeVisible();
+});

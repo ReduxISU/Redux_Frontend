@@ -12,16 +12,23 @@
 //
 // Adding a renderer (phase B, #200):
 //   1. Write components/pictures/<Type>Renderer.js. It receives
-//        { idPrefix, name, payload, frame, frameIndex, frameCount, highlightIds }
+//        { idPrefix, name, payload, frame, frameIndex, frameCount, frames, highlightIds }
 //      where `payload` is the response's static part, `frame` is `frames[frameIndex]`, `name`
-//      is the visualization's name (for labels) and `highlightIds` are gadget piece ids
-//      (#239; ignore them until then). Before Run, `frame` is the plain frame (plainFrame()
-//      below; `{}` unless the type registers one) and `frameIndex` is null: the renderer must
-//      draw the whole instance from the payload alone, every piece in Background, and place
-//      it exactly where the run's steps will (a layout that is a pure function of the payload).
+//      is the visualization's name (for labels), `frames` is every frame the steps walk (empty
+//      before Run; only a picture whose layout must hold still over a growing run, the Search
+//      Tree's, needs it) and `highlightIds` are gadget piece ids (#239; ignore them until then).
+//      Before Run, `frame` is the plain frame (plainFrame() below; `{}` unless the type
+//      registers one) and `frameIndex` is null: the renderer must draw the whole instance from
+//      the payload alone, every piece in Background, and place it exactly where the run's steps
+//      will (a layout that is a pure function of the payload).
 //      Draw with React-owned SVG inside DiagramZoom.js (DiagramSvg.js with fit, zoom and pan;
 //      or plain HTML when the picture is text, as the Table is), take every color from
 //      pictureStates.js's pictureStateStyle(), and give every focusable piece an aria-label.
+//      A node-link picture also gets `layoutKey` (the instance and visualization drawn) and
+//      lets the reader move its nodes and bend its edges (#250): keep the changes with
+//      diagramEdits.js's useDiagramEdits([layoutKey ?? payload]), draw every node and edge
+//      from the edited positions, mark them with nodeDragProps / edgeDragProps, and pass
+//      DiagramZoom an `editor` (makeEditor) with the type's own limits.
 //   2. Add it to PICTURE_RENDERERS below under the exact `type` Redux sends.
 //   3. If the picture draws annotations that are not states (group colors, order badges,
 //      missing edges), export a function (payload, frames) => [{key, text, swatch}] from the
@@ -42,17 +49,25 @@
 
 import AutomatonRenderer, { automatonAnnotations, automatonRuns } from "./AutomatonRenderer";
 import BipartiteGraphRenderer, { bipartiteAnnotations } from "./BipartiteGraphRenderer";
+import BoardRenderer, { boardAnnotations } from "./BoardRenderer";
+import FlowNetworkRenderer, { flowAnnotations } from "./FlowNetworkRenderer";
 import GraphRenderer, { graphAnnotations } from "./GraphRenderer";
 import GroupedGraphRenderer, { groupedGraphAnnotations } from "./GroupedGraphRenderer";
 import LayeredGraphRenderer, { layeredAnnotations } from "./LayeredGraphRenderer";
+import PackingRenderer, { packingAnnotations } from "./PackingRenderer";
+import SearchTreeRenderer, { searchTreeAnnotations } from "./SearchTreeRenderer";
 import TableRenderer, { tablePlainFrame } from "./TableRenderer";
 
 /** Picture type (the response's `type`) -> its renderer. */
 export const PICTURE_RENDERERS = {
   Automaton: AutomatonRenderer,
   BipartiteGraph: BipartiteGraphRenderer,
+  Board: BoardRenderer,
+  FlowNetwork: FlowNetworkRenderer,
   Graph: GraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
+  Packing: PackingRenderer,
+  SearchTree: SearchTreeRenderer,
   GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
 };
@@ -61,8 +76,12 @@ export const PICTURE_RENDERERS = {
 const PICTURE_ANNOTATIONS = {
   Automaton: automatonAnnotations,
   BipartiteGraph: bipartiteAnnotations,
+  Board: boardAnnotations,
+  FlowNetwork: flowAnnotations,
   Graph: graphAnnotations,
   LayeredGraph: layeredAnnotations,
+  Packing: packingAnnotations,
+  SearchTree: searchTreeAnnotations,
   GroupedGraph: groupedGraphAnnotations,
 };
 

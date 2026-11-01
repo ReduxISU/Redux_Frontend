@@ -49,15 +49,17 @@ function VisualizationTypeControl({ id, options, value, onChange }) {
  * What goes inside one picture box.
  * @typedef {{kind: "frame", frame: Object, backendType: string, name: string, edit?: Object,
  *     highlightIds?: string[]}
- *   | {kind: "picture", type: string, payload: Object|null, frame: Object,
- *      frameIndex: number|null, frameCount: number, name: string, showCaption: boolean,
- *      runs?: {options: Array<{id: string, label: string, accepted?: boolean}>,
+ *   | {kind: "picture", type: string, payload: Object|null, layoutKey?: string, frame: Object,
+ *      frameIndex: number|null, frameCount: number, frames?: Object[], name: string,
+ *      showCaption: boolean, runs?: {options: Array<{id: string, label: string, accepted?: boolean}>,
  *        value: string|null, onChange: Function}|null}
  *   | {kind: "loading", text: string}
  *   | {kind: "message", text: string, tone?: "error"|"muted", compact?: boolean,
  *      action?: {id: string, label: string, onClick: Function}}} PictureContent
  *   `compact` draws a short box (no picture is coming, so no room is held for one).
  *   `highlightIds` are the pieces the hovered or focused gadget row names (#229 stage 4).
+ *   `frames` are the run's frames the steps walk (#217: a picture whose layout spans the run),
+ *   none before Run.
  *   "picture" is a format=frames picture (#199), drawn by the renderer for its `type`;
  *   `frameIndex` is null for the default picture before Run (the plain frame). `runs` are the
  *   other runs the steps can follow instead of the solver's (#204: an NFA's paths), with the
@@ -88,9 +90,11 @@ function PictureBox({ idPrefix, content }) {
         name={content.name}
         type={content.type}
         payload={content.payload}
+        layoutKey={content.layoutKey}
         frame={content.frame}
         frameIndex={content.frameIndex}
         frameCount={content.frameCount}
+        frames={content.frames ?? null}
         showCaption={content.showCaption}
         runs={content.runs ?? null}
       />

@@ -22,12 +22,25 @@
 // Force / Circle switch to override it). Hovering, focusing or tapping a node traces it: its
 // edges in the trace color, everything not touching it faded by color. The diagram opens fitted
 // to its box and zooms and pans with DiagramZoom.js.
+//
+// #250: the reader can move any node and bend any edge (diagramEdits.js), freely; the changes
+// stay while the steps play and after Run, and go back to the layout on a new instance or
+// visualization, on a Force / Circle switch, or on Reset layout.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
 import DiagramZoom from "./DiagramZoom";
+import {
+  EdgeHandles,
+  editedPositions,
+  makeEditor,
+  nodeDragProps,
+  offsetAlongNormal,
+  useDiagramEdits,
+} from "./diagramEdits";
 import { layoutGraph, NODE_RADIUS, nodeWidth } from "./graphLayout";
 import {
+  autoBow,
   Badge,
   edgeGeometry,
   edgeLook,
@@ -117,8 +130,9 @@ function tourPositions(order) {
  * @param {string} props.name The visualization's name, for the diagram's label.
  * @param {Object} props.payload The Graph payload.
  * @param {Object} props.frame The frame to draw.
+ * @param {string|null} [props.layoutKey] The instance and visualization drawn (#250).
  */
-export default function GraphRenderer({ idPrefix, name, payload, frame }) {
+export default function GraphRenderer({ idPrefix, name, payload, frame, layoutKey = null }) {
   const graph = useMemo(() => readGraph(payload), [payload]);
   const defaultLayout = payload?.layout === "circle" ? "circle" : "force";
   const [layoutChoice, setLayoutChoice] = useState(null);
@@ -148,7 +162,23 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
   const { first: positionOf, extra: repeatsOf } = tourPositions(frame?.order);
   const phantoms = Array.isArray(frame?.phantoms) ? frame.phantoms : [];
   const shape = payload?.shape ?? "";
-  const pos = layout.positions;
+  const edits = useDiagramEdits([layoutKey ?? payload, layoutMode]);
+  const pos = editedPositions(layout.positions, edits.nodes);
+  const editor = makeEditor({
+    edits,
+    nodeAt: (id) => pos.get(id) ?? null,
+    moveNode: (id, point) => edits.setNode(id, point),
+    dragEdge: (id, point) => {
+      const edge = graph.edges.find((candidate) => candidate.id === id);
+      const a = pos.get(edge?.a);
+      const b = pos.get(edge?.b);
+      if (!a || !b || edge.a === edge.b) return;
+      edits.setBend(id, offsetAlongNormal(a, b, point) - autoBow(a, b, edge.bend));
+    },
+  });
+  const extraOf = (id) => edits.bends[id] ?? 0;
+  // Each edge's grab handle, collected as the edges are drawn.
+  const handles = [];
 
   const label = `${name}: a graph of ${graph.nodes.length} node${graph.nodes.length === 1 ? "" : "s"} and ${graph.edges.length} edge${graph.edges.length === 1 ? "" : "s"}${graph.directed ? ", directed" : ""}.`;
 
@@ -167,6 +197,7 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
         label={label}
         drawing={layout}
         resetOn={[payload, layoutMode]}
+        editor={editor}
         toolbar={
           <PictureToggle
             id={`${idPrefix}-layout`}
@@ -194,8 +225,9 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
               b,
               graph.widths.get(edge.a),
               graph.widths.get(edge.b),
-              { directed: graph.directed, bend: edge.bend },
+              { directed: graph.directed, bend: edge.bend, extra: extraOf(edge.id) },
             );
+            handles.push({ id: edge.id, d: geometry.path });
             return (
               <g
                 key={edge.id}
@@ -217,6 +249,7 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
             );
           })}
         </g>
+        <EdgeHandles edges={handles} />
         {traced === null && (
           <g data-layer="phantoms">
             {phantoms.map((phantom, index) => {
@@ -265,11 +298,12 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
               b,
               graph.widths.get(edge.a),
               graph.widths.get(edge.b),
-              { bend: edge.bend },
+              { bend: edge.bend, extra: extraOf(edge.id) },
             );
             return (
               <WeightTag
                 key={edge.id}
+                dragId={edge.id}
                 x={geometry.label.x}
                 y={geometry.label.y}
                 text={edge.tag}
@@ -319,6 +353,7 @@ export default function GraphRenderer({ idPrefix, name, payload, frame }) {
                 data-group={group}
                 data-order={position}
                 data-terminal={terminal ? "true" : undefined}
+                {...nodeDragProps(node.id)}
                 data-traced={near ? (faint ? "faint" : "trace") : undefined}
                 data-focusable=""
                 tabIndex={0}
