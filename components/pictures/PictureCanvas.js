@@ -77,6 +77,8 @@ function FrameCaption({ id, frame }) {
  * @param {number|null} props.frameIndex Which frame it is, or null for the plain frame of the
  *   default picture before Run (registry.js plainFrame(): every piece in Background).
  * @param {number} props.frameCount How many frames the response has.
+ * @param {Object[]|null} [props.frames] Every frame the steps walk (during a run; none before
+ *   Run), for a picture whose layout spans the whole run (#217).
  * @param {boolean} [props.showCaption] Show the step's caption (during a run, not for the
  *   default picture before Run, where the caption would describe a run nobody started).
  * @param {string[]} [props.highlightIds] Gadget piece ids (#239).
@@ -93,6 +95,7 @@ export default function PictureCanvas({
   frame,
   frameIndex,
   frameCount,
+  frames = null,
   showCaption,
   highlightIds,
   runs = null,
@@ -123,6 +126,7 @@ export default function PictureCanvas({
         frame={frame}
         frameIndex={frameIndex}
         frameCount={frameCount}
+        frames={frames ?? []}
         highlightIds={highlightIds}
         runs={runs}
       />

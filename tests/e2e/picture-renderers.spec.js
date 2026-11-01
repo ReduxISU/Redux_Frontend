@@ -25,9 +25,15 @@
 // the augmenting paths and back arcs, and the cut's S and T sides.
 // #202: the Grouped Graph renderer (SAT and 3SAT's clause graph) after that, with the same
 // plain picture before Run and the same fit and zoom.
-// #207: the Packing renderer (Partition, Subset Sum, Knapsack, Bin Packing) last: the item pool,
-// each container's lines as rows to scale, every step's placement and totals, no text that
+// #207: the Packing renderer (Partition, Subset Sum, Knapsack, Bin Packing) after that: the item
+// pool, each container's lines as rows to scale, every step's placement and totals, no text that
 // meets another, and on a phone a drawing as narrow as its box, so its text is not shrunk.
+// #217: the Search Tree renderer (backtracking and branch-and-bound runs) last: the tree as each
+// step leaves it, folds, the answer's path, one box for the whole run, opening at fit like every
+// picture, zooming in to readable text on a phone, and stepping that keeps the step in view.
+// #208: the Board renderer (Sudoku, N-Queens) after it: every square, clue, queen and ruled-out
+// square as each step leaves them, Hints, the trace of a square's row, column and box (or a
+// queen's lines of attack), and on a phone a board drawn at its own size, its text not shrunk.
 
 import { expect, test } from "./fixtures";
 import { gotoProblemDetail, openPanel } from "./helpers";
@@ -44,7 +50,10 @@ import {
   DFA_GARBAGE_AUTOMATON_FRAMES,
   DFA_TABLE_FRAMES,
   DIRECTED_HAMILTONIAN_GRAPH_FRAMES,
+  DM3_SEARCH_TREE_FRAMES,
   EXACT_COVER_BIPARTITE_FRAMES,
+  GRAPH_COLORING_FAILED_SEARCH_TREE_FRAMES,
+  GRAPH_COLORING_SEARCH_TREE_FRAMES,
   HITTING_SET_BIPARTITE_FRAMES,
   ILP_TABLE_FRAMES_WITH_BLANK,
   KNAPSACK_OVER_PACKING_FRAMES,
@@ -56,6 +65,10 @@ import {
   MIN_CUT_FLOW_FRAMES,
   MIN_CUT_NO_PATH_FLOW_FRAMES,
   MIN_CUT_PARALLEL_FLOW_FRAMES,
+  N_QUEENS_BOARD_FRAMES,
+  N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES,
+  N_QUEENS_NONE_BOARD_FRAMES,
+  N_QUEENS_SEARCH_TREE_FRAMES,
   NFA_BACKTRACK_REJECTED_AUTOMATON_FRAMES,
   NFA_DEFAULT_AUTOMATON_FRAMES,
   NFA_SUBSET_AUTOMATON_FRAMES,
@@ -65,6 +78,8 @@ import {
   SAT3_CLAUSE_GRAPH_FRAMES,
   SAT3_FACTOR_GRAPH_FRAMES,
   SAT3_FAILED_CLAUSE_GRAPH_FRAMES,
+  SAT3_SEARCH_TREE_FRAMES,
+  SAT3_UNSAT_SEARCH_TREE_FRAMES,
   SCC_LAYERED_FRAMES,
   SET_COVER_BIPARTITE_FRAMES,
   SET_COVER_FAILED_BIPARTITE_FRAMES,
@@ -76,8 +91,14 @@ import {
   SUBSET_SUM_APPROX_PACKING_FRAMES,
   SUBSET_SUM_CLIPPED_PACKING_FRAMES,
   SUBSET_SUM_PACKING_FRAMES,
+  SUDOKU_BOARD_FRAMES,
+  SUDOKU_CLASH_BOARD_FRAMES,
+  SUDOKU_SHORT_BOARD_FRAMES,
   TOPOLOGICAL_SORT_CYCLE_LAYERED_FRAMES,
   TOPOLOGICAL_SORT_LAYERED_FRAMES,
+  TSP_4CITY_SEARCH_TREE_FRAMES,
+  TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES,
+  TSP_SEARCH_TREE_FRAMES,
 } from "./picture-payloads";
 
 const PROBLEM = "DFA Acceptance";
@@ -3545,6 +3566,1146 @@ test("Packing: a wide screen still draws the picture 480 wide, as large as its b
   const smallest = await packingSmallestText(page);
   expect(smallest.px).toBeGreaterThan(PHONE_TEXT_PX);
 });
+
+// --- #217: the Search Tree renderer (backtracking and branch-and-bound runs) ----------------
+
+const TREE = "#workbench-source-frames-searchtree";
+
+/**
+ * Each search tree capture. The catalog CI's backend serves has no Search Tree visualizations
+ * yet, so every capture is drawn on the 3SAT page (its clause graph's visualization made to name
+ * SearchTree): the picture is the capture's, whatever the page.
+ */
+const TREE_CASES = {
+  sat3: SAT3_SEARCH_TREE_FRAMES,
+  sat3Unsat: SAT3_UNSAT_SEARCH_TREE_FRAMES,
+  tsp: TSP_SEARCH_TREE_FRAMES,
+  tspGreedyBeaten: TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES,
+  tsp4City: TSP_4CITY_SEARCH_TREE_FRAMES,
+  coloring: GRAPH_COLORING_SEARCH_TREE_FRAMES,
+  coloringFailed: GRAPH_COLORING_FAILED_SEARCH_TREE_FRAMES,
+  queens: N_QUEENS_SEARCH_TREE_FRAMES,
+  dm3: DM3_SEARCH_TREE_FRAMES,
+};
+
+async function openTree(page, capture) {
+  await setEveryPictureType(page, "SearchTree");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${TREE}-tree`)).toBeVisible();
+}
+
+const treeNode = (page, id) => page.locator(`${TREE}-tree [data-node-id="${id}"]`);
+const treeEdge = (page, id) => page.locator(`${TREE}-tree [data-edge-into="${id}"]`);
+
+/** Frame `index`'s tree, checked node by node against the picture. */
+async function expectTreeFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const tree = page.locator(`${TREE}-tree`);
+  await expect(tree.locator("[data-node-id]")).toHaveCount(frame.nodes.length);
+  await expect(tree.locator("[data-edge-into]")).toHaveCount(
+    frame.nodes.filter((node) => node.parent !== null).length,
+  );
+  for (const node of frame.nodes) {
+    const drawn = treeNode(page, node.id);
+    await expect(drawn).toHaveAttribute("data-state", node.state);
+    await expect(drawn).toHaveAttribute("data-kind", node.kind);
+    await expect(drawn.locator("[data-label]")).toHaveText(node.label);
+  }
+  await expect(tree.locator("[data-focus]")).toHaveCount(frame.focus.length);
+  for (const id of frame.focus) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-focus", "true");
+  }
+  const summary = page.locator(`${TREE}-summary`);
+  await expect(summary).toHaveAttribute("data-total", String(frame.total));
+  await expect(summary).toHaveAttribute("data-cut", String(frame.cut));
+}
+
+for (const [key, capture] of Object.entries(TREE_CASES)) {
+  test(`Search Tree: the ${key} capture grows its tree step by step, every node as Redux sends it`, async ({
+    page,
+  }) => {
+    // Every step of the run, checked piece by piece.
+    test.slow();
+    await openTree(page, capture);
+    // Before Run there is no tree: the picture says it grows once the solver runs.
+    await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute(
+      "data-plain",
+      "true",
+    );
+    await expect(page.locator(`${TREE}-waiting`)).toContainText(
+      `The search tree of this ${capture.payload.problem} instance grows from the solver's choices, step by step.`,
+    );
+    await expect(page.locator(`${TREE}-svg`)).toHaveCount(0);
+    // Nothing here can be dragged (#250 leaves the tree alone).
+    await expect(page.locator(`${TREE}-layout-reset`)).toHaveCount(0);
+
+    await runToFrame(page, capture, 0);
+    await expectTreeFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectTreeFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await page.locator(`${TREE}-tree [data-focusable]`).all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /./);
+    }
+  });
+}
+
+/** Each drawn node's box, by id, in viewBox units. */
+function treeBoxes(page) {
+  return page.locator(`${TREE}-tree [data-node-id]`).evaluateAll((nodes) =>
+    Object.fromEntries(
+      nodes.map((node) => {
+        const box = node.querySelector("[data-body]").getBBox();
+        return [
+          node.getAttribute("data-node-id"),
+          { x: box.x, y: box.y, width: box.width, height: box.height },
+        ];
+      }),
+    ),
+  );
+}
+
+test("Search Tree: each level is a row, and a parent sits centred over its first and last child", async ({
+  page,
+}) => {
+  const capture = GRAPH_COLORING_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const frame = capture.frames.at(-1);
+  const boxes = await treeBoxes(page);
+  const centre = (id) => boxes[id].x + boxes[id].width / 2;
+  for (const node of frame.nodes) {
+    const children = frame.nodes.filter((child) => child.parent === node.id);
+    if (!children.length) continue;
+    for (const child of children) expect(boxes[child.id].y).toBeGreaterThan(boxes[node.id].y);
+    // Siblings left to right in the order Redux made them, and the parent over their middle.
+    const xs = children.map((child) => centre(child.id));
+    expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+    expect(centre(node.id)).toBeCloseTo((xs[0] + xs.at(-1)) / 2, 0);
+  }
+  // No two nodes on a row meet.
+  const ids = Object.keys(boxes);
+  for (const [i, a] of ids.entries()) {
+    for (const b of ids.slice(i + 1)) {
+      const p = boxes[a];
+      const q = boxes[b];
+      const meet =
+        p.x < q.x + q.width && q.x < p.x + p.width && p.y < q.y + q.height && q.y < p.y + p.height;
+      expect(meet, `${a} meets ${b}`).toBe(false);
+    }
+  }
+});
+
+test("Search Tree: the whole run shares one box, so the view and a node's size hold still while it grows", async ({
+  page,
+}) => {
+  const capture = N_QUEENS_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, 0);
+  // The tree opens at fit, and the window holds still while it grows.
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  const viewBox = await page.locator(`${TREE}-svg`).getAttribute("viewBox");
+  const first = await treeBoxes(page);
+  // A step later the tree has changed shape (Redux folded a branch), but the box is the same.
+  for (let index = 1; index < capture.frames.length; index += 1) {
+    await page.locator("#workbench-steps-next").click();
+    await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+    expect(await page.locator(`${TREE}-svg`).getAttribute("viewBox")).toBe(viewBox);
+  }
+  const last = await treeBoxes(page);
+  expect(last.n0.height).toBe(first.n0.height);
+  expect(last.n0.width).toBe(first.n0.width);
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+});
+
+test("Search Tree: folds stand for the nodes Redux hid, and say how many", async ({ page }) => {
+  const capture = N_QUEENS_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, 0);
+  const frame = capture.frames[0];
+  const more = frame.nodes.find((node) => node.kind === "more");
+  const cut = frame.nodes.find((node) => node.kind === "cut");
+  await expect(treeNode(page, more.id)).toHaveAttribute("data-hidden", String(more.hidden));
+  await expect(treeNode(page, more.id)).toHaveAttribute(
+    "aria-label",
+    new RegExp(`^\\+${more.hidden} more, path .*, ${more.hidden} finished nodes folded away`),
+  );
+  await expect(treeNode(page, cut.id)).toHaveAttribute(
+    "aria-label",
+    new RegExp(`^${cut.hidden} cut, path .*, ${cut.hidden} branches cut`),
+  );
+  // A cut branch is dashed red, a fold of finished ones dotted grey.
+  await expect(treeEdge(page, cut.id)).toHaveAttribute("stroke-dasharray", "4 4");
+  await expect(treeEdge(page, more.id)).toHaveAttribute("stroke-dasharray", "2 3");
+  await expect(legendBody(page)).toContainText("+k more (a finished branch folded away)");
+  await expect(legendBody(page)).toContainText("k cut (that many cut branches drawn as one)");
+});
+
+test("Search Tree: the answer's path turns green, and best-first nodes show when they left the queue", async ({
+  page,
+}) => {
+  const capture = SAT3_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  for (const id of ["n0", "n1", "n3"]) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  for (const id of ["n1", "n3"]) {
+    await expect(treeEdge(page, id)).not.toHaveAttribute("stroke-dasharray", /./);
+  }
+  // The answer's leaf says why it is one, and each queued node how many clauses it leaves.
+  await expect(treeNode(page, "n3").locator("[data-note]")).toHaveAttribute("data-note", "x3 free");
+  await expect(treeNode(page, "n2").locator("[data-note]")).toHaveAttribute(
+    "data-note",
+    "1 clause left",
+  );
+  // Best-first: the order each node left the queue, and the one still queued waits dashed.
+  await expect(treeNode(page, "n0").locator('[data-badge="order"]')).toHaveText("1");
+  await expect(treeNode(page, "n1").locator('[data-badge="order"]')).toHaveText("2");
+  await expect(treeNode(page, "n2")).toHaveAttribute("data-kind", "queued");
+  await expect(treeNode(page, "n2")).toHaveAttribute("data-state", "Untraveled");
+  await expect(legendBody(page)).toContainText("Order (when the node left the queue)");
+});
+
+test("Search Tree: a branch explored and backed out of is solid red, and a run that finds nothing says no", async ({
+  page,
+}) => {
+  const failed = GRAPH_COLORING_FAILED_SEARCH_TREE_FRAMES;
+  await openTree(page, failed);
+  await runToFrame(page, failed, failed.frames.length - 1);
+  const node = failed.frames.at(-1).nodes.find((candidate) => candidate.kind === "failed");
+  await expect(treeNode(page, node.id)).toHaveAttribute("data-state", "Rejected");
+  await expect(treeEdge(page, node.id)).not.toHaveAttribute("stroke-dasharray", /./);
+  await expect(legendBody(page)).toContainText("Solid red branch (explored, then backed out of)");
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: no");
+  await expect(page.locator(`${TREE}-tree [data-state="Solution"]`)).toHaveCount(0);
+});
+
+test("Search Tree: a bound or clash is noted under its node, on two lines when it is long", async ({
+  page,
+}) => {
+  const capture = TSP_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const note = treeNode(page, "n3").locator("[data-note]");
+  await expect(note).toHaveAttribute("data-note", "lb 7450 ≥ 6830");
+  await expect(note.locator("tspan")).toHaveText(["lb 7450", "≥ 6830"]);
+  await expect(treeNode(page, "n3")).toHaveAttribute(
+    "aria-label",
+    "Denver, path New York → Denver, cut without exploring, Rejected (failed or ruled out), lb 7450 ≥ 6830",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Note under a node (the bound or clash that decided it)",
+  );
+  await expect(legendBody(page)).toContainText(
+    "Dashed red branch (cut without exploring, by a bound or a clash)",
+  );
+  await expect(page.locator(`${CAPTION}-verdict`)).toHaveText("Verdict: yes");
+});
+
+test("Search Tree: TSP's greedy tour is a leaf under the root, and the answer's path when nothing beats it", async ({
+  page,
+}) => {
+  const capture = TSP_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  // The first step: the root is explored first, and the greedy tour is the step's node.
+  await runToFrame(page, capture, 0);
+  await expect(treeNode(page, "n0").locator('[data-badge="order"]')).toHaveText("1");
+  await expect(treeNode(page, "n1")).toHaveAttribute("data-focus", "true");
+  await expect(treeNode(page, "n1").locator("[data-label]")).toHaveText("greedy tour");
+  await expect(treeNode(page, "n1").locator("[data-note]")).toHaveAttribute(
+    "data-note",
+    "tour 6830",
+  );
+  // The search never beats it: the answer's path is the root and the greedy tour.
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("End");
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
+  await expect(page.locator(`${TREE}-tree [data-state="Solution"]`)).toHaveCount(2);
+  for (const id of ["n0", "n1"]) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(treeEdge(page, "n1")).not.toHaveAttribute("stroke-dasharray", /./);
+  // The label fits its node.
+  const fits = await treeNode(page, "n1").evaluate((node) => {
+    const body = node.querySelector("[data-body]").getBoundingClientRect();
+    const label = node.querySelector("[data-label]").getBoundingClientRect();
+    return label.left >= body.left - 0.5 && label.right <= body.right + 0.5;
+  });
+  expect(fits).toBe(true);
+});
+
+test("Search Tree: when the search beats TSP's greedy tour, the answer's path runs down the tree", async ({
+  page,
+}) => {
+  const capture = TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  for (const id of ["n0", "n3", "n9", "n12", "n14"]) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(treeNode(page, "n14").locator("[data-note]")).toHaveAttribute(
+    "data-note",
+    "tour 27",
+  );
+  // The greedy tour it beat stays a leaf, no longer the answer.
+  await expect(treeNode(page, "n1")).toHaveAttribute("data-state", "Covered");
+  await expect(treeNode(page, "n1").locator("[data-note]")).toHaveAttribute("data-note", "tour 31");
+});
+
+test("Search Tree: hovering, focusing or tapping a node traces its path from the root", async ({
+  page,
+}) => {
+  const capture = TSP_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await treeNode(page, "n12").hover();
+  for (const id of ["n0", "n5", "n9", "n12"]) {
+    await expect(treeNode(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  for (const id of ["n5", "n9", "n12"]) {
+    await expect(treeEdge(page, id)).toHaveAttribute("data-traced", "trace");
+  }
+  await expect(treeNode(page, "n2")).toHaveAttribute("data-traced", "faint");
+  await expect(treeEdge(page, "n2")).toHaveAttribute("data-traced", "faint");
+  const faded = await treeNode(page, "n2").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+
+  await page.mouse.move(0, 0);
+  await treeNode(page, "n7").focus();
+  await expect(treeNode(page, "n2")).toHaveAttribute("data-traced", "trace");
+  await expect(treeNode(page, "n5")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(treeNode(page, "n7")).toHaveAttribute("aria-pressed", "true");
+  await expect(treeNode(page, "n2")).toHaveAttribute(
+    "aria-label",
+    "Chicago, path New York → Chicago, explored, Covered (rule met), lb 5470, left the queue 2, 3 children",
+  );
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Search Tree: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await openTree(page, TSP_SEARCH_TREE_FRAMES);
+      await runToFrame(page, TSP_SEARCH_TREE_FRAMES, TSP_SEARCH_TREE_FRAMES.frames.length - 1);
+      await page.setViewportSize({ width, height: 900 });
+      const svg = page.locator(`${TREE}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${TREE}-svg`);
+      // The notes follow the theme: no dark-on-dark, no light-on-white.
+      const ink = await treeNode(page, "n0")
+        .locator("[data-note]")
+        .evaluate((el) => getComputedStyle(el).fill);
+      const [r, g, b] = ink.match(/\d+/g).map(Number);
+      expect((r + g + b) / 3 > 128).toBe(scheme === "dark");
+    });
+  }
+}
+
+/**
+ * Every place where two texts of the tree meet, or a text spills out of its node or crosses a
+ * node it doesn't belong to, or an edge runs through a text other than its own ends' labels.
+ * @returns {Promise<string[]>} One line per collision; empty when the picture is clear.
+ */
+function treeCollisions(page) {
+  return page.locator(`${TREE}-svg`).evaluate((svg) => {
+    const found = [];
+    const texts = [
+      ...svg.querySelectorAll("[data-node-id] [data-label], [data-node-id] [data-note]"),
+    ].map((text) => ({
+      name: `${text.closest("[data-node-id]").dataset.nodeId} "${text.textContent}"`,
+      owner: text.closest("[data-node-id]").dataset.nodeId,
+      box: text.getBBox(),
+    }));
+    const bodies = [...svg.querySelectorAll("[data-node-id] [data-body]")].map((body) => ({
+      owner: body.closest("[data-node-id]").dataset.nodeId,
+      box: body.getBBox(),
+    }));
+    const meets = (a, b) =>
+      a.x < b.x + b.width - 0.5 &&
+      b.x < a.x + a.width - 0.5 &&
+      a.y < b.y + b.height - 0.5 &&
+      b.y < a.y + a.height - 0.5;
+    texts.forEach((a, i) => {
+      texts.forEach((b, j) => {
+        if (j > i && meets(a.box, b.box)) found.push(`${a.name} meets ${b.name}`);
+      });
+      for (const body of bodies) {
+        if (body.owner !== a.owner && meets(a.box, body.box)) {
+          found.push(`${a.name} on node ${body.owner}`);
+        }
+      }
+    });
+    for (const body of bodies) {
+      const label = texts.find((text) => text.owner === body.owner);
+      if (
+        label &&
+        (label.box.x < body.box.x - 0.5 ||
+          label.box.x + label.box.width > body.box.x + body.box.width + 0.5)
+      ) {
+        found.push(`${label.name} spills out of its node`);
+      }
+    }
+    for (const path of svg.querySelectorAll("[data-edge-into]")) {
+      const child = path.dataset.edgeInto;
+      const length = path.getTotalLength();
+      for (const text of texts) {
+        if (text.owner === child) continue;
+        const inner = {
+          x: text.box.x + 1,
+          y: text.box.y + 1,
+          width: text.box.width - 2,
+          height: text.box.height - 2,
+        };
+        for (let at = 0; at <= length; at += 2) {
+          const point = path.getPointAtLength(at);
+          if (
+            point.x > inner.x &&
+            point.x < inner.x + inner.width &&
+            point.y > inner.y &&
+            point.y < inner.y + inner.height
+          ) {
+            found.push(`edge into ${child} runs through ${text.name}`);
+            break;
+          }
+        }
+      }
+    }
+    return found;
+  });
+}
+
+for (const [key, capture] of Object.entries(TREE_CASES)) {
+  test(`Search Tree: the ${key} capture's labels and notes never meet, at every step`, async ({
+    page,
+  }) => {
+    // Every step of the run, checked piece by piece.
+    test.slow();
+    await openTree(page, capture);
+    await runToFrame(page, capture, 0);
+    expect(await treeCollisions(page)).toEqual([]);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      expect(await treeCollisions(page)).toEqual([]);
+    }
+  });
+}
+
+/**
+ * The smallest label and the smallest note of the tree as drawn on screen, in CSS px (font size
+ * times the diagram's scale), with the text each belongs to.
+ */
+function treeSmallestText(page) {
+  return page.locator(`${TREE}-svg`).evaluate((svg) => {
+    const scale = svg.getScreenCTM().a;
+    const smallest = (selector) =>
+      [...svg.querySelectorAll(selector)]
+        .map((text) => ({
+          text: text.textContent,
+          px: Number.parseFloat(getComputedStyle(text).fontSize) * scale,
+        }))
+        .reduce((least, text) => (text.px < least.px ? text : least), { text: "", px: Infinity });
+    return { label: smallest("[data-label]"), note: smallest("[data-note]") };
+  });
+}
+
+/** The smallest a tree's label and note may be drawn on a phone, in CSS px. */
+const TREE_LABEL_PX = 11;
+const TREE_NOTE_PX = 10;
+
+/** Whether node `id`'s box is wholly inside the picture area on screen. */
+function treeNodeInView(page, id) {
+  return page.locator(`${TREE}-svg`).evaluate((svg, nodeId) => {
+    const node = svg.querySelector(`[data-node-id="${nodeId}"] [data-body]`);
+    const a = node.getBoundingClientRect();
+    const b = svg.getBoundingClientRect();
+    return (
+      a.left >= b.left - 1 &&
+      a.right <= b.right + 1 &&
+      a.top >= b.top - 1 &&
+      a.bottom <= b.bottom + 1
+    );
+  }, id);
+}
+
+/** The node a frame's view follows: its step's, or else the end of the answer's path. */
+function followedNode(frame) {
+  const [focus] = frame.focus;
+  if (focus !== undefined) return focus;
+  const answer = frame.nodes.findLast(
+    (node) => node.state === "Solution" || node.state === "Committed",
+  );
+  return (answer ?? frame.nodes[0]).id;
+}
+
+/** The tree's zoom, as DiagramZoom.js reports it. */
+const treeZoom = async (page) =>
+  Number(await page.locator(`${TREE}-zoom`).getAttribute("data-zoom"));
+
+/** Whether the tree's smallest label and note read at TREE_LABEL_PX and TREE_NOTE_PX. */
+async function treeReadable(page) {
+  const smallest = await treeSmallestText(page);
+  return smallest.label.px >= TREE_LABEL_PX && smallest.note.px >= TREE_NOTE_PX;
+}
+
+/** Presses + until the tree's text is readable (treeReadable) or + is disabled. */
+async function zoomTreeToReadable(page) {
+  const zoomIn = page.locator(`${TREE}-zoom-in`);
+  for (let press = 0; press < 12; press += 1) {
+    if (await treeReadable(page)) return;
+    if (await zoomIn.isDisabled()) return;
+    const before = await treeZoom(page);
+    await zoomIn.click();
+    await expect.poll(() => treeZoom(page)).toBeGreaterThan(before);
+  }
+}
+
+for (const width of [390, 1280]) {
+  test(`Search Tree: at ${width} px every capture opens at fit, on Run and on its last step`, async ({
+    page,
+  }) => {
+    test.slow();
+    await page.setViewportSize({ width, height: 844 });
+    for (const capture of Object.values(TREE_CASES)) {
+      await openTree(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      await page.locator("#workbench-run").click();
+      const count = capture.frames.length;
+      await expect(page.locator("#workbench-steps-position")).toHaveText(
+        `Step ${count} of ${count}`,
+      );
+      await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      await expect(page.locator(`${TREE}-zoom-reset`)).toBeDisabled();
+      await expect(page.locator(`${TREE}-zoom-out`)).toBeDisabled();
+      await expectFits(page, `${TREE}-svg`);
+    }
+  });
+}
+
+for (const key of ["sat3", "tsp", "queens"]) {
+  test(`Search Tree: on a 390 px phone the ${key} tree zooms in to readable text, and stepping keeps the step in view`, async ({
+    page,
+  }) => {
+    const capture = TREE_CASES[key];
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openTree(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    await runToFrame(page, capture, capture.frames.length - 1);
+    await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    // + reaches the text's full size, however wide the tree.
+    await zoomTreeToReadable(page);
+    const zoomed = await treeSmallestText(page);
+    expect(zoomed.label.px, `"${zoomed.label.text}"`).toBeGreaterThanOrEqual(TREE_LABEL_PX);
+    expect(zoomed.note.px, `"${zoomed.note.text}"`).toBeGreaterThanOrEqual(TREE_NOTE_PX);
+    await expectFits(page, `${TREE}-svg`);
+    // Zoomed in, each step's node is brought into view, at the same readable size.
+    for (let index = capture.frames.length - 2; index >= capture.frames.length - 6; index -= 1) {
+      if (index < 0) break;
+      await page.locator("#workbench-steps-previous").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expect.poll(() => treeNodeInView(page, followedNode(capture.frames[index]))).toBe(true);
+    }
+    const stepped = await treeSmallestText(page);
+    expect(stepped.label.px).toBeGreaterThanOrEqual(TREE_LABEL_PX);
+    expect(stepped.note.px).toBeGreaterThanOrEqual(TREE_NOTE_PX);
+    // Back at step 1, following its node frames the path down to it: where the window can hold
+    // the path from the root, the root is in view too.
+    await toFirstStep(page);
+    const first = followedNode(capture.frames[0]);
+    await expect.poll(() => treeNodeInView(page, first)).toBe(true);
+    const framing = await page.locator(`${TREE}-svg`).evaluate((svg, nodeId) => {
+      const rect = (id) =>
+        svg.querySelector(`[data-node-id="${id}"] [data-body]`).getBoundingClientRect();
+      const area = svg.getBoundingClientRect();
+      const root = svg.querySelector("[data-node-id] [data-body]").getBoundingClientRect();
+      const node = rect(nodeId);
+      return {
+        pathFits:
+          Math.max(root.right, node.right) - Math.min(root.left, node.left) <= area.width &&
+          Math.max(root.bottom, node.bottom) - Math.min(root.top, node.top) <= area.height,
+        rootInView:
+          root.left >= area.left - 1 &&
+          root.right <= area.right + 1 &&
+          root.top >= area.top - 1 &&
+          root.bottom <= area.bottom + 1,
+      };
+    }, first);
+    if (framing.pathFits) expect(framing.rootInView).toBe(true);
+    await page.locator(`${TREE}-zoom-reset`).click();
+    await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  });
+}
+
+test("Search Tree: Ctrl + wheel also zooms a wide tree on a phone in to readable text", async ({
+  page,
+}) => {
+  const capture = TSP_SEARCH_TREE_FRAMES;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openTree(page, capture);
+  await page.locator("#workbench-panel-close").click();
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const svg = page.locator(`${TREE}-svg`);
+  await svg.scrollIntoViewIfNeeded();
+  const box = await svg.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.down("Control");
+  for (let turn = 0; turn < 12; turn += 1) {
+    if (await treeReadable(page)) break;
+    await page.mouse.wheel(0, -200);
+  }
+  await page.keyboard.up("Control");
+  await expect.poll(() => treeReadable(page)).toBe(true);
+});
+
+test("Search Tree: on a desktop a wide tree opens at fit, and + zooms it in to readable text", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const capture = TSP_GREEDY_BEATEN_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await page.locator("#workbench-run").click();
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+  await zoomTreeToReadable(page);
+  const smallest = await treeSmallestText(page);
+  expect(smallest.label.px).toBeGreaterThanOrEqual(TREE_LABEL_PX);
+  expect(smallest.note.px).toBeGreaterThanOrEqual(TREE_NOTE_PX);
+  await page.locator(`${TREE}-zoom-reset`).click();
+  await expect(page.locator(`${TREE}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+});
+
+test("Search Tree: a short note like 2 clauses left stays on one line", async ({ page }) => {
+  const capture = SAT3_UNSAT_SEARCH_TREE_FRAMES;
+  await openTree(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  const notes = page.locator(`${TREE}-tree [data-note="2 clauses left"]`);
+  expect(await notes.count()).toBeGreaterThan(0);
+  for (const note of await notes.all()) {
+    await expect(note.locator("tspan")).toHaveText(["2 clauses left"]);
+  }
+  for (const note of await page.locator(`${TREE}-tree [data-note="1 clause left"]`).all()) {
+    await expect(note.locator("tspan")).toHaveText(["1 clause left"]);
+  }
+});
+
+for (const width of [390, 320]) {
+  test(`Search Tree: at ${width} px every capture's finished tree has no labels or notes meeting`, async ({
+    page,
+  }) => {
+    test.slow();
+    await page.setViewportSize({ width, height: 844 });
+    for (const capture of Object.values(TREE_CASES)) {
+      await openTree(page, capture);
+      await page.locator("#workbench-panel-close").click();
+      await runToFrame(page, capture, capture.frames.length - 1);
+      expect(await treeCollisions(page)).toEqual([]);
+      await expectFits(page, `${TREE}-svg`);
+    }
+  });
+}
+
+// --- #208: the Board renderer (Sudoku, N-Queens) --------------------------------------------
+
+const BOARD = "#workbench-source-frames-board";
+
+/**
+ * Each board capture. The catalog CI's backend serves has no Board visualizations yet, so every
+ * capture is drawn on the 3SAT page (its visualization made to name Board): the picture is the
+ * capture's, whatever the page.
+ */
+const BOARD_CASES = {
+  sudokuShort: SUDOKU_SHORT_BOARD_FRAMES,
+  sudokuClash: SUDOKU_CLASH_BOARD_FRAMES,
+  sudoku: SUDOKU_BOARD_FRAMES,
+  queens: N_QUEENS_BOARD_FRAMES,
+  queensNone: N_QUEENS_NONE_BOARD_FRAMES,
+  queensConstructive: N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES,
+};
+
+async function openBoard(page, capture) {
+  await setEveryPictureType(page, "Board");
+  await openPicture(page, "3SAT", capture);
+  await expect(page.locator(`${BOARD}-board`)).toBeVisible();
+}
+
+const boardSquare = (page, id) => page.locator(`${BOARD}-board [data-square-id="${id}"]`);
+
+/** Frame `index`'s squares, pieces and links, checked square by square against the picture. */
+async function expectBoardFrame(page, capture, index) {
+  const frame = capture.frames[index];
+  const board = page.locator(`${BOARD}-board`);
+  const drawn = await board
+    .locator("[data-square-id]")
+    .evaluateAll((squares) =>
+      Object.fromEntries(
+        squares.map((square) => [
+          square.getAttribute("data-square-id"),
+          [
+            square.getAttribute("data-state"),
+            square.getAttribute("data-value"),
+            square.getAttribute("data-piece"),
+            square.getAttribute("data-focus"),
+          ],
+        ]),
+      ),
+    );
+  const { size } = capture.payload;
+  const pieces = new Map(frame.pieces.map((piece) => [piece.id, piece.kind]));
+  const focus = new Set(frame.focus);
+  for (let r = 0; r < size; r += 1) {
+    for (let c = 0; c < size; c += 1) {
+      const id = `r${r}c${c}`;
+      expect(drawn[id], id).toEqual([
+        frame.cells[id]?.state ?? "Background",
+        capture.payload.game === "queens" ? null : (frame.values[id] ?? null),
+        pieces.get(id) ?? null,
+        focus.has(id) ? "true" : null,
+      ]);
+    }
+  }
+  await expect(board.locator("[data-piece-id]")).toHaveCount(frame.pieces.length);
+  const links = await board
+    .locator("[data-link-from]")
+    .evaluateAll((all) =>
+      all.map(
+        (link) => `${link.getAttribute("data-link-from")}>${link.getAttribute("data-link-to")}`,
+      ),
+    );
+  expect(links).toEqual(frame.links.map((link) => `${link.from}>${link.to}`));
+}
+
+for (const [key, capture] of Object.entries(BOARD_CASES)) {
+  test(`Board: the ${key} capture draws every square and every step's values, pieces and links`, async ({
+    page,
+  }) => {
+    // Every step of the run, checked square by square.
+    test.slow();
+    const { payload } = capture;
+    await openBoard(page, capture);
+    const board = page.locator(`${BOARD}-board`);
+    await expect(board).toHaveAttribute("data-game", payload.game);
+    await expect(board.locator("[data-square-id]")).toHaveCount(payload.size * payload.size);
+    await expect(board.locator("[data-axis]")).toHaveCount(2 * payload.size);
+    await expect(board.locator("[data-axis]").first()).toHaveText(String(payload.labelsFrom));
+    // Nothing here can be dragged (#250 leaves the board alone).
+    await expect(page.locator(`${BOARD}-layout-reset`)).toHaveCount(0);
+    await expect(page.locator(`${BOARD}-svg`)).not.toHaveAttribute("data-editable", /./);
+
+    await runToFrame(page, capture, 0);
+    await expectBoardFrame(page, capture, 0);
+    for (let index = 1; index < capture.frames.length; index += 1) {
+      await page.locator("#workbench-steps-next").click();
+      await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+      await expectBoardFrame(page, capture, index);
+    }
+    const last = capture.frames.at(-1);
+    await expect(page.locator(`${CAPTION}-verdict`)).toHaveText(
+      last.ok ? "Verdict: yes" : "Verdict: no",
+    );
+    for (const piece of await board.locator("[data-focusable]").all()) {
+      await expect(piece).toHaveAttribute("tabindex", "0");
+      await expect(piece).toHaveAttribute("aria-label", /^Row \d+, column \d+, /);
+    }
+  });
+}
+
+/** Each square's drawn box, by id, in viewBox units. */
+function squareBoxes(page) {
+  return page.locator(`${BOARD}-board [data-square-id]`).evaluateAll((squares) =>
+    Object.fromEntries(
+      squares.map((square) => {
+        const box = square.querySelector("[data-body]").getBBox();
+        return [square.getAttribute("data-square-id"), `${box.x},${box.y},${box.width}`];
+      }),
+    ),
+  );
+}
+
+test("Board: before Run the Sudoku is its clues alone, and step 1 keeps every square in place", async ({
+  page,
+}) => {
+  const capture = SUDOKU_SHORT_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const board = page.locator(`${BOARD}-board`);
+  await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
+  await expect(board.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(board.locator("[data-value]")).toHaveCount(capture.payload.clues.length);
+  for (const clue of capture.payload.clues) {
+    const square = boardSquare(page, clue.id);
+    await expect(square).toHaveAttribute("data-clue", "true");
+    await expect(square).toHaveAttribute("data-value", clue.value);
+    await expect(square.locator("[data-text]")).toHaveAttribute("font-weight", "700");
+  }
+  await expect(board.locator("[data-link-from]")).toHaveCount(0);
+  const before = await squareBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await squareBoxes(page)).toEqual(before);
+});
+
+test("Board: a chessboard before Run is empty, with its labels counted from 0", async ({
+  page,
+}) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const board = page.locator(`${BOARD}-board`);
+  await expect(board.locator("[data-piece-id]")).toHaveCount(0);
+  await expect(board.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
+  await expect(board.locator("[data-axis]").first()).toHaveText("0");
+  await expect(boardSquare(page, "r0c0")).toHaveAttribute("aria-label", "Row 0, column 0, empty");
+  const before = await squareBoxes(page);
+  await runToFrame(page, capture, 0);
+  expect(await squareBoxes(page)).toEqual(before);
+});
+
+test("Board: clashing clues are Rejected and joined by a dashed link", async ({ page }) => {
+  const capture = SUDOKU_CLASH_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const index = capture.frames.findIndex((frame) => frame.links.length > 0);
+  expect(index).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, index);
+  const link = capture.frames[index].links[0];
+  await expect(boardSquare(page, link.from)).toHaveAttribute("data-state", "Rejected");
+  const drawn = page.locator(`${BOARD}-board [data-link-from="${link.from}"]`);
+  await expect(drawn.locator("line")).toHaveAttribute("stroke-dasharray", "5 4");
+  // A clash's square holds a digit, so it gets no cross over it.
+  await expect(drawn.locator("[data-cross]")).toHaveCount(0);
+  await expect(legendBody(page)).toContainText(
+    "Dashed line (a clash: both squares hold the same digit)",
+  );
+});
+
+test("Board: a queen's ruled-out squares get a cross and a link back to the queen", async ({
+  page,
+}) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const index = capture.frames.findIndex((frame) => frame.links.length > 0);
+  expect(index).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, index);
+  for (const link of capture.frames[index].links) {
+    const drawn = page.locator(
+      `${BOARD}-board [data-link-from="${link.from}"][data-link-to="${link.to}"]`,
+    );
+    await expect(drawn.locator("[data-cross]")).toHaveCount(1);
+    await expect(boardSquare(page, link.from)).toHaveAttribute("data-state", "Rejected");
+  }
+  await expect(legendBody(page)).toContainText("Crown (a queen on the board)");
+});
+
+test("Board: Committed queens turn Solution only on the confirmed answer", async ({ page }) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  const committed = capture.frames.findIndex((frame) =>
+    Object.values(frame.cells).some((cell) => cell.state === "Committed"),
+  );
+  expect(committed).toBeGreaterThanOrEqual(0);
+  await runToFrame(page, capture, committed);
+  const square = page.locator(`${BOARD}-board [data-state="Committed"]`).first();
+  // Committed's outline is dashed, Solution's is not.
+  await expect(square.locator("rect").nth(1)).toHaveAttribute("stroke-dasharray", /\d/);
+  const last = capture.frames.at(-1);
+  await page.locator("#workbench-steps-slider input").focus();
+  await page.keyboard.press("End");
+  await expect(page.locator(`${CAPTION}-text`)).toHaveText(last.caption);
+  for (const piece of last.pieces) {
+    await expect(boardSquare(page, piece.id)).toHaveAttribute("data-state", "Solution");
+  }
+  await expect(legendBody(page)).toContainText("Committed (kept so far)");
+  await expect(legendBody(page)).toContainText("Solution (answer)");
+});
+
+test("Board: Hints shades every square a placed queen attacks", async ({ page }) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  await runToFrame(page, capture, 0);
+  const board = page.locator(`${BOARD}-board`);
+  await expect(board.locator("[data-attacked]")).toHaveCount(0);
+  await page.locator(`${BOARD}-hints-on`).click();
+  await expect(page.locator(`${BOARD}-hints-on`)).toHaveAttribute("aria-pressed", "true");
+  const { size } = capture.payload;
+  const queens = capture.frames[0].pieces;
+  let expected = 0;
+  for (let r = 0; r < size; r += 1) {
+    for (let c = 0; c < size; c += 1) {
+      const onQueen = queens.some((q) => q.r === r && q.c === c);
+      const attacked = queens.some(
+        (q) => q.r === r || q.c === c || Math.abs(q.r - r) === Math.abs(q.c - c),
+      );
+      if (!onQueen && attacked) expected += 1;
+    }
+  }
+  await expect(board.locator("[data-attacked]")).toHaveCount(expected);
+  await page.locator(`${BOARD}-hints-off`).click();
+  await expect(board.locator("[data-attacked]")).toHaveCount(0);
+});
+
+test("Board: hovering, focusing or tapping a square traces its row, column and box, and fades the rest by color", async ({
+  page,
+}) => {
+  const capture = SUDOKU_BOARD_FRAMES;
+  await openBoard(page, capture);
+  await runToFrame(page, capture, capture.frames.length - 1);
+  await boardSquare(page, "r4c4").hover();
+  await expect(boardSquare(page, "r4c4")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r4c0")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r0c4")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r3c5")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r0c0")).toHaveAttribute("data-traced", "faint");
+  const faded = await boardSquare(page, "r0c0").evaluate((el) => ({
+    opacity: getComputedStyle(el).opacity,
+    filter: getComputedStyle(el).filter,
+  }));
+  expect(faded.opacity).toBe("1");
+  expect(faded.filter).toContain("grayscale");
+  await expect(page.locator(`${BOARD}-board [data-trace-ring="r4c4"]`)).toHaveCount(1);
+
+  await page.mouse.move(0, 0);
+  await boardSquare(page, "r0c0").focus();
+  await expect(boardSquare(page, "r0c8")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r4c4")).toHaveAttribute("data-traced", "faint");
+  await page.keyboard.press("Enter");
+  await expect(boardSquare(page, "r0c0")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Board: tracing a chessboard square draws a queen's lines of attack from it", async ({
+  page,
+}) => {
+  const capture = N_QUEENS_BOARD_FRAMES;
+  await openBoard(page, capture);
+  await boardSquare(page, "r1c1").hover();
+  // From (1, 1) on a 4 by 4 board every one of the eight directions has a square.
+  await expect(page.locator(`${BOARD}-board [data-ray]`)).toHaveCount(8);
+  await expect(boardSquare(page, "r3c3")).toHaveAttribute("data-traced", "trace");
+  await expect(boardSquare(page, "r0c3")).toHaveAttribute("data-traced", "faint");
+  await boardSquare(page, "r0c0").hover();
+  await expect(page.locator(`${BOARD}-board [data-ray]`)).toHaveCount(3);
+});
+
+test("Board: on a phone a tap traces a square, also after zooming in", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openBoard(page, SUDOKU_BOARD_FRAMES);
+  await page.locator("#workbench-panel-close").click();
+  await expectFits(page, `${BOARD}-svg`);
+  await page.locator(`${BOARD}-zoom-in`).click();
+  await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await boardSquare(page, "r4c4").focus();
+  await boardSquare(page, "r4c4").blur();
+  await boardSquare(page, "r4c4").click();
+  await expect(boardSquare(page, "r4c4")).toHaveAttribute("aria-pressed", "true");
+  await expect(boardSquare(page, "r0c0")).toHaveAttribute("data-traced", "faint");
+  await expectFits(page, `${BOARD}-svg`);
+});
+
+for (const scheme of ["light", "dark"]) {
+  for (const width of [390, 1080, 1280]) {
+    test(`Board: draws at ${width} px in the ${scheme} theme without widening the page`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openBoard(page, SUDOKU_BOARD_FRAMES);
+      const svg = page.locator(`${BOARD}-svg`);
+      await expect(svg).toBeVisible();
+      expect((await svg.boundingBox()).width).toBeGreaterThan(250);
+      await expectFits(page, `${BOARD}-svg`);
+      await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+      // The clues and the labels follow the theme: no dark-on-dark, no light-on-white.
+      for (const selector of ['[data-clue="true"] [data-text]', "[data-axis]"]) {
+        const ink = await page
+          .locator(`${BOARD}-board ${selector}`)
+          .first()
+          .evaluate((el) => getComputedStyle(el).fill);
+        const [r, g, b] = ink.match(/\d+/g).map(Number);
+        expect((r + g + b) / 3 > 128, selector).toBe(scheme === "dark");
+      }
+    });
+  }
+}
+
+/**
+ * Every place where two texts of `svg` meet, read off the screen, and every square whose text
+ * spills out of it.
+ * @returns {Promise<string[]>} One line per collision; empty when the picture is clear.
+ */
+function svgTextCollisions(page, svgSelector, boxSelector) {
+  return page.locator(svgSelector).evaluate((svg, boxes) => {
+    const found = [];
+    const texts = [...svg.querySelectorAll("text")].filter((text) => text.textContent.trim());
+    const rects = texts.map((text) => ({ text, box: text.getBoundingClientRect() }));
+    const meets = (a, b) =>
+      a.left < b.right - 0.5 &&
+      b.left < a.right - 0.5 &&
+      a.top < b.bottom - 0.5 &&
+      b.top < a.bottom - 0.5;
+    rects.forEach((a, i) => {
+      rects.forEach((b, j) => {
+        if (j > i && meets(a.box, b.box)) {
+          found.push(`"${a.text.textContent}" meets "${b.text.textContent}"`);
+        }
+      });
+    });
+    if (boxes) {
+      for (const group of svg.querySelectorAll(boxes)) {
+        const rect = group.querySelector("[data-body]").getBoundingClientRect();
+        for (const text of group.querySelectorAll("text")) {
+          const box = text.getBoundingClientRect();
+          if (
+            box.left < rect.left - 0.5 ||
+            box.right > rect.right + 0.5 ||
+            box.top < rect.top - 0.5 ||
+            box.bottom > rect.bottom + 0.5
+          ) {
+            found.push(`"${text.textContent}" spills out of its square`);
+          }
+        }
+      }
+    }
+    return found;
+  }, boxSelector);
+}
+
+/** The smallest text of `svg` as drawn on screen, in CSS px, with the text it belongs to. */
+function smallestText(page, svgSelector) {
+  return page.locator(svgSelector).evaluate((svg) => {
+    const scale = svg.getScreenCTM().a;
+    return [...svg.querySelectorAll("text, tspan")]
+      .filter((text) => text.textContent.trim())
+      .map((text) => ({
+        text: text.textContent,
+        px: Number.parseFloat(getComputedStyle(text).fontSize) * scale,
+      }))
+      .reduce((smallest, text) => (text.px < smallest.px ? text : smallest));
+  });
+}
+
+for (const [key, capture] of Object.entries(BOARD_CASES)) {
+  for (const width of [1280, 390, 320]) {
+    test(`Board: the ${key} capture's texts never meet at ${width} px, before Run and at every step`, async ({
+      page,
+    }) => {
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      await openBoard(page, capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const clear = () => svgTextCollisions(page, `${BOARD}-svg`, "[data-square-id]");
+      expect(await clear()).toEqual([]);
+      await runToFrame(page, capture, 0);
+      expect(await clear()).toEqual([]);
+      for (let index = 1; index < capture.frames.length; index += 1) {
+        await page.locator("#workbench-steps-next").click();
+        await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[index].caption);
+        expect(await clear()).toEqual([]);
+      }
+    });
+  }
+}
+
+for (const key of ["sudoku", "queensConstructive"]) {
+  test(`Board: on a 390 px phone the ${key} board is drawn at its own size, every label at least ${PHONE_TEXT_PX} px`, async ({
+    page,
+  }) => {
+    const capture = BOARD_CASES[key];
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openBoard(page, capture);
+    await page.locator("#workbench-panel-close").click();
+    await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    await expectFits(page, `${BOARD}-svg`);
+    const before = await smallestText(page, `${BOARD}-svg`);
+    expect(before.px, `"${before.text}" is ${before.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    await runToFrame(page, capture, Math.floor(capture.frames.length / 2));
+    const during = await smallestText(page, `${BOARD}-svg`);
+    expect(during.px, `"${during.text}" is ${during.px} px`).toBeGreaterThanOrEqual(PHONE_TEXT_PX);
+    // The whole board is inside the picture area, with nothing to scroll to.
+    const inside = await page.locator(`${BOARD}-svg`).evaluate((svg) => {
+      const area = svg.getBoundingClientRect();
+      return [...svg.querySelectorAll("[data-square-id]")].every((square) => {
+        const box = square.getBoundingClientRect();
+        return (
+          box.left >= area.left - 0.5 &&
+          box.right <= area.right + 0.5 &&
+          box.top >= area.top - 0.5 &&
+          box.bottom <= area.bottom + 0.5
+        );
+      });
+    });
+    expect(inside).toBe(true);
+  });
+}
+
+// --- Every renderer opens at fit -------------------------------------------------------------
+//
+// Each registered picture type (components/pictures/registry.js), drawn from one capture on the
+// 3SAT page, opens at fit at a phone's and a desktop's width: before Run (where it draws the
+// plain instance) and after it. The Table is text with no zoom, and fits its box's width.
+
+/** One capture per registered picture type. */
+const FIT_CASES = {
+  Automaton: DFA_AUTOMATON_FRAMES,
+  BipartiteGraph: SET_COVER_BIPARTITE_FRAMES,
+  Board: N_QUEENS_CONSTRUCTIVE_BOARD_FRAMES,
+  FlowNetwork: MIN_CUT_FLOW_FRAMES,
+  Graph: CLIQUE_GRAPH_FRAMES,
+  GroupedGraph: SAT3_CLAUSE_GRAPH_FRAMES,
+  LayeredGraph: TOPOLOGICAL_SORT_LAYERED_FRAMES,
+  Packing: PARTITION_PACKING_FRAMES,
+  SearchTree: TSP_SEARCH_TREE_FRAMES,
+  Table: DFA_TABLE_FRAMES,
+};
+
+for (const width of [390, 1280]) {
+  test(`Every picture type opens at fit at ${width} px, before Run and after it`, async ({
+    page,
+  }) => {
+    test.slow();
+    await page.setViewportSize({ width, height: 844 });
+    for (const [type, capture] of Object.entries(FIT_CASES)) {
+      await setEveryPictureType(page, type);
+      await openPicture(page, "3SAT", capture);
+      if (width < 600) await page.locator("#workbench-panel-close").click();
+      const prefix = `#workbench-source-frames-${type.toLowerCase()}`;
+      const atFit = async (when) => {
+        if (type === "Table") {
+          await expect(page.locator(`${prefix}-zoom`), `${type} ${when}`).toHaveCount(0);
+          const overflow = await page.evaluate(
+            () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          );
+          expect(overflow, `${type} ${when}`).toBeLessThanOrEqual(0);
+          return;
+        }
+        // The Search Tree has nothing to draw before Run.
+        if (type === "SearchTree" && when === "before Run") return;
+        await expect(page.locator(`${prefix}-zoom`), `${type} ${when}`).toHaveAttribute(
+          "data-zoom",
+          "1.00",
+        );
+        await expect(page.locator(`${prefix}-zoom-reset`), `${type} ${when}`).toBeDisabled();
+        await expectFits(page, `${prefix}-svg`);
+      };
+      await atFit("before Run");
+      await page.locator("#workbench-run").click();
+      const count = capture.frames.length;
+      await expect(page.locator("#workbench-steps-position")).toHaveText(
+        `Step ${count} of ${count}`,
+      );
+      await atFit("after Run");
+    }
+  });
+}
 
 // --- #250: moving nodes and bending edges by hand -------------------------------------------
 //
