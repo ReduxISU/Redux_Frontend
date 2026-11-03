@@ -90,6 +90,21 @@ function slugify(name) {
 // `types` (option keys) and `solverTypeNames` (raw members) are lists, read through
 // data/tagList.js. #295: the command bar tells a randomized ("Stochastic") solver by any of
 // them (lib/runSeed.js).
+/**
+ * #303: where a problem, solver, verifier, visualization or reduction comes from, as /info
+ * sends it, for the Source, Code and Authors lines of its info card. `source` is the citation
+ * (with `sourceLink` when declared), `sourceFile` its file's path in the Redux repo.
+ * @returns {{source: string, sourceLink: string, sourceFile: string, contributors: string[]}}
+ */
+function creditsOf(objectInfo) {
+  return {
+    source: objectInfo?.source || "",
+    sourceLink: objectInfo?.sourceLink || "",
+    sourceFile: objectInfo?.sourceFile || "",
+    contributors: Array.isArray(objectInfo?.contributors) ? objectInfo.contributors : [],
+  };
+}
+
 function buildSolvers(solverClassNames, info) {
   return (solverClassNames ?? []).map((className) => {
     const solverInfo = info[className] ?? {};
@@ -105,6 +120,7 @@ function buildSolvers(solverClassNames, info) {
       complexityBucketName: solverInfo.complexityBucket ?? null,
       timeComplexity: normalizeComplexity(solverInfo.timeComplexity),
       spaceComplexity: normalizeComplexity(solverInfo.spaceComplexity),
+      credits: creditsOf(solverInfo),
     };
   });
 }
@@ -177,6 +193,7 @@ function buildVisualizations(visualizationClassNames, info, visualizationTypesBy
         "pictureType" in visualizationInfo ? (visualizationInfo.pictureType ?? null) : undefined,
       solverName: visualizationInfo.solver?.solverName ?? null,
       verifierName: visualizationInfo.verifier?.verifierName ?? null,
+      credits: creditsOf(visualizationInfo),
     };
   });
 }
@@ -211,8 +228,8 @@ function describeVerifier(className, info, problemInfo) {
     certificateDescription: verifierInfo.verifierDefinition ?? "",
     certificateFormat: problemInfo.certificateFormat || "",
     exampleCertificate: verifierInfo.certificate || undefined,
-    // #303 stage 4: who wrote it, for its info card.
-    contributors: Array.isArray(verifierInfo.contributors) ? verifierInfo.contributors : [],
+    // #303: its source, code and authors, for its info card.
+    credits: creditsOf(verifierInfo),
   };
 }
 
@@ -289,6 +306,7 @@ function buildReductions(
               edge.complexityBucket ?? info[edge.className]?.complexityBucket ?? null,
             bigO: info[edge.className]?.complexity || "",
             description: info[edge.className]?.reductionDefinition || "",
+            credits: creditsOf(info[edge.className]),
             targetProblem: buildTargetProblem(toCode, info, codeToName),
             // #229 stage 3: Verify's "Check against: target" checks with the target
             // problem's own verifier, against the instance the reduction built.
@@ -329,6 +347,7 @@ function buildTargetProblem(problemCode, info, codeToName) {
     complexityClass: tags.complexityClass,
     problemType: tags.problemType,
     problemVariant: tags.problemVariant,
+    credits: creditsOf(problemInfo),
   };
 }
 
@@ -382,6 +401,7 @@ function buildProblem(problemCode, info, batches, codeToName) {
     // than assumed away, so the input below it is always a string.
     defaultInstance: problemInfo.defaultInstance || "",
     instanceFormat: problemInfo.instanceFormat || "",
+    credits: creditsOf(problemInfo),
     solvers: buildSolvers(solversByProblem[problemCode], info),
     visualizations: buildVisualizations(
       visualizationsByProblem[problemCode],

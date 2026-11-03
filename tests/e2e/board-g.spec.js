@@ -497,6 +497,59 @@ for (const width of [320, 1280]) {
   });
 }
 
+test("each (i) card ends with Source, Code and Authors, and the links can be reached", async ({
+  page,
+}) => {
+  await openSat3(page, {
+    editInfo: (info) => {
+      info.SAT3.source = "Karp, 1972.";
+      info.SAT3.sourceLink = "https://example.org/karp.pdf";
+      info.SAT3.sourceFile = "Problems/NPComplete/NPC_SAT3/SAT3_Class.cs";
+      info.SAT3.contributors = ["Kaden Marchetti"];
+    },
+  });
+  const button = page.locator("#problem-info-button");
+  const card = page.locator("#problem-info-card");
+  await button.click();
+  await expect(card.getByRole("link", { name: "Karp, 1972." })).toHaveAttribute(
+    "href",
+    "https://example.org/karp.pdf",
+  );
+  const code = card.getByRole("link", { name: "SAT3_Class.cs" });
+  await expect(code).toHaveAttribute(
+    "href",
+    "https://github.com/ReduxISU/Redux/blob/HEAD/Problems/NPComplete/NPC_SAT3/SAT3_Class.cs",
+  );
+  await expect(code).toHaveAttribute("target", "_blank");
+  await expect(card).toContainText("Problems/NPComplete/NPC_SAT3");
+  await expect(card).toContainText("Kaden Marchetti");
+  await button.click();
+  await expect(card).toBeHidden();
+
+  // Keyboard: Tab from the (i) moves into the card's links and keeps it open; Escape closes it
+  // and returns to the (i).
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect(card).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(card.getByRole("link", { name: "Karp, 1972." })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(code).toBeFocused();
+  await expect(card).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(card).toBeHidden();
+  await expect(button).toBeFocused();
+
+  // The solver's card has the same three lines (a mouse hover opens it).
+  await page.locator("#workbench-solver-info-button").hover();
+  const solverCard = page.locator("#workbench-solver-info-card");
+  for (const label of ["Source", "Code", "Authors"]) await expect(solverCard).toContainText(label);
+  await expect(solverCard.getByRole("link", { name: /\.cs$/ })).toHaveAttribute(
+    "href",
+    /^https:\/\/github\.com\/ReduxISU\/Redux\/blob\/HEAD\/Problems\//,
+  );
+});
+
 for (const width of [320, 390]) {
   test(`at ${width} px the page never scrolls sideways, and the ISU logo is in the footer`, async ({
     page,

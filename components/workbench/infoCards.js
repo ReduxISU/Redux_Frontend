@@ -14,11 +14,54 @@ import { backendEnumLabel, optionLabel, pictureTypeLabel, UNCLASSIFIED } from ".
 
 export const NOT_DECLARED = "Not declared yet";
 
+// The GitHub repo holding the backend's source; the API's `sourceFile` paths are relative to it
+// (the same default and override as Redux_GUI's info boxes). NEXT_PUBLIC_ variables are read at
+// build time, so pointing this at a fork takes a rebuild.
+const REDUX_REPO_URL = (
+  process.env.NEXT_PUBLIC_REDUX_REPO_URL || "https://github.com/ReduxISU/Redux"
+).replace(/\/+$/, "");
+
 /**
  * @typedef {{key: string, label: string}} Tag
- * @typedef {{label: string, value: string, note?: string, mono?: boolean}} Fact
+ * @typedef {{label: string, value: string, note?: string, mono?: boolean, href?: string,
+ *   clamp?: number}} Fact
+ *   `href` makes the value a link that opens in a new tab; `clamp` cuts it to that many lines,
+ *   with the whole value on hover.
  * @typedef {{title: string, kind: string, description: string, facts: Fact[]}} Card
  */
+
+/** A `sourceFile` path's page on GitHub. `blob/HEAD` is the repo's default branch. */
+export function sourceFileUrl(sourceFile) {
+  const path = sourceFile.split("/").map(encodeURIComponent).join("/");
+  return `${REDUX_REPO_URL}/blob/HEAD/${path}`;
+}
+
+/**
+ * #303: the Source, Code and Authors lines every card ends with, from hooks/useProblemDetail.js's
+ * `credits`. Source links its `sourceLink` when one is declared, cut to three lines so a long
+ * citation doesn't stretch the card; Code names the file and links it on GitHub, with its
+ * folder under it.
+ * @returns {Fact[]}
+ */
+function creditFacts(credits) {
+  const { source, sourceLink, sourceFile, contributors = [] } = credits ?? {};
+  const slash = sourceFile ? sourceFile.lastIndexOf("/") : -1;
+  return [
+    source
+      ? { label: "Source", value: source, clamp: 3, ...(sourceLink ? { href: sourceLink } : {}) }
+      : { label: "Source", value: NOT_DECLARED },
+    sourceFile
+      ? {
+          label: "Code",
+          value: sourceFile.slice(slash + 1),
+          note: slash > 0 ? sourceFile.slice(0, slash) : "",
+          mono: true,
+          href: sourceFileUrl(sourceFile),
+        }
+      : { label: "Code", value: NOT_DECLARED },
+    { label: "Authors", value: contributors.length > 0 ? contributors.join(", ") : NOT_DECLARED },
+  ];
+}
 
 function tagsFrom(labels) {
   return labels.filter(Boolean).map((label) => ({ key: label, label }));
@@ -107,8 +150,7 @@ export function problemCard(problem) {
         label: "Output",
         value: overview.outputDescription ?? overview.output ?? NOT_DECLARED,
       },
-      { label: "Source", value: overview.source ?? NOT_DECLARED },
-      { label: "Authors", value: overview.contributedBy ?? NOT_DECLARED },
+      ...creditFacts(problem.credits),
     ],
   };
 }
@@ -149,6 +191,7 @@ export function solverCard(solver) {
         value: backendEnumLabel("solverComplexity", solver.complexityBucketName) ?? NOT_DECLARED,
       },
       { label: "Type", value: listValue(enumLabelsOf("solverType", solver.solverTypeNames)) },
+      ...creditFacts(solver.credits),
     ],
   };
 }
@@ -174,6 +217,7 @@ export function targetCard(name, targetProblem) {
       { label: "Class", value: listValue(classes) },
       { label: "Type", value: listValue(types) },
       { label: "Variant", value: listValue(variants) },
+      ...creditFacts(targetProblem?.credits),
     ],
   };
 }
@@ -212,6 +256,7 @@ export function reductionCard(reduction, sourceName) {
         label: "Bucket",
         value: backendEnumLabel("solverComplexity", reduction.complexityBucketName) ?? NOT_DECLARED,
       },
+      ...creditFacts(reduction.credits),
     ],
   };
 }
@@ -248,6 +293,7 @@ export function visualizationCard(visualization, role) {
       },
       { label: "Shows", value: shows.length > 0 ? shows.join(". ") : NOT_DECLARED },
       { label: "Best for", value: pictureInfo?.bestFor ?? NOT_DECLARED },
+      ...creditFacts(visualization.credits),
     ],
   };
 }
@@ -260,7 +306,6 @@ export function visualizationCard(visualization, role) {
  * @returns {Card}
  */
 export function verifierCard(verifier) {
-  const contributors = verifier.contributors ?? [];
   return {
     title: verifier.name,
     kind: "Verifier",
@@ -270,7 +315,7 @@ export function verifierCard(verifier) {
         label: "Certificate",
         value: verifier.certificateFormat || NOT_DECLARED,
       },
-      { label: "Authors", value: contributors.length > 0 ? contributors.join(", ") : NOT_DECLARED },
+      ...creditFacts(verifier.credits),
     ],
   };
 }
