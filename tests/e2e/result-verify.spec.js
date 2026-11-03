@@ -378,6 +378,12 @@ test("Map a solution across fills the target's answer in Reduce's Verify stage, 
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-stage-verify")).toHaveAttribute("aria-current", "step");
 
+  // Map across has its own section under both checks, closed until opened.
+  const mapToggle = page.locator("#workbench-map-toggle");
+  await expect(mapToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#workbench-map-button")).toBeHidden();
+  await mapToggle.click();
+  await expect(mapToggle).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#workbench-map-hint")).toHaveText(
     `Uses ${solverName}'s answer from this run. Nothing new runs.`,
   );

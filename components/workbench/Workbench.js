@@ -100,6 +100,7 @@
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
 
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import { useRouter } from "next/router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -158,7 +159,7 @@ import {
   visualizationCard,
   visualizationTags,
 } from "./infoCards";
-import { COMPACT_MEDIA, PHONE_MEDIA, secondaryButtonSx } from "./layout";
+import { COMPACT_MEDIA, PANES_STACK_MEDIA, PHONE_MEDIA, secondaryButtonSx } from "./layout";
 import InstancePanel from "./panels/InstancePanel";
 import ResultPanel, { SeedText } from "./panels/ResultPanel";
 import { ReduceVerifySide, unreadableFailure, VerifyTaskRow } from "./panels/VerifyBox";
@@ -584,6 +585,8 @@ export default function Workbench({ problem }) {
   // #303 stage 4: from Reduce's Verify stage, it fills the target's certificate with a source
   // answer (from the Solve tab's Algorithm) mapped onto the target.
   const mapRun = useComputeRequest({ subject: "certificate" });
+  // Its section under the two checks is closed until opened.
+  const [mapOpen, setMapOpen] = useState(false);
   const mapResult = mapRun.status === COMPUTE_DONE ? mapRun.result : null;
   const mapCurrent =
     Boolean(mapResult) &&
@@ -2424,42 +2427,128 @@ export default function Workbench({ problem }) {
   const reduceVerify = targetSolveCurrent ? (
     <Box
       id={`${ID}-checks`}
-      sx={{
-        flex: "none",
-        minWidth: 0,
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "flex-start",
-        gap: "14px 16px",
-      }}
+      sx={{ flex: "none", minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}
     >
-      <ReduceVerifySide
-        idPrefix={`${ID}-verify-target`}
-        select={
-          targetVerifier
-            ? {
-                label: `${builtTargetName} verifier`,
-                ...verifierSelect(targetVerifiers, targetVerifier, (className) =>
-                  setTargetVerifierPicks((picks) => ({
-                    ...picks,
-                    [selectedReduction.target]: className,
-                  })),
-                ),
-              }
-            : null
-        }
-        noVerifier={`${builtTargetName} declares no verifier, so its answer can't be checked here.`}
-        field={{
-          label: `${builtTargetName} answer`,
-          value: targetCertificate,
-          onChange: (text) => setReduceCertificate("target", text),
-          verifier: targetVerifier,
-          unreadable: unreadableFailure(targetCheck.request),
+      {/* #303: each check sits under its own picture, on the picture grid's columns (PaneGrid.js:
+          source, the arrow's 36px, target), and the two stack, source first, where the pictures do. */}
+      <Box
+        id={`${ID}-checks-grid`}
+        sx={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) 36px minmax(0, 1fr)",
+          columnGap: "16px",
+          rowGap: "14px",
+          alignItems: "start",
+          minWidth: 0,
+          "& > :last-child": { gridColumn: 3 },
+          [PANES_STACK_MEDIA]: {
+            gridTemplateColumns: "minmax(0, 1fr)",
+            "& > :last-child": { gridColumn: 1 },
+          },
         }}
-        onCheck={checkTarget}
-        checkDisabled={!canCheckTarget}
-        checkDone={targetVerdict ? checkedDone(`the ${builtTargetName} answer`) : null}
-        extra={
+      >
+        <ReduceVerifySide
+          idPrefix={`${ID}-verify-source`}
+          select={
+            sourceVerifierSelect
+              ? {
+                  label: `${problem.name} verifier, for the mapped-back answer`,
+                  ...sourceVerifierSelect,
+                }
+              : null
+          }
+          noVerifier={`${problem.name} declares no verifier, so the mapped-back answer can't be checked here.`}
+          field={{
+            label: `Mapped-back ${problem.name} answer`,
+            value: mappedCertificate,
+            onChange: (text) => setReduceCertificate("source", text),
+            verifier: sourceVerifier,
+            unreadable: unreadableFailure(sourceCheck.request),
+          }}
+          onCheck={checkSource}
+          checkDisabled={!canCheckSource}
+          checkDone={sourceVerdict ? checkedDone(`the ${problem.name} answer`) : null}
+        />
+        <ReduceVerifySide
+          idPrefix={`${ID}-verify-target`}
+          select={
+            targetVerifier
+              ? {
+                  label: `${builtTargetName} verifier`,
+                  ...verifierSelect(targetVerifiers, targetVerifier, (className) =>
+                    setTargetVerifierPicks((picks) => ({
+                      ...picks,
+                      [selectedReduction.target]: className,
+                    })),
+                  ),
+                }
+              : null
+          }
+          noVerifier={`${builtTargetName} declares no verifier, so its answer can't be checked here.`}
+          field={{
+            label: `${builtTargetName} answer`,
+            value: targetCertificate,
+            onChange: (text) => setReduceCertificate("target", text),
+            verifier: targetVerifier,
+            unreadable: unreadableFailure(targetCheck.request),
+          }}
+          onCheck={checkTarget}
+          checkDisabled={!canCheckTarget}
+          checkDone={targetVerdict ? checkedDone(`the ${builtTargetName} answer`) : null}
+        />
+      </Box>
+      {/* Map a solution across: the reduction's forward direction (a source answer becomes a
+          target answer), in its own section under both checks, closed until opened. */}
+      <Box
+        id={`${ID}-map-section`}
+        sx={{
+          borderTop: "1px solid",
+          borderColor: "border.soft",
+          pt: 0.5,
+          display: "flex",
+          flexDirection: "column",
+          gap: 1,
+        }}
+      >
+        <Box
+          id={`${ID}-map-toggle`}
+          component="button"
+          type="button"
+          aria-expanded={mapOpen}
+          aria-controls={`${ID}-map-body`}
+          onClick={() => setMapOpen((open) => !open)}
+          sx={{
+            alignSelf: "flex-start",
+            minHeight: 44,
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            background: "none",
+            border: "none",
+            color: "text.primary",
+            p: 0,
+            fontFamily: "inherit",
+            fontSize: "0.9375rem",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <ExpandMoreIcon
+            aria-hidden="true"
+            sx={{ fontSize: 18, transform: mapOpen ? "none" : "rotate(-90deg)" }}
+          />
+          Map a {problem.name} answer across to {builtTargetName}
+        </Box>
+        <Box
+          id={`${ID}-map-body`}
+          hidden={!mapOpen}
+          sx={{ display: mapOpen ? "flex" : "none", flexDirection: "column", gap: 1, pb: 0.5 }}
+        >
+          <Box sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
+            The reduction&apos;s other direction: a {problem.name} answer, mapped onto the{" "}
+            {builtTargetName} instance, should be a {builtTargetName} answer. Map across puts it in
+            the {builtTargetName} answer box above, ready to check.
+          </Box>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
             <DoneButton
               id={`${ID}-map-button`}
@@ -2476,36 +2565,14 @@ export default function Workbench({ problem }) {
               onClick={handleMap}
               sx={{ ...secondaryButtonSx, alignSelf: "flex-start" }}
             >
-              Map a {problem.name} answer across
+              Map across
             </DoneButton>
             <Box id={`${ID}-map-hint`} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
               {mapHint}
             </Box>
           </Box>
-        }
-      />
-      <ReduceVerifySide
-        idPrefix={`${ID}-verify-source`}
-        select={
-          sourceVerifierSelect
-            ? {
-                label: `${problem.name} verifier, for the mapped-back answer`,
-                ...sourceVerifierSelect,
-              }
-            : null
-        }
-        noVerifier={`${problem.name} declares no verifier, so the mapped-back answer can't be checked here.`}
-        field={{
-          label: `Mapped-back ${problem.name} answer`,
-          value: mappedCertificate,
-          onChange: (text) => setReduceCertificate("source", text),
-          verifier: sourceVerifier,
-          unreadable: unreadableFailure(sourceCheck.request),
-        }}
-        onCheck={checkSource}
-        checkDisabled={!canCheckSource}
-        checkDone={sourceVerdict ? checkedDone(`the ${problem.name} answer`) : null}
-      />
+        </Box>
+      </Box>
     </Box>
   ) : null;
 
