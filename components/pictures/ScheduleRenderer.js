@@ -18,7 +18,9 @@
 //
 // Layout is scheduleLayout.js's pure function of the payload, the box's width and the run's
 // frames. Hovering, focusing or tapping a job or an hour traces it: it is outlined in the trace
-// color and read out above the picture, and the other jobs or hours fade by color. The diagram
+// color and explained in a tooltip beside it (#303: ./PieceTooltip.js), and the other jobs or
+// hours fade by color. The run's late penalty or cost so far is said on the step's line
+// (./secondarySlots.js StepFact). The diagram
 // opens fitted to its box and zooms and pans with DiagramZoom.js; on a phone it is laid out at
 // the box's width, so its text keeps its size.
 //
@@ -36,6 +38,7 @@ import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
 import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
+import PieceTooltip from "./PieceTooltip";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import { PICTURE_CANVAS } from "./pictureSx";
 import {
@@ -50,6 +53,7 @@ import {
   layoutSchedule,
   SMALL_SIZE,
 } from "./scheduleLayout";
+import { StepFact } from "./secondarySlots";
 import { useBoxWidth } from "./useBoxWidth";
 
 /** How much of a color tints a peak hour's column, and a Rejected hour's. */
@@ -187,22 +191,15 @@ export default function ScheduleRenderer({
       id={`${idPrefix}-schedule`}
       data-rule={payload?.rule ?? ""}
       data-drawing-width={layout.width}
-      sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
+      sx={{
+        position: "relative",
+        width: "100%",
+        minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: 1,
+      }}
     >
-      <Box
-        id={`${idPrefix}-readout`}
-        aria-live="polite"
-        data-traced={drawing.readout.traced ? "true" : undefined}
-        sx={{
-          fontFamily: MONO,
-          fontSize: "0.8125rem",
-          lineHeight: 1.45,
-          minHeight: "2.9em",
-          color: drawing.readout.traced ? "text.primary" : "text.secondary",
-        }}
-      >
-        {drawing.readout.text}
-      </Box>
       <DiagramZoom
         idPrefix={idPrefix}
         label={drawing.label}
@@ -211,8 +208,22 @@ export default function ScheduleRenderer({
       >
         {drawing.content}
       </DiagramZoom>
+      <PieceTooltip
+        idPrefix={idPrefix}
+        containerRef={boxRef}
+        anchor={drawing.readout.traced ? pieceSelector(traced) : null}
+        text={drawing.readout.text}
+      />
+      {drawing.fact && <StepFact id={`${idPrefix}-fact`}>{drawing.fact}</StepFact>}
     </Box>
   );
+}
+
+/** The traced job or hour, as a selector inside the picture's box. */
+function pieceSelector(id) {
+  if (typeof id !== "string") return null;
+  const value = CSS.escape(id);
+  return `[data-job-id="${value}"], [data-hour-hit="${value}"]`;
 }
 
 // ---- Job Sequencing ------------------------------------------------------------------------
@@ -238,19 +249,15 @@ function jobsDrawing({ layout, payload, frame, traced, traceProps, name, gadgetO
     return parts;
   };
 
-  let readout;
-  if (tracedRow) readout = { traced: true, text: describe(tracedRow).join("; ") };
-  else if (runs.size && penalty !== null) {
-    readout = {
-      traced: false,
-      text: `Late penalty ${penalty}${k !== null ? ` (K = ${k})` : ""}. Hover or tap a job to read it.`,
-    };
-  } else {
-    readout = {
-      traced: false,
-      text: `${rows.length} ${rows.length === 1 ? "job" : "jobs"}${k !== null ? `, penalty budget K = ${k}` : ""}. Bars are runs, ticks are deadlines; hover or tap a job to read it.`,
-    };
-  }
+  // #303: a traced job explains itself in a tooltip beside it; the run's late penalty so far is
+  // said on the step's line. How to read the bars and ticks is in the Legend.
+  const readout = tracedRow
+    ? { traced: true, text: describe(tracedRow).join("; ") }
+    : { traced: false, text: "" };
+  const fact =
+    runs.size && penalty !== null
+      ? `Late penalty ${penalty}${k !== null ? ` (K = ${k})` : ""}.`
+      : null;
 
   const content = (
     <>
@@ -423,7 +430,7 @@ function jobsDrawing({ layout, payload, frame, traced, traceProps, name, gadgetO
     </>
   );
   const label = `${name}: ${rows.length} ${rows.length === 1 ? "job" : "jobs"} on one machine${k !== null ? `, at most ${k} total penalty` : ""}${runs.size && penalty !== null ? `; this order's late penalty is ${penalty}` : ""}.`;
-  return { content, readout, label };
+  return { content, readout, fact, label };
 }
 
 // ---- Pump Scheduling -----------------------------------------------------------------------
@@ -482,23 +489,17 @@ function pumpsDrawing({ layout, payload, frame, traced, traceProps, name, gadget
     return parts;
   };
 
-  let readout;
-  if (tracedHour !== null) readout = { traced: true, text: describe(tracedHour).join("; ") };
-  else if (schedule.length && upTo >= 0) {
-    readout = {
-      traced: false,
-      text: `${upTo < HOURS - 1 ? `Hours 0 to ${upTo}: ` : "Total "}${formatMoney(spent(upTo))}${budget !== null ? ` of a ${formatMoney(budget)} budget` : ""}. Hover or tap an hour to read it.`,
-    };
+  // #303: a traced hour explains itself in a tooltip beside it; the cost so far, or the forward
+  // pass's progress, is said on the step's line. The tank and the tariff are in the Legend.
+  const readout =
+    tracedHour !== null
+      ? { traced: true, text: describe(tracedHour).join("; ") }
+      : { traced: false, text: "" };
+  let fact = null;
+  if (schedule.length && upTo >= 0) {
+    fact = `${upTo < HOURS - 1 ? `Hours 0 to ${upTo}: ` : "Total "}${formatMoney(spent(upTo))}${budget !== null ? ` of a ${formatMoney(budget)} budget` : ""}.`;
   } else if (reached.length) {
-    readout = {
-      traced: false,
-      text: `Forward pass: ${reached.length} of 24 hours. The band is every tank level still reachable.`,
-    };
-  } else {
-    readout = {
-      traced: false,
-      text: `Tank at ${formatGallons(tank.level)} of ${formatGallons(tank.capacity)} gal. Shaded hours are peak tariff; hover or tap an hour to read it.`,
-    };
+    fact = `Forward pass: ${reached.length} of 24 hours. The band is every tank level still reachable.`;
   }
 
   // The tank's line: from its level at the start of hour 0 to its level after each hour drawn.
@@ -883,7 +884,7 @@ function pumpsDrawing({ layout, payload, frame, traced, traceProps, name, gadget
     </>
   );
   const label = `${name}: ${rows.length} ${rows.length === 1 ? "pump" : "pumps"} over 24 hours, a tank of ${formatGallons(tank.capacity)} gal${tank.minimum > 0 ? ` kept above ${formatGallons(tank.minimum)} gal` : ""}${schedule.length && upTo >= 0 ? `; ${formatMoney(spent(upTo))} spent by hour ${upTo}` : ""}.`;
-  return { content, readout, label };
+  return { content, readout, fact, label };
 }
 
 /**
@@ -897,6 +898,12 @@ export function scheduleAnnotations(payload, frames) {
   const list = Array.isArray(frames) ? frames.filter(Boolean) : [];
   const rejected = pictureStateStyle("Rejected");
   if (payload?.rule === "jobSequencing" || Array.isArray(payload?.jobs)) {
+    // #303: what replaced the readout line's reading hint; the job itself says the rest.
+    entries.push({
+      key: "reading",
+      text: "Bar (a job's run; hover or tap a job to read its deadline and penalty)",
+      swatch: { kind: "fill", fill: paletteVars.surface.main, line: paletteVars.text.primary },
+    });
     entries.push({
       key: "deadline",
       text: "Tick (the job's deadline; red once the job runs past it)",
@@ -911,6 +918,11 @@ export function scheduleAnnotations(payload, frames) {
     }
     return entries;
   }
+  entries.push({
+    key: "reading",
+    text: "Hour column (hover or tap an hour to read its pumps, tank level and cost)",
+    swatch: { kind: "fill", fill: paletteVars.surface.main, line: paletteVars.viz.dim },
+  });
   if ((payload?.hours ?? []).some((hour) => hour?.peak)) {
     entries.push({
       key: "peak",

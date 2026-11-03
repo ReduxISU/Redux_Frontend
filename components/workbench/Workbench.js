@@ -142,7 +142,7 @@ import ComputeStatus from "../detail/ComputeStatus";
 import { GADGET_PALETTE } from "../pictures/gadgetRings";
 import { pictureStateStyle, statesInFrames } from "../pictures/pictureStates";
 import { pictureAnnotations, pictureLegendFrames, pictureRuns } from "../pictures/registry";
-import { SecondarySlots } from "../pictures/secondarySlots";
+import { ResultAnswerSlot, SecondarySlots } from "../pictures/secondarySlots";
 import { PictureFullScreen } from "../pictures/zoomControlsSlot";
 import { paletteVars } from "../theme";
 import CommandBar from "./CommandBar";
@@ -587,6 +587,9 @@ export default function Workbench({ problem }) {
   const mapRun = useComputeRequest({ subject: "certificate" });
   // Its section under the two checks is closed until opened.
   const [mapOpen, setMapOpen] = useState(false);
+  // The Solve answer row's element, where a picture's spelled-out answer goes.
+  const [answerSlot, setAnswerSlot] = useState(null);
+  const answerSlotValue = useMemo(() => ({ inWorkbench: true, element: answerSlot }), [answerSlot]);
   const mapResult = mapRun.status === COMPUTE_DONE ? mapRun.result : null;
   const mapCurrent =
     Boolean(mapResult) &&
@@ -2142,6 +2145,15 @@ export default function Workbench({ problem }) {
           id: `${ID}-result-answer`,
           text: answer || "The solver returned an empty answer.",
         },
+        // #303: a picture's spelled-out answer (the Edit Distance edits) lands here
+        // (../pictures/secondarySlots.js ResultAnswerSlot).
+        extra: (
+          <Box
+            ref={setAnswerSlot}
+            id={`${ID}-result-answer-extra`}
+            sx={{ mt: 1, "&:empty": { display: "none" } }}
+          />
+        ),
         action: {
           id: `${ID}-result-verify-answer`,
           label: "Check it in Verify",
@@ -2648,53 +2660,55 @@ export default function Workbench({ problem }) {
 
       {/* #303 stage 3: on full screen the pictures' wheel and one finger zoom and pan. */}
       <PictureFullScreen.Provider value={Boolean(fullScreen)}>
-        <SecondarySlots.Provider value={secondarySlots}>
-          <VisualizationPane
-            idPrefix={ID}
-            showing={showing}
-            showingIsError={Boolean(instanceError)}
-            verdict={verdictLine}
-            source={{
-              // #303 stage 2: Reduce's source pane's label row.
-              parts: [
-                { k: "Problem", v: problem.name },
-                ...(targetSolveCurrent && solvedFields.mappedBack
-                  ? [
-                      {
-                        k: "Answer",
-                        // The problem the view drew, when there is one (as its Problem part).
-                        v: `mapped back from ${wholeView?.target?.problem ?? targetSolveResult.targetName}`,
-                      },
-                    ]
-                  : []),
-              ],
-              type: vizTypeControl,
-              content: sourceContent,
-            }}
-            target={target}
-            steps={
-              showingRunPicture
-                ? {
-                    frameCount: runFrames.length,
-                    currentStep,
-                    onStepChange: setCurrentStep,
-                  }
-                : reduceView && !switching
+        <ResultAnswerSlot.Provider value={answerSlotValue}>
+          <SecondarySlots.Provider value={secondarySlots}>
+            <VisualizationPane
+              idPrefix={ID}
+              showing={showing}
+              showingIsError={Boolean(instanceError)}
+              verdict={verdictLine}
+              source={{
+                // #303 stage 2: Reduce's source pane's label row.
+                parts: [
+                  { k: "Problem", v: problem.name },
+                  ...(targetSolveCurrent && solvedFields.mappedBack
+                    ? [
+                        {
+                          k: "Answer",
+                          // The problem the view drew, when there is one (as its Problem part).
+                          v: `mapped back from ${wholeView?.target?.problem ?? targetSolveResult.targetName}`,
+                        },
+                      ]
+                    : []),
+                ],
+                type: vizTypeControl,
+                content: sourceContent,
+              }}
+              target={target}
+              steps={
+                showingRunPicture
                   ? {
-                      frameCount: reduceView.frames.length,
-                      currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
-                      onStepChange: setReduceStep,
+                      frameCount: runFrames.length,
+                      currentStep,
+                      onStepChange: setCurrentStep,
                     }
-                  : null
-            }
-            reduction={reductionPane}
-            note={note}
-            legendFrames={legendFrames}
-            legendStates={legendStates}
-            legendAnnotations={legendAnnotations}
-            fullScreen={{ on: fullOn, onToggle: toggleFullScreen }}
-          />
-        </SecondarySlots.Provider>
+                  : reduceView && !switching
+                    ? {
+                        frameCount: reduceView.frames.length,
+                        currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
+                        onStepChange: setReduceStep,
+                      }
+                    : null
+              }
+              reduction={reductionPane}
+              note={note}
+              legendFrames={legendFrames}
+              legendStates={legendStates}
+              legendAnnotations={legendAnnotations}
+              fullScreen={{ on: fullOn, onToggle: toggleFullScreen }}
+            />
+          </SecondarySlots.Provider>
+        </ResultAnswerSlot.Provider>
       </PictureFullScreen.Provider>
 
       <Box sx={{ display: fullScreen ? "none" : "flex", flexDirection: "column", gap: 2.5 }}>

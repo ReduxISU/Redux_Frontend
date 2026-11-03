@@ -292,8 +292,8 @@ test("a picture type with a renderer is drawn from format=frames, and one withou
   await expect(page.locator(`${TABLE_PREFIX}-r0`)).toHaveAttribute("data-state", "Background");
   await expect(page.locator(`${TABLE_PREFIX}-r0c3`)).toHaveText("1");
   await expect(page.locator(`${TABLE_PREFIX}-r0c3`)).not.toHaveAttribute("data-changed", /./);
-  // The caption counts only the row drawn, not the trace's length ("1 of 2 rows" would give it away).
-  await expect(page.locator(`${TABLE_PREFIX}-table-caption`)).toHaveText(/: 1 row$/);
+  // #303: no caption line over the picture; the Showing line names it.
+  await expect(page.locator(`${TABLE_PREFIX}-table-caption`)).toHaveCount(0);
   expect(asked).toEqual([`${TABLE_VIZ} frames`]);
 
   // A type with no renderer: the frames answer is set aside, the list is asked for, and the
@@ -5509,8 +5509,9 @@ test("Schedule: a late job's bar turns solid red past its deadline, and its pena
       "700",
     );
   }
-  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
-    `Late penalty ${frame.penalty} (K = ${capture.payload.k}). Hover or tap a job to read it.`,
+  // #303: the late penalty so far is said on the step's line.
+  await expect(page.locator(`${SCHEDULE}-fact`)).toHaveText(
+    `Late penalty ${frame.penalty} (K = ${capture.payload.k}).`,
   );
   await expect(legendBody(page)).toContainText(
     "Tick (the job's deadline; red once the job runs past it)",
@@ -5559,16 +5560,12 @@ test("Schedule: the forward pass grows its band hour by hour, and the replay dra
   // Hour 0 starts two pumps: a corner mark each, and a startup cap on its cost.
   await expect(picture.locator("[data-startup]")).toHaveCount(2);
   await expect(picture.locator('[data-startup-cost="t0"]')).toHaveCount(1);
-  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
-    "Hours 0 to 5: $11.36. Hover or tap an hour to read it.",
-  );
+  await expect(page.locator(`${SCHEDULE}-fact`)).toHaveText("Hours 0 to 5: $11.36.");
   // The answer: every hour drawn, the pumps that run Solution.
   await toFrame(page, capture, capture.frames.length - 1);
   await expect(picture.locator('[data-cell-id="P1t0"]')).toHaveAttribute("data-state", "Solution");
   await expect(picture.locator('[data-shown="false"]')).toHaveCount(0);
-  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
-    "Total $32.12. Hover or tap an hour to read it.",
-  );
+  await expect(page.locator(`${SCHEDULE}-fact`)).toHaveText("Total $32.12.");
   for (const text of [
     "Shaded hour (peak tariff: power costs more)",
     "Dashed line (the tank's capacity)",
@@ -5596,9 +5593,7 @@ test("Schedule: Emergency Resilience marks its minimum and charts the share of i
       picture.locator("[data-tick]").filter({ hasText: new RegExp(`^${text}$`) }),
     ).toHaveCount(1);
   }
-  await expect(page.locator(`${SCHEDULE}-readout`)).toHaveText(
-    "Total $55.55 of a $55.86 budget. Hover or tap an hour to read it.",
-  );
+  await expect(page.locator(`${SCHEDULE}-fact`)).toHaveText("Total $55.55 of a $55.86 budget.");
   await expect(legendBody(page)).toContainText("Red dashed line (the tank's minimum)");
   await expect(legendBody(page)).toContainText(
     "Violet line, right axis (the share of the budget spent so far)",
@@ -6287,7 +6282,8 @@ test("Code Tree: before Run the characters stand alone in character order, and t
   const order = capture.payload.symbols.map((symbol) => plain[symbol.id][0]);
   expect(order).toEqual([...order].sort((a, b) => a - b));
   await expect(page.locator(`${CODE_TREE}-strip-head`)).toHaveText("INPUT · 70 CHARACTERS");
-  await expect(page.locator(`${CODE_TREE}-summary`)).toHaveText("19 one-node trees to merge");
+  // #303: before Run there is no step line, so the run facts are not shown.
+  await expect(page.locator(`${CODE_TREE}-summary`)).toHaveCount(0);
 
   // One layout for the whole run: a node drawn at one step is in the same place at every other.
   await page.locator("#workbench-run").click();
@@ -6739,7 +6735,7 @@ test("Quantum Circuit: before Run the circuit is the plain instance, and step 1 
   await expect(picture.locator('[data-state]:not([data-state="Background"])')).toHaveCount(0);
   await expect(picture.locator("[data-future], [data-bar], [data-bit-out]")).toHaveCount(0);
   await expect(picture.locator("[data-chart-empty]")).toHaveText("Bars appear once a column runs.");
-  await expect(page.locator(`${QUANTUM}-summary`)).toHaveText("4 qubits, 5 columns");
+  await expect(page.locator(`${QUANTUM}-summary`)).toHaveCount(0);
   // Nothing is still to come before Run, so the Legend has no dashed gate.
   await expect(legendBody(page).locator('[data-legend-key="note-future"]')).toHaveCount(0);
   const before = await quantumBoxes(page);
@@ -7273,9 +7269,9 @@ test("Table: an Edit Distance cell reads three cells, solid from the one it took
 }) => {
   const capture = EDIT_DISTANCE_TABLE_FRAMES;
   await openTable(page, capture);
-  await expect(page.locator(`${TABLE}-edits [data-edits-empty]`)).toBeVisible();
-  // (The page is 3SAT's, so the name before it is 3SAT's visualization.)
-  await expect(page.locator(`${TABLE}-table-caption`)).toHaveText(/: "horse" to "ros"$/);
+  // #303: no edits before there is an answer, and no caption line over the picture.
+  await expect(page.locator(`${TABLE}-edits`)).toHaveCount(0);
+  await expect(page.locator(`${TABLE}-table-caption`)).toHaveCount(0);
   await runToFrame(page, capture, 1);
   const arrows = page.locator(`${TABLE}-table [data-step-arrow]`);
   await expect(arrows).toHaveCount(3);
@@ -7304,7 +7300,6 @@ test("Table: an Edit Distance cell reads three cells, solid from the one it took
   await toFrame(page, capture, back);
   await expect(page.locator(`${TABLE}-table [data-step-arrow]`)).toHaveCount(0);
   expect(await page.locator(`${TABLE}-table [data-path-arrow]`).count()).toBeGreaterThan(0);
-  await expect(page.locator(`${TABLE}-edits [data-edits-empty]`)).toBeVisible();
 
   await page.locator("#workbench-steps-slider input").press("End");
   await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames.at(-1).caption);
@@ -7315,9 +7310,16 @@ test("Table: an Edit Distance cell reads three cells, solid from the one it took
     "sub keep del keep del",
   );
   await expect(page.locator(`${TABLE}-edits`)).toContainText("R replace");
-  await expect(tableReadout(page)).toHaveText(
-    "The green path is one cheapest way: 1 replacement and 2 deletions. Hover or tap a cell to see what it was worked out from.",
-  );
+  // The edits sit under the Solve answer, not around the picture.
+  await expect(page.locator(`#workbench-result-answer-extra ${TABLE}-edits`)).toHaveCount(1);
+  // A cell's working shows in a card beside it, and nothing shows while no cell is traced.
+  await expect(tableReadout(page)).toHaveText("");
+  await expect(page.locator(`${TABLE}-tooltip`)).toBeHidden();
+  await tableCell(page, "r1c1").hover();
+  await expect(page.locator(`${TABLE}-tooltip`)).toBeVisible();
+  await expect(tableReadout(page)).toHaveAttribute("data-traced", "true");
+  await expect(tableReadout(page)).not.toHaveText("");
+  await expect(legendBody(page)).toContainText("Cell number");
   await expect(legendBody(page)).toContainText("Solid arrow (the cell whose value this cell took)");
 });
 
@@ -7343,8 +7345,6 @@ test("Table: 0-1 ILP draws x as chips, shades the coefficients its 1s switch on,
   await expect(unset.first()).toHaveAttribute("stroke-dasharray", /\d/);
   await expect(page.locator(`${TABLE}-table [data-on]`)).toHaveCount(0);
   await expect(page.locator(`${TABLE}-table [data-pill]`)).toHaveCount(0);
-  // The caption counts the three constraints, not the x row above them.
-  await expect(page.locator(`${TABLE}-table-caption`)).toHaveText(/: 3 rows$/);
 
   // The answer (0 1 0): x2's column is what every row adds up.
   await page.locator("#workbench-run").click();
@@ -7435,7 +7435,6 @@ test("Table: Dijkstra's table writes a cost not settled yet in italics, and an u
 }) => {
   const capture = SSSP_UNREACHABLE_TABLE_FRAMES;
   await openTable(page, capture);
-  await expect(page.locator(`${TABLE}-table-caption`)).toHaveText("Shortest paths from 1");
   await runToFrame(page, capture, 1);
   await expect(tableCell(page, "r1c2")).toHaveAttribute("data-tentative", "true");
   await expect(tableCell(page, "r1c2").locator("text")).toHaveAttribute("font-style", "italic");

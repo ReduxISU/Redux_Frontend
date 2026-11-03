@@ -68,6 +68,7 @@ import {
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import { PICTURE_CANVAS } from "./pictureSx";
+import { StepFact } from "./secondarySlots";
 
 /** An ε-arrow's dash, while it has no state dash of its own. */
 const EPSILON_DASH = "5 4";
@@ -439,7 +440,7 @@ function Tape({ id, input, frame, frameIndex, justRead, stuck, outside }) {
 }
 
 /** The All branches / One path switch and, on One path, the path to follow. */
-function PathPicker({ id, runs }) {
+function PathPicker({ id, runs, truncated = false }) {
   const one = runs.value !== null;
   return (
     <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, minWidth: 0 }}>
@@ -485,6 +486,12 @@ function PathPicker({ id, runs }) {
               {option.label}
             </option>
           ))}
+          {/* #303: that the list is cut short is said in the list, not under the picture. */}
+          {truncated && (
+            <option id={`${id}-paths-truncated`} disabled value="">
+              More runs than these {runs.options.length}, not listed
+            </option>
+          )}
         </Box>
       )}
     </Box>
@@ -622,7 +629,11 @@ export default function AutomatonRenderer({
         drawing={layout}
         resetOn={[payload]}
         editor={editor}
-        toolbar={runs && runs.options.length > 0 ? <PathPicker id={idPrefix} runs={runs} /> : null}
+        toolbar={
+          runs && runs.options.length > 0 ? (
+            <PathPicker id={idPrefix} runs={runs} truncated={payload?.pathsTruncated === true} />
+          ) : null
+        }
       >
         <g data-layer="edges">
           {arrows.map((arrow) => {
@@ -938,20 +949,9 @@ export default function AutomatonRenderer({
         outside={stuckOutside}
       />
       {allDead && (
-        <Box
-          id={`${idPrefix}-dead`}
-          sx={{ fontSize: "0.875rem", fontWeight: 700, color: pictureStateStyle("Rejected").text }}
-        >
+        <StepFact id={`${idPrefix}-dead`}>
           No state is left: every branch of the run died or ended outside an accept state.
-        </Box>
-      )}
-      {runs && runs.value !== null && payload?.pathsTruncated === true && (
-        <Box
-          id={`${idPrefix}-paths-truncated`}
-          sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-        >
-          This machine has more runs than the {runs.options.length} listed.
-        </Box>
+        </StepFact>
       )}
     </Box>
   );
