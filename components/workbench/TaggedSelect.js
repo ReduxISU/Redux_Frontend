@@ -205,17 +205,33 @@ export function InfoCard({ card, id, role, hidden, sx, cardRef, ...rest }) {
               sx={{ m: 0, display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}
             >
               <Box
-                component="span"
+                component={fact.href ? "a" : "span"}
+                {...(fact.href
+                  ? { href: fact.href, target: "_blank", rel: "noopener noreferrer" }
+                  : {})}
+                {...(fact.clamp ? { title: fact.value } : {})}
                 sx={{
                   fontWeight: 600,
                   overflowWrap: "anywhere",
                   ...(fact.mono ? { fontFamily: MONO_FONT, fontSize: "0.8125rem" } : {}),
+                  ...(fact.href ? { color: "brand.text", textDecoration: "underline" } : {}),
+                  ...(fact.clamp
+                    ? {
+                        display: "-webkit-box",
+                        WebkitLineClamp: fact.clamp,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }
+                    : {}),
                 }}
               >
                 {fact.value}
               </Box>
               {fact.note && (
-                <Box component="span" sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                <Box
+                  component="span"
+                  sx={{ fontSize: "0.75rem", color: "text.secondary", overflowWrap: "anywhere" }}
+                >
                   {fact.note}
                 </Box>
               )}
@@ -281,7 +297,9 @@ export function InfoButton({ id, card, align, placement = "below", inline = fals
           // Only keyboard focus opens the card on its own; a tap or click toggles it below.
           if (event.currentTarget.matches(":focus-visible")) setFocused(true);
         }}
-        onBlur={() => {
+        onBlur={(event) => {
+          // Tabbing on into the card's Source or Code link keeps it open.
+          if (wrapperRef.current?.contains(event.relatedTarget)) return;
           setFocused(false);
           setPinned(false);
           setDismissed(false);
@@ -336,6 +354,24 @@ export function InfoButton({ id, card, align, placement = "below", inline = fals
         card={card}
         hidden={!open}
         cardRef={cardRef}
+        // A press on the card's links must not take focus from the button, or a tapped card
+        // would close before its link opens. The link still follows the click.
+        onMouseDown={(event) => event.preventDefault()}
+        onBlur={(event) => {
+          if (wrapperRef.current?.contains(event.relatedTarget)) return;
+          setFocused(false);
+          setPinned(false);
+          setDismissed(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setPinned(false);
+            setFocused(false);
+            setDismissed(true);
+            document.getElementById(`${id}-button`)?.focus();
+          }
+        }}
         data-placement={placement === "above" && above ? "above" : "below"}
         sx={{
           ...(placement === "above" && above
