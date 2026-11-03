@@ -11,6 +11,7 @@
 //   - ReduceVerifySide: one of the two checks of Reduce's Verify stage, a Verifier menu, the
 //     answer to check (prefilled from the Solve stage) and its own Check button, which says
 //     "Checked" and is inactive while its verdict is of the answer, verifier and instance shown.
+//     Each fills its column of Workbench.js's checks grid, under its own picture.
 // The verdicts are result rows (Workbench.js), not drawn here.
 //
 // A certificate Redux cannot read (400 certificate_parse_error) shows its error right under its
@@ -48,10 +49,12 @@ export function unreadableFailure(request) {
  * The certificate box: its label, the box, the verifier's format under it, and the error of a
  * certificate Redux could not read.
  * @param {{id: string, label: string, value: string, onChange: (text: string) => void,
- *   verifier: Object|null, unreadable: Object|null, sx?: Object}} props The hint's id is
- *   `${id}-hint`, the error's `${id}-error`.
+ *   verifier: Object|null, unreadable: Object|null, action?: import("react").ReactNode,
+ *   sx?: Object}} props The hint's id is `${id}-hint`, the error's `${id}-error`. `action` (a
+ *   Check button) sits beside the box only, so the hint and error under it take the field's
+ *   whole width.
  */
-export function CertificateField({ id, label, value, onChange, verifier, unreadable, sx }) {
+export function CertificateField({ id, label, value, onChange, verifier, unreadable, action, sx }) {
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
   // Some formats already start with "Format:"; the hint says it once.
@@ -61,32 +64,37 @@ export function CertificateField({ id, label, value, onChange, verifier, unreada
       <Box component="label" htmlFor={id} sx={{ ...controlLabelSx, fontWeight: 600 }}>
         {label}
       </Box>
-      <Box
-        id={id}
-        component="input"
-        type="text"
-        value={value}
-        placeholder={exampleFrom(format, verifier?.exampleCertificate)}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
-        autoComplete="off"
-        aria-invalid={unreadable ? "true" : undefined}
-        aria-describedby={unreadable ? `${errorId} ${hintId}` : hintId}
-        sx={{
-          width: "100%",
-          minHeight: 44,
-          boxSizing: "border-box",
-          backgroundColor: "surface.input",
-          color: "text.primary",
-          border: "1px solid",
-          borderColor: unreadable ? "status.err" : "border.main",
-          borderRadius: "10px",
-          px: 1.5,
-          fontFamily: MONO_FONT,
-          fontSize: "0.875rem",
-          "&::placeholder": { color: "text.secondary", opacity: 1 },
-        }}
-      />
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, minWidth: 0 }}>
+        <Box
+          id={id}
+          component="input"
+          type="text"
+          value={value}
+          placeholder={exampleFrom(format, verifier?.exampleCertificate)}
+          onChange={(event) => onChange(event.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={unreadable ? "true" : undefined}
+          aria-describedby={unreadable ? `${errorId} ${hintId}` : hintId}
+          sx={{
+            flex: "1 1 auto",
+            width: "100%",
+            minWidth: 0,
+            minHeight: 44,
+            boxSizing: "border-box",
+            backgroundColor: "surface.input",
+            color: "text.primary",
+            border: "1px solid",
+            borderColor: unreadable ? "status.err" : "border.main",
+            borderRadius: "10px",
+            px: 1.5,
+            fontFamily: MONO_FONT,
+            fontSize: "0.875rem",
+            "&::placeholder": { color: "text.secondary", opacity: 1 },
+          }}
+        />
+        {action}
+      </Box>
       {unreadable && (
         <Box id={errorId} sx={{ fontSize: "0.8125rem", color: "error.light" }}>
           <Box component="span" sx={{ fontWeight: 700 }}>
@@ -175,9 +183,7 @@ export function ReduceVerifySide({
     <Box
       id={idPrefix}
       sx={{
-        flex: "1 1 280px",
         minWidth: 0,
-        maxWidth: 460,
         display: "flex",
         flexDirection: "column",
         gap: 1.25,
@@ -196,18 +202,21 @@ export function ReduceVerifySide({
           {noVerifier}
         </Box>
       )}
-      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, minWidth: 0 }}>
-        <CertificateField id={`${idPrefix}-certificate`} {...field} sx={{ flex: "1 1 auto" }} />
-        <DoneButton
-          id={`${idPrefix}-check`}
-          onClick={onCheck}
-          disabled={checkDisabled}
-          done={checkDone}
-          sx={{ ...secondaryButtonSx, flex: "none", mt: "22px" }}
-        >
-          Check
-        </DoneButton>
-      </Box>
+      <CertificateField
+        id={`${idPrefix}-certificate`}
+        {...field}
+        action={
+          <DoneButton
+            id={`${idPrefix}-check`}
+            onClick={onCheck}
+            disabled={checkDisabled}
+            done={checkDone}
+            sx={{ ...secondaryButtonSx, flex: "none" }}
+          >
+            Check
+          </DoneButton>
+        }
+      />
       {extra}
     </Box>
   );
