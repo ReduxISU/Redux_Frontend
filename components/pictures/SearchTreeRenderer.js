@@ -54,6 +54,7 @@ import {
   NOTE_OFFSET,
   NOTE_SIZE,
 } from "./searchTreeLayout";
+import { StepFact } from "./secondarySlots";
 
 /**
  * The scale (CSS px per drawing unit) the tree's text reads at: its design size, so a label is
@@ -269,19 +270,6 @@ export default function SearchTreeRenderer({
         resetOn={[payload, frames]}
         follow={follow}
         readableScale={READABLE_SCALE}
-        toolbar={
-          total !== null ? (
-            <Box
-              id={`${idPrefix}-summary`}
-              data-total={total}
-              data-cut={cut ?? undefined}
-              sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-            >
-              {`${plural(total, "node")} so far`}
-              {cut !== null ? `, ${cut} cut without exploring` : ""}
-            </Box>
-          ) : null
-        }
       >
         {tree.nodes.length === 0 && (
           <text
@@ -443,6 +431,15 @@ export default function SearchTreeRenderer({
           })}
         </g>
       </DiagramZoom>
+      {total !== null && (
+        <StepFact
+          id={`${idPrefix}-summary`}
+          data={{ "data-total": total, "data-cut": cut ?? undefined }}
+        >
+          {`${plural(total, "node")} so far`}
+          {cut !== null ? `, ${cut} cut without exploring` : ""}
+        </StepFact>
+      )}
     </Box>
   );
 }

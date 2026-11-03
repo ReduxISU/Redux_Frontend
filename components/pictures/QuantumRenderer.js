@@ -55,6 +55,7 @@ import {
   SMALL_SIZE,
   TITLE_SIZE,
 } from "./quantumLayout";
+import { StepFact } from "./secondarySlots";
 import { useBoxWidth } from "./useBoxWidth";
 
 /** The scale (CSS px per drawing unit) the circuit's text reads at: its design size. */
@@ -266,15 +267,6 @@ export default function QuantumRenderer({
         resetOn={[payload, frames, layout.width]}
         follow={follow}
         readableScale={READABLE_SCALE}
-        toolbar={
-          <Box
-            id={`${idPrefix}-summary`}
-            data-applied={plain ? undefined : applied}
-            sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-          >
-            {summary}
-          </Box>
-        }
       >
         {layout.note.length > 0 && (
           <text
@@ -690,6 +682,11 @@ export default function QuantumRenderer({
           </g>
         )}
       </DiagramZoom>
+      {!plain && (
+        <StepFact id={`${idPrefix}-summary`} data={{ "data-applied": applied }}>
+          {summary}
+        </StepFact>
+      )}
     </Box>
   );
 }

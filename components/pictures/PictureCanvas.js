@@ -4,12 +4,14 @@
 // picture type (./registry.js), and, during a run, the step's caption under it: what the
 // solver did at this step, in Redux's own words, with the step's event and, on the last
 // step, the run's verdict. #303: in the workbench the caption goes under the step controls
-// (./secondarySlots.js StepTextSlot).
+// (./secondarySlots.js StepTextSlot). A picture's facts about the run (counts, the flow value)
+// follow the caption on that line, in an element made here (StepFactSlot), shown only during a
+// run of a picture that has its own step line.
 
 import Box from "@mui/material/Box";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { hasPictureRenderer, PICTURE_RENDERERS } from "./registry";
-import { InSlot, StepTextSlot } from "./secondarySlots";
+import { InSlot, StepFactSlot, StepTextSlot } from "./secondarySlots";
 
 // Redux's StepEvent names, as a reader would say them.
 const EVENT_TEXT = {
@@ -110,6 +112,8 @@ export default function PictureCanvas({
   runs = null,
 }) {
   const stepTextSlot = useContext(StepTextSlot);
+  const [factSlot, setFactSlot] = useState(null);
+  const showFacts = Boolean(showCaption) && frameIndex !== null && frameIndex !== undefined;
   // Read straight off the module's table (not through a function) so React sees one stable
   // component per type.
   const Renderer = hasPictureRenderer(type) ? PICTURE_RENDERERS[type] : null;
@@ -128,23 +132,39 @@ export default function PictureCanvas({
       data-plain={frameIndex === null ? "true" : undefined}
       sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1.5 }}
     >
-      <Renderer
-        idPrefix={`${idPrefix}-${type.toLowerCase()}`}
-        name={name}
-        payload={payload}
-        layoutKey={layoutKey ?? null}
-        frame={frame}
-        frameIndex={frameIndex}
-        frameCount={frameCount}
-        frames={frames ?? []}
-        highlightIds={highlightIds}
-        gadgetColors={gadgetColors}
-        boxSoFar={boxSoFar}
-        runs={runs}
-      />
-      {showCaption && typeof frame.caption === "string" && frame.caption && (
+      <StepFactSlot.Provider value={showFacts ? factSlot : null}>
+        <Renderer
+          idPrefix={`${idPrefix}-${type.toLowerCase()}`}
+          name={name}
+          payload={payload}
+          layoutKey={layoutKey ?? null}
+          frame={frame}
+          frameIndex={frameIndex}
+          frameCount={frameCount}
+          frames={frames ?? []}
+          highlightIds={highlightIds}
+          gadgetColors={gadgetColors}
+          boxSoFar={boxSoFar}
+          runs={runs}
+        />
+      </StepFactSlot.Provider>
+      {showCaption && (
         <InSlot slot={stepTextSlot}>
-          <FrameCaption id={`${idPrefix}-caption`} frame={frame} />
+          {typeof frame.caption === "string" && frame.caption && (
+            <FrameCaption id={`${idPrefix}-caption`} frame={frame} />
+          )}
+          {showFacts && (
+            <Box
+              ref={setFactSlot}
+              id={`${idPrefix}-facts`}
+              sx={{
+                fontSize: "0.8125rem",
+                color: "text.secondary",
+                mt: 0.5,
+                "&:empty": { display: "none" },
+              }}
+            />
+          )}
         </InSlot>
       )}
     </Box>

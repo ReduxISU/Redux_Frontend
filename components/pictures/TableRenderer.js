@@ -7,7 +7,7 @@
 //     read (solid from the one whose value it took, dashed from the others); the trace back keeps
 //     the cheapest path (Committed, then green on the answer), joined by arrows in the order the
 //     grid was filled. Once the path is the answer, the edits it spells out are written under the
-//     picture, letter by letter.
+//     Solve answer, letter by letter (#303: ./secondarySlots.js AtAnswer).
 //   - matrix (0-1 ILP): the assignment x on top as chips (? not tried, 0, 1), one row per
 //     constraint with its coefficients, its total, its bound and whether it holds. A coefficient
 //     whose variable is 1 is shaded: it is what the row adds up.
@@ -25,8 +25,9 @@
 // so no row or column moves while the steps walk. Hovering, focusing or tapping a cell (grid) or
 // a row traces it back to what it came from: the cells an Edit Distance cell was worked out from;
 // the row an automaton step continues; the rows along a node's shortest path; the x's and
-// coefficients a constraint's total adds up. It is outlined in the trace color and read out above
-// the picture, and the rest fades by color. The picture opens at Fit and zooms with DiagramZoom.js;
+// coefficients a constraint's total adds up. It is outlined in the trace color and explained in a tooltip
+// beside it (#303: ./PieceTooltip.js), and the rest fades by color. How to read the table is in
+// the Legend; the picture carries no caption or readout line of its own. The picture opens at Fit and zooms with DiagramZoom.js;
 // on a phone the table tightens to its box first, so its text keeps its size, and a table too wide
 // for that zooms in to readable text.
 //
@@ -45,8 +46,10 @@ import { paletteVars } from "../theme";
 import DiagramZoom from "./DiagramZoom";
 import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
+import PieceTooltip from "./PieceTooltip";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import { PICTURE_CANVAS } from "./pictureSx";
+import { AtAnswer } from "./secondarySlots";
 import {
   CHIP_HEIGHT,
   cellAt,
@@ -283,22 +286,15 @@ export default function TableRenderer({
       id={`${idPrefix}-table`}
       data-table-shape={payload?.shape ?? ""}
       data-drawing-width={layout.width}
-      sx={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
+      sx={{
+        position: "relative",
+        width: "100%",
+        minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: 1,
+      }}
     >
-      <Box
-        id={`${idPrefix}-readout`}
-        aria-live="polite"
-        data-traced={drawing.readout.traced ? "true" : undefined}
-        sx={{
-          fontFamily: MONO,
-          fontSize: "0.8125rem",
-          lineHeight: 1.45,
-          minHeight: "2.9em",
-          color: drawing.readout.traced ? "text.primary" : "text.secondary",
-        }}
-      >
-        {drawing.readout.text}
-      </Box>
       <DiagramZoom
         idPrefix={idPrefix}
         label={`${caption}. ${drawing.label}`}
@@ -306,20 +302,29 @@ export default function TableRenderer({
         resetOn={[payload, layout.width, layout.height]}
         follow={follow}
         readableScale={READABLE_SCALE}
-        toolbar={
-          <Box
-            id={`${idPrefix}-table-caption`}
-            sx={{ fontSize: "0.8125rem", fontWeight: 700, color: "text.primary" }}
-          >
-            {caption}
-          </Box>
-        }
       >
         {drawing.content}
       </DiagramZoom>
-      {drawing.after}
+      <PieceTooltip
+        idPrefix={idPrefix}
+        containerRef={boxRef}
+        anchor={drawing.readout.traced ? pieceSelector(traced) : null}
+        text={drawing.readout.traced ? drawing.readout.text : ""}
+      />
+      {layout.kind === "grid" && !plain && (
+        <AtAnswer>
+          <EditStrip idPrefix={idPrefix} edits={answerEdits(layout, frames.at(-1) ?? step)} />
+        </AtAnswer>
+      )}
     </Box>
   );
+}
+
+/** The traced cell or row, as a selector inside the table's box. */
+function pieceSelector(id) {
+  if (typeof id !== "string") return null;
+  const value = CSS.escape(id);
+  return `[data-focusable][data-cell-id="${value}"], [data-focusable][data-row-id="${value}"]`;
 }
 
 // ---- Grid (Edit Distance) ------------------------------------------------------------------
@@ -338,35 +343,13 @@ function editOf(a, b, rowLetter, columnLetter) {
   return null;
 }
 
-/** "a", "a and b", "a, b and c". */
-function andList(items) {
-  if (items.length <= 1) return items.join("");
-  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
-}
-
-function gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetOf }) {
-  const { rows, columns, cell } = layout;
-  const values = Array.isArray(step.values) ? step.values : [];
-  const valueAt = (i, j) => {
-    const value = values[i]?.[j];
-    return value === null || value === undefined ? null : String(value);
-  };
-  const rowLetter = (i) => rows[i]?.label ?? "";
-  const columnLetter = (j) => columns[j]?.label ?? "";
-  const highlight = pictureStateStyle("ElementHighlight");
-  const changed = new Set(Array.isArray(step.changed) ? step.changed : []);
+/**
+ * The trace back's path at `step`: the kept and confirmed cells, plus the cell it is at, in the
+ * order the grid was filled, and the links between cells next to each other.
+ */
+function tracePath(layout, step) {
+  const { rows, columns } = layout;
   const cellState = (i, j) => stateOf(step.cells, `r${i}c${j}`);
-
-  // The step's arrows: the cells it read, and the one whose value it took.
-  const arrows = (Array.isArray(step.arrows) ? step.arrows : [])
-    .map((arrow) => ({ from: cellAt(arrow?.from), to: cellAt(arrow?.to), best: !!arrow?.best }))
-    .filter((arrow) => arrow.from && arrow.to);
-  const read = new Map();
-  for (const arrow of arrows) {
-    const id = `r${arrow.from.row}c${arrow.from.column}`;
-    if (arrow.best || !read.has(id)) read.set(id, arrow.best ? "best" : "read");
-  }
-
   // The trace back's path: the kept and confirmed cells, plus the cell it is at, in the order the
   // grid was filled. Only cells next to each other are joined.
   const pathCells = [];
@@ -396,7 +379,18 @@ function gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetO
       pathLinks.push({ a, b });
     }
   }
-  // The answer's edits, once the confirmed path runs from (0, 0) to the far corner.
+  return { pathCells, pathLinks };
+}
+
+/**
+ * The edits the answer's path spells out, once the confirmed path runs from (0, 0) to the far
+ * corner at `step` (the run's last frame), else null.
+ */
+function answerEdits(layout, step) {
+  const { rows, columns } = layout;
+  const rowLetter = (i) => rows[i]?.label ?? "";
+  const columnLetter = (j) => columns[j]?.label ?? "";
+  const { pathCells, pathLinks } = tracePath(layout, step);
   const confirmed = pathCells.filter((c) => c.state === "Solution");
   const complete =
     confirmed.length === pathCells.length &&
@@ -409,6 +403,34 @@ function gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetO
   const edits = complete
     ? pathLinks.map(({ a, b }) => editOf(a, b, rowLetter, columnLetter)).filter(Boolean)
     : null;
+
+  return edits;
+}
+
+function gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetOf }) {
+  const { rows, columns, cell } = layout;
+  const values = Array.isArray(step.values) ? step.values : [];
+  const valueAt = (i, j) => {
+    const value = values[i]?.[j];
+    return value === null || value === undefined ? null : String(value);
+  };
+  const rowLetter = (i) => rows[i]?.label ?? "";
+  const columnLetter = (j) => columns[j]?.label ?? "";
+  const highlight = pictureStateStyle("ElementHighlight");
+  const changed = new Set(Array.isArray(step.changed) ? step.changed : []);
+  const cellState = (i, j) => stateOf(step.cells, `r${i}c${j}`);
+
+  // The step's arrows: the cells it read, and the one whose value it took.
+  const arrows = (Array.isArray(step.arrows) ? step.arrows : [])
+    .map((arrow) => ({ from: cellAt(arrow?.from), to: cellAt(arrow?.to), best: !!arrow?.best }))
+    .filter((arrow) => arrow.from && arrow.to);
+  const read = new Map();
+  for (const arrow of arrows) {
+    const id = `r${arrow.from.row}c${arrow.from.column}`;
+    if (arrow.best || !read.has(id)) read.set(id, arrow.best ? "best" : "read");
+  }
+
+  const { pathLinks } = tracePath(layout, step);
 
   // The cell the step is about: its row and column letters are highlighted.
   const current = focusIds(step)
@@ -472,24 +494,9 @@ function gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetO
       }
     }
     readout = { traced: true, text };
-  } else if (edits) {
-    const count = (op) => edits.filter((e) => e.op === op).length;
-    const parts = [
-      [count("sub"), "replacement"],
-      [count("del"), "deletion"],
-      [count("ins"), "insertion"],
-    ]
-      .filter(([c]) => c)
-      .map(([c, w]) => `${c} ${w}${c === 1 ? "" : "s"}`);
-    readout = {
-      traced: false,
-      text: `The green path is one cheapest way: ${parts.length ? andList(parts) : "no edits at all"}. Hover or tap a cell to see what it was worked out from.`,
-    };
   } else {
-    readout = {
-      traced: false,
-      text: "Each cell is the cost of turning a prefix of x into a prefix of y. Hover or tap a cell to see what it was worked out from.",
-    };
+    // The reading and the hover hint are in the Legend; the answer's edits under the answer.
+    readout = { traced: false, text: "" };
   }
   const near = sources ? new Set([traced, ...sources.keys()]) : null;
 
@@ -756,7 +763,6 @@ function gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetO
     </>
   );
 
-  const after = <EditStrip idPrefix={idPrefix} edits={edits} />;
   const xText = rows
     .slice(1)
     .map((row) => row.label)
@@ -766,11 +772,16 @@ function gridDrawing({ layout, step, traced, traceProps, idPrefix, name, gadgetO
     .map((column) => column.label)
     .join("");
   const label = `${name}: a grid of ${rows.length} by ${columns.length} cells, turning "${xText}" into "${yText}".`;
-  return { content, readout, label, boxOf, after };
+  return { content, readout, label, boxOf };
 }
 
-/** The edits the answer's path spells out, x over the edits over y, letter by letter. */
+/**
+ * The edits the answer's path spells out, x over the edits over y, letter by letter, with their
+ * key. Shown under the Solve answer (./secondarySlots.js AtAnswer); nothing until the run's trace
+ * back confirms a path.
+ */
 function EditStrip({ idPrefix, edits }) {
+  if (!edits) return null;
   const replace = pictureStateStyle("ElementHighlight");
   const change = pictureStateStyle("Rejected");
   const box = (key, text, look) => (
@@ -816,58 +827,53 @@ function EditStrip({ idPrefix, edits }) {
   return (
     <Box
       id={`${idPrefix}-edits`}
-      data-edits={edits ? edits.map((e) => e.op).join(" ") : ""}
+      data-edits={edits.map((e) => e.op).join(" ")}
       sx={{
         fontFamily: MONO,
         fontSize: "0.9375rem",
         color: "text.primary",
-        minHeight: "6.6em",
         display: "grid",
         alignContent: "start",
         gap: "3px",
         overflowX: "auto",
       }}
     >
-      {edits ? (
-        <>
-          {line(
-            "x",
-            edits.map((e, k) =>
-              box(`x${k}`, e.x ?? "–", e.x === null ? { color: "text.secondary" } : looks[e.op]),
-            ),
-            "x",
-          )}
-          {line(
-            "EDIT",
-            edits.map((e, k) =>
-              box(`o${k}`, { keep: "·", sub: "R", del: "D", ins: "I" }[e.op], {
-                ...looks[e.op],
-                fontSize: "0.6875rem",
-                fontWeight: 700,
-              }),
-            ),
-            "op",
-          )}
-          {line(
-            "y",
-            edits.map((e, k) =>
-              box(`y${k}`, e.y ?? "–", e.y === null ? { color: "text.secondary" } : looks[e.op]),
-            ),
-            "y",
-          )}
-          <Box component="span" sx={{ fontSize: "0.75rem", color: "text.secondary", mt: 0.5 }}>
-            R replace · D delete from x · I insert from y · a dot keeps the letter
-          </Box>
-        </>
-      ) : (
+      <>
         <Box
           component="span"
-          data-edits-empty=""
-          sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
+          sx={{ fontFamily: "inherit", fontSize: "0.8125rem", color: "text.secondary", mb: 0.5 }}
         >
-          The edits are spelled out here once the trace back confirms the cheapest path.
+          One cheapest way, letter by letter:
         </Box>
-      )}
+        {line(
+          "x",
+          edits.map((e, k) =>
+            box(`x${k}`, e.x ?? "–", e.x === null ? { color: "text.secondary" } : looks[e.op]),
+          ),
+          "x",
+        )}
+        {line(
+          "EDIT",
+          edits.map((e, k) =>
+            box(`o${k}`, { keep: "·", sub: "R", del: "D", ins: "I" }[e.op], {
+              ...looks[e.op],
+              fontSize: "0.6875rem",
+              fontWeight: 700,
+            }),
+          ),
+          "op",
+        )}
+        {line(
+          "y",
+          edits.map((e, k) =>
+            box(`y${k}`, e.y ?? "–", e.y === null ? { color: "text.secondary" } : looks[e.op]),
+          ),
+          "y",
+        )}
+        <Box component="span" sx={{ fontSize: "0.75rem", color: "text.secondary", mt: 0.5 }}>
+          R replace · D delete from x · I insert from y · a dot keeps the letter
+        </Box>
+      </>
     </Box>
   );
 }
@@ -1020,14 +1026,8 @@ function rowsDrawing({
     }
     readout = { traced: true, text: `${describe(r)}.${from}` };
   } else {
-    let text;
-    if (automaton) text = "One row per step. Hover or tap a row to see the step it continues from.";
-    else if (distance)
-      text = "One row per node. Hover or tap a row to trace its path back to the source.";
-    else if (matrix)
-      text = "Hover or tap a row to see the coefficients its total adds up: the ones whose x is 1.";
-    else text = "Hover or tap a row to read it.";
-    readout = { traced: false, text };
+    // How to read the rows, and that hovering traces one, is in the Legend.
+    readout = { traced: false, text: "" };
   }
 
   const boxOf = (id) => {
@@ -1437,6 +1437,37 @@ export function tableAnnotations(payload, frames) {
   const highlight = pictureStateStyle("ElementHighlight");
   const met = pictureStateStyle("Covered");
   const columns = Array.isArray(payload?.columns) ? payload.columns : [];
+  // #303: how to read the table, and that a cell or row explains itself on hover, in a tooltip.
+  const has = (key) => columns.some((column) => column.key === key);
+  let reading;
+  if (payload?.shape === "grid") {
+    reading = {
+      text: "Cell number (the cost of turning a prefix of x into a prefix of y; hover or tap a cell for how it was worked out)",
+      swatch: "3",
+    };
+  } else if (payload?.shape === "matrix") {
+    reading = {
+      text: "Row (one constraint; hover or tap it for the coefficients its total adds up)",
+      swatch: "≤",
+    };
+  } else if (has("from") && has("to")) {
+    reading = {
+      text: "Row (one step; hover or tap it for the step it continues from)",
+      swatch: "→",
+    };
+  } else if (has("node") && has("path")) {
+    reading = {
+      text: "Row (one node; hover or tap it to trace its path back to the source)",
+      swatch: "→",
+    };
+  } else {
+    reading = { text: "Row (hover or tap it to read it)", swatch: "→" };
+  }
+  entries.push({
+    key: "reading",
+    text: reading.text,
+    swatch: { kind: "text", text: reading.swatch },
+  });
   if (payload?.shape === "grid") {
     if (list.some((frame) => Array.isArray(frame.arrows) && frame.arrows.length)) {
       entries.push(

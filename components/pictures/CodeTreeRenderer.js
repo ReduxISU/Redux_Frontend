@@ -52,6 +52,7 @@ import {
 import { edgeLook, FAINT_EDGE, FAINT_FILTER, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
 import { PICTURE_CANVAS } from "./pictureSx";
+import { StepFact } from "./secondarySlots";
 import { useBoxWidth } from "./useBoxWidth";
 
 /** The scale (CSS px per drawing unit) the tree's text reads at: its design size. */
@@ -211,20 +212,6 @@ export default function CodeTreeRenderer({
         resetOn={[payload, frames, layout.width, layout.orientation]}
         follow={follow}
         readableScale={READABLE_SCALE}
-        toolbar={
-          <Box
-            id={`${idPrefix}-summary`}
-            data-roots={roots ?? undefined}
-            data-bits={bits ?? undefined}
-            sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-          >
-            {bits !== null
-              ? `${plural(bits, "bit")} vs ${8 * text.length} at 8 bits each`
-              : roots !== null
-                ? `${plural(roots, "tree")} left to merge`
-                : `${plural(layout.leaves.length, "one-node tree")} to merge`}
-          </Box>
-        }
       >
         <text
           x={10}
@@ -466,6 +453,16 @@ export default function CodeTreeRenderer({
           })}
         </g>
       </DiagramZoom>
+      {(bits !== null || roots !== null) && (
+        <StepFact
+          id={`${idPrefix}-summary`}
+          data={{ "data-roots": roots ?? undefined, "data-bits": bits ?? undefined }}
+        >
+          {bits !== null
+            ? `${plural(bits, "bit")} vs ${8 * text.length} at 8 bits each`
+            : `${plural(roots, "tree")} left to merge`}
+        </StepFact>
+      )}
       <EncodedStrip
         idPrefix={idPrefix}
         payload={payload}

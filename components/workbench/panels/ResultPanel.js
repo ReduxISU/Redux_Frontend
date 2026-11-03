@@ -75,6 +75,8 @@ const codeSx = {
  * @property {import("react").ReactNode} text
  * @property {{id: string, text: string, maxHeight?: number}} [code] Text worth copying, in a
  *   monospace field under the sentence.
+ * @property {import("react").ReactNode} [extra] More under the field (#303: the element a
+ *   picture's spelled-out answer renders into).
  * @property {{id: string, label: string, disabled?: boolean, onClick: () => void}} [action]
  */
 
@@ -160,6 +162,7 @@ export function ResultRows({ id, rows }) {
                   {row.code.text}
                 </Box>
               )}
+              {row.extra}
             </Box>
             {row.action && (
               <Box
