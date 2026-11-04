@@ -8021,6 +8021,16 @@ test("Drag: on a touch screen a swipe at fit scrolls the page, and a long press 
   expect(await centresOf(page, `${GRAPH}-graph`)).toEqual(before);
   await expect(page.locator(`${GRAPH}-layout-reset`)).toBeDisabled();
 
+  // The swipe's scroll can still be gliding to a stop; wait until the page holds still for a
+  // moment, so the check below only sees scrolling the drag itself would cause.
+  await page.waitForFunction(
+    () =>
+      new Promise((resolve) => {
+        const start = window.scrollY;
+        setTimeout(() => resolve(window.scrollY === start), 200);
+      }),
+  );
+
   // A long press arms the node (a dashed outline); the drag after it moves the node, not the page.
   const held = await screenCentre(node);
   const scrollHeld = await page.evaluate(() => window.scrollY);
