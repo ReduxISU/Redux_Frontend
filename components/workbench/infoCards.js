@@ -261,6 +261,27 @@ export function reductionCard(reduction, sourceName) {
   };
 }
 
+/**
+ * A chain of reductions (lib/reductionChain.js) in the Reduction dropdown: the route, then each
+ * step's reduction by name.
+ * @param {{target: string, hops: Array<{name: string, from: string, to: string}>}} chain
+ * @returns {Card}
+ */
+export function chainCard(chain) {
+  const hops = chain.hops ?? [];
+  const route = hops.length > 0 ? [hops[0].from, ...hops.map((hop) => hop.to)].join(" → ") : "";
+  return {
+    title: route || chain.target,
+    kind: `Chain of ${hops.length} reductions`,
+    description: `Runs these reductions one after another. Only ${chain.target} is solved; its answer is carried back one step at a time.`,
+    facts: hops.map((hop, index) => ({
+      label: `Step ${index + 1}`,
+      value: hop.name,
+      note: `${hop.from} → ${hop.to}`,
+    })),
+  };
+}
+
 // --- Visualization type -------------------------------------------------------------------
 
 /** What the visualization draws (its picture type). */

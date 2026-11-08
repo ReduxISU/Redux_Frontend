@@ -48,7 +48,7 @@ import { useContext, useState } from "react";
 import StepScrubber from "../detail/StepScrubber";
 import VisualizationCanvas from "../detail/visualizations/VisualizationCanvas";
 import PictureCanvas from "../pictures/PictureCanvas";
-import ReductionView, { ReductionPhaseBar } from "../pictures/ReductionView";
+import ReductionView, { ReductionChainHeader, ReductionPhaseBar } from "../pictures/ReductionView";
 import { StepTextSlot } from "../pictures/secondarySlots";
 import { PictureFullScreen, ZoomControlsSlot } from "../pictures/zoomControlsSlot";
 import Legend from "./Legend";
@@ -333,7 +333,11 @@ function PictureBox({ idPrefix, content }) {
  *   types?: {source: Object|null, target: Object|null}}|null} [props.reduction] A Reduction
  *   View to draw in place of `source` and `target` (#215); `steps` walk its frames. `types` are
  *   its sides' Picture dropdowns (ReduxISU/Redux#912), shaped as `source.type`; `loading` is
- *   said in place of the pictures while another picture is drawn.
+ *   said in place of the pictures while another picture is drawn. `chain`, for a chain of
+ *   reductions (lib/reductionChain.js): `view` is the hop drawn now and `steps` walk the whole
+ *   chain, so `chain.frameIndex` is the hop's own frame, `chain.onLocalStep` moves to one of the
+ *   hop's frames, `chain.phases` are the hop's phases, and the header (title, hops, current,
+ *   onHop, end) sits above the pictures.
  * @param {{on: "all"|"source"|"target"|null, onToggle: (which: "all"|"source"|"target") =>
  *   void}} props.fullScreen #303: what is on full screen (the workspace then shows only the
  *   picture(s) and the steps): everything, or one of Reduce's two panes alone (stage 2), and the
@@ -499,13 +503,25 @@ export default function VisualizationPane({
               {fullButton}
             </Box>
             {!full && verdict?.button && <VerdictLine verdict={verdict} />}
+            {reduction?.chain && (
+              <ReductionChainHeader
+                idPrefix={`${idPrefix}-chain`}
+                title={reduction.chain.title}
+                hops={reduction.chain.hops}
+                current={reduction.chain.current}
+                onHop={reduction.chain.onHop}
+                end={reduction.chain.end}
+              />
+            )}
             {reduction ? (
               <ReductionView
                 // A new run, or another picture on either side, starts with nothing pointed at.
                 key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
                 idPrefix={`${idPrefix}-reduction`}
                 view={reduction.view}
-                frameIndex={steps?.currentStep ?? 0}
+                frameIndex={
+                  reduction.chain ? reduction.chain.frameIndex : (steps?.currentStep ?? 0)
+                }
                 activeGadget={reduction.activeGadget}
                 loading={reduction.loading ?? null}
                 colorMode={reduction.colorMode ?? "plain"}
@@ -571,8 +587,9 @@ export default function VisualizationPane({
           <ReductionPhaseBar
             idPrefix={`${idPrefix}-phases`}
             frames={reduction.view.frames}
-            frameIndex={steps.currentStep}
-            onStepChange={steps.onStepChange}
+            frameIndex={reduction.chain ? reduction.chain.frameIndex : steps.currentStep}
+            onStepChange={reduction.chain ? reduction.chain.onLocalStep : steps.onStepChange}
+            phases={reduction.chain?.phases}
           />
         )}
         {/* #303: the step bar, the step's description on its "Step N of M:" line. */}

@@ -316,8 +316,17 @@ function ReductionPane({
  * @param {Object[]} props.frames The view's frames.
  * @param {number} props.frameIndex The step on screen.
  * @param {(index: number) => void} props.onStepChange
+ * @param {Array<{key: string, label: string, about: string}>} [props.phases] The phases to list
+ *   (a chain's earlier hop has its handoff in place of Solve: lib/reductionView.js
+ *   chainHopPhases); left out, a reduction's three.
  */
-export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }) {
+export function ReductionPhaseBar({
+  idPrefix,
+  frames,
+  frameIndex,
+  onStepChange,
+  phases = REDUCTION_PHASES,
+}) {
   const starts = phaseStarts(frames);
   const current = frames[frameIndex]?.phase ?? null;
   // #303: the step's place in its phase ("3 of 8"), said on the marked phase (the step bar's
@@ -331,7 +340,7 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
       data-current-phase={current ?? undefined}
       sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center", minWidth: 0 }}
     >
-      {REDUCTION_PHASES.map((phase, index) => {
+      {phases.map((phase, index) => {
         const start = starts[phase.key];
         const here = phase.key === current;
         return (
@@ -370,6 +379,88 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
           </Box>
         );
       })}
+    </Box>
+  );
+}
+
+/**
+ * A chain's header (lib/reductionChain.js), above its pictures: the chain named problem by
+ * problem ("Exact Cover → Subset Sum → Partition"), then one button per step ("1 · Exact Cover →
+ * Subset Sum"), the step whose reduction is drawn now marked (`aria-current="step"`, the soft
+ * brand button, as the phase bar marks its phase). Each jumps to its step's first frame. At the
+ * chain's last frame it says what came back to the first problem (`end`).
+ * @param {Object} props
+ * @param {string} props.idPrefix
+ * @param {string} props.title
+ * @param {Array<{from: string, to: string}>} props.hops
+ * @param {number} props.current The hop drawn now.
+ * @param {(hop: number) => void} props.onHop
+ * @param {{tone: "ok"|"err"|"warn"|"info", text: string}|null} props.end
+ */
+export function ReductionChainHeader({ idPrefix, title, hops, current, onHop, end }) {
+  const endColor = {
+    ok: "success.light",
+    err: "error.light",
+    warn: "viz.orange",
+    info: "text.secondary",
+  };
+  return (
+    <Box
+      id={idPrefix}
+      data-current-hop={current + 1}
+      data-hop-count={hops.length}
+      sx={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}
+    >
+      <Box id={`${idPrefix}-title`} sx={{ fontSize: "0.9375rem", fontWeight: 700 }}>
+        {title}
+      </Box>
+      <Box
+        role="group"
+        aria-label="Chain steps"
+        sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center", minWidth: 0 }}
+      >
+        {hops.map((hop, index) => {
+          const here = index === current;
+          return (
+            <Box
+              key={`${hop.from}-${hop.to}-${index}`}
+              component="button"
+              type="button"
+              id={`${idPrefix}-hop-${index + 1}`}
+              data-hop={index + 1}
+              aria-current={here ? "step" : undefined}
+              title={`Show step ${index + 1}: ${hop.from} to ${hop.to}`}
+              onClick={() => onHop(index)}
+              sx={{
+                minHeight: 44,
+                px: 1.5,
+                borderRadius: "999px",
+                border: "1px solid",
+                borderColor: here ? "brand.softLine" : "border.main",
+                boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.softLine}` : "none",
+                backgroundColor: here ? "brand.soft" : "surface.main",
+                color: here ? "brand.onSoft" : "text.secondary",
+                fontFamily: "inherit",
+                fontSize: "0.8125rem",
+                fontWeight: here ? 700 : 500,
+                cursor: "pointer",
+              }}
+            >
+              {`${index + 1} · ${hop.from} → ${hop.to}`}
+            </Box>
+          );
+        })}
+      </Box>
+      {end && (
+        <Box
+          id={`${idPrefix}-end`}
+          role="status"
+          data-tone={end.tone}
+          sx={{ fontSize: "0.875rem", fontWeight: 600, color: endColor[end.tone] }}
+        >
+          {end.text}
+        </Box>
+      )}
     </Box>
   );
 }

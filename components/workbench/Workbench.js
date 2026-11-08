@@ -119,11 +119,22 @@ import useGadgetColorMode from "../../hooks/useGadgetColorMode";
 import { gadgetColorMap, highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
+  chainEnding,
+  chainRouteLabel,
+  chainTimeline,
+  chainTitle,
+  hopStart,
+  timelineIndexOf,
+} from "../../lib/reductionChain";
+import {
   buildOnlyView,
+  chainHopPhases,
+  chainsServed,
   hasSkippedPairs,
   paneFrame,
   pieceNamer,
   reductionViewWorth,
+  requestReductionChain,
   requestReductionViewOrNull,
   samePlaceIn,
   viewPictureWorkable,
@@ -148,6 +159,7 @@ import { paletteVars } from "../theme";
 import CommandBar from "./CommandBar";
 import DoneButton from "./DoneButton";
 import {
+  chainCard,
   reductionCard,
   reductionTags,
   solverCard,
@@ -351,6 +363,9 @@ export default function Workbench({ problem }) {
   );
   const reductions = problem.reductions?.to ?? [];
   const targets = [...new Set(reductions.map((reduction) => reduction.target))];
+  // The problems reached only through a chain of 2 to 6 reductions (lib/reductionChain.js),
+  // listed in the To dropdown after the direct targets.
+  const chains = problem.reductions?.chains ?? [];
 
   // --- Selections ------------------------------------------------------------------------
   // #303: the tab on now. Verify draws what Solve draws (the instance, or Solve's run), so
@@ -404,6 +419,10 @@ export default function Workbench({ problem }) {
     reductionsForTarget.find((reduction) => reduction.className === reductionClassName) ??
     reductionsForTarget[0] ??
     null;
+  // A chained target, when one is chosen (a direct target's name never is one).
+  const selectedChain = selectedReduction
+    ? null
+    : (chains.find((chain) => chain.target === targetName) ?? null);
 
   // --- Runs ------------------------------------------------------------------------------
   const solveRun = useComputeRequest({ subject: "instance" });
@@ -415,6 +434,9 @@ export default function Workbench({ problem }) {
   // #303 stage 2: Reduce's Solve step, solving the target the reduction built.
   const targetSolveRun = useComputeRequest({ subject: "instance" });
   const solveIdRef = useRef(0);
+  // A chain of reductions (ProblemProvider/reductionChainView): every step built, the last
+  // problem solved and the answer carried back step by step, in one request.
+  const chainRun = useComputeRequest({ subject: "instance" });
 
   const solveResult = solveRun.status === COMPUTE_DONE ? solveRun.result : null;
   const pictureResult = pictureRun.status === COMPUTE_DONE ? pictureRun.result : null;
@@ -484,6 +506,33 @@ export default function Workbench({ problem }) {
   const reduceView = mode === "reduce" && wholeView ? (viewSolved ? wholeView : buildView) : null;
   const switching =
     Boolean(reduceView) && viewSwitch.isRunning && switchPending?.runId === reduceResult.runId;
+
+  // --- A chain of reductions --------------------------------------------------------------
+  // Its result counts while it is of this instance and the chained target chosen now. One step
+  // control walks the whole chain in play order (lib/reductionChain.js chainTimeline), and the
+  // Reduction View draws the hop that step is on. A new chain opens on its last step, the answer
+  // carried back to this problem, as a run opens on its finished result.
+  const chainResult = chainRun.status === COMPUTE_DONE ? chainRun.result : null;
+  const chainCurrent =
+    Boolean(chainResult) &&
+    Boolean(selectedChain) &&
+    chainResult.instance === instance &&
+    chainResult.target === selectedChain.target;
+  const chainView =
+    mode === "reduce" && chainCurrent && chainResult.chain?.drawable ? chainResult.chain : null;
+  const chainSteps = useMemo(() => (chainView ? chainTimeline(chainView.hops) : []), [chainView]);
+  const [chainStep, setChainStep] = useState(0);
+  const [chainStepsFor, setChainStepsFor] = useState(chainRun.result);
+  if (chainStepsFor !== chainRun.result) {
+    setChainStepsFor(chainRun.result);
+    const landed = chainRun.result?.chain;
+    setChainStep(landed?.drawable ? Math.max(chainTimeline(landed.hops).length - 1, 0) : 0);
+  }
+  const chainIndex = Math.min(chainStep, Math.max(chainSteps.length - 1, 0));
+  const chainAt = chainSteps[chainIndex] ?? null;
+  const chainHopView = chainView && chainAt ? chainView.hops[chainAt.hop] : null;
+  // The Reduction View on screen: one reduction's, or the chain's hop on this step.
+  const shownView = reduceView ?? chainHopView;
 
   // --- Verify (#303 stage 4) ---------------------------------------------------------------
   // Three checks, each its own request (hooks/useCertificateCheck.js): the Verify tab's, against
@@ -712,7 +761,7 @@ export default function Workbench({ problem }) {
   // --- Instance errors -------------------------------------------------------------------
   const runFailure =
     lastRun?.instance === instance
-      ? [solveRun, pictureRun, reduceRun].find(
+      ? [solveRun, pictureRun, reduceRun, chainRun].find(
           (request) =>
             request.status === COMPUTE_FAILED && request.failure?.code === "instance_parse_error",
         )?.failure
@@ -848,7 +897,11 @@ export default function Workbench({ problem }) {
   }
 
   const isRunning =
-    solveRun.isRunning || pictureRun.isRunning || reduceRun.isRunning || targetSolveRun.isRunning;
+    solveRun.isRunning ||
+    pictureRun.isRunning ||
+    reduceRun.isRunning ||
+    targetSolveRun.isRunning ||
+    chainRun.isRunning;
   const hasInstance = instance.trim() !== "";
   const canSolve = Boolean(selectedSolver?.className);
   const canReduce = canSolve && Boolean(selectedReduction?.className);
@@ -888,6 +941,8 @@ export default function Workbench({ problem }) {
   // (Verify has no Run: its Check is the Verify box's own, and so is Reduce's Verify stage.)
   let modeBlocked;
   if (mode === "solve") modeBlocked = !canSolve;
+  // A chain runs the last problem's own solver: this problem's Algorithm is not used.
+  else if (selectedChain) modeBlocked = !chainsServed();
   else if (reduceStage === "solve")
     modeBlocked = !reduceCurrent || !selectedTargetSolver?.className;
   else modeBlocked = reduceStage === "verify" || !canReduce;
@@ -1007,6 +1062,14 @@ export default function Workbench({ problem }) {
           };
         });
       }
+    } else if (selectedChain) {
+      const chain = selectedChain;
+      chainRun.start(async (signal) => ({
+        chain: await requestReductionChain({ chain, instance: runInstance, signal }),
+        target: chain.target,
+        instance: runInstance,
+        runId,
+      }));
     } else {
       // #303 stage 2: a new build starts the stepper again from Solve.
       targetSolveRun.reset();
@@ -1389,6 +1452,7 @@ export default function Workbench({ problem }) {
   const targetLabel = selectedReduction?.target ?? targetName ?? "the target";
   let runLabel;
   if (mode === "solve") runLabel = "Solve";
+  else if (selectedChain) runLabel = "Run the chain";
   else if (reduceStage === "solve") runLabel = `Solve through ${targetLabel}`;
   else if (reduceStage === "verify") runLabel = "Check both";
   else runLabel = "Reduce";
@@ -1466,6 +1530,11 @@ export default function Workbench({ problem }) {
         label: "Solved",
         hint: `Change ${runInputs(selectedTargetSolver)}, or the reduction, to solve again.`,
       };
+    } else if (mode === "reduce" && selectedChain && chainCurrent && !pendingEdit) {
+      mainButton.done = {
+        label: "Reduced",
+        hint: "Change the instance or Reduce to to run the chain again.",
+      };
     } else if (mode === "reduce" && reduceStage === "reduce" && reduceDone) {
       mainButton.done = {
         label: "Reduced",
@@ -1490,6 +1559,12 @@ export default function Workbench({ problem }) {
       modeNote = "This solver cannot be run: the catalog did not say which backend solver it is.";
     else if (seedInvalid)
       modeNote = `A seed is a whole number up to ${MAX_SEED}. Leave it blank for a random run.`;
+  } else if (selectedChain) {
+    modeNote = chainsServed()
+      ? `Runs ${selectedChain.hops.length} reductions one after another (${chainTitle(
+          selectedChain,
+        )}), solves the ${selectedChain.target} instance at the end, and carries its answer back to ${problem.name} one step at a time.`
+      : "Chains of reductions need a newer Redux backend. The reductions straight from this problem still work.";
   } else if (reductions.length === 0) {
     modeNote = `No reductions from ${problem.name} are declared yet.`;
   } else if (reduceStage === "verify") {
@@ -1514,7 +1589,12 @@ export default function Workbench({ problem }) {
   }
 
   let showing;
-  if (!selectedViz && !reduceRun.isRunning && !(mode === "reduce" && reduceCurrent)) {
+  if (mode === "reduce" && selectedChain && chainRun.isRunning) {
+    showing = `Running the chain ${chainTitle(selectedChain)}.`;
+  } else if (mode === "reduce" && chainCurrent) {
+    const solverName = chainResult.chain?.solverName;
+    showing = `${chainTitle(selectedChain)}${solverName ? `, solved by ${solverName}` : ""}`;
+  } else if (!selectedViz && !reduceRun.isRunning && !(mode === "reduce" && reduceCurrent)) {
     // Nothing to draw: say what ran, without claiming a picture.
     if (solveRun.isRunning) showing = `Running ${selectedSolver?.name ?? "the solver"}.`;
     else if (mode === "solve" && solveCurrent) showing = solveResult.solverName;
@@ -1647,7 +1727,28 @@ export default function Workbench({ problem }) {
       ? reduceResult.targetVisualization
       : selectedReduction?.targetVisualization;
     let content;
-    if (!selectedReduction) {
+    if (selectedChain) {
+      if (chainRun.isRunning) {
+        content = { kind: "loading", text: `Running the chain to ${selectedChain.target}.` };
+      } else if (chainCurrent) {
+        // The chain came back but one of its pictures can't be drawn here (chainView is null).
+        content = {
+          kind: "message",
+          text: "This site can't draw every picture in this chain yet. The answer is in the results below.",
+        };
+      } else if (chainRun.status === COMPUTE_FAILED && lastRun?.instance === instance) {
+        content = {
+          kind: "message",
+          tone: "error",
+          text: "The chain did not run. The reason is shown under the Run the chain button.",
+        };
+      } else {
+        content = {
+          kind: "message",
+          text: `Press Run the chain to build the ${selectedChain.target} instance from this one, one step at a time.`,
+        };
+      }
+    } else if (!selectedReduction) {
       content = { kind: "message", text: `No reductions from ${problem.name} are declared yet.` };
     } else if (reduceCurrent) {
       const frame = reducedTargetFrame(reduceResult);
@@ -1688,7 +1789,9 @@ export default function Workbench({ problem }) {
       card: visualizationCard(visualization, "target"),
     });
     let targetType = null;
-    if (viewTargets.length > 1) {
+    if (selectedChain) {
+      targetType = null;
+    } else if (viewTargets.length > 1) {
       targetType = {
         options: viewTargets.map(targetOption),
         value: targetViewPicture(selectedReduction) ?? viewTargets[0].className,
@@ -1700,7 +1803,12 @@ export default function Workbench({ problem }) {
     }
     // #303 stage 2: the pane's label row says what the target is now.
     let targetState;
-    if (!reduceCurrent)
+    if (selectedChain)
+      targetState = {
+        k: "Status",
+        v: chainRun.isRunning ? "being built" : chainCurrent ? "built" : "not built yet",
+      };
+    else if (!reduceCurrent)
       targetState = { k: "Status", v: reduceRun.isRunning ? "being built" : "not built yet" };
     else if (targetSolveCurrent) targetState = { k: "Algorithm", v: targetSolveResult.solverName };
     else if (targetSolveRun.isRunning)
@@ -1716,9 +1824,17 @@ export default function Workbench({ problem }) {
   // --- Gadgets (#229 stage 4) ----------------------------------------------------------------
   // Only a current reduction's gadgets, in Reduce mode. The hovered or focused row's pieces
   // are drawn on each picture that has them (lib/gadgets.js picks the ids each picture uses).
-  const reduceGadgets = mode === "reduce" && reduceCurrent ? (reduceResult.gadgets ?? []) : [];
+  // A chain's are the gadgets of the hop on screen, kept apart from every other hop's.
+  const gadgetsKey = chainHopView
+    ? `chain:${chainResult.runId}:${chainAt.hop}`
+    : reduceCurrent
+      ? reduceResult.runId
+      : null;
+  let reduceGadgets = [];
+  if (chainHopView) reduceGadgets = chainHopView.gadgets;
+  else if (mode === "reduce" && reduceCurrent) reduceGadgets = reduceResult.gadgets ?? [];
   const activeGadget =
-    gadgetHighlight && reduceCurrent && gadgetHighlight.runId === reduceResult.runId
+    gadgetHighlight && gadgetsKey !== null && gadgetHighlight.runId === gadgetsKey
       ? (reduceGadgets[gadgetHighlight.index] ?? null)
       : null;
   // #239: a format=frames picture (the default picture before a Reduction View, or on a backend
@@ -1773,22 +1889,22 @@ export default function Workbench({ problem }) {
   // #239: the Gadgets rows name pieces the way the pictures label them, and in the Reduction
   // View's Color mode carry each gadget's color.
   let gadgetNamers = null;
-  if (reduceView) {
+  if (shownView) {
     gadgetNamers = {
-      source: pieceNamer(reduceView.source.payload),
-      target: pieceNamer(reduceView.target.payload),
+      source: pieceNamer(shownView.source.payload),
+      target: pieceNamer(shownView.target.payload),
     };
   } else if (sourceContent.kind === "picture") {
     gadgetNamers = { source: pieceNamer(sourceContent.payload), target: null };
   }
   const gadgetRowColors =
-    reduceView && gadgetMarkMode === "color"
-      ? gadgetColorMap(reduceView.gadgets, GADGET_PALETTE).byGadget
+    shownView && gadgetMarkMode === "color"
+      ? gadgetColorMap(shownView.gadgets, GADGET_PALETTE).byGadget
       : null;
 
   function handleGadgetHighlight(index, leaving) {
     if (index !== null) {
-      if (reduceCurrent) setGadgetHighlight({ runId: reduceResult.runId, index });
+      if (gadgetsKey !== null) setGadgetHighlight({ runId: gadgetsKey, index });
       return;
     }
     setGadgetHighlight((current) =>
@@ -1832,6 +1948,9 @@ export default function Workbench({ problem }) {
     note = { text: "This run recorded no steps.", tone: "muted" };
   } else if (showingRunPicture) {
     note = null;
+  } else if (chainHopView) {
+    // Each step's own caption says what it does.
+    note = null;
   } else if (reduceView) {
     // The Reduction View's own caption says what each step does.
     note = switchNote && !switching ? { text: switchNote, tone: "warning" } : null;
@@ -1863,13 +1982,13 @@ export default function Workbench({ problem }) {
   // registry.js pictureLegendFrames).
   let legendStates = null;
   let legendAnnotations = null;
-  if (reduceView) {
+  if (shownView) {
     // #215: both pictures' states and annotations over the whole view, so the key holds still
     // while stepping, and the view's own marks: the gadget link and, on a Graph target, the
-    // pairs a rule leaves unjoined.
-    const sides = [reduceView.source, reduceView.target];
+    // pairs a rule leaves unjoined. A chain's key is the hop on screen's.
+    const sides = [shownView.source, shownView.target];
     const panes = sides.map((side, index) =>
-      reduceView.frames.map((frame) => paneFrame(frame, index === 0 ? "source" : "target", null)),
+      shownView.frames.map((frame) => paneFrame(frame, index === 0 ? "source" : "target", null)),
     );
     legendStates = statesInFrames(panes.flat());
     const entries = [];
@@ -1882,14 +2001,14 @@ export default function Workbench({ problem }) {
         entries.push({ ...entry, key: `${index === 0 ? "source" : "target"}-${entry.key}` });
       }
     });
-    if (reduceView.target.type === "Graph" && hasSkippedPairs(reduceView)) {
+    if (shownView.target.type === "Graph" && hasSkippedPairs(shownView)) {
       entries.push({
         key: "rule-says-no",
         text: "Rule says no (a pair the reduction leaves unjoined on purpose)",
         swatch: { kind: "line", color: pictureStateStyle("Blocked").line, dash: "6 5" },
       });
     }
-    if (reduceView.gadgets.length > 0) {
+    if (shownView.gadgets.length > 0) {
       entries.push({
         key: "gadget-link",
         text: "Linked by a gadget (point at a piece to see what it became or came from)",
@@ -1897,7 +2016,7 @@ export default function Workbench({ problem }) {
       });
       // #239: Color mode's colors, and that they repeat past the palette's size.
       if (gadgetMarkMode === "color") {
-        const used = new Set(gadgetColorMap(reduceView.gadgets, GADGET_PALETTE).byGadget.values());
+        const used = new Set(gadgetColorMap(shownView.gadgets, GADGET_PALETTE).byGadget.values());
         GADGET_PALETTE.filter((color) => used.has(color)).forEach((color, index) => {
           entries.push({
             key: `gadget-color-${index}`,
@@ -1951,6 +2070,17 @@ export default function Workbench({ problem }) {
     reduceAnnouncement = `The reduction did not run. ${reduceRun.failure?.headline ?? ""}`;
   } else if (reduceRun.status === COMPUTE_CANCELLED) {
     reduceAnnouncement = "Run cancelled.";
+  }
+
+  let chainAnnouncement = "";
+  if (chainRun.status === COMPUTE_RUNNING) {
+    chainAnnouncement = `Running the chain to ${selectedChain?.target ?? "the last problem"}. This can take up to a minute.`;
+  } else if (chainRun.status === COMPUTE_DONE) {
+    chainAnnouncement = `The chain to ${chainResult.target} finished in ${formatSeconds(chainRun.elapsedMs)}.`;
+  } else if (chainRun.status === COMPUTE_FAILED) {
+    chainAnnouncement = `The chain did not run. ${chainRun.failure?.headline ?? ""}`;
+  } else if (chainRun.status === COMPUTE_CANCELLED) {
+    chainAnnouncement = "Run cancelled.";
   }
 
   let targetSolveAnnouncement = "";
@@ -2029,6 +2159,17 @@ export default function Workbench({ problem }) {
           onCancel={reduceRun.cancel}
           busyLabel={`Running the reduction to ${selectedReduction?.target ?? "the target"}`}
         />
+        {selectedChain && (
+          <ComputeStatus
+            quiet
+            idPrefix={`${ID}-chain-run`}
+            status={chainRun.status}
+            announcement={chainAnnouncement}
+            failure={chainRun.failure?.code === "instance_parse_error" ? null : chainRun.failure}
+            onCancel={chainRun.cancel}
+            busyLabel={`Running the chain to ${selectedChain.target}`}
+          />
+        )}
         <ComputeStatus
           quiet
           idPrefix={`${ID}-target-solve`}
@@ -2174,6 +2315,47 @@ export default function Workbench({ problem }) {
     resultsEmpty = sourceVerifier ? "Nothing checked yet: type an answer and press Check." : "";
     if (verifyVerdict) {
       resultRows.push(verdictRow("verdict", verifyVerdict, undefined, "this answer"));
+    }
+  } else if (selectedChain) {
+    const title = chainTitle(selectedChain);
+    if (!chainCurrent) {
+      resultRows.push({
+        key: "chain-next",
+        tag: "Chain",
+        tone: "info",
+        icon: "1",
+        text: `Run the chain builds each instance in turn (${title}), solves the ${selectedChain.target} instance, then carries the answer back to ${problem.name} one step at a time.`,
+      });
+    } else {
+      const ran = chainResult.chain;
+      resultRows.push({
+        key: "chain-done",
+        tag: "Chain",
+        tone: "ok",
+        icon: "✓",
+        text: `Ran ${title}${ran.solverName ? `, solved by ${ran.solverName}` : ""}, ${formatSeconds(chainRun.elapsedMs)}.`,
+      });
+      const ending = chainEnding(ran, problem.name, selectedChain.target);
+      const icons = { ok: "✓", err: "✗", warn: "!", info: "←" };
+      resultRows.push({
+        key: "chain-answer",
+        tag: "Chain",
+        tone: ending.tone,
+        icon: icons[ending.tone],
+        text: ran.answer === null ? ending.text : `${ending.text} The answer:`,
+        ...(ran.answer === null
+          ? {}
+          : { code: { id: `${ID}-result-chain-answer`, text: ran.answer || "(empty)" } }),
+      });
+      if (Number.isSafeInteger(ran.seed)) {
+        resultRows.push({
+          key: "chain-seed",
+          tag: "Chain",
+          tone: "info",
+          icon: "#",
+          text: <SeedText id={`${ID}-result-chain-seed`} seed={ran.seed} />,
+        });
+      }
     }
   } else if (selectedReduction) {
     if (!reduceCurrent) {
@@ -2377,6 +2559,39 @@ export default function Workbench({ problem }) {
     };
   }
 
+  if (chainHopView) {
+    const hops = selectedChain.hops;
+    const hop = chainAt.hop;
+    const last = hop === hops.length - 1;
+    const atEnd = chainIndex === chainSteps.length - 1;
+    reductionPane = {
+      view: chainHopView,
+      activeGadget,
+      colorMode: gadgetMarkMode,
+      onColorMode: setGadgetMarkMode,
+      // Each hop is its own view: moving to another starts with nothing pointed at.
+      runId: gadgetsKey,
+      loading: null,
+      types: null,
+      chain: {
+        title: chainTitle(selectedChain),
+        hops,
+        current: hop,
+        onHop: (index) => {
+          const start = hopStart(chainSteps, index);
+          if (start !== -1) setChainStep(start);
+        },
+        end: atEnd ? chainEnding(chainView, problem.name, selectedChain.target) : null,
+        frameIndex: chainAt.frame,
+        phases: chainHopPhases(last, hops[hop + 1]?.to ?? ""),
+        onLocalStep: (frame) => {
+          const index = timelineIndexOf(chainSteps, hop, frame);
+          if (index !== -1) setChainStep(index);
+        },
+      },
+    };
+  }
+
   const resultPanel = (
     <ResultPanel
       idPrefix={`${ID}-result`}
@@ -2385,10 +2600,11 @@ export default function Workbench({ problem }) {
       gadgets={
         reduceGadgets.length > 0
           ? {
-              runId: reduceResult.runId,
+              runId: gadgetsKey,
               gadgets: reduceGadgets,
-              sourceFrame: sourceContent.kind === "frame" ? sourceContent.frame : null,
-              targetFrame: reducedTargetFrame(reduceResult),
+              sourceFrame:
+                !chainHopView && sourceContent.kind === "frame" ? sourceContent.frame : null,
+              targetFrame: chainHopView ? null : reducedTargetFrame(reduceResult),
               namers: gadgetNamers,
               colors: gadgetRowColors,
               activeIndex: activeGadget ? gadgetHighlight.index : null,
@@ -2593,7 +2809,9 @@ export default function Workbench({ problem }) {
   const hiddenInFull = fullScreen ? { display: "none" } : {};
   // What full screen is titled: the problem, or in Reduce (#303 stage 2) the reduction or one pane's problem.
   let fullTitle = problem.name;
-  if (fullOn === "all" && mode === "reduce") fullTitle = `${problem.name} ${ARROW} ${targetLabel}`;
+  if (fullOn === "all" && mode === "reduce" && selectedChain) fullTitle = chainTitle(selectedChain);
+  else if (fullOn === "all" && mode === "reduce")
+    fullTitle = `${problem.name} ${ARROW} ${targetLabel}`;
   else if (fullOn === "target") fullTitle = targetLabel;
 
   return (
@@ -2698,7 +2916,13 @@ export default function Workbench({ problem }) {
                         currentStep: Math.min(reduceStep, reduceView.frames.length - 1),
                         onStepChange: setReduceStep,
                       }
-                    : null
+                    : chainHopView
+                      ? {
+                          frameCount: chainSteps.length,
+                          currentStep: chainIndex,
+                          onStepChange: setChainStep,
+                        }
+                      : null
               }
               reduction={reductionPane}
               note={note}
@@ -2735,38 +2959,65 @@ export default function Workbench({ problem }) {
             targets.length > 0
               ? {
                   value: targetName ?? targets[0],
-                  options: targets.map((name) => {
-                    const targetProblem = reductions.find(
-                      (reduction) => reduction.target === name,
-                    )?.targetProblem;
-                    return {
-                      value: name,
-                      label: name,
-                      tags: targetTags(targetProblem),
-                      card: targetCard(name, targetProblem),
-                    };
-                  }),
+                  options: [
+                    ...targets.map((name) => {
+                      const targetProblem = reductions.find(
+                        (reduction) => reduction.target === name,
+                      )?.targetProblem;
+                      return {
+                        value: name,
+                        label: name,
+                        tags: targetTags(targetProblem),
+                        card: targetCard(name, targetProblem),
+                      };
+                    }),
+                    // Then the problems reached through a chain, each naming its route; on a
+                    // backend without chains they stay listed, greyed, saying why.
+                    ...chains
+                      .filter((chain) => !targets.includes(chain.target))
+                      .map((chain) => ({
+                        value: chain.target,
+                        label: chainRouteLabel(chain),
+                        tags: targetTags(chain.targetProblem),
+                        card: targetCard(chain.target, chain.targetProblem),
+                        ...(chainsServed()
+                          ? {}
+                          : { disabled: true, reason: "Chains need a newer Redux backend." }),
+                      })),
+                  ],
                   onChange: selectTarget,
                 }
               : null
           }
           reduction={
-            reductionsForTarget.length > 0
+            selectedChain
               ? {
-                  value: selectedReduction.className,
-                  options: reductionsForTarget.map((reduction) => ({
-                    value: reduction.className,
-                    label: reduction.name,
-                    tags: reductionTags(reduction),
-                    card: reductionCard(reduction, problem.name),
-                  })),
-                  onChange: setReductionClassName,
+                  value: "chain",
+                  options: [
+                    {
+                      value: "chain",
+                      label: selectedChain.hops.map((hop) => hop.name).join(", then "),
+                      tags: [],
+                      card: chainCard(selectedChain),
+                    },
+                  ],
                 }
-              : null
+              : reductionsForTarget.length > 0
+                ? {
+                    value: selectedReduction.className,
+                    options: reductionsForTarget.map((reduction) => ({
+                      value: reduction.className,
+                      label: reduction.name,
+                      tags: reductionTags(reduction),
+                      card: reductionCard(reduction, problem.name),
+                    })),
+                    onChange: setReductionClassName,
+                  }
+                : null
           }
           seed={seedShown ? { value: seedText, onChange: setSeedText, invalid: seedInvalid } : null}
           stepper={
-            reductions.length > 0
+            reductions.length > 0 && !selectedChain
               ? {
                   stages: reduceStages,
                   shown: reduceStage,
