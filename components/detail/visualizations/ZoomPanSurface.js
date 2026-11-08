@@ -11,8 +11,9 @@
 // change never fights them. The "Fit view" button always returns to the fitted view.
 //
 // Gestures (the visualization is the only place any of this applies):
-//   - mouse wheel (and trackpad pinch) zooms about the cursor, scale clamped to 0.25x-8x, and
-//     never scrolls the page
+//   - mouse wheel (and trackpad pinch) zooms about the cursor, scale clamped to 0.25x-20x, and
+//     never scrolls the page. A mouse notch zooms about 1.3 times and a pinch at its own slower
+//     rate, as the diagrams' DiagramZoom does (components/pictures/DiagramZoom.js wheelRate)
 //   - right-button drag pans. A right click that doesn't move still reaches the renderer's own
 //     context-menu handler; a right drag swallows the context menu that follows it
 //   - two-finger pinch zooms and two-finger drag pans; one finger is left alone, so a swipe
@@ -37,13 +38,15 @@ import {
   useRef,
   useState,
 } from "react";
+import { wheelRate } from "../../pictures/DiagramZoom";
 
 export const MIN_SCALE = 0.25;
-export const MAX_SCALE = 8;
+// 20, not 8: raised with DiagramZoom's MAX_ZOOM (4 to 10 times fit), as a big picture is fitted
+// small.
+export const MAX_SCALE = 20;
 const FIT_PADDING = 24;
 const MAX_FIT_SCALE = 2; // don't blow a tiny diagram up to fill the whole box
 const PAN_CLICK_SLOP = 4; // px a right press may move and still count as a click
-const WHEEL_ZOOM_RATE = 0.0015;
 
 const ViewScaleContext = createContext(1);
 
@@ -203,7 +206,7 @@ export default function ZoomPanSurface({
     function handleWheel(event) {
       event.preventDefault();
       const lineScale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1;
-      const factor = Math.exp(-event.deltaY * lineScale * WHEEL_ZOOM_RATE);
+      const factor = Math.exp(-event.deltaY * lineScale * wheelRate(event));
       const point = boxPoint(event.clientX, event.clientY);
       apply(zoomAbout(viewRef.current, factor, point.x, point.y, minScale.current));
     }

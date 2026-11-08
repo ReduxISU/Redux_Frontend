@@ -22,8 +22,13 @@
 //     wheel zooms too, since there is no page to scroll. In normal view a plain wheel is left to
 //     the page, so it still scrolls; the help line under the picture says how to zoom. (No popup
 //     over the picture on a plain wheel: the owner found it noisy and dropped it.)
-//   - Range. From MIN_ZOOM (a quarter of fit, the mockup's floor) to MAX_ZOOM times fit (or the
-//     renderer's readable scale, below). Every picture still opens at fit.
+//   - Range. From MIN_ZOOM (a quarter of fit, the mockup's floor) to MAX_ZOOM times fit, or
+//     further when that is not enough for the picture's text to reach READABLE_MAX_ZOOM times
+//     its reading size (a big chain picture is fitted very small). Every picture still opens at
+//     fit.
+//   - Rates. One mouse-wheel notch zooms about 1.3 times, a trackpad pinch zooms smoothly at
+//     its own slower rate (wheelRate says how they are told apart), and + and - (the buttons
+//     and the keys) zoom BUTTON_STEP times.
 //   - Pan, at any zoom, fit included, but clamped (clampView): on each axis at least a quarter
 //     of the drawing, and never less than KEEP_PX on screen, stays in the window, so the picture
 //     can't be lost off the edge. (Board G's mockup doesn't clamp at all; a lost picture with
@@ -72,7 +77,8 @@
 // through a big picture on a phone zooms once and keeps the step in view. At the default view
 // everything is in view, so it does nothing there, and it never changes the reader's zoom.
 // With `readableScale` too, zooming in goes on past MAX_ZOOM times fit when that is not enough
-// to reach the scale the picture's text reads at (a wide search tree on a phone).
+// to reach READABLE_MAX_ZOOM times the scale the picture's text reads at (a wide search tree on
+// a phone); a renderer that gives none reads at scale 1 (a drawing unit to a CSS px).
 
 import Box from "@mui/material/Box";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -83,7 +89,7 @@ import { visuallyHiddenSx } from "./pictureSx";
 import { PictureFullScreen, ZoomControlsSlot } from "./zoomControlsSlot";
 
 /** The furthest a diagram zooms in, as a multiple of fit. */
-export const MAX_ZOOM = 4;
+export const MAX_ZOOM = 10;
 
 /** #303: the furthest a diagram zooms out, as a multiple of fit (Board G's floor). */
 export const MIN_ZOOM = 0.25;
@@ -131,13 +137,50 @@ function fitBox(drawing, area) {
 }
 
 /**
- * How far past a renderer's `readableScale` a picture too small to read at fit can zoom in
- * (#217), when that is further than MAX_ZOOM times fit.
+ * How far past the scale its text reads at (a renderer's `readableScale`, else 1) a picture can
+ * zoom in (#217), when that is further than MAX_ZOOM times fit: its text three times its
+ * reading size.
  */
-const READABLE_MAX_ZOOM = 2;
+export const READABLE_MAX_ZOOM = 3;
+
+/** The scale (CSS px per drawing unit) a picture's text reads at when its renderer gives none. */
+const DEFAULT_READABLE_SCALE = 1;
 
 /** How much one press of + or - (the buttons or the keys) zooms. */
-const BUTTON_STEP = 1.5;
+export const BUTTON_STEP = 2;
+
+/** The wheel's zoom rate per px of delta: a mouse notch's, and a trackpad pinch's. */
+export const NOTCH_WHEEL_RATE = 0.0026;
+export const PINCH_WHEEL_RATE = 0.0015;
+
+/**
+ * The furthest a fitted box zooms in, as a multiple of fit: MAX_ZOOM, or further when that
+ * leaves the text under READABLE_MAX_ZOOM times its reading size.
+ * @param {number|null} fitScale CSS px per drawing unit at fit; null until measured.
+ * @param {number|null} [readableScale] The renderer's (#217); null reads at scale 1.
+ */
+export function maxZoomFor(fitScale, readableScale = null) {
+  if (!(fitScale > 0)) return MAX_ZOOM;
+  const readable = readableScale > 0 ? readableScale : DEFAULT_READABLE_SCALE;
+  return Math.max(MAX_ZOOM, (readable * READABLE_MAX_ZOOM) / fitScale);
+}
+
+/**
+ * The zoom rate for one wheel event, per px of delta. A mouse wheel moves in notches: lines or
+ * pages (deltaMode 1 or 2, Firefox), or about 100 px a notch in whole numbers (deltaMode 0,
+ * Chrome, Edge, Safari), so a whole-number delta of 50 px or more is taken for a notch and
+ * zooms at NOTCH_WHEEL_RATE (about 1.3 times a 100 px notch). A trackpad pinch, which the
+ * browser sends as Ctrl + wheel, comes as many small, mostly fractional px deltas, and keeps
+ * PINCH_WHEEL_RATE so it does not get faster; so does a trackpad's two-finger scroll in full
+ * screen. A browser zoomed to a fraction may report a notch as a fractional delta: it zooms at
+ * the slower rate, which still works.
+ * @param {{deltaMode: number, deltaY: number}} event
+ */
+export function wheelRate(event) {
+  if (event.deltaMode === 1 || event.deltaMode === 2) return NOTCH_WHEEL_RATE;
+  const delta = Math.abs(event.deltaY);
+  return delta >= 50 && Number.isInteger(event.deltaY) ? NOTCH_WHEEL_RATE : PINCH_WHEEL_RATE;
+}
 
 /** #303: how far (CSS px) one arrow key press pans the picture (Board G's step). */
 const KEY_PAN_PX = 40;
@@ -419,8 +462,8 @@ const resetActiveSx = {
  *   path but cuts it, the window pans to frame the path (see viewFraming); at the default view
  *   everything is in view already.
  * @param {number|null} [props.readableScale] The scale (CSS px per drawing unit) the picture's
- *   text reads at (#217). Zooming in reaches READABLE_MAX_ZOOM times it, when that is further
- *   than MAX_ZOOM times fit. The picture still opens at fit.
+ *   text reads at (#217); left out, 1. Zooming in reaches READABLE_MAX_ZOOM times it, when that
+ *   is further than MAX_ZOOM times fit. The picture still opens at fit.
  * @param {import("react").ReactNode} props.children The diagram's elements.
  */
 export default function DiagramZoom({
@@ -473,18 +516,15 @@ export default function DiagramZoom({
     ? Math.round(drawing.height * Math.min(area.width / drawing.width, MAX_FIT_SCALE))
     : null;
   const fitted = fitBox(drawing, area);
-  // The fitted box, with how far it zooms in (MAX_ZOOM times fit, or further when the
-  // renderer's readable scale is further off), its scale at fit and the drawing it frames
+  // The fitted box, with how far it zooms in (MAX_ZOOM times fit, or further when the text's
+  // readable scale is further off, maxZoomFor), its scale at fit and the drawing it frames
   // (clampView and zoomedAt read them).
   const fitScale = area?.width > 0 ? area.width / fitted.width : null;
   const box = {
     ...fitted,
     drawing,
     scale: fitScale,
-    maxZoom:
-      readableScale && fitScale
-        ? Math.max(MAX_ZOOM, (readableScale * READABLE_MAX_ZOOM) / fitScale)
-        : MAX_ZOOM,
+    maxZoom: maxZoomFor(fitScale, readableScale),
   };
   const [stored, setStored] = useState(FIT);
   const [storedFor, setStoredFor] = useState(resetOn);
@@ -561,11 +601,12 @@ export default function DiagramZoom({
       event.preventDefault();
       const ctm = svg.getScreenCTM();
       if (!ctm) return;
-      // Lines and pages to px, and one big notch no further than 300 px (Board G's rate).
+      // Lines and pages to px, and one big notch no further than 300 px; a mouse notch zooms
+      // faster than a pinch (wheelRate).
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1;
       const delta = clamp(event.deltaY * unit, -300, 300);
       const current = viewRef.current;
-      const k = current.k * Math.exp(-delta * 0.0015);
+      const k = current.k * Math.exp(-delta * wheelRate(event));
       setStored(zoomedAt(current, boxRef.current, ctm, k, event.clientX, event.clientY));
     };
     svg.addEventListener("wheel", onWheel, { passive: false });

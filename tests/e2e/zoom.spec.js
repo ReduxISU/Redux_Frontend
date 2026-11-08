@@ -5,7 +5,9 @@
 // picture request, as in picture-renderers.spec.js), whose nodes are movable:
 //   - Ctrl + wheel zooms about the pointer; a plain wheel scrolls the page in normal view (no
 //     popup over the picture), and zooms in full screen;
-//   - zoom runs below fit, down to MIN_ZOOM (a quarter of fit);
+//   - zoom runs below fit, down to MIN_ZOOM (a quarter of fit), and up to MAX_ZOOM (ten times
+//     fit), + and - doubling and halving it;
+//   - a mouse-wheel notch zooms faster than a trackpad pinch's small fractional steps;
 //   - a pan works at fit too, and is clamped so part of the picture stays in the window;
 //   - a right drag pans anywhere with no context menu, a left drag on a node moves it;
 //   - one Reset, neutral and disabled at the default view, orange (the soft button) and enabled
@@ -210,11 +212,11 @@ test.describe("desktop", () => {
     const zoomOut = page.locator(`${GRAPH}-zoom-out`);
     await expect(zoomOut).toBeEnabled();
     await zoomOut.click();
-    await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "0.67");
+    await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "0.50");
     // The whole drawing shows, smaller.
     expect(await shownShare(page)).toEqual({ x: 1, y: 1 });
     await expect(page.locator(RESET)).toBeEnabled();
-    for (let press = 0; press < 3; press += 1) await zoomOut.click();
+    await zoomOut.click();
     await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "0.25");
     await expect(zoomOut).toBeDisabled();
     // Ctrl + wheel stops there too.
@@ -224,6 +226,53 @@ test.describe("desktop", () => {
     await page.mouse.wheel(0, 400);
     await page.keyboard.up("Control");
     expect(await zoomOf(page)).toBe(0.25);
+  });
+
+  test("zoom goes up to ten times fit, + doubling it, and stops there", async ({ page }) => {
+    await settledViewBox(page);
+    const zoomIn = page.locator(`${GRAPH}-zoom-in`);
+    await zoomIn.click();
+    await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.00");
+    for (let press = 0; press < 10 && (await zoomIn.isEnabled()); press += 1) await zoomIn.click();
+    await expect(zoomIn).toBeDisabled();
+    // Ten times fit, or further when the graph's labels need it to read three times their size.
+    expect(await zoomOf(page)).toBeGreaterThanOrEqual(10);
+    const most = await zoomOf(page);
+    const middle = await middleOf(page);
+    await page.mouse.move(middle.x, middle.y);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -400);
+    await page.keyboard.up("Control");
+    expect(await zoomOf(page)).toBe(most);
+  });
+
+  test("a mouse-wheel notch zooms about 1.3 times; a pinch's small fractional steps zoom slower", async ({
+    page,
+  }) => {
+    await settledViewBox(page);
+    const wheel = (deltaY) =>
+      page.locator(SVG).evaluate((svg, delta) => {
+        const box = svg.getBoundingClientRect();
+        svg.dispatchEvent(
+          new WheelEvent("wheel", {
+            deltaY: delta,
+            deltaMode: 0,
+            ctrlKey: true,
+            clientX: box.left + box.width / 2,
+            clientY: box.top + box.height / 2,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      }, deltaY);
+    // One notch, as Chrome sends it: 100 px.
+    await wheel(-100);
+    await expect.poll(() => zoomOf(page)).toBeCloseTo(1.3, 1);
+    await page.locator(RESET).click();
+    await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");
+    // A pinch: 40 steps of 2.5 px, 100 px in all, zoom less (about 1.16 times).
+    for (let step = 0; step < 40; step += 1) await wheel(-2.5);
+    await expect.poll(() => zoomOf(page)).toBeCloseTo(1.16, 1);
   });
 
   test("a drag on the background pans at fit, and the pan stops with part of the picture shown", async ({
@@ -315,7 +364,7 @@ test.describe("desktop", () => {
     await expect(reset).toBeEnabled();
     await expect(reset).toHaveAttribute("data-active", "true");
     expect(await resetFilled(page)).toBe(true);
-    await expect(reset).toHaveAttribute("aria-label", "Reset view: undo zoom (zoom 150%)");
+    await expect(reset).toHaveAttribute("aria-label", "Reset view: undo zoom (zoom 200%)");
     await reset.click();
     await expect(reset).toBeDisabled();
     expect(await viewBoxOf(page)).toBe(fit);
@@ -363,11 +412,11 @@ test.describe("desktop", () => {
     expect(x).toBeGreaterThan(fx);
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("+");
-    await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+    await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.00");
     await page.keyboard.press("-");
     await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");
     await page.keyboard.press("-");
-    await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "0.67");
+    await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "0.50");
     await expect(page.locator(RESET)).toBeEnabled();
     await page.keyboard.press("0");
     await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");

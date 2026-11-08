@@ -946,19 +946,19 @@ test("Graph: the zoom buttons zoom in and out, and Reset goes back to the whole 
   await expect(page.locator(`${GRAPH}-zoom-in`)).toHaveAttribute("aria-label", "Zoom in");
 
   await page.locator(`${GRAPH}-zoom-in`).click();
-  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   expect(await viewBoxOf(page)).not.toBe(fit);
   // Keyboard: the buttons are plain buttons in the tab order.
   await page.locator(`${GRAPH}-zoom-in`).focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.25");
-  await page.locator(`${GRAPH}-zoom-in`).click();
-  await page.locator(`${GRAPH}-zoom-in`).click();
-  // Clamped at 4x (2.25 x 1.5 x 1.5 would be 5.06).
   await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "4.00");
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  await page.locator(`${GRAPH}-zoom-in`).click();
+  // Clamped at 10x (4 x 2 x 2 would be 16).
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "10.00");
   await expect(page.locator(`${GRAPH}-zoom-in`)).toBeDisabled();
   await page.locator(`${GRAPH}-zoom-out`).click();
-  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.67");
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "5.00");
 
   await page.locator(`${GRAPH}-zoom-reset`).click();
   await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "1.00");
@@ -996,11 +996,11 @@ test("Graph: zoom is kept while stepping and goes back to fit when the layout ch
   await page.locator(`${GRAPH}-zoom-in`).click();
   await dragAcross(page, `${GRAPH}-svg`, -60, 0);
   const zoomed = await viewBoxOf(page);
-  expect(await zoomOf(page)).toBe("1.50");
+  expect(await zoomOf(page)).toBe("2.00");
 
   await page.locator("#workbench-steps-next").click();
   await expect(page.locator(`${CAPTION}-text`)).toHaveText(capture.frames[1].caption);
-  expect(await zoomOf(page)).toBe("1.50");
+  expect(await zoomOf(page)).toBe("2.00");
   expect(await viewBoxOf(page)).toBe(zoomed);
 
   await page.locator(`${GRAPH}-layout-circle`).click();
@@ -1022,7 +1022,6 @@ test("Graph: a drag pans at fit too, and zoomed in it pans no further than keeps
     page.locator(`${GRAPH}-svg`).evaluate((svg) => getComputedStyle(svg).touchAction);
   expect(await touchAction()).toBe("pan-y");
 
-  await page.locator(`${GRAPH}-zoom-in`).click();
   await page.locator(`${GRAPH}-zoom-in`).click();
   const before = await viewBoxOf(page);
   expect(await touchAction()).toBe("pan-y");
@@ -1060,8 +1059,8 @@ test("Graph: on a phone a tap still traces a node after zooming, and focus bring
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openPicture(page, "Clique", LARGE_GRAPH_FRAMES);
-  for (let press = 0; press < 3; press += 1) await page.locator(`${GRAPH}-zoom-in`).click();
-  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "3.38");
+  for (let press = 0; press < 2; press += 1) await page.locator(`${GRAPH}-zoom-in`).click();
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "4.00");
 
   // Zoomed in on the middle, node 1 (top of the circle) is out of the window. Focusing it pans
   // it into view, and tracing follows the focus.
@@ -1111,9 +1110,9 @@ test("Graph: a two-finger pinch zooms on a touch screen", async ({ page }) => {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: touches(spread) });
   }
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  // The fingers spread to three times their distance: 3x, within the 4x limit.
+  // The fingers spread to three times their distance: 3x, well within the 10x limit.
   await expect.poll(async () => Number(await zoomOf(page))).toBeGreaterThan(2.5);
-  expect(Number(await zoomOf(page))).toBeLessThanOrEqual(4);
+  expect(Number(await zoomOf(page))).toBeLessThanOrEqual(3.5);
 });
 
 // --- The picture area (DiagramZoom.js) -------------------------------------------------------
@@ -1182,7 +1181,7 @@ test("Graph: zoomed in, a pan reaches both the drawing's left and right edges", 
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
-  for (let press = 0; press < 3; press += 1) await page.locator(`${GRAPH}-zoom-in`).click();
+  for (let press = 0; press < 2; press += 1) await page.locator(`${GRAPH}-zoom-in`).click();
   // The outermost nodes' left and right edges, and whether the window shows them.
   const edges = () =>
     page.locator(`${GRAPH}-svg`).evaluate((svg) => {
@@ -1482,7 +1481,7 @@ test("Bipartite Graph: on a phone a tap traces a node, also after zooming in", a
   await openBipartite(page, BIPARTITE_CASES[3]);
   await expectFits(page, `${BIPARTITE}-svg`);
   await page.locator(`${BIPARTITE}-zoom-in`).click();
-  await expect(page.locator(`${BIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${BIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await bipartiteNode(page, "v:x2").focus();
   await bipartiteNode(page, "v:x2").blur();
   await bipartiteNode(page, "v:x2").click();
@@ -1869,7 +1868,7 @@ test("Layered Graph: on a phone a tap traces a node, also after zooming in", asy
   await openLayered(page, LAYERED_CASES.sssp);
   await expectFits(page, `${LAYERED}-svg`);
   await page.locator(`${LAYERED}-zoom-in`).click();
-  await expect(page.locator(`${LAYERED}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${LAYERED}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await layeredNode(page, "3").focus();
   await layeredNode(page, "3").blur();
   await layeredNode(page, "3").click();
@@ -2411,7 +2410,7 @@ test("Automaton: on a phone a tap traces a state, also after zooming in", async 
   await openAutomaton(page, AUTOMATON_CASES.nfaDefault);
   await expectFits(page, `${AUTOMATON}-svg`);
   await page.locator(`${AUTOMATON}-zoom-in`).click();
-  await expect(page.locator(`${AUTOMATON}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${AUTOMATON}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await automatonState(page, "q:3").focus();
   await automatonState(page, "q:3").blur();
   await automatonState(page, "q:3").click();
@@ -2755,7 +2754,7 @@ test("Flow Network: on a phone a tap traces a node, also after zooming in", asyn
   await openFlow(page, MIN_CUT_BACKWARD_FLOW_FRAMES);
   await expectFits(page, `${FLOW}-svg`);
   await page.locator(`${FLOW}-zoom-in`).click();
-  await expect(page.locator(`${FLOW}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${FLOW}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await flowNode(page, "b").focus();
   await flowNode(page, "b").blur();
   await flowNode(page, "b").click();
@@ -3102,7 +3101,7 @@ test("Grouped Graph: the clause graph zooms like a graph, and a tap still traces
   await openPicture(page, "3SAT", SAT3_CLAUSE_GRAPH_FRAMES);
   const zoom = page.locator(`${CLAUSES}-zoom`);
   await page.locator(`${CLAUSES}-zoom-in`).click();
-  await expect(zoom).toHaveAttribute("data-zoom", "1.50");
+  await expect(zoom).toHaveAttribute("data-zoom", "2.00");
 
   // Focusing a literal brings it into view; tapping it traces its variable.
   await literal(page, "c0-0").focus();
@@ -3543,7 +3542,7 @@ test("Packing: on a phone a tap traces an item, also after zooming in", async ({
   await openPacking(page, KNAPSACK_PACKING_FRAMES);
   await expectFits(page, `${PACKING}-svg`);
   await page.locator(`${PACKING}-zoom-in`).click();
-  await expect(page.locator(`${PACKING}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${PACKING}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await packingItem(page, "I2").focus();
   await packingItem(page, "I2").blur();
   await packingItem(page, "I2").click();
@@ -4645,7 +4644,7 @@ test("Board: on a phone a tap traces a square, also after zooming in", async ({ 
   await openBoard(page, SUDOKU_BOARD_FRAMES);
   await expectFits(page, `${BOARD}-svg`);
   await page.locator(`${BOARD}-zoom-in`).click();
-  await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${BOARD}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await boardSquare(page, "r4c4").focus();
   await boardSquare(page, "r4c4").blur();
   await boardSquare(page, "r4c4").click();
@@ -5134,7 +5133,7 @@ test("Geometry: on a phone a tap traces a point, also after zooming in", async (
   await openGeometry(page, capture);
   await expectFits(page, `${GEOMETRY}-svg`);
   await page.locator(`${GEOMETRY}-zoom-in`).click();
-  await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${GEOMETRY}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   const [first, second] = capture.payload.points;
   await geometryPoint(page, first.id).focus();
   await geometryPoint(page, first.id).blur();
@@ -5721,7 +5720,7 @@ test("Schedule: on a phone a tap traces an hour, also after zooming in", async (
   await openSchedule(page, capture);
   await expectFits(page, `${SCHEDULE}-svg`);
   await page.locator(`${SCHEDULE}-zoom-in`).click();
-  await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${SCHEDULE}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await scheduleHourHit(page, "t12").focus();
   await scheduleHourHit(page, "t12").blur();
   await scheduleHourHit(page, "t12").click();
@@ -6062,7 +6061,7 @@ test("Tripartite Matching: on a phone the list goes under the columns, and a tap
   await expect(page.locator(`${TRIPARTITE}-tripartite`)).toHaveAttribute("data-wide", "false");
   await expectFits(page, `${TRIPARTITE}-svg`);
   await page.locator(`${TRIPARTITE}-zoom-in`).click();
-  await expect(page.locator(`${TRIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${TRIPARTITE}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await tripartiteElement(page, "y3").focus();
   await tripartiteElement(page, "y3").blur();
   await tripartiteElement(page, "y3").click();
@@ -6437,7 +6436,7 @@ test("Code Tree: on a phone the tree lies on its side, and a tap traces a node a
     expect(boxes[merge.id][0]).toBeLessThan(Math.min(boxes[merge.left][0], boxes[merge.right][0]));
   }
   await page.locator(`${CODE_TREE}-zoom-in`).click();
-  await expect(page.locator(`${CODE_TREE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${CODE_TREE}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await treePiece(page, "c5").focus();
   await treePiece(page, "c5").blur();
   await treePiece(page, "c5").click();
@@ -6985,7 +6984,7 @@ test("Quantum Circuit: on a phone a tap traces a gate after zooming in, and Shor
   await openQuantum(page, BV_QUANTUM_FRAMES);
   await expectFits(page, `${QUANTUM}-svg`);
   await page.locator(`${QUANTUM}-zoom-in`).click();
-  await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${QUANTUM}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await quantumGate(page, "g2_0").focus();
   await quantumGate(page, "g2_0").blur();
   await quantumGate(page, "g2_0").click();
@@ -7538,7 +7537,7 @@ test("Table: on a phone a tap traces a row, also after zooming in", async ({ pag
   await openTable(page, SSSP_TABLE_FRAMES);
   await expectFits(page, `${TABLE}-svg`);
   await page.locator(`${TABLE}-zoom-in`).click();
-  await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "1.50");
+  await expect(page.locator(`${TABLE}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   await tableRow(page, "r1").focus();
   await tableRow(page, "r1").blur();
   await tableRow(page, "r1").click();
@@ -7952,8 +7951,7 @@ test("Drag: zoomed in, a node follows the pointer through the zoomed view, and e
   await page.setViewportSize({ width: 1280, height: 900 });
   await openPicture(page, "Clique", CLIQUE_GRAPH_FRAMES);
   await page.locator(`${GRAPH}-zoom-in`).click();
-  await page.locator(`${GRAPH}-zoom-in`).click();
-  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.25");
+  await expect(page.locator(`${GRAPH}-zoom`)).toHaveAttribute("data-zoom", "2.00");
   const node = graphNode(page, "3");
   const from = await screenCentre(node);
   const drawnBefore = await drawnCentre(node);
