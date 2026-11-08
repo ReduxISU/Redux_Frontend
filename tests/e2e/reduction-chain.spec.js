@@ -12,8 +12,9 @@
 // (./chain-payloads.js). A backend whose reduction graph lacks Exact Cover -> Subset Sum ->
 // Partition (CI's, today) skips these tests.
 //
-// A chain draws each problem with a picture chosen under its route (Set Cover, at the end of
-// Clique -> Vertex Cover -> Set Cover, offers three): the dropdowns come from
+// A chain draws each problem with a picture chosen on the pane drawing it, as a one-step
+// reduction's are (Set Cover, at the end of Clique -> Vertex Cover -> Set Cover, offers three; a
+// middle problem is on both hops it is part of): the choices come from
 // ProblemProvider/reductionChainPictures, a choice asks for the chain again with
 // `visualizations`, and the viewer stays on the same step (./chain-picture-payloads.js).
 
@@ -28,6 +29,8 @@ import {
   CLIQUE_TO_SET_COVER_NESTED_SET_CHAIN,
   CLIQUE_TO_SET_COVER_PICTURES,
   CLIQUE_TO_SET_COVER_SEARCH_TREE_CHAIN,
+  EXACT_COVER_TO_PARTITION_FORMULA_CHAIN,
+  EXACT_COVER_TO_PARTITION_PICTURES,
 } from "./chain-picture-payloads";
 import { expect, test } from "./fixtures";
 
@@ -348,12 +351,38 @@ test.describe("Reduce mode: chains of reductions", () => {
 });
 
 // --- A picture per problem ---------------------------------------------------------------------
-// Clique -> Vertex Cover -> Set Cover: only Set Cover has more than one picture the chain can draw
-// it with (Bipartite Graph, Nested Set, Search Tree), so it alone gets a dropdown.
+// Each pane's Picture dropdown, at its top right as in a one-step reduction (#912), picks the
+// picture of the problem it draws: hop k's panes draw problems k and k + 1, Start and end the
+// first and the last. Clique -> Vertex Cover -> Set Cover: Clique and Vertex Cover have one picture
+// the chain can draw them with (a Search Tree only for the last problem), Set Cover three
+// (Bipartite Graph, Nested Set, Search Tree).
 
 const PICTURES_REQUEST = /\/api\/redux\/ProblemProvider\/reductionChainPictures\?/;
 const SET_COVER_ROUTE = "Set Cover — via Vertex Cover (2 steps)";
 const stepsPosition = (page) => page.locator("#workbench-steps-position");
+const paneType = (page, which) => page.locator(`#workbench-${which}-type-button`);
+const paneTypeValue = (page, which) => page.locator(`#workbench-${which}-type-value`);
+
+/** The names a pane's Picture dropdown lists, read by opening it (Escape closes it). */
+async function paneTypeNames(page, which) {
+  await page.locator(`#workbench-${which}-type-button`).click();
+  const names = (
+    await page.locator(`#workbench-${which}-type-listbox`).getByRole("option").allTextContents()
+  ).map((text) => text.trim());
+  await page.keyboard.press("Escape");
+  return names;
+}
+
+/** Picks a pane's picture by its friendly name. */
+async function pickPanePicture(page, which, name) {
+  await page.locator(`#workbench-${which}-type-button`).click();
+  await page
+    .locator(`#workbench-${which}-type-listbox`)
+    .getByRole("option")
+    .filter({ hasText: name })
+    .first()
+    .click();
+}
 
 /** Answers the chain by its visualizations parameter, and records each request's. */
 async function answerSetCoverChain(page, asked, answers = {}) {
@@ -397,19 +426,11 @@ async function runSetCoverChain(page) {
   await expect(header(page)).toHaveAttribute("data-summary", "true");
 }
 
-/** Picks Set Cover's picture by its friendly name. */
-async function pickSetCover(page, name) {
-  await page.locator("#workbench-chain-pictures-3-button").click();
-  await page
-    .locator("#workbench-chain-pictures-3-listbox")
-    .getByRole("option")
-    .filter({ hasText: name })
-    .first()
-    .click();
-}
+/** Picks Set Cover's picture by its friendly name: the right pane, on hop 2 or Start and end. */
+const pickSetCover = (page, name) => pickPanePicture(page, "target", name);
 
 test.describe("Reduce mode: a picture per problem of a chain", () => {
-  test("offers a dropdown only where there is a choice, named by picture type", async ({
+  test("each pane's dropdown, on the pane, picks the picture of the problem it draws", async ({
     page,
   }) => {
     const asked = [];
@@ -417,24 +438,48 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
     await runSetCoverChain(page);
     // The first run draws the defaults: no visualizations parameter.
     expect(asked).toEqual([null]);
-    await expect(page.locator("#workbench-chain-pictures-row [data-problem]")).toHaveCount(1);
-    await expect(page.locator("#workbench-chain-pictures-3-cell")).toHaveAttribute(
-      "data-problem",
-      "Set Cover",
-    );
-    await expect(page.locator("#workbench-chain-pictures-1-cell")).toHaveCount(0);
-    await expect(page.locator("#workbench-chain-pictures-2-cell")).toHaveCount(0);
-    await expect(page.locator("#workbench-chain-pictures-3-label")).toHaveText("Set Cover");
-    await expect(page.locator("#workbench-chain-pictures-3-value")).toHaveText("Bipartite Graph");
-    await page.locator("#workbench-chain-pictures-3-button").click();
-    const names = (
-      await page
-        .locator("#workbench-chain-pictures-3-listbox")
-        .getByRole("option")
-        .allTextContents()
-    ).map((text) => text.trim());
-    expect(names).toEqual(["Bipartite Graph", "Nested Set", "Search Tree"]);
-    await page.keyboard.press("Escape");
+    // No row of dropdowns under the route: they are on the panes.
+    await expect(page.locator("#workbench-chain-pictures")).toHaveCount(0);
+    await expect(page.locator("#workbench-chain-pictures-row")).toHaveCount(0);
+
+    // Start and end: Clique on the left, Set Cover on the right, each pane's dropdown in its own
+    // header, at its top right.
+    const sourcePane = view(page).locator("#workbench-reduction-source-pane");
+    const targetPane = view(page).locator("#workbench-reduction-target-pane");
+    await expect(sourcePane).toContainText("Clique");
+    await expect(sourcePane.locator("#workbench-source-type-button")).toHaveCount(1);
+    await expect(targetPane.locator("#workbench-target-type-button")).toHaveCount(1);
+    const menus = [];
+    for (const which of ["source", "target"]) {
+      const pane = await view(page).locator(`#workbench-reduction-${which}-pane`).boundingBox();
+      const menu = await page.locator(`#workbench-${which}-type-button`).boundingBox();
+      // In the pane's header, as a one-step reduction's (board-g.spec.js checks where).
+      expect(menu.y - pane.y).toBeLessThan(80);
+      expect(menu.x).toBeGreaterThanOrEqual(pane.x - 1);
+      expect(menu.x + menu.width).toBeLessThanOrEqual(pane.x + pane.width + 1);
+      menus.push(menu);
+    }
+    expect(Math.abs(menus[0].y - menus[1].y)).toBeLessThanOrEqual(1);
+    await expect(paneTypeValue(page, "source")).toHaveText("Graph");
+    await expect(paneTypeValue(page, "target")).toHaveText("Bipartite Graph");
+    expect(await paneTypeNames(page, "target")).toEqual([
+      "Bipartite Graph",
+      "Nested Set",
+      "Search Tree",
+    ]);
+    // One picture: the dropdown still says what it is, as a one-step reduction's does.
+    expect(await paneTypeNames(page, "source")).toEqual(["Graph"]);
+
+    // Hop 1: Clique, then Vertex Cover (its Search Tree is the last problem's alone).
+    await page.locator("#workbench-chain-hop-1").click();
+    await expect(paneTypeValue(page, "source")).toHaveText("Graph");
+    await expect(paneTypeValue(page, "target")).toHaveText("Graph");
+    expect(await paneTypeNames(page, "target")).toEqual(["Graph"]);
+    // Hop 2: Vertex Cover, then Set Cover.
+    await page.locator("#workbench-chain-hop-2").click();
+    await expect(paneTypeValue(page, "source")).toHaveText("Graph");
+    await expect(paneTypeValue(page, "target")).toHaveText("Bipartite Graph");
+    expect(asked).toEqual([null]);
   });
 
   test("another picture keeps the step and redraws, with the same chain asked for", async ({
@@ -453,7 +498,7 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
     );
 
     await pickSetCover(page, "Nested Set");
-    await expect(page.locator("#workbench-chain-pictures-3-value")).toHaveText("Nested Set");
+    await expect(paneTypeValue(page, "target")).toHaveText("Nested Set");
     await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
       "data-picture-type",
       "NestedSet",
@@ -462,9 +507,13 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
     await expect(stepsPosition(page)).toContainText("8 of 19");
     await expect(header(page)).toHaveAttribute("data-current-hop", "2");
     await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "build");
+    await expect(page.locator("#workbench-chain-pictures-run-status")).toHaveText(
+      "The chain now draws Set Cover as Nested Set.",
+    );
 
     // Start and end stays Start and end, and draws Set Cover with the picture chosen.
     await page.locator("#workbench-chain-summary").click();
+    await expect(paneTypeValue(page, "target")).toHaveText("Nested Set");
     await pickSetCover(page, "Bipartite Graph");
     await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
       "data-picture-type",
@@ -473,6 +522,44 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
     await expect(header(page)).toHaveAttribute("data-summary", "true");
     // Back to every default: the parameter is left out again.
     expect(asked).toEqual([null, ",,SetCoverNestedSetVisualization", null]);
+  });
+
+  test("while the chain is drawn again the panes say so, the dropdowns are fixed on the choice, and Cancel keeps the pictures", async ({
+    page,
+  }) => {
+    const asked = [];
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    await answerSetCoverChain(page, asked, {
+      ",,SetCoverNestedSetVisualization": async (route) => {
+        await held;
+        await route.fulfill({ json: CLIQUE_TO_SET_COVER_NESTED_SET_CHAIN }).catch(() => {});
+      },
+    });
+    await runSetCoverChain(page);
+    await toStep(page, 7);
+    await pickSetCover(page, "Nested Set");
+    // Where a one-step reduction says it draws another picture: in the panes.
+    for (const which of ["source", "target"])
+      await expect(view(page).locator(`#workbench-reduction-${which}`)).toContainText(
+        "Drawing the chain again with Set Cover as Nested Set.",
+      );
+    await expect(paneTypeValue(page, "target")).toHaveText("Nested Set");
+    await expect(page.locator("#workbench-target-type-button")).toBeDisabled();
+    await expect(page.locator("#workbench-source-type-button")).toBeDisabled();
+    // Cancel stops waiting: the request it leaves is aborted, on purpose.
+    page.allowNetworkFailures();
+    await page.locator("#workbench-chain-pictures-run-cancel-button").click();
+    await expect(paneTypeValue(page, "target")).toHaveText("Bipartite Graph");
+    await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
+      "data-picture-type",
+      "BipartiteGraph",
+    );
+    await expect(page.locator("#workbench-target-type-button")).toBeEnabled();
+    await expect(stepsPosition(page)).toContainText("8 of 19");
+    release();
   });
 
   test("a search tree for the last problem, chosen during its Solve, starts the Solve again", async ({
@@ -502,7 +589,7 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
     );
   });
 
-  test("a picture Redux can't draw says so, naming the problem, and the dropdown goes back", async ({
+  test("a picture Redux can't draw says so under the pictures, naming the problem, and the dropdown goes back", async ({
     page,
   }) => {
     const asked = [];
@@ -526,7 +613,11 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
     const failure = page.locator("#workbench-chain-pictures-run-failure");
     await expect(failure).toContainText("Set Cover can't be drawn with that picture in this chain");
     await expect(failure).toContainText("Set Cover keeps the picture it had.");
-    await expect(page.locator("#workbench-chain-pictures-3-value")).toHaveText("Bipartite Graph");
+    // Under the pictures, where a one-step reduction's notes go.
+    const pictures = await view(page).boundingBox();
+    const box = await failure.boundingBox();
+    expect(box.y).toBeGreaterThanOrEqual(pictures.y + pictures.height - 1);
+    await expect(paneTypeValue(page, "target")).toHaveText("Bipartite Graph");
     await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
       "data-picture-type",
       "BipartiteGraph",
@@ -542,7 +633,80 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
       route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
     );
     await runSetCoverChain(page);
-    await expect(page.locator("#workbench-chain-pictures")).toHaveCount(0);
+    await expect(paneType(page, "source")).toHaveCount(0);
+    await expect(paneType(page, "target")).toHaveCount(0);
+    await page.locator("#workbench-chain-hop-2").click();
+    await expect(paneType(page, "target")).toHaveCount(0);
     expect(asked).toEqual([null]);
+  });
+});
+
+// Exact Cover -> Subset Sum -> Partition: Subset Sum, the middle problem, is hop 1's target and
+// hop 2's source, so either pane picks its picture and both hops draw it.
+test.describe("Reduce mode: the middle problem of a chain", () => {
+  test.beforeEach(async ({ page }) => {
+    await needsChain(page);
+  });
+
+  test("Subset Sum's dropdown is on hop 1's right pane and hop 2's left, and either redraws both", async ({
+    page,
+  }) => {
+    const asked = [];
+    await page.route(PICTURES_REQUEST, (route) =>
+      route.fulfill({ json: EXACT_COVER_TO_PARTITION_PICTURES }),
+    );
+    await page.route(CHAIN_REQUEST, (route) => {
+      const visualizations = new URL(route.request().url()).searchParams.get("visualizations");
+      asked.push(visualizations);
+      return route.fulfill({
+        json:
+          visualizations === ",SubsetSumFormulaVisualization,"
+            ? EXACT_COVER_TO_PARTITION_FORMULA_CHAIN
+            : EXACT_COVER_TO_PARTITION_CHAIN,
+      });
+    });
+    await openTarget(page, PARTITION_ROUTE);
+    await page.locator("#workbench-run").click();
+    await expectSummary(page);
+    // Start and end: Exact Cover and Partition.
+    await expect(paneTypeValue(page, "source")).toHaveText("Bipartite Graph");
+    expect(await paneTypeNames(page, "source")).toEqual(["Bipartite Graph", "Nested Set"]);
+    await expect(paneTypeValue(page, "target")).toHaveText("Packing");
+
+    // Hop 2's left pane picks Subset Sum.
+    await page.locator("#workbench-chain-hop-2").click();
+    await expect(view(page).locator("#workbench-reduction-source-pane")).toContainText(
+      "Subset Sum",
+    );
+    await expect(paneTypeValue(page, "source")).toHaveText("Packing");
+    expect(await paneTypeNames(page, "source")).toEqual(["Packing", "Formula"]);
+    await pickPanePicture(page, "source", "Formula");
+    await expect(view(page).locator("#workbench-reduction-source")).toHaveAttribute(
+      "data-picture-type",
+      "Formula",
+    );
+    expect(asked).toEqual([null, ",SubsetSumFormulaVisualization,"]);
+    await expect(header(page)).toHaveAttribute("data-current-hop", "2");
+    // Hop 1's right pane is Subset Sum too, drawn the same.
+    await page.locator("#workbench-chain-hop-1").click();
+    await expect(paneTypeValue(page, "target")).toHaveText("Formula");
+    await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
+      "data-picture-type",
+      "Formula",
+    );
+    // Back to Packing from there: both hops again.
+    await pickPanePicture(page, "target", "Packing");
+    await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
+      "data-picture-type",
+      "Packing",
+    );
+    expect(asked).toEqual([null, ",SubsetSumFormulaVisualization,", null]);
+    await expect(header(page)).toHaveAttribute("data-current-hop", "1");
+    await page.locator("#workbench-chain-hop-2").click();
+    await expect(paneTypeValue(page, "source")).toHaveText("Packing");
+    await expect(view(page).locator("#workbench-reduction-source")).toHaveAttribute(
+      "data-picture-type",
+      "Packing",
+    );
   });
 });

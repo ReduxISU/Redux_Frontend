@@ -52,6 +52,8 @@ export const CANCEL_EXPLANATION =
  *   "Running Clique Brute Force Solver".
  * @param {boolean} [props.quiet] #303 stage 4: the announcement is spoken but not shown, for
  *   a page whose results already say it (the workbench's result rows).
+ * @param {boolean} [props.spinner] False when the page shows its own spinner and busy text
+ *   (a chain drawn again says it in its panes): while running, only Cancel shows here.
  */
 export default function ComputeStatus({
   idPrefix,
@@ -61,6 +63,7 @@ export default function ComputeStatus({
   onCancel,
   busyLabel,
   quiet = false,
+  spinner = true,
 }) {
   const isRunning = status === COMPUTE_RUNNING;
 
@@ -79,10 +82,12 @@ export default function ComputeStatus({
 
       {isRunning && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
-          <CircularProgress size={18} aria-hidden="true" />
-          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            {busyLabel}
-          </Typography>
+          {spinner && <CircularProgress size={18} aria-hidden="true" />}
+          {busyLabel && (
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+              {busyLabel}
+            </Typography>
+          )}
           <Box
             id={`${idPrefix}-cancel-button`}
             component="button"

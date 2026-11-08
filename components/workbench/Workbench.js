@@ -163,7 +163,6 @@ import { pictureAnnotations, pictureLegendFrames, pictureRuns } from "../picture
 import { ResultAnswerSlot, SecondarySlots } from "../pictures/secondarySlots";
 import { PictureFullScreen } from "../pictures/zoomControlsSlot";
 import { paletteVars } from "../theme";
-import ChainPictures from "./ChainPictures";
 import CommandBar from "./CommandBar";
 import DoneButton from "./DoneButton";
 import {
@@ -451,8 +450,9 @@ export default function Workbench({ problem }) {
   const chainVersionRef = useRef(0);
 
   // The pictures the chain chosen can draw each problem with (lib/reductionChain.js
-  // normalizeChainPictures), asked for once a chained target is chosen. Null until they come,
-  // and from a backend without ProblemProvider/reductionChainPictures: no choice is offered then.
+  // normalizeChainPictures), asked for once a chained target is chosen; each pane's Picture
+  // dropdown offers its problem's (see reductionPane below). Null until they come, and from a
+  // backend without ProblemProvider/reductionChainPictures: no choice is offered then.
   const chainKey = selectedChain ? selectedChain.hops.map((hop) => hop.className).join(",") : "";
   const [chainPictures, setChainPictures] = useState({ key: "", problems: null });
   // selectedChain is one of problem.reductions.chains, the same object while the route is.
@@ -2663,7 +2663,6 @@ export default function Workbench({ problem }) {
 
   // #912: the Reduction View's dropdowns, and what it says while it draws another picture.
   let reductionPane = null;
-  let chainPicturesRow = null;
   if (reduceView) {
     const targetAll =
       reductions.find((reduction) => reduction.className === reduceResult.reductionClassName)
@@ -2706,44 +2705,52 @@ export default function Workbench({ problem }) {
   if (chainHopView) {
     const hops = selectedChain.hops;
     const hop = chainAt.hop;
-    // One dropdown per problem with more than one picture the chain can draw it with; the one
-    // being asked for shows while it is, and a failed one is back on the picture still drawn.
+    // Each pane's Picture dropdown picks the picture of the problem it draws, as a one-step
+    // reduction's do (#912): hop k's panes draw problems k + 1 and k + 2 (counted from 1), Start
+    // and end's the first and the last. A middle problem is the target of one hop and the source
+    // of the next, so either pane picks it and both hops show it. The one being asked for shows
+    // while it is, and a failed one is back on the picture still drawn.
     const switchingChain = chainSwitch.isRunning && chainPending?.runId === chainRunResult?.runId;
-    const items = (chainPictureList ?? [])
-      .filter((entry) => entry.pictures.length > 1)
-      .map((entry) => {
-        const index = entry.position - 1;
-        const catalog = selectedChain.visualizations?.[index] ?? [];
-        const role = index === 0 ? "source" : "target";
+    const chainTypeControl = (position, which) => {
+      const entry = chainPictureList?.[position - 1];
+      if (!entry || entry.pictures.length === 0) return null;
+      const index = position - 1;
+      const catalog = selectedChain.visualizations?.[index] ?? [];
+      const value =
+        switchingChain && chainPending.position === position
+          ? chainPending.visualization
+          : chainDrawn[index];
+      const options = entry.pictures.map((picture) => {
+        const label = pictureTypeLabel(picture.pictureType) ?? "Picture";
+        const known = catalog.find(
+          (visualization) => visualization.className === picture.visualization,
+        );
+        const named = known?.name && known.name !== known.className;
         return {
-          position: entry.position,
-          problem: entry.problem,
-          value:
-            switchingChain && chainPending.position === entry.position
-              ? chainPending.visualization
-              : chainDrawn[index],
-          options: entry.pictures.map((picture) => {
-            const label = pictureTypeLabel(picture.pictureType) ?? "Picture";
-            const known = catalog.find(
-              (visualization) => visualization.className === picture.visualization,
-            );
-            const named = known?.name && known.name !== known.className;
-            return {
-              value: picture.visualization,
-              label,
-              tags: [],
-              card: visualizationCard(
-                {
-                  ...(known ?? {}),
-                  name: named ? known.name : `${entry.problem} as ${label}`,
-                  pictureType: picture.pictureType,
-                },
-                role,
-              ),
-            };
-          }),
+          value: picture.visualization,
+          label,
+          tags: [],
+          card: visualizationCard(
+            {
+              ...(known ?? {}),
+              name: named ? known.name : `${entry.problem} as ${label}`,
+              pictureType: picture.pictureType,
+            },
+            which,
+          ),
         };
       });
+      return {
+        options,
+        value,
+        // Fixed while the chain runs or is drawn again.
+        disabled: switchingChain || chainRun.isRunning,
+      };
+    };
+    const sourcePosition = chainAt.summary ? 1 : hop + 1;
+    const targetPosition = chainAt.summary ? hops.length + 1 : hop + 2;
+    const sourceType = chainTypeControl(sourcePosition, "source");
+    const targetType = chainTypeControl(targetPosition, "target");
     let switchAnnouncement = "";
     if (chainSwitch.status === COMPUTE_RUNNING && chainPending) {
       switchAnnouncement = `Drawing the chain again with ${chainPending.problem} as ${chainPending.label}.`;
@@ -2762,21 +2769,19 @@ export default function Workbench({ problem }) {
               `${chainSwitch.failure.detail} ${chainPending.problem} keeps the picture it had.`.trim(),
           }
         : chainSwitch.failure;
-    chainPicturesRow = (
-      <ChainPictures
-        idPrefix={`${ID}-chain-pictures`}
-        items={items}
-        onPick={switchingChain || chainRun.isRunning ? null : pickChainPicture}
-        status={{
-          quiet: true,
-          status: chainPending?.runId === chainRunResult?.runId ? chainSwitch.status : COMPUTE_IDLE,
-          announcement: switchAnnouncement,
-          failure: switchFailure,
-          onCancel: chainSwitch.cancel,
-          busyLabel: chainPending
-            ? `Drawing the chain again with ${chainPending.problem} as ${chainPending.label}`
-            : "Drawing the chain again",
-        }}
+    // Under the pictures, where a one-step reduction's notes go: the request drawing the chain
+    // again (spoken; its Cancel while it runs, the panes saying what is being drawn) and why
+    // it failed when it did.
+    const chainStatus = (
+      <ComputeStatus
+        idPrefix={`${ID}-chain-pictures-run`}
+        quiet
+        spinner={false}
+        status={chainPending?.runId === chainRunResult?.runId ? chainSwitch.status : COMPUTE_IDLE}
+        announcement={switchAnnouncement}
+        failure={switchFailure}
+        onCancel={chainSwitch.cancel}
+        busyLabel=""
       />
     );
     const last = hop === hops.length - 1;
@@ -2787,12 +2792,23 @@ export default function Workbench({ problem }) {
       onColorMode: setGadgetMarkMode,
       // Each hop is its own view: moving to another starts with nothing pointed at.
       runId: gadgetsKey,
-      loading: null,
-      types: null,
+      loading: switchingChain
+        ? `Drawing the chain again with ${chainPending.problem} as ${chainPending.label}.`
+        : null,
+      types: {
+        source: sourceType && {
+          ...sourceType,
+          onChange: (next) => pickChainPicture(sourcePosition, next),
+        },
+        target: targetType && {
+          ...targetType,
+          onChange: (next) => pickChainPicture(targetPosition, next),
+        },
+      },
+      status: chainStatus,
       chain: {
         title: chainTitle(selectedChain),
         hops,
-        pictures: chainPicturesRow,
         current: hop,
         onHop: (index) => {
           const start = hopStart(chainSteps, index);

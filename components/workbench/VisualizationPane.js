@@ -80,11 +80,20 @@ const FULL_STEP_TEXT_HEIGHT = "4.5rem";
  * Board G has it; `inline` puts the label beside the box, on the header row, with the (i) after
  * the box, so a long label or picture name never crowds them. `menu` (Reduce's
  * panes) keeps it a dropdown that opens even with one choice; picking the picture already
- * drawn changes nothing.
+ * drawn changes nothing. `disabled` fixes it on its value (a chain being drawn).
  */
-function VisualizationTypeControl({ id, options, value, onChange, inline = false, menu = false }) {
+function VisualizationTypeControl({
+  id,
+  options,
+  value,
+  onChange,
+  disabled = false,
+  inline = false,
+  menu = false,
+}) {
   let pick;
-  if (menu)
+  if (disabled) pick = undefined;
+  else if (menu)
     pick = (next) => {
       if (next !== value) onChange?.(next);
     };
@@ -330,15 +339,17 @@ function PictureBox({ idPrefix, content }) {
  * @param {Array<{key: string, text: string, swatch: Object}>|null} [props.legendAnnotations]
  *   What a format=frames picture draws besides states (#201), for the Legend.
  * @param {{view: Object, activeGadget: Object|null, runId: number, loading?: string|null,
- *   types?: {source: Object|null, target: Object|null}}|null} [props.reduction] A Reduction
- *   View to draw in place of `source` and `target` (#215); `steps` walk its frames. `types` are
- *   its sides' Picture dropdowns (ReduxISU/Redux#912), shaped as `source.type`; `loading` is
- *   said in place of the pictures while another picture is drawn. `chain`, for a chain of
+ *   types?: {source: Object|null, target: Object|null}, status?: import("react").ReactNode}|null}
+ *   [props.reduction] A Reduction View to draw in place of `source` and `target` (#215);
+ *   `steps` walk its frames. `types` are its panes' Picture dropdowns (ReduxISU/Redux#912),
+ *   shaped as `source.type` (with `disabled` to fix one); `loading` is said in place of the
+ *   pictures while another picture is drawn, and `status` (the request drawing it, with its
+ *   Cancel and failure) sits under them. `chain`, for a chain of
  *   reductions (lib/reductionChain.js): `view` is the hop drawn now and `steps` walk the whole
  *   chain, so `chain.frameIndex` is the hop's own frame, `chain.onLocalStep` moves to one of the
  *   hop's frames, `chain.phases` are the hop's phases (null on Start and end: no phase bar),
- *   and the header (title, hops, current, onHop) sits above the pictures, with `chain.pictures`
- *   (the row picking each problem's picture, components/workbench/ChainPictures.js) under it.
+ *   and the header (title, hops, current, onHop) sits above the pictures. Its panes' `types`
+ *   pick the pictures of the problems the hop draws.
  * @param {{on: "all"|"source"|"target"|null, onToggle: (which: "all"|"source"|"target") =>
  *   void}} props.fullScreen #303: what is on full screen (the workspace then shows only the
  *   picture(s) and the steps): everything, or one of Reduce's two panes alone (stage 2), and the
@@ -513,8 +524,7 @@ export default function VisualizationPane({
                 onHop={reduction.chain.onHop}
               />
             )}
-            {reduction?.chain?.pictures ?? null}
-            {reduction ? (
+            {reduction && (
               <ReductionView
                 // A new run, or another picture on either side, starts with nothing pointed at.
                 key={`${reduction.runId}:${reduction.view.source.visualization}:${reduction.view.target.visualization}`}
@@ -535,7 +545,9 @@ export default function VisualizationPane({
                   target: typeControl("target", reduction.types?.target, true),
                 }}
               />
-            ) : (
+            )}
+            {reduction?.status ?? null}
+            {!reduction && (
               <PaneGrid
                 id={`${idPrefix}-panes`}
                 only={only}
