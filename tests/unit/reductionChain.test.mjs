@@ -2,11 +2,13 @@
 //
 // Chains of reductions in Reduce mode (lib/reductionChain.js): the routes found in the reduction
 // graph, their To dropdown labels, the play order one step control walks over every hop, and the
-// plain words for a chain that did not run.
+// plain words for a chain that did not run, and a picture per problem: the pictures offered, the
+// visualizations parameter, and where a viewer lands when a picture changes.
 
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  chainDrawnPictures,
   chainEnding,
   chainFailure,
   chainRouteLabel,
@@ -14,10 +16,13 @@ import {
   chainSummaryView,
   chainTimeline,
   chainTitle,
+  chainVisualizationsParam,
   composeChainGadgets,
   findChains,
   hopStart,
   joinWords,
+  keepChainPlace,
+  normalizeChainPictures,
   revealScroll,
   routeFades,
   routeStops,
@@ -530,5 +535,184 @@ describe("the route header", () => {
     assert.equal(revealScroll({ ...box, itemLeft: 10, itemWidth: 100 }), 0);
     // Wider than the room: from its start.
     assert.equal(revealScroll({ ...box, itemLeft: 400, itemWidth: 400 }), 368);
+  });
+});
+
+// A hop whose frames have these phases: b build, h handoff, s solve, m map.
+const PHASE_LETTERS = { b: "build", h: "handoff", s: "solve", m: "map" };
+function hopOf(letters) {
+  return { frames: [...letters].map((letter) => ({ phase: PHASE_LETTERS[letter] })) };
+}
+
+describe("a picture per problem", () => {
+  // Clique -> Vertex Cover -> Set Cover, as ProblemProvider/reductionChainPictures answers it.
+  const picture = (visualization, pictureType, allowed) => ({
+    visualization,
+    pictureType,
+    drawsAnswers: pictureType !== "SearchTree",
+    allowed,
+  });
+  const CLIQUE_TO_SET_COVER_PICTURES = {
+    path: ["sipserReductionVertexCover", "KarpVertexCoverToSetCover"],
+    problems: [
+      {
+        position: 1,
+        problem: "Clique",
+        default: "CliqueDefaultVisualization",
+        pictures: [
+          picture("CliqueDefaultVisualization", "Graph", true),
+          picture("CliqueSearchTreeVisualization", "SearchTree", false),
+        ],
+      },
+      {
+        position: 2,
+        problem: "Vertex Cover",
+        default: "VertexCoverDefaultVisualization",
+        pictures: [
+          picture("VertexCoverDefaultVisualization", "Graph", true),
+          picture("VertexCoverSearchTreeVisualization", "SearchTree", false),
+        ],
+      },
+      {
+        position: 3,
+        problem: "Set Cover",
+        default: "SetCoverDefaultVisualization",
+        pictures: [
+          picture("SetCoverDefaultVisualization", "BipartiteGraph", true),
+          picture("SetCoverNestedSetVisualization", "NestedSet", true),
+          picture("SetCoverSearchTreeVisualization", "SearchTree", true),
+        ],
+      },
+    ],
+  };
+
+  test("normalizeChainPictures keeps only the pictures the chain takes, the default first", () => {
+    const problems = normalizeChainPictures(CLIQUE_TO_SET_COVER_PICTURES);
+    assert.deepEqual(
+      problems.map((entry) => [entry.problem, entry.pictures.map((one) => one.pictureType)]),
+      [
+        ["Clique", ["Graph"]],
+        ["Vertex Cover", ["Graph"]],
+        ["Set Cover", ["BipartiteGraph", "NestedSet", "SearchTree"]],
+      ],
+    );
+    assert.equal(problems[2].defaultVisualization, "SetCoverDefaultVisualization");
+    assert.equal(problems[2].pictures[2].drawsAnswers, false);
+    assert.equal(normalizeChainPictures({ error: "unknown_reduction" }), null);
+    assert.equal(normalizeChainPictures(null), null);
+  });
+
+  test("chainVisualizationsParam leaves defaults empty, and is null when all are", () => {
+    const defaults = [
+      "CliqueDefaultVisualization",
+      "VertexCoverDefaultVisualization",
+      "SetCoverDefaultVisualization",
+    ];
+    const nested = [defaults[0], defaults[1], "SetCoverNestedSetVisualization"];
+    assert.deepEqual(chainVisualizationsParam(nested, defaults), [
+      "",
+      "",
+      "SetCoverNestedSetVisualization",
+    ]);
+    assert.equal(
+      chainVisualizationsParam(nested, defaults).join(","),
+      ",,SetCoverNestedSetVisualization",
+    );
+    assert.equal(chainVisualizationsParam(defaults, defaults), null);
+    assert.equal(chainVisualizationsParam([null, "", undefined], defaults), null);
+  });
+
+  test("chainDrawnPictures reads each problem's picture off the hops", () => {
+    const hops = [
+      { source: { visualization: "A" }, target: { visualization: "B" } },
+      { source: { visualization: "B" }, target: { visualization: null } },
+    ];
+    assert.deepEqual(chainDrawnPictures({ hops }), ["A", "B", null]);
+    assert.deepEqual(chainDrawnPictures({ hops: [] }), []);
+  });
+
+  const at = (hops, hop, frame) =>
+    chainTimeline(hops).find((entry) => entry.hop === hop && entry.frame === frame);
+
+  test("keepChainPlace keeps every step with the same pictures", () => {
+    const hops = [hopOf("bbbhmm"), hopOf("bbssssmm")];
+    chainTimeline(hops).forEach((entry, index) => {
+      assert.equal(keepChainPlace(hops, entry, hops), index);
+    });
+  });
+
+  test("keepChainPlace clamps to a phase that got shorter", () => {
+    const before = [hopOf("bbbbhmm"), hopOf("bbssssmmm")];
+    const after = [hopOf("bbhmm"), hopOf("bbssmm")];
+    const timeline = chainTimeline(after);
+    // The 4th Build frame of hop 1 lands on its 2nd and last.
+    assert.deepEqual(timeline[keepChainPlace(before, at(before, 0, 3), after)], {
+      hop: 0,
+      frame: 1,
+    });
+    // The 3rd Map back frame of hop 2 lands on its 2nd and last.
+    assert.deepEqual(timeline[keepChainPlace(before, at(before, 1, 8), after)], {
+      hop: 1,
+      frame: 5,
+    });
+    // The 2nd Solve frame stays the 2nd.
+    assert.deepEqual(timeline[keepChainPlace(before, at(before, 1, 3), after)], {
+      hop: 1,
+      frame: 3,
+    });
+  });
+
+  test("keepChainPlace sends a place in the last Solve to its start when a search tree came or went", () => {
+    const before = [hopOf("bbhm"), hopOf("bbsssm")];
+    const after = [hopOf("bbhm"), hopOf("bbssssssm")];
+    const timeline = chainTimeline(after);
+    const solving = at(before, 1, 4);
+    assert.deepEqual(timeline[keepChainPlace(before, solving, after, { restartSolve: true })], {
+      hop: 1,
+      frame: 2,
+    });
+    // Without the change it keeps its place; outside the Solve the change does nothing.
+    assert.deepEqual(timeline[keepChainPlace(before, solving, after)], { hop: 1, frame: 4 });
+    const building = at(before, 1, 1);
+    assert.deepEqual(timeline[keepChainPlace(before, building, after, { restartSolve: true })], {
+      hop: 1,
+      frame: 1,
+    });
+  });
+
+  test("keepChainPlace keeps Start and end the last stop", () => {
+    const before = [hopOf("bbhm"), hopOf("bbsm")];
+    const after = [hopOf("bbbhm"), hopOf("bbsssmm")];
+    const summary = chainTimeline(before).at(-1);
+    const index = keepChainPlace(before, summary, after, { restartSolve: true });
+    assert.equal(index, chainTimeline(after).length - 1);
+    assert.equal(chainTimeline(after)[index].summary, true);
+  });
+
+  test("chainFailure names the problem a picture failed for", () => {
+    const chain = {
+      target: "Set Cover",
+      hops: [
+        { from: "Clique", to: "Vertex Cover", name: "Sipser" },
+        { from: "Vertex Cover", to: "Set Cover", name: "Karp" },
+      ],
+    };
+    const words = (payload) => chainFailure(400, payload, chain);
+    assert.match(
+      words({ error: "search_picture_not_last", position: 2 }).headline,
+      /^Vertex Cover can't be drawn as a search tree here/,
+    );
+    assert.match(
+      words({ error: "unknown_visualization", position: 3, problem: "Set Cover" }).headline,
+      /that picture for Set Cover/,
+    );
+    assert.match(
+      words({ error: "visualization_mismatch", position: 1 }).headline,
+      /^Clique can't be drawn with that picture/,
+    );
+    assert.match(
+      words({ error: "visualization_count", expected: 3, received: 2 }).detail,
+      /each of the chain's 3 problems and was sent 2/,
+    );
   });
 });

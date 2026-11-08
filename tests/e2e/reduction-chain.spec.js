@@ -11,12 +11,24 @@
 // backend serves chains yet, so the chain's answers are captures from a local build
 // (./chain-payloads.js). A backend whose reduction graph lacks Exact Cover -> Subset Sum ->
 // Partition (CI's, today) skips these tests.
+//
+// A chain draws each problem with a picture chosen under its route (Set Cover, at the end of
+// Clique -> Vertex Cover -> Set Cover, offers three): the dropdowns come from
+// ProblemProvider/reductionChainPictures, a choice asks for the chain again with
+// `visualizations`, and the viewer stays on the same step (./chain-picture-payloads.js).
 
 import {
   EXACT_COVER_TO_PARTITION_CHAIN,
   EXACT_COVER_TO_WEIGHTED_CUT_CHAIN,
   WEIGHTED_CUT_HOP_FAILED,
 } from "./chain-payloads";
+import {
+  CLIQUE_TO_SET_COVER_CHAIN,
+  CLIQUE_TO_SET_COVER_INSTANCE,
+  CLIQUE_TO_SET_COVER_NESTED_SET_CHAIN,
+  CLIQUE_TO_SET_COVER_PICTURES,
+  CLIQUE_TO_SET_COVER_SEARCH_TREE_CHAIN,
+} from "./chain-picture-payloads";
 import { expect, test } from "./fixtures";
 
 const CHAIN_REQUEST = /\/api\/redux\/ProblemProvider\/reductionChainView\?/;
@@ -332,5 +344,205 @@ test.describe("Reduce mode: chains of reductions", () => {
     await expect(page.locator("#workbench-stage-solve")).toHaveAttribute("aria-current", "step");
     await expect(view(page)).toHaveAttribute("data-phase", "build");
     await expect(header(page)).toHaveCount(0);
+  });
+});
+
+// --- A picture per problem ---------------------------------------------------------------------
+// Clique -> Vertex Cover -> Set Cover: only Set Cover has more than one picture the chain can draw
+// it with (Bipartite Graph, Nested Set, Search Tree), so it alone gets a dropdown.
+
+const PICTURES_REQUEST = /\/api\/redux\/ProblemProvider\/reductionChainPictures\?/;
+const SET_COVER_ROUTE = "Set Cover — via Vertex Cover (2 steps)";
+const stepsPosition = (page) => page.locator("#workbench-steps-position");
+
+/** Answers the chain by its visualizations parameter, and records each request's. */
+async function answerSetCoverChain(page, asked, answers = {}) {
+  await page.route(PICTURES_REQUEST, (route) =>
+    route.fulfill({ json: CLIQUE_TO_SET_COVER_PICTURES }),
+  );
+  await page.route(CHAIN_REQUEST, (route) => {
+    const visualizations = new URL(route.request().url()).searchParams.get("visualizations");
+    asked.push(visualizations);
+    const answer = answers[visualizations ?? ""];
+    if (answer) return answer(route);
+    if (visualizations === ",,SetCoverNestedSetVisualization")
+      return route.fulfill({ json: CLIQUE_TO_SET_COVER_NESTED_SET_CHAIN });
+    if (visualizations === ",,SetCoverSearchTreeVisualization")
+      return route.fulfill({ json: CLIQUE_TO_SET_COVER_SEARCH_TREE_CHAIN });
+    return route.fulfill({ json: CLIQUE_TO_SET_COVER_CHAIN });
+  });
+}
+
+/** Opens Clique in Reduce mode, picks Set Cover through the chain and runs it. */
+async function runSetCoverChain(page) {
+  const response = await page.request.get("/api/redux/Navigation/Reductions");
+  const graph = response.ok() ? await response.json() : {};
+  test.skip(
+    !graph.CLIQUE?.VERTEXCOVER || !graph.VERTEXCOVER?.SETCOVER,
+    "This backend's reduction graph has no Clique -> Vertex Cover -> Set Cover.",
+  );
+  await page.goto(`/Clique?instance=${encodeURIComponent(CLIQUE_TO_SET_COVER_INSTANCE)}`);
+  await expect(page.getByRole("heading", { level: 1, name: "Clique" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await page.locator("#workbench-mode-reduce").click();
+  await page.locator("#workbench-target-button").click();
+  await page
+    .locator("#workbench-target-listbox")
+    .getByRole("option")
+    .filter({ hasText: SET_COVER_ROUTE })
+    .first()
+    .click();
+  await page.locator("#workbench-run").click();
+  await expect(header(page)).toHaveAttribute("data-summary", "true");
+}
+
+/** Picks Set Cover's picture by its friendly name. */
+async function pickSetCover(page, name) {
+  await page.locator("#workbench-chain-pictures-3-button").click();
+  await page
+    .locator("#workbench-chain-pictures-3-listbox")
+    .getByRole("option")
+    .filter({ hasText: name })
+    .first()
+    .click();
+}
+
+test.describe("Reduce mode: a picture per problem of a chain", () => {
+  test("offers a dropdown only where there is a choice, named by picture type", async ({
+    page,
+  }) => {
+    const asked = [];
+    await answerSetCoverChain(page, asked);
+    await runSetCoverChain(page);
+    // The first run draws the defaults: no visualizations parameter.
+    expect(asked).toEqual([null]);
+    await expect(page.locator("#workbench-chain-pictures-row [data-problem]")).toHaveCount(1);
+    await expect(page.locator("#workbench-chain-pictures-3-cell")).toHaveAttribute(
+      "data-problem",
+      "Set Cover",
+    );
+    await expect(page.locator("#workbench-chain-pictures-1-cell")).toHaveCount(0);
+    await expect(page.locator("#workbench-chain-pictures-2-cell")).toHaveCount(0);
+    await expect(page.locator("#workbench-chain-pictures-3-label")).toHaveText("Set Cover");
+    await expect(page.locator("#workbench-chain-pictures-3-value")).toHaveText("Bipartite Graph");
+    await page.locator("#workbench-chain-pictures-3-button").click();
+    const names = (
+      await page
+        .locator("#workbench-chain-pictures-3-listbox")
+        .getByRole("option")
+        .allTextContents()
+    ).map((text) => text.trim());
+    expect(names).toEqual(["Bipartite Graph", "Nested Set", "Search Tree"]);
+    await page.keyboard.press("Escape");
+  });
+
+  test("another picture keeps the step and redraws, with the same chain asked for", async ({
+    page,
+  }) => {
+    const asked = [];
+    await answerSetCoverChain(page, asked);
+    await runSetCoverChain(page);
+    // Hop 2's third Build frame: hop 1 has 5 Build frames, so step 8.
+    await toStep(page, 7);
+    await expect(stepsPosition(page)).toContainText("8 of 19");
+    await expect(header(page)).toHaveAttribute("data-current-hop", "2");
+    await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
+      "data-picture-type",
+      "BipartiteGraph",
+    );
+
+    await pickSetCover(page, "Nested Set");
+    await expect(page.locator("#workbench-chain-pictures-3-value")).toHaveText("Nested Set");
+    await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
+      "data-picture-type",
+      "NestedSet",
+    );
+    expect(asked).toEqual([null, ",,SetCoverNestedSetVisualization"]);
+    await expect(stepsPosition(page)).toContainText("8 of 19");
+    await expect(header(page)).toHaveAttribute("data-current-hop", "2");
+    await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "build");
+
+    // Start and end stays Start and end, and draws Set Cover with the picture chosen.
+    await page.locator("#workbench-chain-summary").click();
+    await pickSetCover(page, "Bipartite Graph");
+    await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
+      "data-picture-type",
+      "BipartiteGraph",
+    );
+    await expect(header(page)).toHaveAttribute("data-summary", "true");
+    // Back to every default: the parameter is left out again.
+    expect(asked).toEqual([null, ",,SetCoverNestedSetVisualization", null]);
+  });
+
+  test("a search tree for the last problem, chosen during its Solve, starts the Solve again", async ({
+    page,
+  }) => {
+    const asked = [];
+    await answerSetCoverChain(page, asked);
+    await runSetCoverChain(page);
+    // Hop 2's second Solve frame: 5 + 4 Build frames, then the Solve's two: step 11.
+    await toStep(page, 10);
+    await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "solve");
+    await expect(stepsPosition(page)).toContainText("11 of 19");
+
+    await pickSetCover(page, "Search Tree");
+    await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
+      "data-picture-type",
+      "SearchTree",
+    );
+    await expect(stepsPosition(page)).toContainText("10 of 19");
+    await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "solve");
+    expect(asked.at(-1)).toBe(",,SetCoverSearchTreeVisualization");
+
+    // On Start and end, the search tree says why Clique's pieces don't link into it.
+    await page.locator("#workbench-chain-summary").click();
+    await expect(page.locator("#workbench-reduction-link")).toContainText(
+      "A search tree draws the solver's choices",
+    );
+  });
+
+  test("a picture Redux can't draw says so, naming the problem, and the dropdown goes back", async ({
+    page,
+  }) => {
+    const asked = [];
+    await answerSetCoverChain(page, asked, {
+      ",,SetCoverNestedSetVisualization": (route) =>
+        route.fulfill({
+          status: 400,
+          json: {
+            error: "visualization_mismatch",
+            received: "SetCoverNestedSetVisualization",
+            side: "target",
+            position: 3,
+            problem: "Set Cover",
+            detail: "That picture does not draw Set Cover here.",
+          },
+        }),
+    });
+    await runSetCoverChain(page);
+    await toStep(page, 7);
+    await pickSetCover(page, "Nested Set");
+    const failure = page.locator("#workbench-chain-pictures-run-failure");
+    await expect(failure).toContainText("Set Cover can't be drawn with that picture in this chain");
+    await expect(failure).toContainText("Set Cover keeps the picture it had.");
+    await expect(page.locator("#workbench-chain-pictures-3-value")).toHaveText("Bipartite Graph");
+    await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
+      "data-picture-type",
+      "BipartiteGraph",
+    );
+    await expect(stepsPosition(page)).toContainText("8 of 19");
+  });
+
+  test("a backend without the pictures list offers no dropdowns", async ({ page }) => {
+    const asked = [];
+    await answerSetCoverChain(page, asked);
+    // The fixture's 404, as an older backend answers, wins over the list above.
+    await page.route(PICTURES_REQUEST, (route) =>
+      route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
+    );
+    await runSetCoverChain(page);
+    await expect(page.locator("#workbench-chain-pictures")).toHaveCount(0);
+    expect(asked).toEqual([null]);
   });
 });

@@ -331,11 +331,16 @@ function buildReductions(
 
   // The problems reached only through a chain of 2 to 6 reductions, each with one route (the
   // fewest steps, the first reduction of each), for Reduce's To dropdown after the direct ones
-  // (lib/reductionChain.js). `targetProblem` is for its info card, as a direct target's is.
+  // (lib/reductionChain.js). `targetProblem` is for its info card, as a direct target's is;
+  // `visualizations` are every problem's of the chain, the first problem's first, so a picture
+  // picked for one of them is named and described as the problem's own dropdown does.
   const nameOf = (code) => codeToName.get(code) ?? problemDisplayName(info, code);
   const chains = findChains(reductionGraph, problemCode, nameOf).map((chain) => ({
     ...chain,
     targetProblem: buildTargetProblem(chain.targetCode, info, codeToName),
+    visualizations: [chain.hops[0]?.fromCode, ...chain.hops.map((hop) => hop.toCode)].map((code) =>
+      buildVisualizations(visualizationsByProblem[code], info, visualizationTypesByInstance),
+    ),
   }));
 
   return { to, from, chains };

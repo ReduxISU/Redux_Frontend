@@ -95,6 +95,10 @@ const STEP_GADGET_LIMIT = 4;
 const LINKS_UNAVAILABLE =
   "Gadget links can't be shown on this picture: it doesn't draw the pieces the gadgets name.";
 
+/** Why a Search Tree side shows no links: it draws a solver's choices, not the instance's pieces. */
+const TREE_LINKS_UNAVAILABLE =
+  "A search tree draws the solver's choices, not the instance's pieces, so pieces don't link into it.";
+
 const KIND_LABELS = new Map(
   [...GADGET_KINDS, OTHER_GADGET_KIND].map((entry) => [entry.kind, entry.label]),
 );
@@ -849,6 +853,8 @@ export default function ReductionView({
         : "This picture can't show the target piece by piece, so it shows it whole while it is built.";
   }
   const noneHidden = useMemo(() => new Set(), []);
+  const unlinkedTree = (which) =>
+    gadgets.length > 0 && !linkable[which] && view[which].type === "SearchTree";
   const linkNote = (which) => (gadgets.length > 0 && !linkable[which] ? LINKS_UNAVAILABLE : null);
   const joinNotes = (...notes) => notes.filter(Boolean).join(" ") || null;
 
@@ -891,7 +897,12 @@ export default function ReductionView({
     const pointed = name.endsWith(")")
       ? `${name.slice(0, -1)}, ${problem})`
       : `${name} (${problem})`;
-    if (link.gadgets.length === 0) {
+    const other = which === "source" ? "target" : "source";
+    if (link.gadgets.length > 0 && unlinkedTree(other)) {
+      // Start and end with a search tree last (or a reduction drawn onto one): the links go on
+      // to pieces the tree does not draw.
+      readout = `${pointed}: ${TREE_LINKS_UNAVAILABLE.charAt(0).toLowerCase()}${TREE_LINKS_UNAVAILABLE.slice(1)}`;
+    } else if (link.gadgets.length === 0) {
       readout = `${pointed}: no gadget names this piece.`;
     } else {
       const kinds = [...new Set(link.gadgets.map((gadgetIndex) => gadgets[gadgetIndex].kind))]
@@ -923,9 +934,11 @@ export default function ReductionView({
     readout = `Gadget: ${source.problem} ${from} ${ARROW} ${target.problem} ${to}.`;
   } else {
     readout =
-      gadgets.length > 0
-        ? "Point at a piece on either side, or tap it, to see what it became or came from."
-        : "This reduction lists no gadgets, so its pieces are not linked across.";
+      gadgets.length > 0 && unlinkedTree("target")
+        ? TREE_LINKS_UNAVAILABLE
+        : gadgets.length > 0
+          ? "Point at a piece on either side, or tap it, to see what it became or came from."
+          : "This reduction lists no gadgets, so its pieces are not linked across.";
   }
 
   return (

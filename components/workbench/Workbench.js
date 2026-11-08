@@ -104,12 +104,14 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import { useRouter } from "next/router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { pictureTypeLabel } from "../../data/taxonomy";
 import { VISUALIZATION_TYPE_MAP } from "../../data/visualizationTypes";
 import { canCheck, useCertificateCheck, verdictMatches } from "../../hooks/useCertificateCheck";
 import {
   COMPUTE_CANCELLED,
   COMPUTE_DONE,
   COMPUTE_FAILED,
+  COMPUTE_IDLE,
   COMPUTE_RUNNING,
   useComputeRequest,
 } from "../../hooks/useComputeRequest";
@@ -119,13 +121,15 @@ import useGadgetColorMode from "../../hooks/useGadgetColorMode";
 import { gadgetColorMap, highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
+  chainDrawnPictures,
   chainEnding,
-  chainProblems,
   chainRouteLabel,
   chainSummaryView,
   chainTimeline,
   chainTitle,
+  chainVisualizationsParam,
   hopStart,
+  keepChainPlace,
   timelineIndexOf,
 } from "../../lib/reductionChain";
 import {
@@ -136,6 +140,7 @@ import {
   paneFrame,
   pieceNamer,
   reductionViewWorth,
+  requestChainPictures,
   requestReductionChain,
   requestReductionViewOrNull,
   samePlaceIn,
@@ -158,6 +163,7 @@ import { pictureAnnotations, pictureLegendFrames, pictureRuns } from "../picture
 import { ResultAnswerSlot, SecondarySlots } from "../pictures/secondarySlots";
 import { PictureFullScreen } from "../pictures/zoomControlsSlot";
 import { paletteVars } from "../theme";
+import ChainPictures from "./ChainPictures";
 import CommandBar from "./CommandBar";
 import DoneButton from "./DoneButton";
 import {
@@ -439,6 +445,44 @@ export default function Workbench({ problem }) {
   // A chain of reductions (ProblemProvider/reductionChainView): every step built, the last
   // problem solved and the answer carried back step by step, in one request.
   const chainRun = useComputeRequest({ subject: "instance" });
+  // The same chain drawn again with another picture for one of its problems. Its own request,
+  // so the chain on screen stays while it runs, and a slower answer never lands over a later one.
+  const chainSwitch = useComputeRequest({ subject: "instance" });
+  const chainVersionRef = useRef(0);
+
+  // The pictures the chain chosen can draw each problem with (lib/reductionChain.js
+  // normalizeChainPictures), asked for once a chained target is chosen. Null until they come,
+  // and from a backend without ProblemProvider/reductionChainPictures: no choice is offered then.
+  const chainKey = selectedChain ? selectedChain.hops.map((hop) => hop.className).join(",") : "";
+  const [chainPictures, setChainPictures] = useState({ key: "", problems: null });
+  // selectedChain is one of problem.reductions.chains, the same object while the route is.
+  useEffect(() => {
+    if (!selectedChain) return;
+    const key = selectedChain.hops.map((hop) => hop.className).join(",");
+    const chain = selectedChain;
+    const controller = new AbortController();
+    requestChainPictures({ chain, signal: controller.signal })
+      .then((problems) => setChainPictures({ key, problems }))
+      .catch((error) => {
+        if (error?.name !== "AbortError") setChainPictures({ key, problems: null });
+      });
+    return () => controller.abort();
+  }, [selectedChain]);
+  const chainProblemCount = selectedChain ? selectedChain.hops.length + 1 : 0;
+  const chainPictureList =
+    chainPictures.key === chainKey && chainPictures.problems?.length === chainProblemCount
+      ? chainPictures.problems
+      : null;
+  const chainDefaults = chainPictureList
+    ? chainPictureList.map((entry) => entry.defaultVisualization)
+    : [];
+  // The pictures last drawn for each route, so running the chain again keeps them.
+  const [chainPicks, setChainPicks] = useState({});
+  // The picture being asked for ({runId, position, visualization}), kept after it fails so the
+  // failure can name it.
+  const [chainPending, setChainPending] = useState(null);
+  // The chain drawn again with other pictures, for the run it belongs to.
+  const [chainSwitched, setChainSwitched] = useState(null);
 
   const solveResult = solveRun.status === COMPUTE_DONE ? solveRun.result : null;
   const pictureResult = pictureRun.status === COMPUTE_DONE ? pictureRun.result : null;
@@ -515,7 +559,13 @@ export default function Workbench({ problem }) {
   // Reduction View draws the hop that step is on. A new chain opens on its last stop, Start and
   // end (this problem with the answer carried back, beside the last problem solved), as a run
   // opens on its finished result.
-  const chainResult = chainRun.status === COMPUTE_DONE ? chainRun.result : null;
+  const chainRunResult = chainRun.status === COMPUTE_DONE ? chainRun.result : null;
+  const chainResult =
+    chainRunResult && chainSwitched?.runId === chainRunResult.runId
+      ? { ...chainRunResult, chain: chainSwitched.chain }
+      : chainRunResult;
+  const chainVersion =
+    chainRunResult && chainSwitched?.runId === chainRunResult.runId ? chainSwitched.version : 0;
   const chainCurrent =
     Boolean(chainResult) &&
     Boolean(selectedChain) &&
@@ -533,11 +583,29 @@ export default function Workbench({ problem }) {
   }
   const chainIndex = Math.min(chainStep, Math.max(chainSteps.length - 1, 0));
   const chainAt = chainSteps[chainIndex] ?? null;
-  // The last stop, "Start and end": the first problem beside the last (lib/reductionChain.js).
+  // Another picture's chain opens where the viewer was: the same hop, phase and place in it
+  // (lib/reductionChain.js keepChainPlace). A last problem changed to or from a Search Tree ran
+  // another solver, so a place in its Solve goes back to the Solve's start.
+  const [chainSwitchLanded, setChainSwitchLanded] = useState(chainSwitch.result);
+  if (chainSwitchLanded !== chainSwitch.result) {
+    const landed = chainSwitch.result;
+    setChainSwitchLanded(landed);
+    if (landed && chainView && landed.runId === chainRunResult?.runId) {
+      const tree = (hops) => hops.at(-1)?.target?.type === "SearchTree";
+      setChainSwitched({ runId: landed.runId, chain: landed.chain, version: landed.version });
+      setChainPicks((picks) => ({ ...picks, [landed.key]: landed.picks }));
+      setChainStep(
+        keepChainPlace(chainView.hops, chainAt, landed.chain.hops, {
+          restartSolve: tree(chainView.hops) !== tree(landed.chain.hops),
+        }),
+      );
+    }
+  }
+  // The last stop, "Start and end": the first problem beside the last (lib/reductionChain.js),
+  // named as Redux names the chain's problems.
   const chainSummary = useMemo(
-    () =>
-      chainView && selectedChain ? chainSummaryView(chainView, chainProblems(selectedChain)) : null,
-    [chainView, selectedChain],
+    () => (chainView ? chainSummaryView(chainView, chainView.problems) : null),
+    [chainView],
   );
   let chainHopView = null;
   if (chainView && chainAt)
@@ -907,6 +975,53 @@ export default function Workbench({ problem }) {
     });
   }
 
+  // The picture each problem of the chain on screen is drawn with: what Redux drew, else (a
+  // backend that does not say) the problem's default.
+  const chainDrawn = chainView
+    ? chainDrawnPictures(chainView).map((drawn, index) => drawn ?? chainDefaults[index] ?? "")
+    : [];
+
+  /** Draws the chain on screen again with another picture for problem `position` (from 1). */
+  function pickChainPicture(position, visualization) {
+    if (!chainView || !chainPictureList || chainSwitch.isRunning || chainRun.isRunning) return;
+    if (chainDrawn[position - 1] === visualization) return;
+    const run = chainRunResult;
+    const chain = selectedChain;
+    const key = chainKey;
+    const picks = chainDrawn.slice();
+    picks[position - 1] = visualization;
+    const visualizations = chainVisualizationsParam(picks, chainDefaults);
+    // The same run of a randomized solver, so only the pictures change.
+    const seed = chainView.seed;
+    const entry = chainPictureList[position - 1];
+    const label =
+      pictureTypeLabel(
+        entry.pictures.find((picture) => picture.visualization === visualization)?.pictureType,
+      ) ?? "that picture";
+    chainVersionRef.current += 1;
+    const version = chainVersionRef.current;
+    setChainPending({ runId: run.runId, position, visualization, problem: entry.problem, label });
+    chainSwitch.start(async (signal) => {
+      const ran = await requestReductionChain({
+        chain,
+        instance: run.instance,
+        visualizations,
+        seed,
+        signal,
+      });
+      if (!ran?.drawable) {
+        const error = new Error("CHAIN PICTURE NOT DRAWABLE");
+        error.failure = {
+          code: "chain_picture_undrawable",
+          headline: `This site can't draw the chain with ${entry.problem} as ${label} yet`,
+          detail: "Redux drew it, but one of its pictures has no renderer here.",
+        };
+        throw error;
+      }
+      return { runId: run.runId, chain: ran, key, picks, version };
+    });
+  }
+
   const isRunning =
     solveRun.isRunning ||
     pictureRun.isRunning ||
@@ -998,6 +1113,7 @@ export default function Workbench({ problem }) {
 
     // A new Run draws with the pictures picked so far; a switch still on its way is dropped.
     viewSwitch.reset();
+    chainSwitch.reset();
     setSwitchNote(null);
     if (mode === "solve") {
       const visualization = selectedViz;
@@ -1075,8 +1191,24 @@ export default function Workbench({ problem }) {
       }
     } else if (selectedChain) {
       const chain = selectedChain;
+      // The pictures last drawn for this route, each only while the chain still offers it.
+      const visualizations = chainPictureList
+        ? chainVisualizationsParam(
+            (chainPicks[chainKey] ?? []).map((pick, index) =>
+              chainPictureList[index]?.pictures.some((picture) => picture.visualization === pick)
+                ? pick
+                : "",
+            ),
+            chainDefaults,
+          )
+        : null;
       chainRun.start(async (signal) => ({
-        chain: await requestReductionChain({ chain, instance: runInstance, signal }),
+        chain: await requestReductionChain({
+          chain,
+          instance: runInstance,
+          visualizations,
+          signal,
+        }),
         target: chain.target,
         instance: runInstance,
         runId,
@@ -1837,7 +1969,7 @@ export default function Workbench({ problem }) {
   // are drawn on each picture that has them (lib/gadgets.js picks the ids each picture uses).
   // A chain's are the gadgets of the hop on screen, kept apart from every other hop's.
   const gadgetsKey = chainHopView
-    ? `chain:${chainResult.runId}:${chainAt.hop}`
+    ? `chain:${chainResult.runId}:${chainVersion}:${chainAt.hop}`
     : reduceCurrent
       ? reduceResult.runId
       : null;
@@ -2531,6 +2663,7 @@ export default function Workbench({ problem }) {
 
   // #912: the Reduction View's dropdowns, and what it says while it draws another picture.
   let reductionPane = null;
+  let chainPicturesRow = null;
   if (reduceView) {
     const targetAll =
       reductions.find((reduction) => reduction.className === reduceResult.reductionClassName)
@@ -2573,6 +2706,79 @@ export default function Workbench({ problem }) {
   if (chainHopView) {
     const hops = selectedChain.hops;
     const hop = chainAt.hop;
+    // One dropdown per problem with more than one picture the chain can draw it with; the one
+    // being asked for shows while it is, and a failed one is back on the picture still drawn.
+    const switchingChain = chainSwitch.isRunning && chainPending?.runId === chainRunResult?.runId;
+    const items = (chainPictureList ?? [])
+      .filter((entry) => entry.pictures.length > 1)
+      .map((entry) => {
+        const index = entry.position - 1;
+        const catalog = selectedChain.visualizations?.[index] ?? [];
+        const role = index === 0 ? "source" : "target";
+        return {
+          position: entry.position,
+          problem: entry.problem,
+          value:
+            switchingChain && chainPending.position === entry.position
+              ? chainPending.visualization
+              : chainDrawn[index],
+          options: entry.pictures.map((picture) => {
+            const label = pictureTypeLabel(picture.pictureType) ?? "Picture";
+            const known = catalog.find(
+              (visualization) => visualization.className === picture.visualization,
+            );
+            const named = known?.name && known.name !== known.className;
+            return {
+              value: picture.visualization,
+              label,
+              tags: [],
+              card: visualizationCard(
+                {
+                  ...(known ?? {}),
+                  name: named ? known.name : `${entry.problem} as ${label}`,
+                  pictureType: picture.pictureType,
+                },
+                role,
+              ),
+            };
+          }),
+        };
+      });
+    let switchAnnouncement = "";
+    if (chainSwitch.status === COMPUTE_RUNNING && chainPending) {
+      switchAnnouncement = `Drawing the chain again with ${chainPending.problem} as ${chainPending.label}.`;
+    } else if (chainSwitch.status === COMPUTE_DONE && chainPending) {
+      switchAnnouncement = `The chain now draws ${chainPending.problem} as ${chainPending.label}.`;
+    } else if (chainSwitch.status === COMPUTE_FAILED && chainPending) {
+      switchAnnouncement = `${chainPending.problem} could not be drawn as ${chainPending.label}. ${chainSwitch.failure?.headline ?? ""}`;
+    } else if (chainSwitch.status === COMPUTE_CANCELLED) {
+      switchAnnouncement = "Stopped drawing the chain again.";
+    }
+    const switchFailure =
+      chainSwitch.failure && chainPending
+        ? {
+            ...chainSwitch.failure,
+            detail:
+              `${chainSwitch.failure.detail} ${chainPending.problem} keeps the picture it had.`.trim(),
+          }
+        : chainSwitch.failure;
+    chainPicturesRow = (
+      <ChainPictures
+        idPrefix={`${ID}-chain-pictures`}
+        items={items}
+        onPick={switchingChain || chainRun.isRunning ? null : pickChainPicture}
+        status={{
+          quiet: true,
+          status: chainPending?.runId === chainRunResult?.runId ? chainSwitch.status : COMPUTE_IDLE,
+          announcement: switchAnnouncement,
+          failure: switchFailure,
+          onCancel: chainSwitch.cancel,
+          busyLabel: chainPending
+            ? `Drawing the chain again with ${chainPending.problem} as ${chainPending.label}`
+            : "Drawing the chain again",
+        }}
+      />
+    );
     const last = hop === hops.length - 1;
     reductionPane = {
       view: chainHopView,
@@ -2586,6 +2792,7 @@ export default function Workbench({ problem }) {
       chain: {
         title: chainTitle(selectedChain),
         hops,
+        pictures: chainPicturesRow,
         current: hop,
         onHop: (index) => {
           const start = hopStart(chainSteps, index);

@@ -41,6 +41,8 @@ const VISUALIZE_RUN_REQUEST = /\/api\/redux\/ProblemProvider\/visualizeRun\?/;
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 // ProblemProvider/reductionChainView, a chain of reductions' Reduction View.
 const REDUCTION_CHAIN_REQUEST = /\/api\/redux\/ProblemProvider\/reductionChainView\?/;
+// ProblemProvider/reductionChainPictures, the pictures a chain can draw each problem with.
+const CHAIN_PICTURES_REQUEST = /\/api\/redux\/ProblemProvider\/reductionChainPictures\?/;
 // #299: Navigation/ProblemVariants (ReduxISU/Redux#946), the Problem Variant facet's options.
 const PROBLEM_VARIANTS_REQUEST = /\/api\/redux\/Navigation\/ProblemVariants$/;
 
@@ -73,8 +75,10 @@ function isReductionViewDeclined(response) {
  */
 function isReductionChainDeclined(response) {
   return (
-    REDUCTION_CHAIN_REQUEST.test(response.url()) &&
-    [400, 404, 405, 429, 500].includes(response.status())
+    (REDUCTION_CHAIN_REQUEST.test(response.url()) &&
+      [400, 404, 405, 429, 500].includes(response.status())) ||
+    // A backend without the pictures list (404) offers no picture choice; the chain still runs.
+    (CHAIN_PICTURES_REQUEST.test(response.url()) && [404, 405].includes(response.status()))
   );
 }
 
@@ -158,6 +162,9 @@ export const test = base.extend({
     // Likewise for chains: a spec about them answers reductionChainView itself
     // (tests/e2e/reduction-chain.spec.js).
     await page.route(REDUCTION_CHAIN_REQUEST, (route) =>
+      route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
+    );
+    await page.route(CHAIN_PICTURES_REQUEST, (route) =>
       route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
     );
 
