@@ -336,8 +336,8 @@ function PictureBox({ idPrefix, content }) {
  *   said in place of the pictures while another picture is drawn. `chain`, for a chain of
  *   reductions (lib/reductionChain.js): `view` is the hop drawn now and `steps` walk the whole
  *   chain, so `chain.frameIndex` is the hop's own frame, `chain.onLocalStep` moves to one of the
- *   hop's frames, `chain.phases` are the hop's phases, and the header (title, hops, current,
- *   onHop, end) sits above the pictures.
+ *   hop's frames, `chain.phases` are the hop's phases (null on Start and end: no phase bar),
+ *   and the header (title, hops, current, onHop) sits above the pictures.
  * @param {{on: "all"|"source"|"target"|null, onToggle: (which: "all"|"source"|"target") =>
  *   void}} props.fullScreen #303: what is on full screen (the workspace then shows only the
  *   picture(s) and the steps): everything, or one of Reduce's two panes alone (stage 2), and the
@@ -510,7 +510,6 @@ export default function VisualizationPane({
                 hops={reduction.chain.hops}
                 current={reduction.chain.current}
                 onHop={reduction.chain.onHop}
-                end={reduction.chain.end}
               />
             )}
             {reduction ? (
@@ -583,7 +582,7 @@ export default function VisualizationPane({
         )}
 
         {/* #303: the phases, right above the step controls, the step's phase marked. */}
-        {reduction && steps && (
+        {reduction && steps && reduction.chain?.phases !== null && (
           <ReductionPhaseBar
             idPrefix={`${idPrefix}-phases`}
             frames={reduction.view.frames}

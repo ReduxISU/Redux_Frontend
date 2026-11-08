@@ -385,82 +385,106 @@ export function ReductionPhaseBar({
 
 /**
  * A chain's header (lib/reductionChain.js), above its pictures: the chain named problem by
- * problem ("Exact Cover → Subset Sum → Partition"), then one button per step ("1 · Exact Cover →
- * Subset Sum"), the step whose reduction is drawn now marked (`aria-current="step"`, the soft
- * brand button, as the phase bar marks its phase). Each jumps to its step's first frame. At the
- * chain's last frame it says what came back to the first problem (`end`).
+ * problem ("Exact Cover → Subset Sum → Partition"), then its stops as one route, arrows between
+ * them: a button per step ("1 · Exact Cover → Subset Sum") and, last, "Start and end" (the first
+ * problem beside the last). The stop drawn now is marked (`aria-current="step"`, the soft brand
+ * button, as the phase bar marks its phase); each jumps to its first frame. On a narrow screen
+ * the route wraps, each arrow staying after the stop it leads from.
  * @param {Object} props
  * @param {string} props.idPrefix
  * @param {string} props.title
  * @param {Array<{from: string, to: string}>} props.hops
- * @param {number} props.current The hop drawn now.
- * @param {(hop: number) => void} props.onHop
- * @param {{tone: "ok"|"err"|"warn"|"info", text: string}|null} props.end
+ * @param {number} props.current The stop drawn now: a hop's index, or `hops.length` for Start and
+ *   end.
+ * @param {(stop: number) => void} props.onHop
  */
-export function ReductionChainHeader({ idPrefix, title, hops, current, onHop, end }) {
-  const endColor = {
-    ok: "success.light",
-    err: "error.light",
-    warn: "viz.orange",
-    info: "text.secondary",
-  };
+export function ReductionChainHeader({ idPrefix, title, hops, current, onHop }) {
+  const first = hops[0]?.from ?? "";
+  const last = hops[hops.length - 1]?.to ?? "";
+  const stops = [
+    ...hops.map((hop, index) => ({
+      id: `${idPrefix}-hop-${index + 1}`,
+      label: `${index + 1} · ${hop.from} → ${hop.to}`,
+      title: `Show step ${index + 1}: ${hop.from} to ${hop.to}`,
+    })),
+    {
+      id: `${idPrefix}-summary`,
+      label: `Start and end · ${first} ↔ ${last}`,
+      title: `Show ${first} and ${last} side by side, with the answer carried back`,
+    },
+  ];
   return (
     <Box
       id={idPrefix}
       data-current-hop={current + 1}
       data-hop-count={hops.length}
+      data-summary={current === hops.length ? "true" : "false"}
       sx={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}
     >
       <Box id={`${idPrefix}-title`} sx={{ fontSize: "0.9375rem", fontWeight: 700 }}>
         {title}
       </Box>
       <Box
-        role="group"
-        aria-label="Chain steps"
-        sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center", minWidth: 0 }}
+        component="ol"
+        aria-label="Chain route"
+        sx={{
+          listStyle: "none",
+          m: 0,
+          p: 0,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 1,
+          alignItems: "center",
+          minWidth: 0,
+        }}
       >
-        {hops.map((hop, index) => {
+        {stops.map((stop, index) => {
           const here = index === current;
           return (
             <Box
-              key={`${hop.from}-${hop.to}-${index}`}
-              component="button"
-              type="button"
-              id={`${idPrefix}-hop-${index + 1}`}
-              data-hop={index + 1}
-              aria-current={here ? "step" : undefined}
-              title={`Show step ${index + 1}: ${hop.from} to ${hop.to}`}
-              onClick={() => onHop(index)}
-              sx={{
-                minHeight: 44,
-                px: 1.5,
-                borderRadius: "999px",
-                border: "1px solid",
-                borderColor: here ? "brand.softLine" : "border.main",
-                boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.softLine}` : "none",
-                backgroundColor: here ? "brand.soft" : "surface.main",
-                color: here ? "brand.onSoft" : "text.secondary",
-                fontFamily: "inherit",
-                fontSize: "0.8125rem",
-                fontWeight: here ? 700 : 500,
-                cursor: "pointer",
-              }}
+              component="li"
+              key={stop.id}
+              sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}
             >
-              {`${index + 1} · ${hop.from} → ${hop.to}`}
+              <Box
+                component="button"
+                type="button"
+                id={stop.id}
+                data-stop={index + 1}
+                aria-current={here ? "step" : undefined}
+                title={stop.title}
+                onClick={() => onHop(index)}
+                sx={{
+                  minHeight: 44,
+                  px: 1.5,
+                  borderRadius: "999px",
+                  border: "1px solid",
+                  borderColor: here ? "brand.softLine" : "border.main",
+                  boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.softLine}` : "none",
+                  backgroundColor: here ? "brand.soft" : "surface.main",
+                  color: here ? "brand.onSoft" : "text.secondary",
+                  fontFamily: "inherit",
+                  fontSize: "0.8125rem",
+                  fontWeight: here ? 700 : 500,
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
+              >
+                {stop.label}
+              </Box>
+              {index < stops.length - 1 && (
+                <Box
+                  component="span"
+                  aria-hidden="true"
+                  sx={{ color: "text.secondary", fontSize: "1rem", flex: "none" }}
+                >
+                  →
+                </Box>
+              )}
             </Box>
           );
         })}
       </Box>
-      {end && (
-        <Box
-          id={`${idPrefix}-end`}
-          role="status"
-          data-tone={end.tone}
-          sx={{ fontSize: "0.875rem", fontWeight: 600, color: endColor[end.tone] }}
-        >
-          {end.text}
-        </Box>
-      )}
     </Box>
   );
 }

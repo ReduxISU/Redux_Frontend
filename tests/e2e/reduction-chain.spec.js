@@ -52,6 +52,40 @@ async function openTarget(page, label) {
   await expect(page.locator("#workbench-target-value")).toHaveText(label);
 }
 
+/** The Start and end stop is on screen: both pictures, its caption, its stop marked. */
+async function expectSummary(page) {
+  await expect(header(page)).toHaveAttribute("data-summary", "true");
+  await expect(page.locator("#workbench-chain-summary")).toHaveAttribute("aria-current", "step");
+  await expect(view(page)).toHaveAttribute("data-phase", "summary");
+  await expect(view(page).locator("#workbench-reduction-source-pane")).toContainText("Exact Cover");
+  await expect(view(page).locator("#workbench-reduction-target-pane")).toContainText("Partition");
+  await expect(caption(page)).toHaveText(
+    "Exact Cover's answer {{1},{2,3}} came from solving Partition and carrying the answer back through Subset Sum. It checks out: it is a valid Exact Cover answer.",
+  );
+}
+
+/** A piece on one side of the Reduction View, by its id, whatever attribute marks it. */
+function piece(page, side, id) {
+  const marks = ["data-node-id", "data-item-id", "data-element-id", "data-piece-id"];
+  return page
+    .locator(`#workbench-reduction-${side}`)
+    .locator(marks.map((mark) => `[${mark}="${id}"]`).join(","))
+    .first();
+}
+
+/** The ids of the pieces marked as linked on one side. */
+function hotIds(page, side) {
+  return page
+    .locator(`#workbench-reduction-${side} [data-rv-link="hot"]`)
+    .evaluateAll((elements) =>
+      elements.flatMap((element) =>
+        [...element.attributes]
+          .filter((attribute) => /^data-[a-z]+-id$/.test(attribute.name))
+          .map((attribute) => attribute.value),
+      ),
+    );
+}
+
 /** The step controls to `index` (0-based), by the slider's keyboard. */
 async function toStep(page, index) {
   const slider = page.locator('#workbench-steps-slider input[type="range"]');
@@ -111,12 +145,10 @@ test.describe("Reduce mode: chains of reductions", () => {
     // Done: the button can't change the result until an input changes.
     await expect(run).toHaveText("Reduced");
 
-    // It opens on the end: hop 1's last Map back, with what came back to Exact Cover.
-    await expect(header(page)).toHaveAttribute("data-current-hop", "1");
-    await expect(page.locator("#workbench-chain-end")).toHaveText(
-      "The answer carried back to Exact Cover checks out: it is a valid Exact Cover answer.",
-    );
-    await expect(caption(page)).toHaveText("{{1},{2,3}} is a valid Exact Cover answer.");
+    // It opens on the last stop, Start and end: Exact Cover with the answer carried back,
+    // beside Partition solved.
+    await expectSummary(page);
+    await expect(page.locator("#workbench-steps-position")).toContainText("33 of 33");
     await expect(page.locator("#workbench-result-chain-answer")).toHaveText("{{1},{2,3}}");
 
     // The first step: hop 1's Build.
@@ -124,7 +156,7 @@ test.describe("Reduce mode: chains of reductions", () => {
     await expect(header(page)).toHaveAttribute("data-current-hop", "1");
     await expect(page.locator("#workbench-chain-hop-1")).toHaveAttribute("aria-current", "step");
     await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "build");
-    await expect(page.locator("#workbench-chain-end")).toHaveCount(0);
+    await expect(header(page)).toHaveAttribute("data-summary", "false");
 
     // Hop 1 has 4 Build frames; the 5th step is hop 2's first Build.
     await toStep(page, 4);
@@ -151,16 +183,37 @@ test.describe("Reduce mode: chains of reductions", () => {
     await page.keyboard.press("ArrowRight");
     await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "map");
 
-    // The hop buttons jump to a hop's first step.
+    // Hop 1's last Map back, then the scrubber's last step: Start and end.
+    await toStep(page, 31);
+    await expect(caption(page)).toHaveText("{{1},{2,3}} is a valid Exact Cover answer.");
+    await page.keyboard.press("ArrowRight");
+    await expectSummary(page);
+
+    // The hop buttons jump to a hop's first step, and the route's last stop to Start and end.
     await page.locator("#workbench-chain-hop-2").click();
     await expect(header(page)).toHaveAttribute("data-current-hop", "2");
     await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "build");
+    await page.locator("#workbench-chain-summary").click();
+    await expectSummary(page);
+  });
 
-    // The end again.
-    const slider = page.locator('#workbench-steps-slider input[type="range"]');
-    await slider.focus();
-    await page.keyboard.press("End");
-    await expect(page.locator("#workbench-chain-end")).toContainText("checks out");
+  test("Start and end links Exact Cover's pieces straight to Partition's", async ({ page }) => {
+    await page.route(CHAIN_REQUEST, (route) =>
+      route.fulfill({ json: EXACT_COVER_TO_PARTITION_CHAIN }),
+    );
+    await openTarget(page, PARTITION_ROUTE);
+    await page.locator("#workbench-run").click();
+    await expectSummary(page);
+    // Set S1 became Subset Sum's number I1, which became Partition's number I1.
+    await piece(page, "source", "S1").hover();
+    await expect(view(page)).toHaveAttribute("data-linked", "true");
+    await expect.poll(() => hotIds(page, "target")).toContain("I1");
+    expect(await hotIds(page, "target")).not.toContain("I2");
+    // The other way: Partition's I2 leads back to set S2.
+    await page.mouse.move(0, 0);
+    await piece(page, "target", "I2").hover();
+    await expect.poll(() => hotIds(page, "source")).toContain("S2");
+    expect(await hotIds(page, "source")).not.toContain("S1");
   });
 
   test("a step that can't be built says which, in plain words", async ({ page }) => {

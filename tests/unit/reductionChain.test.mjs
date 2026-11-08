@@ -10,11 +10,15 @@ import {
   chainEnding,
   chainFailure,
   chainRouteLabel,
+  chainSummaryCaption,
+  chainSummaryView,
   chainTimeline,
   chainTitle,
+  composeChainGadgets,
   findChains,
   hopStart,
   joinWords,
+  startsLeadingTo,
   timelineIndexOf,
 } from "../../lib/reductionChain.js";
 import {
@@ -154,8 +158,12 @@ describe("chainTimeline", () => {
       { hop: 0, frame: 2 },
       { hop: 0, frame: 3 },
       { hop: 0, frame: 4 },
+      { hop: 2, frame: 0, summary: true },
     ]);
     assert.equal(hopStart(timeline, 1), 2);
+    // The Start and end stop is found like a hop, by the index after the last.
+    assert.equal(hopStart(timeline, 2), 11);
+    assert.equal(timelineIndexOf(timeline, 2, 0), 11);
     assert.equal(timelineIndexOf(timeline, 0, 2), 8);
     assert.equal(timelineIndexOf(timeline, 0, 9), -1);
   });
@@ -174,25 +182,30 @@ describe("chainTimeline", () => {
         [1, 2],
         [0, 1],
         [0, 2],
+        [3, 0],
       ],
     );
+    assert.equal(timeline.at(-1).summary, true);
   });
 
   test("a stopped solve: each earlier hop still hands back (a Reject) and ends on one Done", () => {
     const stopped = hops("bbhm", "bbhm", "bbsm");
     const timeline = chainTimeline(stopped);
-    assert.equal(timeline.length, 12);
-    assert.deepEqual(timeline.slice(-4), [
+    assert.equal(timeline.length, 13);
+    assert.deepEqual(timeline.slice(-5), [
       { hop: 1, frame: 2 },
       { hop: 1, frame: 3 },
       { hop: 0, frame: 2 },
       { hop: 0, frame: 3 },
+      { hop: 3, frame: 0, summary: true },
     ]);
   });
 
-  test("the captured Exact Cover to Partition chain plays every frame once, ending on hop 1's Done", () => {
+  test("the captured Exact Cover to Partition chain plays every frame once, then Start and end", () => {
     const capture = EXACT_COVER_TO_PARTITION_CHAIN.hops;
-    const timeline = chainTimeline(capture);
+    const withSummary = chainTimeline(capture);
+    assert.deepEqual(withSummary.at(-1), { hop: 2, frame: 0, summary: true });
+    const timeline = withSummary.slice(0, -1);
     const total = capture.reduce((sum, hop) => sum + hop.frames.length, 0);
     assert.equal(timeline.length, total);
     assert.equal(new Set(timeline.map(({ hop, frame }) => `${hop}:${frame}`)).size, total);
@@ -218,10 +231,149 @@ describe("chainTimeline", () => {
   test("the captured three-hop chain hands back twice", () => {
     const capture = EXACT_COVER_TO_WEIGHTED_CUT_CHAIN.hops;
     const handoffs = chainTimeline(capture)
+      .filter((entry) => !entry.summary)
       .map(({ hop, frame }) => [hop, capture[hop].frames[frame].phase])
       .filter(([, phase]) => phase === "handoff")
       .map(([hop]) => hop);
     assert.deepEqual(handoffs, [1, 0]);
+  });
+});
+
+describe("composeChainGadgets", () => {
+  const gadget = (sourceIds, targetIds, kind = "element") => ({ kind, sourceIds, targetIds });
+
+  test("follows each first-problem piece through every hop to the last problem", () => {
+    const composed = composeChainGadgets([
+      [gadget(["S1"], ["I1"]), gadget(["S2"], ["I2"])],
+      [gadget(["I1"], ["P1"]), gadget(["I2"], ["P2"])],
+    ]);
+    assert.deepEqual(
+      composed.map((link) => [link.kind, link.sourceIds, link.targetIds]),
+      [
+        ["element", ["S1"], ["P1"]],
+        ["element", ["S2"], ["P2"]],
+      ],
+    );
+    assert.deepEqual(
+      composed.map((link) => link.index),
+      [0, 1],
+    );
+  });
+
+  test("fans out: one piece leading to several becomes a group", () => {
+    const composed = composeChainGadgets([
+      [gadget(["a"], ["e1", "e2"], "group")],
+      [gadget(["e1"], ["x1"]), gadget(["e2"], ["x2", "x3"])],
+    ]);
+    assert.deepEqual(composed, [
+      {
+        index: 0,
+        kind: "group",
+        sourceIds: ["a"],
+        targetIds: ["x1", "x2", "x3"],
+        legacySourceIds: [],
+        legacyTargetIds: [],
+        note: "",
+      },
+    ]);
+  });
+
+  test("a broken path just stops, and a gadget with no ids on one side links nothing", () => {
+    const composed = composeChainGadgets([
+      [gadget(["a"], ["m1"]), gadget(["b"], ["m2"]), gadget([], ["m3"], "bound")],
+      [gadget(["m1"], ["z1"]), gadget(["m3"], ["z3"]), gadget(["m2"], [])],
+    ]);
+    assert.deepEqual(
+      composed.map((link) => [link.sourceIds, link.targetIds]),
+      [[["a"], ["z1"]]],
+    );
+    assert.deepEqual(composeChainGadgets([]), []);
+  });
+
+  test("a path through a bound is a bound", () => {
+    const composed = composeChainGadgets([
+      [gadget(["e1", "e2"], ["T"], "bound")],
+      [gadget(["T"], ["P1"], "palette"), gadget(["T"], ["T", "T2"], "bound")],
+    ]);
+    assert.deepEqual(
+      composed.map((link) => [link.kind, link.sourceIds, link.targetIds]),
+      [
+        ["bound", ["e1"], ["P1", "T", "T2"]],
+        ["bound", ["e2"], ["P1", "T", "T2"]],
+      ],
+    );
+  });
+
+  test("three hops, and the reverse: every first-problem piece leading to a last-problem one", () => {
+    const composed = composeChainGadgets([
+      [gadget(["a"], ["m1"]), gadget(["b"], ["m1", "m2"])],
+      [gadget(["m1"], ["n1"]), gadget(["m2"], ["n2"])],
+      [gadget(["n1"], ["z"]), gadget(["n2"], ["z", "y"])],
+    ]);
+    assert.deepEqual(startsLeadingTo(composed, "z"), ["a", "b"]);
+    assert.deepEqual(startsLeadingTo(composed, "y"), ["b"]);
+    assert.deepEqual(startsLeadingTo(composed, "nowhere"), []);
+  });
+
+  test("the captured chains link through their middle problems", () => {
+    const twoHops = composeChainGadgets(
+      EXACT_COVER_TO_PARTITION_CHAIN.hops.map((hop) => hop.gadgets),
+    );
+    assert.ok(twoHops.length > 0);
+    const threeHops = composeChainGadgets(
+      EXACT_COVER_TO_WEIGHTED_CUT_CHAIN.hops.map((hop) => hop.gadgets),
+    );
+    assert.ok(threeHops.length > 0);
+    // Every composed link ends on pieces the last problem's picture draws ids for.
+    const lastIds = JSON.stringify(EXACT_COVER_TO_PARTITION_CHAIN.hops[1].target.picture.payload);
+    for (const link of twoHops) {
+      for (const id of link.targetIds) assert.ok(lastIds.includes(`"${id}"`), id);
+    }
+  });
+});
+
+describe("the Start and end stop", () => {
+  const problems = ["Exact Cover", "Subset Sum", "Partition"];
+
+  test("its caption says where the answer came from and whether it checks out", () => {
+    assert.equal(
+      chainSummaryCaption({ answer: "{{1},{2,3}}", ok: true, timedOut: false }, problems),
+      "Exact Cover's answer {{1},{2,3}} came from solving Partition and carrying the answer back through Subset Sum. It checks out: it is a valid Exact Cover answer.",
+    );
+    assert.match(
+      chainSummaryCaption({ answer: "{}", ok: false, timedOut: false }, [
+        "Exact Cover",
+        "Subset Sum",
+        "Partition",
+        "Weighted Cut",
+      ]),
+      /back through Partition and Subset Sum\. It did not check out/,
+    );
+    assert.equal(
+      chainSummaryCaption({ answer: null, ok: null, timedOut: true }, problems),
+      "The Partition solver had not finished, so there is no answer to compare.",
+    );
+  });
+
+  test("draws the first problem with the answer carried back beside the last problem solved", () => {
+    const chain = EXACT_COVER_TO_PARTITION_CHAIN;
+    const view = chainSummaryView(chain, problems);
+    const [first, last] = chain.hops;
+    assert.equal(view.source, first.source);
+    assert.equal(view.target.picture, last.target.picture);
+    assert.equal(view.frames.length, 1);
+    const [frame] = view.frames;
+    assert.equal(frame.phase, "summary");
+    assert.deepEqual(frame.source, first.frames.filter((f) => f.phase === "map").at(-1).source);
+    assert.deepEqual(frame.target, last.frames.filter((f) => f.phase === "solve").at(-1).target);
+    assert.match(
+      frame.caption,
+      /^Exact Cover's answer \{\{1\},\{2,3\}\} came from solving Partition/,
+    );
+    assert.equal(
+      view.gadgets.length,
+      composeChainGadgets(chain.hops.map((hop) => hop.gadgets)).length,
+    );
   });
 });
 

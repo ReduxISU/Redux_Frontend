@@ -120,7 +120,9 @@ import { gadgetColorMap, highlightIdsOn, normalizeGadgets } from "../../lib/gadg
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
   chainEnding,
+  chainProblems,
   chainRouteLabel,
+  chainSummaryView,
   chainTimeline,
   chainTitle,
   hopStart,
@@ -510,8 +512,9 @@ export default function Workbench({ problem }) {
   // --- A chain of reductions --------------------------------------------------------------
   // Its result counts while it is of this instance and the chained target chosen now. One step
   // control walks the whole chain in play order (lib/reductionChain.js chainTimeline), and the
-  // Reduction View draws the hop that step is on. A new chain opens on its last step, the answer
-  // carried back to this problem, as a run opens on its finished result.
+  // Reduction View draws the hop that step is on. A new chain opens on its last stop, Start and
+  // end (this problem with the answer carried back, beside the last problem solved), as a run
+  // opens on its finished result.
   const chainResult = chainRun.status === COMPUTE_DONE ? chainRun.result : null;
   const chainCurrent =
     Boolean(chainResult) &&
@@ -530,7 +533,15 @@ export default function Workbench({ problem }) {
   }
   const chainIndex = Math.min(chainStep, Math.max(chainSteps.length - 1, 0));
   const chainAt = chainSteps[chainIndex] ?? null;
-  const chainHopView = chainView && chainAt ? chainView.hops[chainAt.hop] : null;
+  // The last stop, "Start and end": the first problem beside the last (lib/reductionChain.js).
+  const chainSummary = useMemo(
+    () =>
+      chainView && selectedChain ? chainSummaryView(chainView, chainProblems(selectedChain)) : null,
+    [chainView, selectedChain],
+  );
+  let chainHopView = null;
+  if (chainView && chainAt)
+    chainHopView = chainAt.summary ? chainSummary : chainView.hops[chainAt.hop];
   // The Reduction View on screen: one reduction's, or the chain's hop on this step.
   const shownView = reduceView ?? chainHopView;
 
@@ -2563,7 +2574,6 @@ export default function Workbench({ problem }) {
     const hops = selectedChain.hops;
     const hop = chainAt.hop;
     const last = hop === hops.length - 1;
-    const atEnd = chainIndex === chainSteps.length - 1;
     reductionPane = {
       view: chainHopView,
       activeGadget,
@@ -2581,9 +2591,9 @@ export default function Workbench({ problem }) {
           const start = hopStart(chainSteps, index);
           if (start !== -1) setChainStep(start);
         },
-        end: atEnd ? chainEnding(chainView, problem.name, selectedChain.target) : null,
         frameIndex: chainAt.frame,
-        phases: chainHopPhases(last, hops[hop + 1]?.to ?? ""),
+        // Start and end is one picture with no phases: the route above already names it.
+        phases: chainAt.summary ? null : chainHopPhases(last, hops[hop + 1]?.to ?? ""),
         onLocalStep: (frame) => {
           const index = timelineIndexOf(chainSteps, hop, frame);
           if (index !== -1) setChainStep(index);
