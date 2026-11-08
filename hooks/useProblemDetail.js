@@ -58,6 +58,7 @@ import {
   SOLVER_TYPE_MAP,
 } from "../data/taxonomy";
 import { buildKeyToName, findProblemKey, problemDisplayName } from "../lib/problemNames";
+import { findChains } from "../lib/reductionChain";
 import {
   requestAllInfo,
   requestAllProblems,
@@ -328,7 +329,16 @@ function buildReductions(
     }
   }
 
-  return { to, from };
+  // The problems reached only through a chain of 2 to 6 reductions, each with one route (the
+  // fewest steps, the first reduction of each), for Reduce's To dropdown after the direct ones
+  // (lib/reductionChain.js). `targetProblem` is for its info card, as a direct target's is.
+  const nameOf = (code) => codeToName.get(code) ?? problemDisplayName(info, code);
+  const chains = findChains(reductionGraph, problemCode, nameOf).map((chain) => ({
+    ...chain,
+    targetProblem: buildTargetProblem(chain.targetCode, info, codeToName),
+  }));
+
+  return { to, from, chains };
 }
 
 /**

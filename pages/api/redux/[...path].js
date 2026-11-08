@@ -90,6 +90,10 @@ const rateLimitBuckets = new Map();
  * `ProblemProvider/reductionView` (#215) builds a reduction step by step, solves the target and
  * maps its answer back, all in one request (`requestReductionView`). A compute endpoint too.
  *
+ * `ProblemProvider/reductionChainView` is the Reduction View of a chain of reductions (A -> B ->
+ * C, at most 6 steps): every step built, the last problem solved, and its answer mapped back step
+ * by step, in one request (`requestReductionChainView`). A compute endpoint like reductionView.
+ *
  * `ProblemProvider/mapSolutionBack` (#303 stage 2) maps a target answer back to the source
  * (`requestMappedSolutionBack`), for Reduce's Solve step. It builds the reduction on the
  * backend, so it is a compute endpoint like `mapSolution`.
@@ -128,6 +132,7 @@ const ALLOWED_ENDPOINTS = new Map([
   ["ProblemProvider/mapSolution", ["POST"]],
   ["ProblemProvider/mapSolutionBack", ["POST"]],
   ["ProblemProvider/reductionView", ["POST"]],
+  ["ProblemProvider/reductionChainView", ["POST"]],
 ]);
 
 /**
@@ -176,6 +181,7 @@ const COMPUTE_ENDPOINTS = new Set([
   "ProblemProvider/mapSolution",
   "ProblemProvider/mapSolutionBack",
   "ProblemProvider/reductionView",
+  "ProblemProvider/reductionChainView",
 ]);
 
 export const config = {

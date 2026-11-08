@@ -69,6 +69,9 @@ function isAbort(error) {
  *   (#229) can mark the instance itself as the problem.
  */
 export function describeComputeFailure(error, subject = "instance") {
+  // A failure its caller already put in plain words (lib/reductionView.js requestReductionChain:
+  // a chain's step that failed) is said as it is.
+  if (typeof error?.failure?.headline === "string") return error.failure;
   if (!(error instanceof ReduxRequestError)) {
     // fetch itself rejected, so there was never a response: the browser
     // could not reach this app's own server. Distinct from a 502, which
