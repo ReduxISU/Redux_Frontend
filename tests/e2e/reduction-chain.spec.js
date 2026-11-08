@@ -12,7 +12,11 @@
 // (./chain-payloads.js). A backend whose reduction graph lacks Exact Cover -> Subset Sum ->
 // Partition (CI's, today) skips these tests.
 
-import { EXACT_COVER_TO_PARTITION_CHAIN, WEIGHTED_CUT_HOP_FAILED } from "./chain-payloads";
+import {
+  EXACT_COVER_TO_PARTITION_CHAIN,
+  EXACT_COVER_TO_WEIGHTED_CUT_CHAIN,
+  WEIGHTED_CUT_HOP_FAILED,
+} from "./chain-payloads";
 import { expect, test } from "./fixtures";
 
 const CHAIN_REQUEST = /\/api\/redux\/ProblemProvider\/reductionChainView\?/;
@@ -86,6 +90,15 @@ function hotIds(page, side) {
     );
 }
 
+/** Whether a stop lies wholly inside the route's visible line. */
+function inRoute(stop) {
+  return stop.evaluate((button) => {
+    const box = button.getBoundingClientRect();
+    const line = button.closest("ol").getBoundingClientRect();
+    return box.left >= line.left - 1 && box.right <= line.right + 1;
+  });
+}
+
 /** The step controls to `index` (0-based), by the slider's keyboard. */
 async function toStep(page, index) {
   const slider = page.locator('#workbench-steps-slider input[type="range"]');
@@ -149,6 +162,12 @@ test.describe("Reduce mode: chains of reductions", () => {
     // beside Partition solved.
     await expectSummary(page);
     await expect(page.locator("#workbench-steps-position")).toContainText("33 of 33");
+    // On a wide screen the whole route fits: full labels, no fades.
+    const route = page.locator("#workbench-chain-route");
+    await expect(route).toHaveAttribute("data-compact", "false");
+    await expect(route).toHaveAttribute("data-fade-left", "false");
+    await expect(route).toHaveAttribute("data-fade-right", "false");
+    await expect(page.locator("#workbench-chain-hop-1")).toHaveText("1 · Exact Cover → Subset Sum");
     await expect(page.locator("#workbench-result-chain-answer")).toHaveText("{{1},{2,3}}");
 
     // The first step: hop 1's Build.
@@ -214,6 +233,56 @@ test.describe("Reduce mode: chains of reductions", () => {
     await piece(page, "target", "I2").hover();
     await expect.poll(() => hotIds(page, "source")).toContain("S2");
     expect(await hotIds(page, "source")).not.toContain("S1");
+  });
+
+  test("on a narrow screen the route stays on one line and scrolls to the stop on screen", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 420, height: 1000 });
+    await page.route(CHAIN_REQUEST, (route) =>
+      route.fulfill({ json: EXACT_COVER_TO_WEIGHTED_CUT_CHAIN }),
+    );
+    await openTarget(page, WEIGHTED_CUT_ROUTE);
+    await page.locator("#workbench-run").click();
+    await expect(header(page)).toHaveAttribute("data-summary", "true");
+
+    const route = page.locator("#workbench-chain-route");
+    const stops = page.locator("#workbench-chain-stops button");
+    await expect(stops).toHaveCount(4);
+    // One line: every stop's top is the same.
+    const tops = await stops.evaluateAll((buttons) =>
+      buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
+    );
+    expect(new Set(tops).size).toBe(1);
+    // Too long to fit: the stops not on screen are compact, their names still full.
+    await expect(route).toHaveAttribute("data-compact", "true");
+    const first = page.locator("#workbench-chain-hop-1");
+    const summary = page.locator("#workbench-chain-summary");
+    await expect(first).toHaveText("1 → Subset Sum");
+    await expect(first).toHaveAccessibleName("1 · Exact Cover → Subset Sum");
+    await expect(summary).toHaveText("Start and end · Exact Cover ↔ Weighted Cut");
+    await expect(page.locator("#workbench-chain-stops")).toHaveAccessibleName(
+      /^Chain route: 1 · Exact Cover → Subset Sum, then 2 · Subset Sum → Partition/,
+    );
+
+    // It opens on Start and end, scrolled to the end: only the left edge fades.
+    await expect.poll(() => inRoute(summary)).toBe(true);
+    await expect(route).toHaveAttribute("data-fade-left", "true");
+    await expect(route).toHaveAttribute("data-fade-right", "false");
+    await expect(page.locator("#workbench-chain-fade-left")).toBeVisible();
+
+    // The first step scrolls the route back to its start: now only the right edge fades.
+    await toStep(page, 0);
+    await expect(header(page)).toHaveAttribute("data-current-hop", "1");
+    await expect(first).toHaveText("1 · Exact Cover → Subset Sum");
+    await expect.poll(() => inRoute(first)).toBe(true);
+    await expect(route).toHaveAttribute("data-fade-right", "true");
+    await expect(route).toHaveAttribute("data-fade-left", "false");
+
+    // Stepping on to hop 2 brings it into view.
+    await toStep(page, 9);
+    await expect(header(page)).toHaveAttribute("data-current-hop", "2");
+    await expect.poll(() => inRoute(page.locator("#workbench-chain-hop-2"))).toBe(true);
   });
 
   test("a step that can't be built says which, in plain words", async ({ page }) => {

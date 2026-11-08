@@ -58,6 +58,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GADGET_EMPTY_SIDE, GADGET_KINDS, OTHER_GADGET_KIND } from "../../data/gadgetKinds";
 import { describeGadget, gadgetColorMap, gadgetIdName } from "../../lib/gadgets";
+import { revealScroll, routeFades, routeStops, stopLabel } from "../../lib/reductionChain";
 import {
   eventWord,
   linkedPieces,
@@ -71,7 +72,7 @@ import {
   sideLinkable,
   unbuiltIds,
 } from "../../lib/reductionView";
-import { paletteVars } from "../theme";
+import { hiddenScrollbarSx, paletteVars } from "../theme";
 import { COMPACT_MEDIA, pictureCardSx } from "../workbench/layout";
 import { PaneGrid, PaneSection } from "../workbench/PaneGrid";
 import { GADGET_PALETTE } from "./gadgetRings";
@@ -383,13 +384,53 @@ export function ReductionPhaseBar({
   );
 }
 
+/** How wide each edge's fade is, and how far a stop scrolled into view stays clear of it. */
+const ROUTE_FADE_PX = 32;
+
+/** One stop's pill, current or not (the hidden copy that measures the route draws it too). */
+function routeStopSx(here) {
+  return {
+    minHeight: 44,
+    px: 1.5,
+    borderRadius: "999px",
+    border: "1px solid",
+    borderColor: here ? "brand.softLine" : "border.main",
+    boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.softLine}` : "none",
+    backgroundColor: here ? "brand.soft" : "surface.main",
+    color: here ? "brand.onSoft" : "text.secondary",
+    fontFamily: "inherit",
+    fontSize: "0.8125rem",
+    fontWeight: here ? 700 : 500,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  };
+}
+
+const routeArrowSx = { color: "text.secondary", fontSize: "1rem", flex: "none" };
+
+/** Whether the reader asked for less motion. */
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+  );
+}
+
 /**
  * A chain's header (lib/reductionChain.js), above its pictures: the chain named problem by
- * problem ("Exact Cover → Subset Sum → Partition"), then its stops as one route, arrows between
- * them: a button per step ("1 · Exact Cover → Subset Sum") and, last, "Start and end" (the first
- * problem beside the last). The stop drawn now is marked (`aria-current="step"`, the soft brand
- * button, as the phase bar marks its phase); each jumps to its first frame. On a narrow screen
- * the route wraps, each arrow staying after the stop it leads from.
+ * problem ("Exact Cover → Subset Sum → Partition"), then its stops as one route on one line,
+ * arrows between them: a button per step ("1 · Exact Cover → Subset Sum") and, last, "Start and
+ * end" (the first problem beside the last). The stop drawn now is marked (`aria-current="step"`,
+ * the soft brand button, as the phase bar marks its phase); each jumps to its first frame.
+ *
+ * A route too long for its line scrolls sideways (trackpad, Shift and the wheel, touch, or Tab
+ * through the stops), with no scrollbar: an edge with stops out of sight fades into the
+ * workspace's surface color instead (the background fades over the stops; no text is made
+ * see-through). Then every stop but the one on screen takes its compact label ("3 → Weighted
+ * Cut"), its full one staying its accessible name. The stop on screen is scrolled into view
+ * whenever it changes (smoothly, unless the reader asked for less motion) and, at once, when the
+ * header first shows. Whether the full route fits is measured on a hidden copy with every label
+ * full, so the choice does not flip as labels shorten.
  * @param {Object} props
  * @param {string} props.idPrefix
  * @param {string} props.title
@@ -399,20 +440,63 @@ export function ReductionPhaseBar({
  * @param {(stop: number) => void} props.onHop
  */
 export function ReductionChainHeader({ idPrefix, title, hops, current, onHop }) {
-  const first = hops[0]?.from ?? "";
-  const last = hops[hops.length - 1]?.to ?? "";
-  const stops = [
-    ...hops.map((hop, index) => ({
-      id: `${idPrefix}-hop-${index + 1}`,
-      label: `${index + 1} · ${hop.from} → ${hop.to}`,
-      title: `Show step ${index + 1}: ${hop.from} to ${hop.to}`,
-    })),
-    {
-      id: `${idPrefix}-summary`,
-      label: `Start and end · ${first} ↔ ${last}`,
-      title: `Show ${first} and ${last} side by side, with the answer carried back`,
-    },
-  ];
+  const stops = useMemo(() => routeStops(hops), [hops]);
+  const scrollerRef = useRef(null);
+  const measureRef = useRef(null);
+  const [compact, setCompact] = useState(false);
+  const [fades, setFades] = useState({ left: false, right: false });
+  const shownOnce = useRef(false);
+
+  // Whether the full route fits, and which edges fade: again on every resize.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    const measure = measureRef.current;
+    if (!scroller || !measure) return undefined;
+    const update = () => {
+      setCompact(measure.offsetWidth > scroller.clientWidth);
+      setFades(routeFades(scroller));
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(update);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [stops]);
+
+  // The stop on screen, into view: at once the first time, smoothly after.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    const item = scroller?.querySelector(`[data-stop="${current + 1}"]`)?.parentElement;
+    if (!scroller || !item) return;
+    const left = revealScroll({
+      itemLeft: item.offsetLeft,
+      itemWidth: item.offsetWidth,
+      scrollLeft: scroller.scrollLeft,
+      clientWidth: scroller.clientWidth,
+      margin: ROUTE_FADE_PX,
+    });
+    const instant = !shownOnce.current || prefersReducedMotion();
+    shownOnce.current = true;
+    if (left !== null) {
+      if (typeof scroller.scrollTo === "function") {
+        scroller.scrollTo({ left, behavior: instant ? "auto" : "smooth" });
+      } else {
+        scroller.scrollLeft = left;
+      }
+    }
+    setFades(routeFades(scroller));
+  }, [current, compact]);
+
+  const fadeSx = (side) => ({
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    [side]: 0,
+    width: ROUTE_FADE_PX,
+    pointerEvents: "none",
+    background: `linear-gradient(to ${side === "left" ? "right" : "left"}, ${paletteVars.surface.main}, transparent)`,
+  });
+
   return (
     <Box
       id={idPrefix}
@@ -425,65 +509,103 @@ export function ReductionChainHeader({ idPrefix, title, hops, current, onHop }) 
         {title}
       </Box>
       <Box
-        component="ol"
-        aria-label="Chain route"
-        sx={{
-          listStyle: "none",
-          m: 0,
-          p: 0,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 1,
-          alignItems: "center",
-          minWidth: 0,
-        }}
+        id={`${idPrefix}-route`}
+        data-compact={compact ? "true" : "false"}
+        data-fade-left={fades.left ? "true" : "false"}
+        data-fade-right={fades.right ? "true" : "false"}
+        sx={{ position: "relative", minWidth: 0, overflow: "hidden" }}
       >
-        {stops.map((stop, index) => {
-          const here = index === current;
-          return (
-            <Box
-              component="li"
-              key={stop.id}
-              sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}
-            >
+        <Box
+          ref={scrollerRef}
+          component="ol"
+          id={`${idPrefix}-stops`}
+          aria-label={`Chain route: ${stops.map((stop) => stop.full).join(", then ")}`}
+          onScroll={(event) => setFades(routeFades(event.currentTarget))}
+          sx={{
+            listStyle: "none",
+            m: 0,
+            // Room for each stop's focus ring, which the scrolling line would otherwise clip.
+            p: "6px",
+            display: "flex",
+            flexWrap: "nowrap",
+            gap: 1,
+            alignItems: "center",
+            minWidth: 0,
+            overflowX: "auto",
+            overflowY: "hidden",
+            position: "relative",
+            // A stop focused by Tab scrolls clear of the fades too.
+            scrollPaddingInline: `${ROUTE_FADE_PX}px`,
+            ...hiddenScrollbarSx,
+          }}
+        >
+          {stops.map((stop, index) => {
+            const here = index === current;
+            return (
               <Box
-                component="button"
-                type="button"
-                id={stop.id}
-                data-stop={index + 1}
-                aria-current={here ? "step" : undefined}
-                title={stop.title}
-                onClick={() => onHop(index)}
-                sx={{
-                  minHeight: 44,
-                  px: 1.5,
-                  borderRadius: "999px",
-                  border: "1px solid",
-                  borderColor: here ? "brand.softLine" : "border.main",
-                  boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.softLine}` : "none",
-                  backgroundColor: here ? "brand.soft" : "surface.main",
-                  color: here ? "brand.onSoft" : "text.secondary",
-                  fontFamily: "inherit",
-                  fontSize: "0.8125rem",
-                  fontWeight: here ? 700 : 500,
-                  textAlign: "left",
-                  cursor: "pointer",
-                }}
+                component="li"
+                key={stop.full}
+                sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}
               >
-                {stop.label}
+                <Box
+                  component="button"
+                  type="button"
+                  id={stop.summary ? `${idPrefix}-summary` : `${idPrefix}-hop-${index + 1}`}
+                  data-stop={index + 1}
+                  aria-current={here ? "step" : undefined}
+                  aria-label={stop.full}
+                  title={stop.title}
+                  onClick={() => onHop(index)}
+                  sx={routeStopSx(here)}
+                >
+                  {stopLabel(stop, { compact, current: here })}
+                </Box>
+                {index < stops.length - 1 && (
+                  <Box component="span" aria-hidden="true" sx={routeArrowSx}>
+                    →
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
+        </Box>
+        {fades.left && <Box id={`${idPrefix}-fade-left`} aria-hidden="true" sx={fadeSx("left")} />}
+        {fades.right && (
+          <Box id={`${idPrefix}-fade-right`} aria-hidden="true" sx={fadeSx("right")} />
+        )}
+        {/* The full route, every label full and bold, out of sight: whether it fits. */}
+        <Box
+          ref={measureRef}
+          aria-hidden="true"
+          sx={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            visibility: "hidden",
+            pointerEvents: "none",
+            width: "max-content",
+            display: "flex",
+            gap: 1,
+            p: "6px",
+            alignItems: "center",
+          }}
+        >
+          {stops.map((stop, index) => (
+            <Box key={stop.full} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Box
+                component="span"
+                sx={{ ...routeStopSx(true), display: "inline-flex", alignItems: "center" }}
+              >
+                {stop.full}
               </Box>
               {index < stops.length - 1 && (
-                <Box
-                  component="span"
-                  aria-hidden="true"
-                  sx={{ color: "text.secondary", fontSize: "1rem", flex: "none" }}
-                >
+                <Box component="span" sx={routeArrowSx}>
                   →
                 </Box>
               )}
             </Box>
-          );
-        })}
+          ))}
+        </Box>
       </Box>
     </Box>
   );

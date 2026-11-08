@@ -18,7 +18,11 @@ import {
   findChains,
   hopStart,
   joinWords,
+  revealScroll,
+  routeFades,
+  routeStops,
   startsLeadingTo,
+  stopLabel,
   timelineIndexOf,
 } from "../../lib/reductionChain.js";
 import {
@@ -461,5 +465,70 @@ describe("chainEnding", () => {
     );
     assert.equal(stopped.tone, "warn");
     assert.match(stopped.text, /^The Partition solver had not finished/);
+  });
+});
+
+describe("the route header", () => {
+  const route = routeStops([
+    { from: "Exact Cover", to: "Subset Sum" },
+    { from: "Subset Sum", to: "Partition" },
+    { from: "Partition", to: "Weighted Cut" },
+  ]);
+
+  test("each stop has a full and a compact label, Start and end last", () => {
+    assert.deepEqual(
+      route.map((stop) => [stop.full, stop.compact]),
+      [
+        ["1 · Exact Cover → Subset Sum", "1 → Subset Sum"],
+        ["2 · Subset Sum → Partition", "2 → Partition"],
+        ["3 · Partition → Weighted Cut", "3 → Weighted Cut"],
+        ["Start and end · Exact Cover ↔ Weighted Cut", "Start and end"],
+      ],
+    );
+    assert.equal(route.at(-1).summary, true);
+  });
+
+  test("compact labels only when the route does not fit, and never on the stop on screen", () => {
+    const [stop] = route;
+    assert.equal(stopLabel(stop, { compact: false, current: false }), stop.full);
+    assert.equal(stopLabel(stop, { compact: true, current: false }), stop.compact);
+    assert.equal(stopLabel(stop, { compact: true, current: true }), stop.full);
+  });
+
+  test("fades: none when it fits, the right at the start, both in the middle, the left at the end", () => {
+    assert.deepEqual(routeFades({ scrollLeft: 0, scrollWidth: 300, clientWidth: 300 }), {
+      left: false,
+      right: false,
+    });
+    assert.deepEqual(routeFades({ scrollLeft: 0, scrollWidth: 301, clientWidth: 300 }), {
+      left: false,
+      right: false,
+    });
+    assert.deepEqual(routeFades({ scrollLeft: 0, scrollWidth: 800, clientWidth: 300 }), {
+      left: false,
+      right: true,
+    });
+    assert.deepEqual(routeFades({ scrollLeft: 200, scrollWidth: 800, clientWidth: 300 }), {
+      left: true,
+      right: true,
+    });
+    assert.deepEqual(routeFades({ scrollLeft: 499.5, scrollWidth: 800, clientWidth: 300 }), {
+      left: true,
+      right: false,
+    });
+  });
+
+  test("revealScroll brings a stop clear of the fades, or leaves the route alone", () => {
+    const box = { scrollLeft: 100, clientWidth: 300, margin: 32 };
+    // In view already.
+    assert.equal(revealScroll({ ...box, itemLeft: 150, itemWidth: 100 }), null);
+    // Off to the right: its end, plus the margin, at the right edge.
+    assert.equal(revealScroll({ ...box, itemLeft: 500, itemWidth: 100 }), 332);
+    // Off to the left: its start, less the margin.
+    assert.equal(revealScroll({ ...box, itemLeft: 110, itemWidth: 100 }), 78);
+    // Near the start: never before 0.
+    assert.equal(revealScroll({ ...box, itemLeft: 10, itemWidth: 100 }), 0);
+    // Wider than the room: from its start.
+    assert.equal(revealScroll({ ...box, itemLeft: 400, itemWidth: 400 }), 368);
   });
 });
