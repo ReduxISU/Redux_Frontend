@@ -158,7 +158,7 @@ function OtherContributions({ items }) {
   return (
     <Box id="contributor-dialog-other-contributions" sx={{ mt: 1.5 }}>
       <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
-        Other Contributions
+        Other Contributions:
       </Typography>
       {areas.map(({ area, pullRequests }, index) => (
         <OtherContributionArea
