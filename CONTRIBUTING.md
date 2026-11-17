@@ -75,6 +75,7 @@ Use a descriptive branch name:
 ### 5. Submit a Pull Request (PR)
 
 Include:
+
 - A clear description of what you changed
 - Why the change is needed
 - Any relevant screenshots or logs (if applicable)
@@ -93,6 +94,7 @@ Include:
 ## Reporting Issues
 
 When reporting bugs, please include:
+
 - Steps to reproduce
 - Expected behavior
 - Actual behavior
@@ -103,6 +105,7 @@ When reporting bugs, please include:
 ## Feature Requests
 
 We welcome ideas! Please:
+
 - Clearly describe the feature
 - Explain the use case
 - Keep scope reasonable
