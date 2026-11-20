@@ -65,6 +65,9 @@
 // workbench shows. The workbench builds that link (lib/permalink.js) and hands this page a way to
 // ask for it (`shareRef`), so the link has the instance on screen even while the address is still
 // catching up with typing.
+//
+// #327: a Back control sits above the title (components/BackButton.js): back in history when the
+// visitor came from another page of this site, else to the problem list.
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -73,6 +76,7 @@ import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useRef } from "react";
+import BackButton from "../components/BackButton";
 import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
 import PageTitle from "../components/PageTitle";
@@ -294,6 +298,7 @@ export default function ProblemDetail() {
         }}
       >
         <Box component="header" sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+          <BackButton id="problem-back" />
           <Box
             sx={{
               display: "flex",
