@@ -99,11 +99,17 @@
 //   - The URL: `?instance=`, `?solver=` and `?viz=` round-trip the way the old sections did
 //     (#150), so links and playlists that name a solver or visualization still open on it.
 //     The old `?step=` is dropped: before Run there are no steps to point at.
+//     #324 (#176): in Reduce, `?reduceTo=` names the target (a chained one too) and `?reduction=`
+//     the reduction when it is not the target's first; a link with them opens Reduce on them.
+//     #174: when the whole link would be longer than lib/permalink.js MAX_PERMALINK_LENGTH, the
+//     instance is left out of it and a note under the instance box says so. The page's Share
+//     button (pages/[problem].js) asks this component for the link (`shareRef`). Opening a link
+//     never runs anything: only the main button starts a compute request (#177).
 
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import { useRouter } from "next/router";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { pictureTypeLabel } from "../../data/taxonomy";
 import { VISUALIZATION_TYPE_MAP } from "../../data/visualizationTypes";
 import { canCheck, useCertificateCheck, verdictMatches } from "../../hooks/useCertificateCheck";
@@ -119,6 +125,7 @@ import { useDefaultPicture } from "../../hooks/useDefaultPicture";
 import { useFrameEdits } from "../../hooks/useFrameEdits";
 import useGadgetColorMode from "../../hooks/useGadgetColorMode";
 import { gadgetColorMap, highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
+import { fitPermalink, permalinkQuery, problemPath } from "../../lib/permalink";
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
   chainDrawnPictures,
@@ -359,7 +366,7 @@ function formatSeconds(milliseconds) {
  *   page mounts a fresh Workbench per problem (keyed by name), so nothing here carries over
  *   from one problem to the next.
  */
-export default function Workbench({ problem }) {
+export default function Workbench({ problem, shareRef = null }) {
   const router = useRouter();
   const solvers = problem.solvers ?? [];
   // Only visualizations this frontend can draw belong in the Visualization Type dropdown.
@@ -377,7 +384,15 @@ export default function Workbench({ problem }) {
   // --- Selections ------------------------------------------------------------------------
   // #303: the tab on now. Verify draws what Solve draws (the instance, or Solve's run), so
   // everything below that tells Solve from Reduce reads `mode`, Verify counting as Solve.
-  const [task, setTask] = useState("solve");
+  // #176: a link naming a reduction (`?reduceTo=`, and `?reduction=` when it is not the first
+  // for that target) opens Reduce on it. A name the problem does not reduce to is ignored.
+  const linkedTarget =
+    typeof router.query.reduceTo === "string" &&
+    (targets.includes(router.query.reduceTo) ||
+      chains.some((chain) => chain.target === router.query.reduceTo))
+      ? router.query.reduceTo
+      : null;
+  const [task, setTask] = useState(linkedTarget ? "reduce" : "solve");
   const mode = task === "reduce" ? "reduce" : "solve";
   // #303: the workspace shows only the picture(s) and the steps: "all" of them, or (stage 2)
   // one of Reduce's two panes alone, "source" or "target"; null when off.
@@ -401,8 +416,19 @@ export default function Workbench({ problem }) {
     findIndexByName(solvers, router.query.solver),
   );
   const [vizIndex, setVizIndex] = useState(() => findIndexByName(visualizations, router.query.viz));
-  const [targetName, setTargetName] = useState(targets[0] ?? null);
-  const [reductionClassName, setReductionClassName] = useState(reductions[0]?.className ?? null);
+  const [targetName, setTargetName] = useState(linkedTarget ?? targets[0] ?? null);
+  const [reductionClassName, setReductionClassName] = useState(() => {
+    const forTarget = reductions.filter(
+      (reduction) => reduction.target === (linkedTarget ?? targets[0]),
+    );
+    const named = router.query.reduction;
+    return (
+      forTarget.find((reduction) => reduction.name === named || reduction.className === named)
+        ?.className ??
+      forTarget[0]?.className ??
+      null
+    );
+  });
   const [currentStep, setCurrentStep] = useState(0);
   const [serializeError, setSerializeError] = useState(null);
   const [lastRun, setLastRun] = useState(null);
@@ -857,25 +883,65 @@ export default function Workbench({ problem }) {
   const lastSyncedRef = useRef(null);
   const solverParam = solverIndex > 0 ? (solvers[solverIndex]?.name ?? null) : null;
   const vizParam = vizIndex > 0 ? (visualizations[vizIndex]?.name ?? null) : null;
-  const instanceParam =
-    debouncedInstance !== (problem.defaultInstance ?? "") ? debouncedInstance : null;
+  const defaultInstance = problem.defaultInstance ?? "";
+  const instanceParam = debouncedInstance !== defaultInstance ? debouncedInstance : null;
+  // #176: in Reduce, the target (a chained one too) and, when it is not the target's first, the
+  // reduction. Solve and Verify leave both out, so a link opens on the tab it was copied from.
+  const reduceToParam = task === "reduce" && targetName ? targetName : null;
+  const reductionParam =
+    reduceToParam && selectedReduction && selectedReduction !== reductionsForTarget[0]
+      ? selectedReduction.name
+      : null;
+  /** The link to this view for `instanceText`, the instance left out when too long (#174). */
+  function permalinkFor(instanceText) {
+    return fitPermalink({
+      origin: typeof window === "undefined" ? "" : window.location.origin,
+      path: problemPath(problem.name),
+      query: permalinkQuery(router.query, {
+        instance: instanceText !== defaultInstance ? instanceText : null,
+        solver: solverParam,
+        viz: vizParam,
+        reduceTo: reduceToParam,
+        reduction: reductionParam,
+      }),
+    });
+  }
   useEffect(() => {
-    const serialized = JSON.stringify([instanceParam, solverParam, vizParam]);
+    const serialized = JSON.stringify([
+      instanceParam,
+      solverParam,
+      vizParam,
+      reduceToParam,
+      reductionParam,
+    ]);
     if (lastSyncedRef.current === serialized) return;
     lastSyncedRef.current = serialized;
-    const {
-      instance: _instance,
-      solver: _solver,
-      viz: _viz,
-      step: _step,
-      ...restQuery
-    } = router.query;
-    const nextQuery = { ...restQuery };
-    if (instanceParam !== null) nextQuery.instance = instanceParam;
-    if (solverParam !== null) nextQuery.solver = solverParam;
-    if (vizParam !== null) nextQuery.viz = vizParam;
-    router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
-  }, [instanceParam, solverParam, vizParam, router]);
+    const { problem: _problem, ...restQuery } = router.query;
+    const { query } = fitPermalink({
+      origin: window.location.origin,
+      path: problemPath(problem.name),
+      query: permalinkQuery(restQuery, {
+        instance: instanceParam,
+        solver: solverParam,
+        viz: vizParam,
+        reduceTo: reduceToParam,
+        reduction: reductionParam,
+      }),
+    });
+    router.replace(
+      { pathname: router.pathname, query: { ...query, problem: router.query.problem } },
+      undefined,
+      {
+        shallow: true,
+      },
+    );
+  }, [instanceParam, solverParam, vizParam, reduceToParam, reductionParam, router, problem.name]);
+  // #174: whether the instance on screen is too long for a link; the note under the instance
+  // box says so, and the address and the Share button leave it out.
+  const linkOmitsInstance = permalinkFor(instance).instanceOmitted;
+  // #324: the Share button (pages/[problem].js) asks for the link when pressed, so it gets the
+  // instance on screen even inside the address's debounce.
+  useImperativeHandle(shareRef, () => ({ link: () => permalinkFor(instance) }));
 
   // --- Full screen (#303) ----------------------------------------------------------------
   // Going in keeps focus on the Full screen button that went in (#305: it is the way out, now
@@ -3106,6 +3172,7 @@ export default function Workbench({ problem }) {
           instance={instance}
           onInstanceChange={setInstance}
           instanceError={instanceError}
+          linkOmitsInstance={linkOmitsInstance}
         />
       </Box>
 
