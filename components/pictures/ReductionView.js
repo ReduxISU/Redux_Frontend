@@ -442,8 +442,17 @@ function prefersReducedMotion() {
  * @param {number} props.current The stop drawn now: a hop's index, or `hops.length` for Start and
  *   end.
  * @param {(stop: number) => void} props.onHop
+ * @param {boolean} [props.summaryReady] #326: false until Solve, when Start and end (the answer
+ *   carried back) has nothing to show yet; its stop is disabled and says why.
  */
-export function ReductionChainHeader({ idPrefix, title, hops, current, onHop }) {
+export function ReductionChainHeader({
+  idPrefix,
+  title,
+  hops,
+  current,
+  onHop,
+  summaryReady = true,
+}) {
   const stops = useMemo(() => routeStops(hops), [hops]);
   const scrollerRef = useRef(null);
   const measureRef = useRef(null);
@@ -545,6 +554,7 @@ export function ReductionChainHeader({ idPrefix, title, hops, current, onHop }) 
         >
           {stops.map((stop, index) => {
             const here = index === current;
+            const waiting = stop.summary && !summaryReady;
             return (
               <Box
                 component="li"
@@ -558,9 +568,13 @@ export function ReductionChainHeader({ idPrefix, title, hops, current, onHop }) 
                   data-stop={index + 1}
                   aria-current={here ? "step" : undefined}
                   aria-label={stop.full}
-                  title={stop.title}
+                  title={waiting ? "Press Solve to carry the answer back first" : stop.title}
+                  disabled={waiting}
                   onClick={() => onHop(index)}
-                  sx={routeStopSx(here)}
+                  sx={{
+                    ...routeStopSx(here),
+                    "&:disabled": { cursor: "not-allowed", color: "text.disabled" },
+                  }}
                 >
                   {stopLabel(stop, { compact, current: here })}
                 </Box>

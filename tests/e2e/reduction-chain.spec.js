@@ -2,10 +2,13 @@
 //
 // Chains of reductions in Reduce mode. After the direct reductions, the To dropdown lists the
 // problems reached only through a chain (from Navigation/Reductions), each naming its route.
-// Choosing one and pressing Run the chain asks ProblemProvider/reductionChainView with the route
-// as `path`, then one step control walks the whole chain: every hop's Build, the last hop's Solve
+// Choosing one and pressing Run the reductions asks ProblemProvider/reductionChainView with the
+// route as `path` and shows every hop's Build (#326); Solve, enabled once they ran, then shows
+// the rest, and one step control walks the whole chain: every hop's Build, the last hop's Solve
 // and Map back, then each earlier hop's handoff and Map back. The chain's header names it and
 // marks the hop on screen; at the end it says whether the answer carried back checked out.
+// Another instance or target clears the chain and disables Solve; another picture draws the
+// chain again with its Build only, Solve enabled again.
 //
 // The catalog comes from the backend behind the suite, like the rest of it. No published
 // backend serves chains yet, so the chain's answers are captures from a local build
@@ -69,6 +72,16 @@ async function openTarget(page, label) {
     .first()
     .click();
   await expect(page.locator("#workbench-target-value")).toHaveText(label);
+}
+
+const solveButton = (page) => page.locator("#workbench-chain-solve");
+
+/** Presses Run the reductions, then Solve once the reductions are built. */
+async function runAndSolve(page) {
+  await page.locator("#workbench-run").click();
+  await expect(solveButton(page)).toBeEnabled();
+  await solveButton(page).click();
+  await expect(solveButton(page)).toHaveText("Solved");
 }
 
 /** The Start and end stop is on screen: both pictures, its caption, its stop marked. */
@@ -158,7 +171,10 @@ test.describe("Reduce mode: chains of reductions", () => {
       "Karp's Subset Sum Reduction, then Partition Reduction",
     );
     const run = page.locator("#workbench-run");
-    await expect(run).toHaveText("Run the chain");
+    await expect(run).toHaveText("Run the reductions");
+    // #326: Solve waits for the reductions.
+    await expect(solveButton(page)).toHaveText("Solve");
+    await expect(solveButton(page)).toBeDisabled();
     await run.click();
 
     await expect(header(page)).toBeVisible();
@@ -173,7 +189,30 @@ test.describe("Reduce mode: chains of reductions", () => {
     // Done: the button can't change the result until an input changes.
     await expect(run).toHaveText("Reduced");
 
-    // It opens on the last stop, Start and end: Exact Cover with the answer carried back,
+    // #326: the reductions ran, nothing is solved yet. It opens on the last Build frame: hop 1's
+    // 4 and hop 2's 6, with no Solve, Map back or Start and end to step to.
+    await expect(page.locator("#workbench-steps-position")).toContainText("10 of 10");
+    await expect(header(page)).toHaveAttribute("data-current-hop", "2");
+    await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "build");
+    await expect(page.locator("#workbench-phases-solve")).toBeDisabled();
+    await expect(page.locator("#workbench-phases-map")).toBeDisabled();
+    await expect(page.locator("#workbench-chain-summary")).toBeDisabled();
+    await expect(page.locator("#workbench-result-chain-answer")).toHaveCount(0);
+    await expect(page.locator("#workbench-results")).toContainText(
+      "Next: Solve solves the Partition instance and carries its answer back to Exact Cover",
+    );
+    await page.locator("#workbench-chain-hop-1").click();
+    await expect(header(page)).toHaveAttribute("data-current-hop", "1");
+    await expect(page.locator("#workbench-phases-handoff")).toBeDisabled();
+
+    // Solve asks for nothing more: the chain's one answer already carries the solve.
+    await expect(solveButton(page)).toBeEnabled();
+    await solveButton(page).click();
+    expect(asked).toHaveLength(1);
+    await expect(solveButton(page)).toHaveText("Solved");
+    await expect(solveButton(page)).toHaveAttribute("aria-disabled", "true");
+
+    // Then it opens on the last stop, Start and end: Exact Cover with the answer carried back,
     // beside Partition solved.
     await expectSummary(page);
     await expect(page.locator("#workbench-steps-position")).toContainText("33 of 33");
@@ -236,7 +275,7 @@ test.describe("Reduce mode: chains of reductions", () => {
       route.fulfill({ json: EXACT_COVER_TO_PARTITION_CHAIN }),
     );
     await openTarget(page, PARTITION_ROUTE);
-    await page.locator("#workbench-run").click();
+    await runAndSolve(page);
     await expectSummary(page);
     // Set S1 became Subset Sum's number I1, which became Partition's number I1.
     await piece(page, "source", "S1").hover();
@@ -258,7 +297,7 @@ test.describe("Reduce mode: chains of reductions", () => {
       route.fulfill({ json: EXACT_COVER_TO_WEIGHTED_CUT_CHAIN }),
     );
     await openTarget(page, WEIGHTED_CUT_ROUTE);
-    await page.locator("#workbench-run").click();
+    await runAndSolve(page);
     await expect(header(page)).toHaveAttribute("data-summary", "true");
 
     const route = page.locator("#workbench-chain-route");
@@ -312,6 +351,40 @@ test.describe("Reduce mode: chains of reductions", () => {
       "Each step makes its numbers bigger, so try a smaller Exact Cover instance.",
     );
     await expect(header(page)).toHaveCount(0);
+    await expect(solveButton(page)).toBeDisabled();
+  });
+
+  test("another instance or another target clears the chain and disables Solve again", async ({
+    page,
+  }) => {
+    await page.route(CHAIN_REQUEST, (route) =>
+      route.fulfill({ json: EXACT_COVER_TO_PARTITION_CHAIN }),
+    );
+    await openTarget(page, PARTITION_ROUTE);
+    await runAndSolve(page);
+    await expectSummary(page);
+
+    // Another instance: the chain is gone, Solve waits for the reductions again.
+    const box = page.locator("#workbench-instance-full-instance");
+    await box.fill("({1,2},{{1},{2}})");
+    await expect(header(page)).toHaveCount(0);
+    await expect(solveButton(page)).toHaveText("Solve");
+    await expect(solveButton(page)).toBeDisabled();
+    await expect(page.locator("#workbench-run")).toHaveText("Run the reductions");
+
+    await expect(page.locator("#workbench-run")).toBeEnabled();
+
+    // Another target: Subset Sum, straight from Exact Cover, has its stepper and no Solve here;
+    // back to Partition, nothing is built.
+    await page.locator("#workbench-target-button").click();
+    await page
+      .locator("#workbench-target-listbox")
+      .getByRole("option")
+      .filter({ hasText: /^Subset Sum/ })
+      .first()
+      .click();
+    await expect(solveButton(page)).toHaveCount(0);
+    await expect(page.locator("#workbench-stages")).toBeVisible();
   });
 
   test("a backend without chains says so and the direct reductions still work", async ({
@@ -422,7 +495,7 @@ async function runSetCoverChain(page) {
     .filter({ hasText: SET_COVER_ROUTE })
     .first()
     .click();
-  await page.locator("#workbench-run").click();
+  await runAndSolve(page);
   await expect(header(page)).toHaveAttribute("data-summary", "true");
 }
 
@@ -504,22 +577,29 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
       "NestedSet",
     );
     expect(asked).toEqual([null, ",,SetCoverNestedSetVisualization"]);
-    await expect(stepsPosition(page)).toContainText("8 of 19");
+    // #326: drawn again, the chain is built, not solved: the same Build step, of 5 + 4.
+    await expect(stepsPosition(page)).toContainText("8 of 9");
     await expect(header(page)).toHaveAttribute("data-current-hop", "2");
     await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "build");
     await expect(page.locator("#workbench-chain-pictures-run-status")).toHaveText(
       "The chain now draws Set Cover as Nested Set.",
     );
+    await expect(solveButton(page)).toHaveText("Solve");
+    await expect(solveButton(page)).toBeEnabled();
+    await expect(page.locator("#workbench-chain-summary")).toBeDisabled();
 
-    // Start and end stays Start and end, and draws Set Cover with the picture chosen.
-    await page.locator("#workbench-chain-summary").click();
+    // Solved again: Start and end draws Set Cover with the picture chosen. Another picture from
+    // there lands on the last Build step.
+    await solveButton(page).click();
+    await expect(header(page)).toHaveAttribute("data-summary", "true");
     await expect(paneTypeValue(page, "target")).toHaveText("Nested Set");
     await pickSetCover(page, "Bipartite Graph");
     await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
       "data-picture-type",
       "BipartiteGraph",
     );
-    await expect(header(page)).toHaveAttribute("data-summary", "true");
+    await expect(stepsPosition(page)).toContainText("9 of 9");
+    await expect(header(page)).toHaveAttribute("data-summary", "false");
     // Back to every default: the parameter is left out again.
     expect(asked).toEqual([null, ",,SetCoverNestedSetVisualization", null]);
   });
@@ -549,6 +629,8 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
     await expect(paneTypeValue(page, "target")).toHaveText("Nested Set");
     await expect(page.locator("#workbench-target-type-button")).toBeDisabled();
     await expect(page.locator("#workbench-source-type-button")).toBeDisabled();
+    // #326: Solve can't run on a chain being drawn again.
+    await expect(solveButton(page)).toBeDisabled();
     // Cancel stops waiting: the request it leaves is aborted, on purpose.
     page.allowNetworkFailures();
     await page.locator("#workbench-chain-pictures-run-cancel-button").click();
@@ -562,7 +644,7 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
     release();
   });
 
-  test("a search tree for the last problem, chosen during its Solve, starts the Solve again", async ({
+  test("a search tree for the last problem, chosen during its Solve, needs Solve again", async ({
     page,
   }) => {
     const asked = [];
@@ -578,9 +660,19 @@ test.describe("Reduce mode: a picture per problem of a chain", () => {
       "data-picture-type",
       "SearchTree",
     );
-    await expect(stepsPosition(page)).toContainText("10 of 19");
-    await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "solve");
     expect(asked.at(-1)).toBe(",,SetCoverSearchTreeVisualization");
+    // #326: another solver will run, so the chain is unsolved: hop 2's first Build step.
+    await expect(stepsPosition(page)).toContainText("6 of 9");
+    await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "build");
+    await expect(page.locator("#workbench-phases-solve")).toBeDisabled();
+    await solveButton(page).click();
+    await page.locator("#workbench-chain-hop-2").click();
+    await page.locator("#workbench-phases-solve").click();
+    await expect(page.locator("#workbench-phases")).toHaveAttribute("data-current-phase", "solve");
+    await expect(view(page).locator("#workbench-reduction-target")).toHaveAttribute(
+      "data-picture-type",
+      "SearchTree",
+    );
 
     // On Start and end, the search tree says why Clique's pieces don't link into it.
     await page.locator("#workbench-chain-summary").click();
@@ -666,7 +758,7 @@ test.describe("Reduce mode: the middle problem of a chain", () => {
       });
     });
     await openTarget(page, PARTITION_ROUTE);
-    await page.locator("#workbench-run").click();
+    await runAndSolve(page);
     await expectSummary(page);
     // Start and end: Exact Cover and Partition.
     await expect(paneTypeValue(page, "source")).toHaveText("Bipartite Graph");

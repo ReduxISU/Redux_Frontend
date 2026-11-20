@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  chainBuiltHops,
   chainDrawnPictures,
   chainEnding,
   chainFailure,
@@ -153,6 +154,12 @@ describe("route labels", () => {
 });
 
 describe("chainTimeline", () => {
+  test("#326: without the summary, Start and end is left out", () => {
+    const timeline = chainTimeline(hops("bbhmm", "bbbssm"), { summary: false });
+    assert.equal(timeline.length, 11);
+    assert.ok(timeline.every((entry) => !entry.summary));
+  });
+
   test("two hops: both builds, the last hop's solve and map, then the first's handoff and map", () => {
     const timeline = chainTimeline(hops("bbhmm", "bbbssm"));
     assert.deepEqual(timeline, [
@@ -714,5 +721,46 @@ describe("a picture per problem", () => {
       words({ error: "visualization_count", expected: 3, received: 2 }).detail,
       /each of the chain's 3 problems and was sent 2/,
     );
+  });
+});
+
+describe("chainBuiltHops (#326)", () => {
+  test("keeps each hop's Build frames only, at the same indexes", () => {
+    const built = chainBuiltHops(hops("bbhmm", "bbbssm"));
+    assert.deepEqual(
+      built.map((hop) => hop.frames.map((frame) => frame.phase[0]).join("")),
+      ["bb", "bbb"],
+    );
+    // Its timeline is every Build, first hop to last, and nothing else.
+    assert.deepEqual(chainTimeline(built, { summary: false }), [
+      { hop: 0, frame: 0 },
+      { hop: 0, frame: 1 },
+      { hop: 1, frame: 0 },
+      { hop: 1, frame: 1 },
+      { hop: 1, frame: 2 },
+    ]);
+  });
+
+  test("a hop with no Build frames keeps its first frame; the hop's other fields stay", () => {
+    const [hop] = chainBuiltHops([
+      { reduction: "R", frames: [{ phase: "solve" }, { phase: "map" }] },
+    ]);
+    assert.equal(hop.reduction, "R");
+    assert.deepEqual(hop.frames, [{ phase: "solve" }]);
+    assert.deepEqual(chainBuiltHops(null), []);
+  });
+
+  test("the captured Exact Cover -> Partition chain builds in 4 + 6 steps", () => {
+    const built = chainBuiltHops(EXACT_COVER_TO_PARTITION_CHAIN.hops);
+    assert.equal(chainTimeline(built, { summary: false }).length, 10);
+  });
+
+  test("a place in Build is kept when the chain is drawn again unsolved", () => {
+    const old = hops("bbhm", "bbbssm");
+    const built = chainBuiltHops(hops("bbhm", "bbbbssm"));
+    // Hop 2's third Build frame stays its third.
+    assert.equal(keepChainPlace(old, { hop: 1, frame: 2 }, built), 4);
+    // A place in Solve lands on that hop's first Build frame.
+    assert.equal(keepChainPlace(old, { hop: 1, frame: 4 }, built), 2);
   });
 });
