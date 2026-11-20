@@ -39,7 +39,14 @@
 // (sun + "Light" while dark, moon + "Dark" while light) and its accessible name says the
 // same; the hidden half is display:none, so it is out of the accessibility tree too. Below
 // `sm` the toggle drops its text label and stays a 44px icon button beside the menu button.
+//
+// #325: left of the theme toggle, "Report a bug" is always on screen (at phone width an icon
+// button with that accessible name, as the toggle drops its label). It opens a new
+// Redux_Frontend issue on GitHub in a new tab, filled in with the page's address and the
+// browser (lib/bugReport.js); the address is filled in when the link is pointed at, focused or
+// pressed, so it is the page the visitor is on now.
 
+import BugReportIcon from "@mui/icons-material/BugReportOutlined";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -52,6 +59,7 @@ import { useColorScheme } from "@mui/material/styles";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
+import { bugReportUrl, NEW_ISSUE_URL } from "../lib/bugReport";
 import { THEME_ATTRIBUTE } from "./theme";
 
 const LOGO_ALT = "Idaho State University, Computer Science";
@@ -135,6 +143,49 @@ function ThemeToggle() {
         label="Dark"
         accessibleName="Switch to the dark theme"
       />
+    </Button>
+  );
+}
+
+/** #325: points the link at a new issue about the page on screen, just before it is used. */
+function fillBugReport(event) {
+  event.currentTarget.href = bugReportUrl({
+    pageUrl: window.location.href,
+    userAgent: navigator.userAgent,
+  });
+}
+
+function ReportBugLink() {
+  return (
+    <Button
+      id="navbar-report-bug"
+      component="a"
+      href={NEW_ISSUE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      variant="outlined"
+      color="inherit"
+      aria-label="Report a bug (opens GitHub in a new tab)"
+      onPointerEnter={fillBugReport}
+      onFocus={fillBugReport}
+      onClick={fillBugReport}
+      onAuxClick={fillBugReport}
+      onContextMenu={fillBugReport}
+      sx={{
+        minHeight: 44,
+        minWidth: 44,
+        px: { xs: 1, sm: 1.75 },
+        flexShrink: 0,
+        gap: 0.75,
+        color: "text.primary",
+        borderColor: "border.main",
+        "&:hover": { borderColor: "border.strong", backgroundColor: "action.hover" },
+      }}
+    >
+      <BugReportIcon aria-hidden="true" fontSize="small" />
+      <Box component="span" aria-hidden="true" sx={{ display: { xs: "none", sm: "inline" } }}>
+        Report a bug
+      </Box>
     </Button>
   );
 }
@@ -299,6 +350,7 @@ export default function NavBar({ sticky = false }) {
           );
         })}
       </Menu>
+      <ReportBugLink />
       <ThemeToggle />
     </Box>
   );
