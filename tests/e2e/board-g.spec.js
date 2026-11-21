@@ -434,6 +434,9 @@ test("the answer box's placeholder is Redux's example, after Example: or e.g., w
     await page.goto(`/${code}`);
     await page.locator("#workbench-mode-verify").click();
     await expect(field).toHaveAttribute("placeholder", placeholder);
+    // Let this problem's default picture arrive before going to the next one: leaving while it
+    // loads cancels it (net::ERR_ABORTED), which the fixtures wrapper counts as a silent failure.
+    await page.waitForLoadState("networkidle");
   }
 });
 
