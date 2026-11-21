@@ -57,8 +57,22 @@ async function needsSubsetSum(page) {
 }
 
 test.describe("Share", () => {
+  // Browsers only offer navigator.clipboard on secure pages (https or localhost). CI serves the
+  // app from another container over plain http, so every page here gets a stand-in clipboard
+  // that keeps what is written and gives it back.
   test.beforeEach(async ({ context }) => {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await context.addInitScript(() => {
+      let text = "";
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (value) => {
+            text = value;
+          },
+          readText: async () => text,
+        },
+      });
+    });
   });
 
   test("copies a link to what is on screen and says Copied", async ({ page }) => {
