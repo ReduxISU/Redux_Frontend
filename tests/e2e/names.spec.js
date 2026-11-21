@@ -118,8 +118,11 @@ test("Reduce mode's target menu uses display names", async ({ page, request }) =
   const targets = await options.evaluateAll((elements) =>
     elements.map((element) => element.querySelector("[id$='-name']")?.textContent?.trim() ?? ""),
   );
-  for (const target of targets.filter(Boolean)) {
-    expect(displayNames.has(target), `"${target}" is a display name`).toBe(true);
+  // A problem reached only through a chain is labelled with its route, "SAT — via Graph Coloring
+  // (2 steps)" (lib/reductionChain.js chainRouteLabel): the name before " — via " is the target's.
+  for (const label of targets.filter(Boolean)) {
+    const target = label.split(" — via ")[0];
+    expect(displayNames.has(target), `"${target}" (from "${label}") is a display name`).toBe(true);
   }
 
   await options
