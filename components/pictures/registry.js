@@ -84,13 +84,13 @@ export const PICTURE_RENDERERS = {
   Formula: FormulaRenderer,
   Geometry: GeometryRenderer,
   Graph: GraphRenderer,
+  GroupedGraph: GroupedGraphRenderer,
   LayeredGraph: LayeredGraphRenderer,
   NestedSet: NestedSetRenderer,
   Packing: PackingRenderer,
   QuantumCircuit: QuantumRenderer,
   Schedule: ScheduleRenderer,
   SearchTree: SearchTreeRenderer,
-  GroupedGraph: GroupedGraphRenderer,
   Table: TableRenderer,
   TripartiteMatching: TripartiteRenderer,
 };
@@ -105,6 +105,7 @@ const PICTURE_ANNOTATIONS = {
   Formula: formulaAnnotations,
   Geometry: geometryAnnotations,
   Graph: graphAnnotations,
+  GroupedGraph: groupedGraphAnnotations,
   LayeredGraph: layeredAnnotations,
   NestedSet: nestedSetAnnotations,
   Packing: packingAnnotations,
@@ -113,7 +114,6 @@ const PICTURE_ANNOTATIONS = {
   SearchTree: searchTreeAnnotations,
   Table: tableAnnotations,
   TripartiteMatching: tripartiteAnnotations,
-  GroupedGraph: groupedGraphAnnotations,
 };
 
 /**

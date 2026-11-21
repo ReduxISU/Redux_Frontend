@@ -12,6 +12,7 @@
 // does, and reductionView is answered from captures (./reduction-payloads.js).
 
 import { expect, test } from "./fixtures";
+import { answerViewCertificates, clickPhase, reduceAndSolve } from "./helpers";
 import {
   SAT_FACTOR_GRAPH_TO_3SAT_VIEW,
   SAT_TO_3SAT_FACTOR_GRAPH_VIEW,
@@ -21,7 +22,7 @@ import {
 
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
 const ALL_INFO_REQUEST = /\/api\/redux\/Navigation\/Batch\/allInfo/;
-const ALL_VISUALIZATIONS_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizations$/;
+const ALL_VISUALIZATIONS_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizations(?=\?|$)/;
 
 const VIEW = "#workbench-reduction";
 const pane = (page, side) => page.locator(`${VIEW}-${side}`);
@@ -90,6 +91,7 @@ async function listPictures(page) {
  * Returns the requests' query strings.
  */
 async function answerViews(page, { older = false, delays = {} } = {}) {
+  await answerViewCertificates(page);
   const asked = [];
   await page.route(REDUCTION_VIEW_REQUEST, async (route) => {
     const url = new URL(route.request().url());
@@ -113,7 +115,7 @@ async function answerViews(page, { older = false, delays = {} } = {}) {
   return asked;
 }
 
-/** Opens SAT in Reduce mode with 3SAT chosen and runs it. */
+/** Opens SAT in Reduce mode with 3SAT chosen and runs it: Reduce, then Solve (#303 stage 2). */
 async function runSatTo3sat(page) {
   await page.goto(`/SAT?instance=${encodeURIComponent(SAT_TO_3SAT_VIEW.source.instance)}`);
   await expect(page.getByRole("heading", { level: 1, name: "SAT" })).toBeVisible({
@@ -130,7 +132,7 @@ async function runSatTo3sat(page) {
       .first()
       .click();
   }
-  await page.locator("#workbench-run").click();
+  await reduceAndSolve(page, { expect });
   await expect(page.locator(VIEW)).toBeVisible();
   await expect(page.locator(VIEW)).toHaveAttribute("data-loading", "false");
 }
@@ -207,7 +209,7 @@ test("a target picture without the build's pieces is shown whole during Build, w
 }) => {
   await answerViews(page);
   await runSatTo3sat(page);
-  await page.locator("#workbench-phases-build").click();
+  await clickPhase(page, "build");
   await expect(page.locator(VIEW)).toHaveAttribute("data-build-reveal", "pieces");
   await expect(pane(page, "target")).not.toHaveAttribute("data-hidden-count", "0");
   await expect(page.locator(`${VIEW}-target-note`)).toHaveCount(0);
@@ -222,7 +224,7 @@ test("a target picture without the build's pieces is shown whole during Build, w
   await expect(page.locator(`${VIEW}-target-note`)).toContainText("grows when the solver runs");
   // Past Build that note goes. A Search Tree draws none of the pieces the gadgets name, so the
   // pane keeps saying links can't be shown there (#239).
-  await page.locator("#workbench-phases-solve").click();
+  await clickPhase(page, "solve");
   await expect(page.locator(`${VIEW}-target-note`)).not.toContainText("grows when the solver runs");
   await expect(page.locator(`${VIEW}-target-note`)).toContainText(
     "Gadget links can't be shown on this picture",
@@ -232,12 +234,13 @@ test("a target picture without the build's pieces is shown whole during Build, w
 test("switching a picture keeps the phase and the step in it", async ({ page }) => {
   await answerViews(page);
   await runSatTo3sat(page);
-  await page.locator("#workbench-phases-solve").click();
+  await clickPhase(page, "solve");
   const start = Number(await page.locator(VIEW).getAttribute("data-frame-index"));
   await page.locator("#workbench-steps-next").click();
   await page.locator("#workbench-steps-next").click();
   await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(start + 2));
-  const caption = await page.locator(`${VIEW}-caption-phase`).textContent();
+  // #303: the step's place in its phase is said on the marked phase button.
+  const caption = await page.locator("#workbench-phases-place").textContent();
 
   await pick(page, "target", "3SAT Search Tree");
   await expect(page.locator(VIEW)).toHaveAttribute(
@@ -246,7 +249,7 @@ test("switching a picture keeps the phase and the step in it", async ({ page }) 
   );
   await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "solve");
   await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(start + 2));
-  await expect(page.locator(`${VIEW}-caption-phase`)).toHaveText(caption);
+  await expect(page.locator("#workbench-phases-place")).toHaveText(caption);
 
   // The source side too.
   await pick(page, "source", "SAT Factor Graph");
@@ -293,9 +296,11 @@ test("while another picture is drawn the panes say so, and a later choice wins o
     "Sat3SearchTreeVisualization",
   );
   await expect(typeButton(page, "target")).toContainText("3SAT Search Tree");
-  // Run asked for the target's default (no pick yet), then the two picks.
+  // Reduce asked for the target's default (no pick yet), Solve for the picture Reduce drew (the
+  // view named it), then the two picks.
   expect(asked.map((request) => request.target)).toEqual([
     null,
+    "Sat3DefaultVisualization",
     "Sat3FactorGraphVisualization",
     "Sat3SearchTreeVisualization",
   ]);
@@ -327,16 +332,23 @@ test("a picture picked before Run is the one the view is drawn with", async ({ p
   expect(asked[0].source).toBe("SatFactorGraphVisualization");
 });
 
-test("a backend that ignores the choice gets a fixed dropdown naming what it drew", async ({
+test("a backend that ignores the choice gets a one-picture dropdown naming what it drew", async ({
   page,
 }) => {
   const asked = await answerViews(page, { older: true });
   await runSatTo3sat(page);
   await expect(page.locator(VIEW)).toHaveAttribute("data-target-visualization", "");
-  // The capture names no picture, so each dropdown names the side's default and can't open.
+  // The capture names no picture, so each dropdown names the side's default, and (#303) still
+  // opens, on that one picture; picking it asks for nothing.
   await expect(typeButton(page, "target")).toContainText("3SAT Visualization");
-  await expect(typeButton(page, "target")).toBeDisabled();
   await expect(typeButton(page, "source")).toContainText("SAT Visualization");
-  await expect(typeButton(page, "source")).toBeDisabled();
-  expect(asked).toHaveLength(1);
+  for (const side of ["source", "target"]) {
+    await expect(typeButton(page, side)).toBeEnabled();
+    await typeButton(page, side).click();
+    const options = page.locator(`#workbench-${side}-type-listbox`).getByRole("option");
+    await expect(options).toHaveCount(1);
+    await options.first().click();
+  }
+  // One request for Reduce and one for Solve; none for a picture.
+  expect(asked).toHaveLength(2);
 });

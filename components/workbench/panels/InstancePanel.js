@@ -1,10 +1,13 @@
 // components/workbench/panels/InstancePanel.js
 //
 // #229: the Instance panel. For now it holds the full instance as one editable text box,
-// plus the problem's declared format description. The design's "By part" boxes (one per
-// clause, or Nodes / Edges / K) need the backend's per-part description (ReduxISU/Redux#851)
-// and land with the part editor (#228); the spot is marked below and nothing here guesses
-// at how to split an instance.
+// plus the problem's declared format description.
+//
+// #303 (Board G): no longer a panel. It is the instance editor at the top of the workspace,
+// always visible, with the error (when Redux can't read the instance) or the format under it.
+// Board G's "By parts" mode (one box per clause, or Nodes / Edges / K) needs the backend's
+// per-part description (ReduxISU/Redux#851) and lands with the part editor (#228); until then
+// only the whole text is shown, with no placeholder for the other mode.
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -34,14 +37,24 @@ export default function InstancePanel({
     .join(" ");
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-      <Box component="label" htmlFor={inputId} sx={{ fontWeight: 600 }}>
-        Full instance
+    <Box
+      component="section"
+      aria-labelledby={`${idPrefix}-label`}
+      id={idPrefix}
+      sx={{ display: "flex", flexDirection: "column", gap: 1 }}
+    >
+      <Box
+        component="label"
+        id={`${idPrefix}-label`}
+        htmlFor={inputId}
+        sx={{ fontSize: "0.8125rem", fontWeight: 600, color: "text.secondary" }}
+      >
+        Instance
       </Box>
       <Box
         id={inputId}
         component="textarea"
-        rows={3}
+        rows={2}
         value={instance}
         onChange={(event) => onInstanceChange(event.target.value)}
         placeholder="No default instance declared for this problem yet."
@@ -56,11 +69,12 @@ export default function InstancePanel({
           color: "text.primary",
           border: "1px solid",
           borderColor: instanceError ? "status.err" : "border.main",
-          borderRadius: "8px",
-          px: 1.5,
-          py: 1.25,
+          borderRadius: "10px",
+          px: "14px",
+          py: "11px",
           fontFamily: MONO_FONT,
-          fontSize: "0.875rem",
+          fontSize: "0.9375rem",
+          lineHeight: 1.6,
         }}
       />
       {instanceError && (
@@ -77,23 +91,14 @@ export default function InstancePanel({
         </Box>
       )}
       {problem.instanceFormat && (
-        <Typography id={formatId} variant="body2" sx={{ color: "text.secondary" }}>
+        <Typography
+          id={formatId}
+          variant="body2"
+          sx={{ color: "text.secondary", fontSize: "0.8125rem" }}
+        >
           {problem.instanceFormat}
         </Typography>
       )}
-      <Box
-        sx={{
-          borderTop: "1px solid",
-          borderColor: "border.soft",
-          pt: 1.5,
-          fontWeight: 600,
-        }}
-      >
-        By part
-      </Box>
-      <Typography variant="body2" sx={{ color: "text.secondary" }}>
-        Editing the instance one part at a time is not available yet. Edit the full instance above.
-      </Typography>
     </Box>
   );
 }

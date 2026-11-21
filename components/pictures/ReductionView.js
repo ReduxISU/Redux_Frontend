@@ -25,6 +25,13 @@
 //     target picture that lacks the pieces the build adds (buildReveal "whole") is shown whole
 //     during Build, with a line saying so.
 //
+// #303 stage 2 (Board G): the two panes are laid out by ../workbench/PaneGrid.js, as Reduce's
+// panes are before a view arrives: each with its label row, its Picture menu, its own zoom
+// buttons and Full screen, the header rows lined up across both, an arrow between them, stacked
+// at 900 px and narrower. `only` shows one pane alone (its Full screen). Reduce's first step
+// passes a view cut to its Build frames (lib/reductionView.js buildOnlyView); Solve and Map back
+// come with the Solve step.
+//
 // The build and fade marks are data attributes set on the renderers' own elements after React
 // draws them (and again whenever a renderer adds elements of its own, through a
 // MutationObserver), styled by this component's stylesheet. React never sets those attributes, so
@@ -41,12 +48,17 @@
 // the gadgets the step made, in plain words, and the step's bound when it sets one. A dashed
 // "Rule says no" line is a piece too (lib/reductionView.js gives it to its edge rule). A picture
 // that draws none of the pieces a side's gadgets name (a Search Tree) says links can't be shown.
+//
+// #303 (Board G polish): in the workbench the step's caption goes under the step controls, and
+// the Plain / Color switch with the line saying what is linked goes to the Gadgets section at the
+// bottom of the page (./secondarySlots.js); outside it they stay under the pictures.
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GADGET_EMPTY_SIDE, GADGET_KINDS, OTHER_GADGET_KIND } from "../../data/gadgetKinds";
 import { describeGadget, gadgetColorMap, gadgetIdName } from "../../lib/gadgets";
+import { revealScroll, routeFades, routeStops, stopLabel } from "../../lib/reductionChain";
 import {
   eventWord,
   linkedPieces,
@@ -60,11 +72,13 @@ import {
   sideLinkable,
   unbuiltIds,
 } from "../../lib/reductionView";
-import { paletteVars } from "../theme";
-import { COMPACT_MEDIA } from "../workbench/layout";
+import { hiddenScrollbarSx, paletteVars } from "../theme";
+import { COMPACT_MEDIA, pictureCardSx } from "../workbench/layout";
+import { PaneGrid, PaneSection } from "../workbench/PaneGrid";
 import { GADGET_PALETTE } from "./gadgetRings";
 import { FAINT_FILTER, PictureToggle } from "./graphPieces";
 import PictureCanvas from "./PictureCanvas";
+import { AtBottom, InSlot, SecondarySlots, StepTextSlot } from "./secondarySlots";
 
 const ARROW = "↦";
 const GADGET_RING = paletteVars.viz.gadget;
@@ -80,6 +94,10 @@ const STEP_GADGET_LIMIT = 4;
 
 const LINKS_UNAVAILABLE =
   "Gadget links can't be shown on this picture: it doesn't draw the pieces the gadgets name.";
+
+/** Why a Search Tree side shows no links: it draws a solver's choices, not the instance's pieces. */
+const TREE_LINKS_UNAVAILABLE =
+  "A search tree draws the solver's choices, not the instance's pieces, so pieces don't link into it.";
 
 const KIND_LABELS = new Map(
   [...GADGET_KINDS, OTHER_GADGET_KIND].map((entry) => [entry.kind, entry.label]),
@@ -151,14 +169,24 @@ function markPieces(root, hidden, hot) {
 }
 
 /**
- * One side of the view: its title and its picture, drawn by the picture type's own renderer,
- * with the build and link marks on top.
+ * One side of the view: its header (label row, Picture menu, zoom, Full screen; #303 stage 2,
+ * ../workbench/PaneGrid.js) and its picture, drawn by the picture type's own renderer, with the
+ * build and link marks on top.
  */
+/** A pane's label row with its Problem part naming `problem`, the problem the view drew. */
+function namedParts(parts, problem) {
+  const named = { k: "Problem", v: problem };
+  if (!parts) return [named];
+  return parts.map((part) => (part.k === "Problem" ? named : part));
+}
+
 function ReductionPane({
   idPrefix,
   which,
-  title,
+  parts,
   typeControl,
+  full,
+  paneHidden,
   loading,
   note,
   type,
@@ -200,41 +228,21 @@ function ReductionPane({
   };
 
   return (
-    <Box
-      component="section"
-      aria-labelledby={`${idPrefix}-title`}
-      sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
+    <PaneSection
+      id={idPrefix}
+      which={which}
+      parts={parts}
+      typeControl={typeControl}
+      full={full}
+      hidden={paneHidden}
+      note={
+        note && !loading ? (
+          <Box component="span" id={`${idPrefix}-note`}>
+            {note}
+          </Box>
+        ) : null
+      }
     >
-      {/* The title wraps beside the dropdown rather than pushing it to a line of its own, so
-          both panes' headers are the dropdown's height and the pictures line up side by side. */}
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "nowrap",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          gap: 1,
-          [COMPACT_MEDIA]: { flexWrap: "wrap" },
-        }}
-      >
-        <Box
-          component="h3"
-          id={`${idPrefix}-title`}
-          sx={{
-            m: 0,
-            minWidth: 0,
-            pb: typeControl ? 1.25 : 0,
-            fontSize: "0.75rem",
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "text.secondary",
-          }}
-        >
-          {title}
-        </Box>
-        {typeControl}
-      </Box>
       {loading ? (
         <Box
           id={idPrefix}
@@ -242,16 +250,12 @@ function ReductionPane({
           data-loading="true"
           role="status"
           sx={{
+            ...pictureCardSx,
             minHeight: 320,
-            display: "flex",
+            flexDirection: "row",
             alignItems: "center",
-            justifyContent: "center",
             gap: 1.5,
             color: "text.secondary",
-            backgroundColor: "surface.input",
-            borderRadius: "10px",
-            p: 2,
-            boxSizing: "border-box",
           }}
         >
           <CircularProgress size={18} aria-hidden="true" />
@@ -276,11 +280,9 @@ function ReductionPane({
             if (event.key === "Escape") onPoint(which, null, "clear");
           }}
           sx={{
-            minWidth: 0,
-            backgroundColor: "surface.input",
-            borderRadius: "10px",
-            p: 2,
-            boxSizing: "border-box",
+            // #303: the picture's card, filling the pane's picture area so both panes' cards are
+            // one height, the picture centered in it (../workbench/layout.js pictureCardSx).
+            ...pictureCardSx,
             [COMPACT_MEDIA]: { p: 1 },
             "& [data-rv-built='no']": { visibility: "hidden" },
             "& [data-rv-link='faint']": {
@@ -304,35 +306,46 @@ function ReductionPane({
           />
         </Box>
       )}
-      {note && !loading && (
-        <Box id={`${idPrefix}-note`} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
-          {note}
-        </Box>
-      )}
-    </Box>
+    </PaneSection>
   );
 }
 
 /**
  * The phase bar: "1 · Build", "2 · Solve", "3 · Map back", the current one marked. Each jumps to
- * its phase's first step. Sits with the step controls, as the mockup's stepper has it.
+ * its phase's first step. Sits with the step controls, as the mockup's stepper has it. #303: it
+ * sits right above them, always shown, so the reader sees which stage the algorithm is in as the
+ * steps play; the phase holding the step on screen is `aria-current="step"` and drawn as the
+ * soft brand button (`brand.soft` fill, `brand.softLine` outline), the others plain.
  * @param {Object} props
  * @param {string} props.idPrefix
  * @param {Object[]} props.frames The view's frames.
  * @param {number} props.frameIndex The step on screen.
  * @param {(index: number) => void} props.onStepChange
+ * @param {Array<{key: string, label: string, about: string}>} [props.phases] The phases to list
+ *   (a chain's earlier hop has its handoff in place of Solve: lib/reductionView.js
+ *   chainHopPhases); left out, a reduction's three.
  */
-export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }) {
+export function ReductionPhaseBar({
+  idPrefix,
+  frames,
+  frameIndex,
+  onStepChange,
+  phases = REDUCTION_PHASES,
+}) {
   const starts = phaseStarts(frames);
   const current = frames[frameIndex]?.phase ?? null;
+  // #303: the step's place in its phase ("3 of 8"), said on the marked phase (the step bar's
+  // line no longer repeats "Build 3 of 8").
+  const place = current ? placeInPhase(frames, frameIndex) : null;
   return (
     <Box
       id={idPrefix}
       role="group"
       aria-label="Reduction phases"
-      sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}
+      data-current-phase={current ?? undefined}
+      sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center", minWidth: 0 }}
     >
-      {REDUCTION_PHASES.map((phase, index) => {
+      {phases.map((phase, index) => {
         const start = starts[phase.key];
         const here = phase.key === current;
         return (
@@ -347,14 +360,14 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
             title={phase.about}
             onClick={() => onStepChange(start)}
             sx={{
-              minHeight: 36,
+              minHeight: 44,
               px: 1.5,
               borderRadius: "999px",
               border: "1px solid",
-              borderColor: here ? "brand.line" : "border.main",
-              boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.line}` : "none",
-              backgroundColor: here ? "surface.raised" : "surface.main",
-              color: here ? "text.primary" : "text.secondary",
+              borderColor: here ? "brand.softLine" : "border.main",
+              boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.softLine}` : "none",
+              backgroundColor: here ? "brand.soft" : "surface.main",
+              color: here ? "brand.onSoft" : "text.secondary",
               fontFamily: "inherit",
               fontSize: "0.8125rem",
               fontWeight: here ? 700 : 500,
@@ -363,9 +376,241 @@ export function ReductionPhaseBar({ idPrefix, frames, frameIndex, onStepChange }
             }}
           >
             {`${index + 1} · ${phase.label}`}
+            {here && place && (
+              <Box component="span" id={`${idPrefix}-place`} sx={{ fontWeight: 500 }}>
+                {` · ${place.index + 1} of ${place.count}`}
+              </Box>
+            )}
           </Box>
         );
       })}
+    </Box>
+  );
+}
+
+/** How wide each edge's fade is, and how far a stop scrolled into view stays clear of it. */
+const ROUTE_FADE_PX = 32;
+
+/** One stop's pill, current or not (the hidden copy that measures the route draws it too). */
+function routeStopSx(here) {
+  return {
+    minHeight: 44,
+    px: 1.5,
+    borderRadius: "999px",
+    border: "1px solid",
+    borderColor: here ? "brand.softLine" : "border.main",
+    boxShadow: here ? `inset 0 0 0 1px ${paletteVars.brand.softLine}` : "none",
+    backgroundColor: here ? "brand.soft" : "surface.main",
+    color: here ? "brand.onSoft" : "text.secondary",
+    fontFamily: "inherit",
+    fontSize: "0.8125rem",
+    fontWeight: here ? 700 : 500,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  };
+}
+
+const routeArrowSx = { color: "text.secondary", fontSize: "1rem", flex: "none" };
+
+/** Whether the reader asked for less motion. */
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+  );
+}
+
+/**
+ * A chain's header (lib/reductionChain.js), above its pictures: the chain named problem by
+ * problem ("Exact Cover → Subset Sum → Partition"), then its stops as one route on one line,
+ * arrows between them: a button per step ("1 · Exact Cover → Subset Sum") and, last, "Start and
+ * end" (the first problem beside the last). The stop drawn now is marked (`aria-current="step"`,
+ * the soft brand button, as the phase bar marks its phase); each jumps to its first frame.
+ *
+ * A route too long for its line scrolls sideways (trackpad, Shift and the wheel, touch, or Tab
+ * through the stops), with no scrollbar: an edge with stops out of sight fades into the
+ * workspace's surface color instead (the background fades over the stops; no text is made
+ * see-through). Then every stop but the one on screen takes its compact label ("3 → Weighted
+ * Cut"), its full one staying its accessible name. The stop on screen is scrolled into view
+ * whenever it changes (smoothly, unless the reader asked for less motion) and, at once, when the
+ * header first shows. Whether the full route fits is measured on a hidden copy with every label
+ * full, so the choice does not flip as labels shorten.
+ * @param {Object} props
+ * @param {string} props.idPrefix
+ * @param {string} props.title
+ * @param {Array<{from: string, to: string}>} props.hops
+ * @param {number} props.current The stop drawn now: a hop's index, or `hops.length` for Start and
+ *   end.
+ * @param {(stop: number) => void} props.onHop
+ */
+export function ReductionChainHeader({ idPrefix, title, hops, current, onHop }) {
+  const stops = useMemo(() => routeStops(hops), [hops]);
+  const scrollerRef = useRef(null);
+  const measureRef = useRef(null);
+  const [compact, setCompact] = useState(false);
+  const [fades, setFades] = useState({ left: false, right: false });
+  const shownOnce = useRef(false);
+
+  // Whether the full route fits, and which edges fade: again on every resize.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    const measure = measureRef.current;
+    if (!scroller || !measure) return undefined;
+    const update = () => {
+      setCompact(measure.offsetWidth > scroller.clientWidth);
+      setFades(routeFades(scroller));
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(update);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [stops]);
+
+  // The stop on screen, into view: at once the first time, smoothly after.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    const item = scroller?.querySelector(`[data-stop="${current + 1}"]`)?.parentElement;
+    if (!scroller || !item) return;
+    const left = revealScroll({
+      itemLeft: item.offsetLeft,
+      itemWidth: item.offsetWidth,
+      scrollLeft: scroller.scrollLeft,
+      clientWidth: scroller.clientWidth,
+      margin: ROUTE_FADE_PX,
+    });
+    const instant = !shownOnce.current || prefersReducedMotion();
+    shownOnce.current = true;
+    if (left !== null) {
+      if (typeof scroller.scrollTo === "function") {
+        scroller.scrollTo({ left, behavior: instant ? "auto" : "smooth" });
+      } else {
+        scroller.scrollLeft = left;
+      }
+    }
+    setFades(routeFades(scroller));
+  }, [current, compact]);
+
+  const fadeSx = (side) => ({
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    [side]: 0,
+    width: ROUTE_FADE_PX,
+    pointerEvents: "none",
+    background: `linear-gradient(to ${side === "left" ? "right" : "left"}, ${paletteVars.surface.main}, transparent)`,
+  });
+
+  return (
+    <Box
+      id={idPrefix}
+      data-current-hop={current + 1}
+      data-hop-count={hops.length}
+      data-summary={current === hops.length ? "true" : "false"}
+      sx={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}
+    >
+      <Box id={`${idPrefix}-title`} sx={{ fontSize: "0.9375rem", fontWeight: 700 }}>
+        {title}
+      </Box>
+      <Box
+        id={`${idPrefix}-route`}
+        data-compact={compact ? "true" : "false"}
+        data-fade-left={fades.left ? "true" : "false"}
+        data-fade-right={fades.right ? "true" : "false"}
+        sx={{ position: "relative", minWidth: 0, overflow: "hidden" }}
+      >
+        <Box
+          ref={scrollerRef}
+          component="ol"
+          id={`${idPrefix}-stops`}
+          aria-label={`Chain route: ${stops.map((stop) => stop.full).join(", then ")}`}
+          onScroll={(event) => setFades(routeFades(event.currentTarget))}
+          sx={{
+            listStyle: "none",
+            m: 0,
+            // Room for each stop's focus ring, which the scrolling line would otherwise clip.
+            p: "6px",
+            display: "flex",
+            flexWrap: "nowrap",
+            gap: 1,
+            alignItems: "center",
+            minWidth: 0,
+            overflowX: "auto",
+            overflowY: "hidden",
+            position: "relative",
+            // A stop focused by Tab scrolls clear of the fades too.
+            scrollPaddingInline: `${ROUTE_FADE_PX}px`,
+            ...hiddenScrollbarSx,
+          }}
+        >
+          {stops.map((stop, index) => {
+            const here = index === current;
+            return (
+              <Box
+                component="li"
+                key={stop.full}
+                sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}
+              >
+                <Box
+                  component="button"
+                  type="button"
+                  id={stop.summary ? `${idPrefix}-summary` : `${idPrefix}-hop-${index + 1}`}
+                  data-stop={index + 1}
+                  aria-current={here ? "step" : undefined}
+                  aria-label={stop.full}
+                  title={stop.title}
+                  onClick={() => onHop(index)}
+                  sx={routeStopSx(here)}
+                >
+                  {stopLabel(stop, { compact, current: here })}
+                </Box>
+                {index < stops.length - 1 && (
+                  <Box component="span" aria-hidden="true" sx={routeArrowSx}>
+                    →
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
+        </Box>
+        {fades.left && <Box id={`${idPrefix}-fade-left`} aria-hidden="true" sx={fadeSx("left")} />}
+        {fades.right && (
+          <Box id={`${idPrefix}-fade-right`} aria-hidden="true" sx={fadeSx("right")} />
+        )}
+        {/* The full route, every label full and bold, out of sight: whether it fits. */}
+        <Box
+          ref={measureRef}
+          aria-hidden="true"
+          sx={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            visibility: "hidden",
+            pointerEvents: "none",
+            width: "max-content",
+            display: "flex",
+            gap: 1,
+            p: "6px",
+            alignItems: "center",
+          }}
+        >
+          {stops.map((stop, index) => (
+            <Box key={stop.full} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Box
+                component="span"
+                sx={{ ...routeStopSx(true), display: "inline-flex", alignItems: "center" }}
+              >
+                {stop.full}
+              </Box>
+              {index < stops.length - 1 && (
+                <Box component="span" sx={routeArrowSx}>
+                  →
+                </Box>
+              )}
+            </Box>
+          ))}
+        </Box>
+      </Box>
     </Box>
   );
 }
@@ -461,12 +706,14 @@ function capitalize(text) {
   return text ? `${text[0].toUpperCase()}${text.slice(1)}` : text;
 }
 
-/** The step's caption: its phase and place in it, what happened, and the verdict at the end. */
+/**
+ * The step's caption: what happened, and the verdict at the end. #303: the phase and the step's
+ * place in it ("Build 3 of 8") moved to the phase bar's marked phase (ReductionPhaseBar), so the
+ * caption reads after the step bar's "Step N of M:".
+ */
 function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors }) {
   const frame = frames[frameIndex];
   if (!frame) return null;
-  const phase = REDUCTION_PHASES.find((entry) => entry.key === frame.phase);
-  const { index, count } = placeInPhase(frames, frameIndex);
   const word = eventWord(frame.phase, frame.event);
   const verdict =
     typeof frame.ok === "boolean" ? (frame.ok ? "Verdict: yes" : "Verdict: no") : null;
@@ -485,19 +732,6 @@ function ReductionCaption({ id, frames, frameIndex, gadgets, describe, colors })
         color: "text.primary",
       }}
     >
-      <Box
-        component="span"
-        id={`${id}-phase`}
-        sx={{
-          fontSize: "0.75rem",
-          fontWeight: 700,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "text.secondary",
-        }}
-      >
-        {`${phase?.label ?? frame.phase} ${index + 1} of ${count}`}
-      </Box>
       {word && (
         <Box component="span" id={`${id}-event`} sx={{ fontWeight: 700 }}>
           {word}
@@ -537,7 +771,12 @@ function listNames(ids, nameOf, limit = 6) {
  * @param {string} props.idPrefix Prefixes every id rendered here.
  * @param {ReturnType<typeof import("../../lib/reductionView").normalizeReductionView>} props.view
  * @param {number} props.frameIndex The step on screen.
- * @param {boolean} props.stack Stack the two pictures (a panel is open beside the pane).
+ * @param {{source?: Array<{k: string, v: string}>, target?: Array<{k: string, v: string}>}}
+ *   [props.labels] #303 stage 2: each pane's label row (../workbench/PaneGrid.js); left out,
+ *   "PROBLEM <name>". Its Problem part names the problem the view drew.
+ * @param {{source?: Object|null, target?: Object|null}} [props.full] Each pane's own Full
+ *   screen button (`{id, on, onToggle}`).
+ * @param {"source"|"target"|null} [props.only] The pane on full screen alone.
  * @param {{sourceIds: string[], targetIds: string[]}|null} [props.activeGadget] The gadget a
  *   Gadgets row in the Result panel is pointing at, drawn when no piece is.
  * @param {{source?: import("react").ReactNode, target?: import("react").ReactNode}} [props.typeControls]
@@ -552,13 +791,17 @@ export default function ReductionView({
   idPrefix,
   view,
   frameIndex,
-  stack,
   activeGadget = null,
   typeControls = {},
+  labels = {},
+  full = {},
+  only = null,
   loading = null,
   colorMode = "plain",
   onColorMode = null,
 }) {
+  const stepTextSlot = useContext(StepTextSlot);
+  const secondarySlots = useContext(SecondarySlots);
   const { source, target, gadgets } = view;
   const sourceFrames = useMemo(
     () => view.frames.map((frame) => paneFrame(frame, "source", source.type)),
@@ -610,6 +853,8 @@ export default function ReductionView({
         : "This picture can't show the target piece by piece, so it shows it whole while it is built.";
   }
   const noneHidden = useMemo(() => new Set(), []);
+  const unlinkedTree = (which) =>
+    gadgets.length > 0 && !linkable[which] && view[which].type === "SearchTree";
   const linkNote = (which) => (gadgets.length > 0 && !linkable[which] ? LINKS_UNAVAILABLE : null);
   const joinNotes = (...notes) => notes.filter(Boolean).join(" ") || null;
 
@@ -652,7 +897,12 @@ export default function ReductionView({
     const pointed = name.endsWith(")")
       ? `${name.slice(0, -1)}, ${problem})`
       : `${name} (${problem})`;
-    if (link.gadgets.length === 0) {
+    const other = which === "source" ? "target" : "source";
+    if (link.gadgets.length > 0 && unlinkedTree(other)) {
+      // Start and end with a search tree last (or a reduction drawn onto one): the links go on
+      // to pieces the tree does not draw.
+      readout = `${pointed}: ${TREE_LINKS_UNAVAILABLE.charAt(0).toLowerCase()}${TREE_LINKS_UNAVAILABLE.slice(1)}`;
+    } else if (link.gadgets.length === 0) {
       readout = `${pointed}: no gadget names this piece.`;
     } else {
       const kinds = [...new Set(link.gadgets.map((gadgetIndex) => gadgets[gadgetIndex].kind))]
@@ -684,9 +934,11 @@ export default function ReductionView({
     readout = `Gadget: ${source.problem} ${from} ${ARROW} ${target.problem} ${to}.`;
   } else {
     readout =
-      gadgets.length > 0
-        ? "Point at a piece on either side, or tap it, to see what it became or came from."
-        : "This reduction lists no gadgets, so its pieces are not linked across.";
+      gadgets.length > 0 && unlinkedTree("target")
+        ? TREE_LINKS_UNAVAILABLE
+        : gadgets.length > 0
+          ? "Point at a piece on either side, or tap it, to see what it became or came from."
+          : "This reduction lists no gadgets, so its pieces are not linked across.";
   }
 
   return (
@@ -701,117 +953,109 @@ export default function ReductionView({
       data-build-reveal={target.buildReveal}
       sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}
     >
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: stack ? "minmax(0, 1fr)" : "minmax(0, 1fr) auto minmax(0, 1fr)",
-          alignItems: "stretch",
-          gap: "10px",
-          [COMPACT_MEDIA]: { gridTemplateColumns: "minmax(0, 1fr)" },
-        }}
-      >
-        <ReductionPane
-          idPrefix={`${idPrefix}-source`}
-          which="source"
-          title={`${source.problem} · the instance you gave`}
-          typeControl={typeControls.source ?? null}
-          loading={loading}
-          type={source.type}
-          payload={source.payload}
-          name={source.problem}
-          frame={sourceFrames[index]}
-          frames={sourceFrames}
-          frameIndex={index}
-          note={loading ? null : linkNote("source")}
-          hidden={noneHidden}
-          hot={link ? link.source : null}
-          gadgetColors={colors?.source}
-          onPoint={point}
-        />
-        <Box
-          aria-hidden="true"
-          sx={{
-            alignSelf: "center",
-            justifySelf: "center",
-            fontSize: "1.5rem",
-            lineHeight: 1,
-            color: "text.secondary",
-            transform: stack ? "rotate(90deg)" : "none",
-            [COMPACT_MEDIA]: { transform: "rotate(90deg)" },
-          }}
-        >
-          {ARROW}
-        </Box>
-        <ReductionPane
-          idPrefix={`${idPrefix}-target`}
-          which="target"
-          title={`${target.problem} · built by the reduction`}
-          typeControl={typeControls.target ?? null}
-          loading={loading}
-          note={joinNotes(targetNote, linkNote("target"))}
-          type={target.type}
-          payload={target.payload}
-          name={target.problem}
-          frame={targetFrames[index]}
-          frames={targetFrames}
-          frameIndex={index}
-          hidden={hiddenTarget}
-          hot={link ? link.target : null}
-          gadgetColors={colors?.target}
-          onPoint={point}
-        />
-      </Box>
+      <PaneGrid
+        id={`${idPrefix}-panes`}
+        only={only}
+        source={
+          <ReductionPane
+            idPrefix={`${idPrefix}-source`}
+            which="source"
+            parts={namedParts(labels.source, source.problem)}
+            typeControl={typeControls.source ?? null}
+            full={full.source ?? null}
+            paneHidden={only === "target"}
+            loading={loading}
+            type={source.type}
+            payload={source.payload}
+            name={source.problem}
+            frame={sourceFrames[index]}
+            frames={sourceFrames}
+            frameIndex={index}
+            note={loading ? null : linkNote("source")}
+            hidden={noneHidden}
+            hot={link ? link.source : null}
+            gadgetColors={colors?.source}
+            onPoint={point}
+          />
+        }
+        target={
+          <ReductionPane
+            idPrefix={`${idPrefix}-target`}
+            which="target"
+            parts={namedParts(labels.target, target.problem)}
+            typeControl={typeControls.target ?? null}
+            full={full.target ?? null}
+            paneHidden={only === "source"}
+            loading={loading}
+            note={joinNotes(targetNote, linkNote("target"))}
+            type={target.type}
+            payload={target.payload}
+            name={target.problem}
+            frame={targetFrames[index]}
+            frames={targetFrames}
+            frameIndex={index}
+            hidden={hiddenTarget}
+            hot={link ? link.target : null}
+            gadgetColors={colors?.target}
+            onPoint={point}
+          />
+        }
+      />
       {!loading && (
-        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px" }}>
-          {gadgets.length > 0 && onColorMode && (
-            <Box
-              id={`${idPrefix}-marks-row`}
-              data-gadget-marks={colorMode}
-              sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}
-            >
+        <AtBottom slots={secondarySlots} slot={secondarySlots.gadgets}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px" }}>
+            {gadgets.length > 0 && onColorMode && (
               <Box
-                component="span"
-                id={`${idPrefix}-marks-label`}
-                sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
+                id={`${idPrefix}-marks-row`}
+                data-gadget-marks={colorMode}
+                sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none" }}
               >
-                Gadgets
+                <Box
+                  component="span"
+                  id={`${idPrefix}-marks-label`}
+                  sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
+                >
+                  Gadgets
+                </Box>
+                <PictureToggle
+                  id={`${idPrefix}-marks`}
+                  label="Gadget marks: Plain marks one gadget while you point at it, Color gives every gadget its own color"
+                  options={MARK_MODES}
+                  value={colorMode}
+                  onChange={onColorMode}
+                />
               </Box>
-              <PictureToggle
-                id={`${idPrefix}-marks`}
-                label="Gadget marks: Plain marks one gadget while you point at it, Color gives every gadget its own color"
-                options={MARK_MODES}
-                value={colorMode}
-                onChange={onColorMode}
-              />
+            )}
+            <Box
+              id={`${idPrefix}-link`}
+              aria-live="polite"
+              data-linked={link ? "true" : "false"}
+              sx={{
+                flex: "1 1 280px",
+                minWidth: 0,
+                fontSize: "0.8125rem",
+                color: link ? "text.primary" : "text.secondary",
+                borderLeft: "3px solid",
+                borderColor: link ? GADGET_RING : "transparent",
+                pl: 1,
+              }}
+            >
+              {readout}
             </Box>
-          )}
-          <Box
-            id={`${idPrefix}-link`}
-            aria-live="polite"
-            data-linked={link ? "true" : "false"}
-            sx={{
-              flex: "1 1 280px",
-              minWidth: 0,
-              fontSize: "0.8125rem",
-              color: link ? "text.primary" : "text.secondary",
-              borderLeft: "3px solid",
-              borderColor: link ? GADGET_RING : "transparent",
-              pl: 1,
-            }}
-          >
-            {readout}
           </Box>
-        </Box>
+        </AtBottom>
       )}
       {!loading && (
-        <ReductionCaption
-          id={`${idPrefix}-caption`}
-          frames={view.frames}
-          frameIndex={index}
-          gadgets={gadgets}
-          describe={describe}
-          colors={colors?.byGadget ?? null}
-        />
+        <InSlot slot={stepTextSlot}>
+          <ReductionCaption
+            id={`${idPrefix}-caption`}
+            frames={view.frames}
+            frameIndex={index}
+            gadgets={gadgets}
+            describe={describe}
+            colors={colors?.byGadget ?? null}
+          />
+        </InSlot>
       )}
     </Box>
   );

@@ -49,6 +49,11 @@
 // in) omits the rail entirely rather than showing broken navigation, per the
 // issue's explicit "degrade gracefully" requirement.
 //
+// #303 (Board G): the page is one centered column under a sticky banner. The title carries an
+// (i) whose card holds the problem's description, tags, input and output (infoCards.js
+// problemCard; this replaced #229's Details panel), and the one-line description sits under
+// it. On phones the ISU logo leaves the banner for a footer at the bottom of the page.
+//
 // #165: `?playlist=custom` is the self-service path -- resolvePlaylist below
 // tries that reserved slug first (decoding the playlist straight out of the
 // `p` param via lib/playlistQuery.js) before falling back to a lookup in
@@ -67,7 +72,9 @@ import NavBar from "../components/NavBar";
 import PageTitle from "../components/PageTitle";
 import PlaylistRail from "../components/PlaylistRail";
 import { isProblemComplete } from "../components/StatusIcon";
-import { COMPACT_MEDIA } from "../components/workbench/layout";
+import { problemCard } from "../components/workbench/infoCards";
+import { COLUMN_MAX_WIDTH, COMPACT_MEDIA, PHONE_MEDIA } from "../components/workbench/layout";
+import { InfoButton } from "../components/workbench/TaggedSelect";
 import Workbench from "../components/workbench/Workbench";
 import { PLAYLISTS } from "../data/playlists";
 import { TAXONOMY } from "../data/taxonomy";
@@ -145,10 +152,10 @@ function optionLabel(facetKey, optionKey) {
 // that something's happening, without changing what that choice guesses.
 function PageShell({ children, loading = false, title = null }) {
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", flex: 1 }}>
       {/* #279: the tab names the problem by its display name. */}
       {title && <PageTitle title={title} />}
-      <NavBar />
+      <NavBar sticky />
       {loading && <LinearProgress aria-label="Loading problem" />}
       {children}
     </Box>
@@ -263,45 +270,60 @@ export default function ProblemDetail() {
         component="main"
         sx={{
           flex: 1,
+          width: "100%",
+          maxWidth: COLUMN_MAX_WIDTH,
+          mx: "auto",
+          boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
-          gap: 2,
-          px: "20px",
-          pt: 2,
-          pb: 6,
-          [COMPACT_MEDIA]: { px: 2, pt: 1.5, pb: 11 },
+          gap: 3,
+          px: 3,
+          pt: 4,
+          pb: 8,
+          [COMPACT_MEDIA]: { px: 2, pt: 2.5, pb: 6 },
+          [PHONE_MEDIA]: { px: 1.5, gap: 2 },
         }}
       >
-        <Box
-          component="header"
-          sx={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "10px 16px",
-          }}
-        >
-          <Typography variant="h1" component="h1" sx={{ m: 0 }}>
-            {problem.name}
-          </Typography>
+        <Box component="header" sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
           <Box
-            component="ul"
-            aria-label="Tags"
-            sx={{ listStyle: "none", m: 0, p: 0, display: "flex", flexWrap: "wrap", gap: 1 }}
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "8px 12px",
+              minWidth: 0,
+            }}
           >
-            {BADGE_FACET_KEYS.flatMap((facetKey) =>
-              (problem.tags[facetKey] ?? []).map((optionKey) => (
-                <Box component="li" key={`${facetKey}-${optionKey}`}>
-                  <Chip
-                    size="small"
-                    variant={`${facetKey}Outlined`}
-                    label={optionLabel(facetKey, optionKey)}
-                  />
-                </Box>
-              )),
-            )}
+            <Typography variant="h1" component="h1" sx={{ m: 0, overflowWrap: "anywhere" }}>
+              {problem.name}
+            </Typography>
+            <InfoButton id="problem-info" card={problemCard(problem)} placement="above" inline />
+            <Box
+              component="ul"
+              aria-label="Tags"
+              sx={{ listStyle: "none", m: 0, p: 0, display: "flex", flexWrap: "wrap", gap: 1 }}
+            >
+              {BADGE_FACET_KEYS.flatMap((facetKey) =>
+                (problem.tags[facetKey] ?? []).map((optionKey) => (
+                  <Box component="li" key={`${facetKey}-${optionKey}`}>
+                    <Chip
+                      size="small"
+                      variant={`${facetKey}Outlined`}
+                      label={optionLabel(facetKey, optionKey)}
+                    />
+                  </Box>
+                )),
+              )}
+            </Box>
           </Box>
+          {problem.oneLiner && (
+            <Typography
+              id="problem-one-liner"
+              sx={{ m: 0, fontSize: "1.125rem", color: "ink.text2" }}
+            >
+              {problem.oneLiner}
+            </Typography>
+          )}
         </Box>
 
         {playlist && playlistIndex !== -1 && (

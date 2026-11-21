@@ -89,11 +89,12 @@ const RUN_CANCEL = "#workbench-solve-cancel-button";
 const RUN_FAILURE = "#workbench-solve-failure";
 const RUN_OUTPUT = "#workbench-result-answer";
 const INSTANCE_INPUT = "#workbench-instance-full-instance";
-const CERTIFICATE_INPUT = "#workbench-result-verify-certificate";
-const VERIFY_BUTTON = "#workbench-result-verify-check";
-const VERIFY_STATUS = "#workbench-result-verify-check-status";
-const VERIFY_FAILURE = "#workbench-result-verify-check-failure";
-const VERDICT_BANNER = "#workbench-result-verify-verdict";
+const CERTIFICATE_INPUT = "#workbench-verify-certificate";
+// #303 stage 4: Verify's Check is the task bar's main button, and the verdict a result row.
+const VERIFY_BUTTON = "#workbench-run";
+const VERIFY_STATUS = "#workbench-verify-check-status";
+const VERIFY_FAILURE = "#workbench-verify-check-failure";
+const VERDICT_BANNER = "#workbench-result-rows-verdict";
 
 // Regexes rather than Playwright glob strings: both compute requests carry
 // a query string (`?solver=...`, `?verifier=...`) and a glob's `*` does not
@@ -133,7 +134,7 @@ test("Run sends the declared instance to the pinned solver and renders Redux's r
   await gotoProblemDetail(page, PINNED_PROBLEM, { expect });
   await selectSolverByName(page, PINNED_SOLVER, { expect });
 
-  await expect(page.locator("#workbench-instance-text")).toHaveText(PINNED_INSTANCE);
+  await expect(page.locator("#workbench-instance-full-instance")).toHaveValue(PINNED_INSTANCE);
 
   // The live region is mounted and empty before anything runs, which is the
   // reliable way to have a screen reader announce the change that follows
@@ -176,6 +177,7 @@ test("a certificate produced by a live Run verifies against the instance it was 
   await expect(output).toBeVisible();
   const solved = ((await output.textContent()) ?? "").trim();
   expect(solved).not.toBe("");
+  await openPanel(page, "verify", { expect });
 
   // The Verify box checks against the same one instance the solver ran on.
   // Topological Sort declares no example certificate, so the box starts empty
@@ -186,7 +188,7 @@ test("a certificate produced by a live Run verifies against the instance it was 
 
   const verdict = page.locator(VERDICT_BANNER);
   await expect(verdict).toBeVisible({ timeout: 30_000 });
-  await expect(verdict).toContainText("Valid certificate");
+  await expect(verdict).toContainText("Valid:");
   await expect(page.locator(VERIFY_STATUS)).toContainText("Certificate accepted");
 });
 
@@ -202,7 +204,7 @@ test("Verify reports Redux's rejection of a wrong certificate rather than decidi
   await openPanel(page, "instance", { expect });
   await expect(page.locator(INSTANCE_INPUT)).toHaveValue(PINNED_INSTANCE);
 
-  await openPanel(page, "result", { expect });
+  await openPanel(page, "verify", { expect });
   await page.locator(CERTIFICATE_INPUT).fill(WRONG_CERTIFICATE);
 
   // T37 (#95) deleted the ported `isCertificateValid` regex that used to
@@ -215,7 +217,7 @@ test("Verify reports Redux's rejection of a wrong certificate rather than decidi
 
   const verdict = page.locator(VERDICT_BANNER);
   await expect(verdict).toBeVisible({ timeout: 30_000 });
-  await expect(verdict).toContainText("Not a valid certificate");
+  await expect(verdict).toContainText("Not valid:");
   await expect(page.locator(VERIFY_STATUS)).toContainText("Certificate rejected");
 });
 
@@ -235,8 +237,7 @@ test("Run explains an unreachable backend instead of failing silently", async ({
   await expect(failure).toContainText("Couldn't reach the Redux backend");
   await expect(page.locator(RUN_STATUS)).toContainText(`${PINNED_SOLVER} did not run.`);
 
-  // No half-state left behind: no answer, no Result dot, and Run is offered again.
-  await expect(page.locator("#workbench-rail-result-dot")).toHaveCount(0);
+  // No half-state left behind: no answer, and Run is offered again.
   await expect(failure).not.toContainText(/undefined|NaN|\[object Object\]/);
   await openPanel(page, "result", { expect });
   await expect(page.locator(RUN_OUTPUT)).toHaveCount(0);
@@ -273,7 +274,7 @@ test("Verify explains an unreachable backend too", async ({ page }) => {
   });
 
   await gotoProblemDetail(page, PINNED_PROBLEM, { expect });
-  await openPanel(page, "result", { expect });
+  await openPanel(page, "verify", { expect });
   await page.locator(CERTIFICATE_INPUT).fill(WRONG_CERTIFICATE);
   await page.locator(VERIFY_BUTTON).click();
 
@@ -310,7 +311,6 @@ test("a problem with no declared instance keeps Run and Verify unavailable", asy
   await gotoProblemDetail(page, PINNED_PROBLEM, { expect });
   await selectSolverByName(page, PINNED_SOLVER, { expect });
 
-  await expect(page.locator("#workbench-instance-text")).toContainText("No instance yet.");
   await openPanel(page, "instance", { expect });
   await expect(page.locator(INSTANCE_INPUT)).toHaveValue("");
 
@@ -325,11 +325,11 @@ test("a problem with no declared instance keeps Run and Verify unavailable", asy
   // Filled certificate, still no instance: this isolates the missing
   // instance as the reason Verify is unavailable rather than the empty
   // certificate box Topological Sort starts with.
-  await openPanel(page, "result", { expect });
+  await openPanel(page, "verify", { expect });
   await page.locator(CERTIFICATE_INPUT).fill(WRONG_CERTIFICATE);
   await expect(page.locator(VERIFY_BUTTON)).toBeDisabled();
   await expect(
-    page.getByText("There is no instance to check against. Press Edit to write one."),
+    page.getByText("There is no instance to check against. Write one in the Instance box above."),
   ).toBeVisible();
 
   // Unavailable, not enabled-and-failing: nothing was ever sent, so no

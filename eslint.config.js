@@ -17,7 +17,15 @@ const nextConfigs = Array.isArray(nextCoreWebVitals) ? nextCoreWebVitals : [next
 
 module.exports = [
   {
-    ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "public/**", "next-env.d.ts"],
+    ignores: [
+      "node_modules/**",
+      ".next/**",
+      ".next-*/**",
+      "out/**",
+      "build/**",
+      "public/**",
+      "next-env.d.ts",
+    ],
   },
 
   js.configs.recommended,

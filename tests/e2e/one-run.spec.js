@@ -197,7 +197,7 @@ for (const { reason, note } of [
   },
   {
     reason: "no_frames",
-    note: `${AUTOMATON_NAME} isn't drawn from this run, so it shows the instance. The answer: ${DFA_ONE_RUN.answer}. Press Run solve again to draw a run in it.`,
+    note: `${AUTOMATON_NAME} isn't drawn from this run, so it shows the instance. The answer: ${DFA_ONE_RUN.answer}. Press Solve to draw a run in it.`,
   },
 ]) {
   test(`a picture the run can't draw (${reason}) shows the instance and why, and keeps the step`, async ({
@@ -237,10 +237,10 @@ test("Run again and a new instance start fresh", async ({ page }) => {
   await previousStep(page);
   await expect(page.locator(POSITION)).toHaveText("Step 1 of 3");
 
-  // A new run is asked for, and opens on its last step.
-  await page.locator("#workbench-run").click();
-  await expect(page.locator(POSITION)).toHaveText("Step 3 of 3");
-  expect(asked.filter((request) => request === "run")).toHaveLength(2);
+  // #303: the run is done (this solver isn't randomized), so Solve says so and asks nothing.
+  await expect(page.locator("#workbench-run")).toHaveText("Solved");
+  await page.locator("#workbench-run").click({ force: true });
+  expect(asked.filter((request) => request === "run")).toHaveLength(1);
 
   // A new instance drops the run: the picture is the plain instance, with no steps.
   await openPanel(page, "instance", { expect });
@@ -250,6 +250,11 @@ test("Run again and a new instance start fresh", async ({ page }) => {
   await expect(page.locator(PICTURE).locator("[data-plain]")).toHaveAttribute("data-plain", "true");
   await chooseVisualization(page, TABLE_NAME);
   await expect(page.locator(POSITION)).toHaveCount(0);
+
+  // A new run is asked for, and opens on its last step.
+  await expect(page.locator("#workbench-run")).toHaveText("Solve");
+  await run(page, 3);
+  expect(asked.filter((request) => request === "run")).toHaveLength(2);
 });
 
 for (const status of [404, 405]) {
@@ -299,17 +304,17 @@ test("moved states stay with their picture when switching away and back", async 
   await page.keyboard.press("Shift+ArrowDown");
   await expect.poll(async () => (await centre()).y - before.y).toBeGreaterThan(20);
   const moved = await centre();
-  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeEnabled();
+  await expect(page.locator(`${AUTOMATON}-zoom-reset`)).toBeEnabled();
 
   await chooseVisualization(page, TABLE_NAME);
   await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Table");
   await chooseVisualization(page, AUTOMATON_NAME);
   await expect(page.locator(PICTURE)).toHaveAttribute("data-picture-type", "Automaton");
   expect(await centre()).toEqual(moved);
-  await expect(page.locator(`${AUTOMATON}-layout-reset`)).toBeEnabled();
+  await expect(page.locator(`${AUTOMATON}-zoom-reset`)).toBeEnabled();
 
-  // Reset layout still puts it back, and it stays back after another round trip.
-  await page.locator(`${AUTOMATON}-layout-reset`).click();
+  // Reset still puts it back, and it stays back after another round trip.
+  await page.locator(`${AUTOMATON}-zoom-reset`).click();
   expect(await centre()).toEqual(before);
   await chooseVisualization(page, TABLE_NAME);
   await chooseVisualization(page, AUTOMATON_NAME);
@@ -330,8 +335,9 @@ const CLAUSES_VIZ = "Sat3DefaultVisualization";
 const TREE_VIZ = "Sat3SearchTreeVisualization";
 const TREE_NAME = "3SAT Search Tree";
 const TREE = "#workbench-source-frames-searchtree";
-const ALL_VISUALIZATIONS_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizations$/;
-const ALL_VISUALIZATION_TYPES_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizationTypes$/;
+const ALL_VISUALIZATIONS_REQUEST = /\/api\/redux\/Navigation\/Batch\/allVisualizations(?=\?|$)/;
+const ALL_VISUALIZATION_TYPES_REQUEST =
+  /\/api\/redux\/Navigation\/Batch\/allVisualizationTypes(?=\?|$)/;
 
 /** 3SAT's Search Tree as the local build's allInfo describes it. */
 const TREE_INFO = {

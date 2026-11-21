@@ -1,7 +1,9 @@
+import Box from "@mui/material/Box";
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
 import Head from "next/head";
 import "../styles/globals.css";
+import SiteFooter from "../components/SiteFooter";
 import theme, { THEME_COLOR_SCHEME_STORAGE_KEY, THEME_MODE_STORAGE_KEY } from "../components/theme";
 
 // T28 (#37): the Pages Router doesn't inject a viewport meta tag on its own
@@ -17,6 +19,10 @@ import theme, { THEME_COLOR_SCHEME_STORAGE_KEY, THEME_MODE_STORAGE_KEY } from ".
 // #156: the theme has dark and light color schemes. defaultMode "system" follows the
 // visitor's prefers-color-scheme until they press the nav toggle; the storage keys match
 // pages/_document.js's InitColorSchemeScript so the first paint already uses the right scheme.
+//
+// #303: every page ends in the same footer, the ISU logo centered under the page. The column
+// is at least the window's height and the page fills what the footer leaves, so on a short
+// page the footer sits at the bottom of the window rather than right under the content.
 export default function App({ Component, pageProps }) {
   return (
     <ThemeProvider
@@ -32,7 +38,12 @@ export default function App({ Component, pageProps }) {
         {/* #279: every page is titled; a problem page or Compare names its problems (theirs wins). */}
         <title>Redux</title>
       </Head>
-      <Component {...pageProps} />
+      <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+        <Box sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <Component {...pageProps} />
+        </Box>
+        <SiteFooter />
+      </Box>
     </ThemeProvider>
   );
 }

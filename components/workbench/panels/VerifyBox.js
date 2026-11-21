@@ -1,346 +1,223 @@
 // components/workbench/panels/VerifyBox.js
 //
-// #229 stage 3: the Verify section at the bottom of the Result & Verify panel. It works before
-// anything has run (a student checking their own answer): the verifier's name, the certificate
-// format the backend declares (built from the verifier's CertificateGrammar where it has one),
-// the certificate box and Check.
+// #229 stage 3 built the Verify box: the verifier's name, the certificate format the backend
+// declares, the certificate box and Check. #303 stage 4 (Board G) takes it apart into the task
+// bar's pieces (./CommandBar.js lays them out):
+//   - CertificateField: the certificate box with its label, the format as a hint under it (its
+//     example as the placeholder), and the error of a certificate Redux cannot read;
+//   - VerifyTaskRow: the Verify tab's row under the menus, the field and, after a Solve, "Use the
+//     solver's answer" (#303: hidden once the field holds that answer, when it could change
+//     nothing); the Verifier menu and the main Check button sit on the row above;
+//   - ReduceVerifySide: one of the two checks of Reduce's Verify stage, a Verifier menu, the
+//     answer to check (prefilled from the Solve stage) and its own Check button, which says
+//     "Checked" and is inactive while its verdict is of the answer, verifier and instance shown.
+//     Each fills its column of Workbench.js's checks grid, under its own picture.
+// The verdicts are result rows (Workbench.js), not drawn here.
 //
-// In Reduce mode a "Check against: source | target" switch sits on top. The target side checks
-// with the target problem's verifier against the instance the reduction built, so it stays
-// locked (with the reason under it) until a run has built one.
-//
-// The state lives in hooks/useCertificateCheck.js, owned by the Workbench: the verdict also
-// goes on the picture pane's Showing line, and Verify This Answer fills this box from the
-// Result panel. This file only draws it.
-//
-// A certificate Redux cannot read (400 certificate_parse_error) shows its error right under
-// the box, and nothing else: there is no verdict to show and nothing to draw.
+// A certificate Redux cannot read (400 certificate_parse_error) shows its error right under its
+// box, and nothing else: there is no verdict to show.
 
 import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
-import { CHECK_SOURCE, CHECK_TARGET } from "../../../hooks/useCertificateCheck";
-import {
-  COMPUTE_CANCELLED,
-  COMPUTE_FAILED,
-  COMPUTE_RUNNING,
-} from "../../../hooks/useComputeRequest";
-import ComputeStatus from "../../detail/ComputeStatus";
-import { VerdictBanner } from "../../detail/VerifierSection";
-import { MONO_FONT } from "../layout";
+import { COMPUTE_FAILED } from "../../../hooks/useComputeRequest";
+import DoneButton from "../DoneButton";
+import { controlLabelSx, MONO_FONT, secondaryButtonSx } from "../layout";
+import TaggedSelect from "../TaggedSelect";
 
-/** The backend's certificate formats end in "Example: ..."; that example is the placeholder. */
-function exampleFrom(format) {
-  const match = /Example:\s*(.+)$/.exec(format ?? "");
-  return match ? match[1].trim() : "";
+// "... Example: x" or "... - e.g. x" (an em dash or a hyphen), at the end of the format.
+const EXAMPLE = /(?:\bExample:|\s[—-]\s*e\.g\.)\s*(.+?)\s*$/s;
+
+/**
+ * #279: the placeholder is Redux's own example, so it is text Redux can read. Most certificate
+ * formats end in "Example: ...", a few (N-Queens, Max Cut, Min Cut, Minimum s-t Cut) in
+ * "- e.g. ..."; a format with neither gives the verifier's own example certificate, if any.
+ * An example written as the end of a sentence keeps its full stop out of the field.
+ */
+export function exampleFrom(format, fallback = "") {
+  const match = EXAMPLE.exec(format ?? "");
+  if (match) return match[1].replace(/\.$/, "").trim();
+  return (fallback ?? "").trim();
 }
 
-function SideButton({ id, pressed, disabled, onClick, children, line }) {
+/** The failure of a check whose certificate Redux could not read, or null. */
+export function unreadableFailure(request) {
+  return request.status === COMPUTE_FAILED && request.failure?.code === "certificate_parse_error"
+    ? request.failure
+    : null;
+}
+
+/**
+ * The certificate box: its label, the box, the verifier's format under it, and the error of a
+ * certificate Redux could not read.
+ * @param {{id: string, label: string, value: string, onChange: (text: string) => void,
+ *   verifier: Object|null, unreadable: Object|null, action?: import("react").ReactNode,
+ *   sx?: Object}} props The hint's id is `${id}-hint`, the error's `${id}-error`. `action` (a
+ *   Check button) sits beside the box only, so the hint and error under it take the field's
+ *   whole width.
+ */
+export function CertificateField({ id, label, value, onChange, verifier, unreadable, action, sx }) {
+  const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  // Some formats already start with "Format:"; the hint says it once.
+  const format = (verifier?.certificateFormat ?? "").replace(/^\s*Format:\s*/i, "");
   return (
-    <Box
-      id={id}
-      component="button"
-      type="button"
-      aria-pressed={pressed}
-      disabled={disabled}
-      title={typeof children === "string" ? children : undefined}
-      onClick={onClick}
-      sx={{
-        flex: "1 1 0",
-        minWidth: 0,
-        minHeight: 44,
-        px: 1.25,
-        borderRadius: "8px",
-        border: pressed ? "2px solid" : "1px solid",
-        borderColor: pressed ? line : "border.main",
-        backgroundColor: pressed ? "surface.raised" : "transparent",
-        color: "text.primary",
-        fontFamily: "inherit",
-        fontSize: "0.875rem",
-        fontWeight: 700,
-        cursor: "pointer",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
-        "&:disabled": { cursor: "not-allowed", color: "text.disabled" },
-      }}
-    >
-      {children}
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, minWidth: 0, ...sx }}>
+      <Box component="label" htmlFor={id} sx={{ ...controlLabelSx, fontWeight: 600 }}>
+        {label}
+      </Box>
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, minWidth: 0 }}>
+        <Box
+          id={id}
+          component="input"
+          type="text"
+          value={value}
+          placeholder={exampleFrom(format, verifier?.exampleCertificate)}
+          onChange={(event) => onChange(event.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={unreadable ? "true" : undefined}
+          aria-describedby={unreadable ? `${errorId} ${hintId}` : hintId}
+          sx={{
+            flex: "1 1 auto",
+            width: "100%",
+            minWidth: 0,
+            minHeight: 44,
+            boxSizing: "border-box",
+            backgroundColor: "surface.input",
+            color: "text.primary",
+            border: "1px solid",
+            borderColor: unreadable ? "status.err" : "border.main",
+            borderRadius: "10px",
+            px: 1.5,
+            fontFamily: MONO_FONT,
+            fontSize: "0.875rem",
+            "&::placeholder": { color: "text.secondary", opacity: 1 },
+          }}
+        />
+        {action}
+      </Box>
+      {unreadable && (
+        <Box id={errorId} sx={{ fontSize: "0.8125rem", color: "error.light" }}>
+          <Box component="span" sx={{ fontWeight: 700 }}>
+            {unreadable.headline}.
+          </Box>{" "}
+          {unreadable.detail}
+          {unreadable.expected && (
+            <Box component="span" sx={{ display: "block", mt: 0.5 }}>
+              Expected: {unreadable.expected}
+            </Box>
+          )}
+        </Box>
+      )}
+      <Box
+        component="p"
+        id={hintId}
+        sx={{
+          m: 0,
+          fontSize: "0.8125rem",
+          color: "text.secondary",
+          overflowWrap: "anywhere",
+        }}
+      >
+        {format ? `Format: ${format}` : "The verifier doesn't declare its certificate format yet."}
+      </Box>
     </Box>
   );
 }
 
 /**
- * @param {Object} props
- * @param {string} props.idPrefix Prefixes every id rendered here.
- * @param {"solve"|"reduce"} props.mode The command bar's mode.
- * @param {ReturnType<import("../../../hooks/useCertificateCheck").useCertificateCheck>}
- *   props.verify The Verify state.
- * @param {string} props.sourceName The problem's name, for the switch.
- * @param {string|null} props.targetName The target problem's name (Reduce mode).
- * @param {string} props.targetLockReason Why the target side is locked, shown under the switch.
+ * The Verify tab's row under the menus: the answer to check and, after a Solve, Use the
+ * solver's answer.
+ * @param {{idPrefix: string, field: Object, useAnswer: (() => void)|null}} props `field` is
+ *   everything CertificateField takes but its id (`${idPrefix}-certificate`).
  */
-export default function VerifyBox({
+export function VerifyTaskRow({ idPrefix, field, useAnswer }) {
+  return (
+    <Box
+      id={`${idPrefix}-row`}
+      sx={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: "10px 12px" }}
+    >
+      <CertificateField id={`${idPrefix}-certificate`} {...field} sx={{ flex: "1 1 360px" }} />
+      {useAnswer && (
+        <Box
+          id={`${idPrefix}-use-answer`}
+          component="button"
+          type="button"
+          onClick={useAnswer}
+          sx={{ ...secondaryButtonSx, flex: "none", mt: "22px" }}
+        >
+          {"Use the solver's answer"}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * One check of Reduce's Verify stage: its Verifier menu (or why there is none), the answer it
+ * checks and Check.
+ * @param {Object} props
+ * @param {string} props.idPrefix Prefixes every id: the menu is `${idPrefix}-verifier`, the
+ *   box `${idPrefix}-certificate`, the button `${idPrefix}-check`.
+ * @param {Object|null} props.select The Verifier menu, as TaggedSelect takes it, or null.
+ * @param {string} props.noVerifier What shows instead of the menu when there is no verifier.
+ * @param {Object} props.field CertificateField's props, but its id.
+ * @param {() => void} props.onCheck
+ * @param {boolean} props.checkDisabled
+ * @param {{label: string, hint: string}|null} [props.checkDone] #303: this answer is checked
+ *   with this verifier against this instance, so Check says "Checked" and is inactive
+ *   (../DoneButton.js) until one of them changes.
+ * @param {import("react").ReactNode} [props.extra] Under the box (the target's Map an answer
+ *   across).
+ */
+export function ReduceVerifySide({
   idPrefix,
-  mode,
-  verify,
-  sourceName,
-  targetName,
-  targetLockReason,
+  select,
+  noVerifier,
+  field,
+  onCheck,
+  checkDisabled,
+  checkDone = null,
+  extra = null,
 }) {
-  const { current, certificate, request, verdict, checkOn } = verify;
-  const verifier = current?.verifier ?? null;
-  const onTarget = checkOn === CHECK_TARGET;
-
-  const certificateId = `${idPrefix}-certificate`;
-  const errorId = `${certificateId}-error`;
-  const hasInstance = Boolean(current?.instance?.trim());
-  const canCheck = Boolean(verifier?.className) && hasInstance && certificate.trim() !== "";
-
-  const unreadable =
-    request.status === COMPUTE_FAILED && request.failure?.code === "certificate_parse_error"
-      ? request.failure
-      : null;
-  const shownVerdict = verdict && verdict.side === checkOn ? verdict : null;
-  const verdictIsCurrent =
-    shownVerdict !== null &&
-    shownVerdict.instance === current.instance &&
-    shownVerdict.certificate === certificate;
-
-  let announcement = "";
-  if (request.status === COMPUTE_RUNNING) {
-    announcement = "Checking this certificate.";
-  } else if (verdict) {
-    announcement =
-      verdict.valid === true
-        ? `Certificate accepted. It is valid for the ${verdict.label}.`
-        : verdict.valid === false
-          ? `Certificate rejected. It is not valid for the ${verdict.label}.`
-          : `Redux answered: ${verdict.text}`;
-  } else if (request.status === COMPUTE_FAILED) {
-    announcement = `The certificate was not checked. ${request.failure?.headline ?? ""}`;
-  } else if (request.status === COMPUTE_CANCELLED) {
-    announcement = "Check cancelled.";
-  }
-
-  let cannotCheck = "";
-  // (With no verifier at all, the box is replaced by a "No verifier declared" line.)
-  if (!verifier) cannotCheck = "";
-  else if (!verifier.className)
-    cannotCheck =
-      "This verifier cannot be run: the catalog did not say which backend verifier it is.";
-  else if (!hasInstance)
-    cannotCheck = "There is no instance to check against. Press Edit to write one.";
-  else if (certificate.trim() === "") cannotCheck = "Type a certificate to check.";
-
   return (
     <Box
       id={idPrefix}
       sx={{
+        minWidth: 0,
         display: "flex",
         flexDirection: "column",
-        gap: "10px",
-        borderTop: "1px solid",
-        borderColor: "border.soft",
-        pt: "14px",
+        gap: 1.25,
       }}
     >
-      <Typography component="h3" sx={{ m: 0, fontSize: "1rem", fontWeight: 700 }}>
-        Verify
-      </Typography>
-
-      {mode === "reduce" && (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
-          <Box
-            component="span"
-            id={`${idPrefix}-check-on-label`}
-            sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-          >
-            Check against
-          </Box>
-          <Box
-            role="group"
-            aria-labelledby={`${idPrefix}-check-on-label`}
-            sx={{ display: "flex", gap: 0.5 }}
-          >
-            <SideButton
-              id={`${idPrefix}-check-on-source`}
-              pressed={!onTarget}
-              line="brand.line"
-              onClick={() => verify.setCheckOn(CHECK_SOURCE)}
-            >
-              {sourceName}
-            </SideButton>
-            <SideButton
-              id={`${idPrefix}-check-on-target`}
-              pressed={onTarget}
-              disabled={verify.targetLocked}
-              line="brand.goldLine"
-              onClick={() => verify.setCheckOn(CHECK_TARGET)}
-            >
-              {targetName ?? "Target"}
-            </SideButton>
-          </Box>
-          {verify.targetLocked && targetLockReason && (
-            <Box
-              id={`${idPrefix}-check-on-hint`}
-              sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-            >
-              {targetLockReason}
-            </Box>
-          )}
+      {select ? (
+        <TaggedSelect
+          id={`${idPrefix}-verifier`}
+          hue="green"
+          infoPlacement="box"
+          boxSx={{ width: "100%" }}
+          {...select}
+        />
+      ) : (
+        <Box id={`${idPrefix}-no-verifier`} sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
+          {noVerifier}
         </Box>
       )}
-
-      {!verifier ? (
-        <Typography id={`${idPrefix}-no-verifier`} variant="body2" sx={{ color: "text.secondary" }}>
-          No verifier declared for {current?.name ?? "this problem"}.
-        </Typography>
-      ) : (
-        <>
-          <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 8px" }}>
-            <Box component="span" sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
-              Verifier
-            </Box>
-            <Box component="strong" id={`${idPrefix}-verifier-name`} sx={{ fontSize: "0.875rem" }}>
-              {verifier.name}
-            </Box>
-          </Box>
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-            <Box component="span" sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
-              Certificate format
-            </Box>
-            <Box
-              component="span"
-              id={`${idPrefix}-format`}
-              sx={{
-                fontFamily: MONO_FONT,
-                fontSize: "0.8125rem",
-                color: "ink.text2",
-                overflowWrap: "anywhere",
-              }}
-            >
-              {verifier.certificateFormat || "Not declared yet"}
-            </Box>
-          </Box>
-          <Box
-            component="label"
-            htmlFor={certificateId}
-            sx={{ fontSize: "0.875rem", fontWeight: 600 }}
-          >
-            Certificate for the {current.label}
-          </Box>
-          <Box
-            id={certificateId}
-            component="textarea"
-            rows={3}
-            value={certificate}
-            placeholder={exampleFrom(verifier.certificateFormat)}
-            onChange={(event) => verify.setCertificate(event.target.value)}
-            spellCheck={false}
-            aria-invalid={unreadable ? "true" : undefined}
-            aria-describedby={unreadable ? errorId : undefined}
-            sx={{
-              width: "100%",
-              boxSizing: "border-box",
-              resize: "vertical",
-              backgroundColor: "surface.input",
-              color: "text.primary",
-              border: "1px solid",
-              borderColor: unreadable ? "status.err" : "border.main",
-              borderRadius: "8px",
-              px: 1.5,
-              py: 1.25,
-              fontFamily: MONO_FONT,
-              fontSize: "0.875rem",
-              "&::placeholder": { color: "text.disabled", opacity: 1 },
-            }}
-          />
-          {unreadable && (
-            <Box id={errorId} sx={{ fontSize: "0.8125rem", color: "error.light" }}>
-              <Box component="span" sx={{ fontWeight: 700 }}>
-                {unreadable.headline}.
-              </Box>{" "}
-              {unreadable.detail}
-              {unreadable.expected && (
-                <Box component="span" sx={{ display: "block", mt: 0.5 }}>
-                  Expected: {unreadable.expected}
-                </Box>
-              )}
-            </Box>
-          )}
-          <Box
+      <CertificateField
+        id={`${idPrefix}-certificate`}
+        {...field}
+        action={
+          <DoneButton
             id={`${idPrefix}-check`}
-            component="button"
-            type="button"
-            disabled={!canCheck || request.isRunning}
-            onClick={() => verify.check()}
-            sx={{
-              alignSelf: "flex-start",
-              minHeight: 44,
-              px: 2.5,
-              borderRadius: "8px",
-              // #280: the soft primary style, like the command bar's Run.
-              border: "1px solid",
-              borderColor: "brand.softLine",
-              backgroundColor: "brand.soft",
-              color: "brand.onSoft",
-              fontFamily: "inherit",
-              fontSize: "0.9375rem",
-              fontWeight: 700,
-              cursor: "pointer",
-              "&:hover:not(:disabled)": { backgroundColor: "brand.softHover" },
-              "&:disabled": {
-                borderColor: "transparent",
-                cursor: "not-allowed",
-                backgroundColor: "surface.track",
-                color: "text.secondary",
-              },
-            }}
+            onClick={onCheck}
+            disabled={checkDisabled}
+            done={checkDone}
+            sx={{ ...secondaryButtonSx, flex: "none" }}
           >
             Check
-          </Box>
-          {cannotCheck && (
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              {cannotCheck}
-            </Typography>
-          )}
-          <ComputeStatus
-            idPrefix={`${idPrefix}-check`}
-            status={request.status}
-            announcement={announcement}
-            failure={unreadable ? null : request.failure}
-            onCancel={request.cancel}
-            busyLabel="Checking this certificate"
-          />
-          {shownVerdict && (
-            <VerdictBanner
-              id={`${idPrefix}-verdict`}
-              valid={shownVerdict.valid}
-              headline={
-                shownVerdict.valid === true
-                  ? "Valid certificate"
-                  : shownVerdict.valid === false
-                    ? "Not a valid certificate"
-                    : "Redux answered something unexpected"
-              }
-              detail={
-                !verdictIsCurrent
-                  ? "That was for an earlier instance or certificate. Press Check again for the current ones."
-                  : shownVerdict.valid === true
-                    ? `Redux checked this certificate against the ${shownVerdict.label} and accepted it.`
-                    : shownVerdict.valid === false
-                      ? `Redux checked this certificate against the ${shownVerdict.label} and rejected it.`
-                      : `The verifier returned "${shownVerdict.text}", which is neither True nor False, so this page will not guess which it meant.`
-              }
-            />
-          )}
-          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            {onTarget
-              ? "If a mapped certificate checks out on the target, the reduction carried the answer across correctly."
-              : "Checking needs no solver: type any certificate and press Check."}
-          </Typography>
-        </>
-      )}
+          </DoneButton>
+        }
+      />
+      {extra}
     </Box>
   );
 }

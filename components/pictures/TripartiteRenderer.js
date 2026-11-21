@@ -21,7 +21,7 @@
 // #250: a name can be dragged up or down its own column (or moved with the arrow keys), to pull
 // apart lines that cross, as a Bipartite Graph's nodes can; its triples' lines follow. It stays
 // in its column, between the first and the last row: which set a name is in is the instance.
-// The list does not move. Reset layout puts the names back.
+// The list does not move. Reset puts the names back.
 //
 // #239: a gadget's pieces (`highlightIds`, `gadgetColors`; gadgetRings.js) are marked: a name gets
 // a ring outside its pill, and a triple a ring around its list row and a band under its line.
@@ -34,6 +34,7 @@ import { makeEditor, nodeDragProps, useDiagramEdits } from "./diagramEdits";
 import { GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import { edgeLook, FAINT_EDGE, FAINT_FILTER, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import {
   BADGE_RADIUS,
   badgeAt,
@@ -101,6 +102,7 @@ export default function TripartiteRenderer({
   const byId = new Map(elements.map((element) => [element.id, element]));
   const editor = makeEditor({
     edits,
+    piece: "name",
     nodeAt: (id) => byId.get(id) ?? null,
     moveNode: (id, point) => {
       const element = byId.get(id);
@@ -299,7 +301,7 @@ export default function TripartiteRenderer({
                   height={PILL_HEIGHT}
                   rx={PILL_HEIGHT / 2}
                   data-body=""
-                  fill={state === "Background" ? paletteVars.surface.input : look.fill}
+                  fill={state === "Background" ? PICTURE_CANVAS : look.fill}
                   stroke={isTraced ? TRACE_COLOR : look.line}
                   strokeWidth={isTraced ? 3 : look.strokeWidth}
                   strokeDasharray={isTraced ? undefined : look.dash}
@@ -334,7 +336,7 @@ export default function TripartiteRenderer({
                       cy={badge.y}
                       r={BADGE_RADIUS}
                       fill={pictureStateStyle("Rejected").line}
-                      stroke={paletteVars.surface.input}
+                      stroke={PICTURE_CANVAS}
                       strokeWidth={1.5}
                     />
                     <text
@@ -342,7 +344,7 @@ export default function TripartiteRenderer({
                       y={badge.y}
                       textAnchor="middle"
                       dominantBaseline="central"
-                      fill={paletteVars.surface.input}
+                      fill={PICTURE_CANVAS}
                       fontFamily={MONO}
                       fontSize={11}
                       fontWeight={700}
@@ -390,7 +392,7 @@ export default function TripartiteRenderer({
                   height={LIST_ROW - 4}
                   rx={5}
                   data-body=""
-                  fill={state === "Background" ? paletteVars.surface.input : style.fill}
+                  fill={state === "Background" ? PICTURE_CANVAS : style.fill}
                   stroke={
                     isTraced ? TRACE_COLOR : state === "Background" ? "transparent" : style.line
                   }

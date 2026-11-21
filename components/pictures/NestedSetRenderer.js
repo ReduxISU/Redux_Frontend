@@ -33,6 +33,7 @@ import { GadgetCircle, GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadg
 import { Badge, FAINT_FILTER, MONO, nodeLook, PictureToggle, TRACE_COLOR } from "./graphPieces";
 import { DOT, listLayout, nestedSetPieces, regionsLayout } from "./nestedSetLayout";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import { useBoxWidth } from "./useBoxWidth";
 
 const LAYOUT_CHOICES = [
@@ -72,7 +73,7 @@ function regionLook(state) {
 function tagLook(state) {
   const look = nodeLook(state);
   if (state === "Background") {
-    return { ...look, fill: paletteVars.surface.input, ink: paletteVars.text.primary };
+    return { ...look, fill: PICTURE_CANVAS, ink: paletteVars.text.primary };
   }
   return look;
 }
@@ -535,7 +536,7 @@ export default function NestedSetRenderer({
                           width={tagBox.w}
                           height={tagBox.h}
                           rx={11}
-                          fill={paletteVars.surface.input}
+                          fill={PICTURE_CANVAS}
                           stroke={pictureStateStyle("Background").line}
                           strokeWidth={1.4}
                         />

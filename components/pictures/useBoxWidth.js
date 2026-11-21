@@ -12,7 +12,9 @@ export function useBoxWidth(ref) {
   useEffect(() => {
     const element = ref.current;
     if (!element) return undefined;
-    const measure = () => setWidth(element.clientWidth || null);
+    // Whole pixels, rounded down: a layout never wider than its box, so a box of 307.7 px
+    // (clientWidth says 308) still draws the picture at its own size, not a hair under it.
+    const measure = () => setWidth(Math.floor(element.getBoundingClientRect().width) || null);
     measure();
     if (typeof ResizeObserver === "undefined") return undefined;
     const observer = new ResizeObserver(measure);

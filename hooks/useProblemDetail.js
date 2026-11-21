@@ -58,6 +58,7 @@ import {
   SOLVER_TYPE_MAP,
 } from "../data/taxonomy";
 import { buildKeyToName, findProblemKey, problemDisplayName } from "../lib/problemNames";
+import { findChains } from "../lib/reductionChain";
 import {
   requestAllInfo,
   requestAllProblems,
@@ -90,6 +91,21 @@ function slugify(name) {
 // `types` (option keys) and `solverTypeNames` (raw members) are lists, read through
 // data/tagList.js. #295: the command bar tells a randomized ("Stochastic") solver by any of
 // them (lib/runSeed.js).
+/**
+ * #303: where a problem, solver, verifier, visualization or reduction comes from, as /info
+ * sends it, for the Source, Code and Authors lines of its info card. `source` is the citation
+ * (with `sourceLink` when declared), `sourceFile` its file's path in the Redux repo.
+ * @returns {{source: string, sourceLink: string, sourceFile: string, contributors: string[]}}
+ */
+function creditsOf(objectInfo) {
+  return {
+    source: objectInfo?.source || "",
+    sourceLink: objectInfo?.sourceLink || "",
+    sourceFile: objectInfo?.sourceFile || "",
+    contributors: Array.isArray(objectInfo?.contributors) ? objectInfo.contributors : [],
+  };
+}
+
 function buildSolvers(solverClassNames, info) {
   return (solverClassNames ?? []).map((className) => {
     const solverInfo = info[className] ?? {};
@@ -105,6 +121,7 @@ function buildSolvers(solverClassNames, info) {
       complexityBucketName: solverInfo.complexityBucket ?? null,
       timeComplexity: normalizeComplexity(solverInfo.timeComplexity),
       spaceComplexity: normalizeComplexity(solverInfo.spaceComplexity),
+      credits: creditsOf(solverInfo),
     };
   });
 }
@@ -177,32 +194,43 @@ function buildVisualizations(visualizationClassNames, info, visualizationTypesBy
         "pictureType" in visualizationInfo ? (visualizationInfo.pictureType ?? null) : undefined,
       solverName: visualizationInfo.solver?.solverName ?? null,
       verifierName: visualizationInfo.verifier?.verifierName ?? null,
+      credits: creditsOf(visualizationInfo),
     };
   });
 }
 
 // Generic "Default Verifier" naming convention (ARCHITECTURE.md's Naming
-// convention section) -- a problem can declare more than one verifier class,
-// but the detail page shows exactly one, so this always takes the first.
+// convention section) -- a problem can declare more than one verifier class.
+// `verifier` is the first (what the old detail sections and the catalog read);
+// #303 stage 4: `verifiers` lists every one, for the workbench's Verifier menus.
 function buildVerifier(verifierClassNames, info, problemInfo) {
-  const [firstVerifierClassName] = verifierClassNames ?? [];
-  if (!firstVerifierClassName) return null;
+  return buildVerifiers(verifierClassNames, info, problemInfo)[0] ?? null;
+}
 
-  const verifierInfo = info[firstVerifierClassName] ?? {};
+function buildVerifiers(verifierClassNames, info, problemInfo) {
+  return (verifierClassNames ?? [])
+    .filter(Boolean)
+    .map((className) => describeVerifier(className, info, problemInfo));
+}
+
+function describeVerifier(className, info, problemInfo) {
+  const verifierInfo = info[className] ?? {};
   return {
     // Same reason as buildSolvers' className: ProblemProvider/verify is
     // keyed by the verifier class name (T37/#95).
-    className: firstVerifierClassName,
+    className,
     // The verifier's own declared display name (IVerifier.verifierName,
     // e.g. "Default SAT Verifier") -- same `?? className` fallback as
     // buildSolvers/buildVisualizations use for their own name fields.
     // Distinct from this section's title, which the ratified naming
     // convention (see this file's own header) always keeps as the generic
     // "Verifier" regardless of which verifier class is shown.
-    name: verifierInfo.verifierName ?? firstVerifierClassName,
+    name: verifierInfo.verifierName ?? className,
     certificateDescription: verifierInfo.verifierDefinition ?? "",
     certificateFormat: problemInfo.certificateFormat || "",
     exampleCertificate: verifierInfo.certificate || undefined,
+    // #303: its source, code and authors, for its info card.
+    credits: creditsOf(verifierInfo),
   };
 }
 
@@ -235,6 +263,7 @@ function buildReductions(
   info,
   visualizationTypesByInstance,
   verifiersByProblem,
+  solversByProblem,
 ) {
   const to = [];
   const from = [];
@@ -278,10 +307,15 @@ function buildReductions(
               edge.complexityBucket ?? info[edge.className]?.complexityBucket ?? null,
             bigO: info[edge.className]?.complexity || "",
             description: info[edge.className]?.reductionDefinition || "",
+            credits: creditsOf(info[edge.className]),
             targetProblem: buildTargetProblem(toCode, info, codeToName),
             // #229 stage 3: Verify's "Check against: target" checks with the target
             // problem's own verifier, against the instance the reduction built.
             targetVerifier: buildVerifier(verifiersByProblem?.[toCode], info, info[toCode] ?? {}),
+            // #303 stage 4: every verifier of the target, for Reduce's Verify stage.
+            targetVerifiers: buildVerifiers(verifiersByProblem?.[toCode], info, info[toCode] ?? {}),
+            // #303 stage 2: the target problem's solvers, for Reduce's Solve step.
+            targetSolvers: buildSolvers(solversByProblem?.[toCode], info),
           });
         }
         if (toCode === problemCode) {
@@ -295,7 +329,21 @@ function buildReductions(
     }
   }
 
-  return { to, from };
+  // The problems reached only through a chain of 2 to 6 reductions, each with one route (the
+  // fewest steps, the first reduction of each), for Reduce's To dropdown after the direct ones
+  // (lib/reductionChain.js). `targetProblem` is for its info card, as a direct target's is;
+  // `visualizations` are every problem's of the chain, the first problem's first, so a picture
+  // picked for one of them is named and described as the problem's own dropdown does.
+  const nameOf = (code) => codeToName.get(code) ?? problemDisplayName(info, code);
+  const chains = findChains(reductionGraph, problemCode, nameOf).map((chain) => ({
+    ...chain,
+    targetProblem: buildTargetProblem(chain.targetCode, info, codeToName),
+    visualizations: [chain.hops[0]?.fromCode, ...chain.hops.map((hop) => hop.toCode)].map((code) =>
+      buildVisualizations(visualizationsByProblem[code], info, visualizationTypesByInstance),
+    ),
+  }));
+
+  return { to, from, chains };
 }
 
 /**
@@ -314,6 +362,7 @@ function buildTargetProblem(problemCode, info, codeToName) {
     complexityClass: tags.complexityClass,
     problemType: tags.problemType,
     problemVariant: tags.problemVariant,
+    credits: creditsOf(problemInfo),
   };
 }
 
@@ -367,6 +416,7 @@ function buildProblem(problemCode, info, batches, codeToName) {
     // than assumed away, so the input below it is always a string.
     defaultInstance: problemInfo.defaultInstance || "",
     instanceFormat: problemInfo.instanceFormat || "",
+    credits: creditsOf(problemInfo),
     solvers: buildSolvers(solversByProblem[problemCode], info),
     visualizations: buildVisualizations(
       visualizationsByProblem[problemCode],
@@ -374,6 +424,7 @@ function buildProblem(problemCode, info, batches, codeToName) {
       visualizationTypesByInstance,
     ),
     verifier: buildVerifier(verifiersByProblem[problemCode], info, problemInfo),
+    verifiers: buildVerifiers(verifiersByProblem[problemCode], info, problemInfo),
     reductions: buildReductions(
       problemCode,
       reductionGraph,
@@ -382,6 +433,7 @@ function buildProblem(problemCode, info, batches, codeToName) {
       info,
       visualizationTypesByInstance,
       verifiersByProblem,
+      solversByProblem,
     ),
   };
 }

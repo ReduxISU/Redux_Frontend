@@ -24,7 +24,7 @@ import {
 
 export default function ContributePage() {
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", flex: 1 }}>
       <NavBar />
       <Box
         component="main"

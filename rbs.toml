@@ -27,7 +27,10 @@ command = "npm run test:e2e"
 # network rbs creates.
 [[integration.services]]
 name = "redux-api"
-image = "ghcr.io/reduxisu/redux:latest"
+# :preview, not :latest, while this line (ReduxISU/Redux_Frontend#331) needs Redux's new
+# visualization system and chains of reductions, which aren't on Redux CSharpAPI yet. :preview is
+# built from Redux local/chain-reductions. Switch back to :latest once those reach CSharpAPI.
+image = "ghcr.io/reduxisu/redux:preview"
 port = 27000
 # Redux has no dedicated /health route; this is the one Redux_Build_System's own docs point at,
 # since its first call is what forces the assembly scan that actually builds the problem registry --

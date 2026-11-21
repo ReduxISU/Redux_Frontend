@@ -190,15 +190,30 @@ export async function gotoProblemDetail(page, problemName, { expect }) {
 }
 
 /**
- * #229: opens one workbench panel ("details", "instance" or "result") from the rail, if it
- * isn't already open, and confirms the rail button reports it open.
+ * #229 opened one workbench panel ("details", "instance" or "result") from the rail. #303
+ * (Board G) has no panels: the instance editor and the results are always on the page, and the
+ * problem's details are the title's (i) card. So this brings the part into view and confirms it
+ * shows: "instance" the editor, "result" the results list (Solve or Reduce), "verify" the Verify
+ * tab's box (pressing the tab), and "details" the (i) card (pressing the (i)).
  */
 export async function openPanel(page, panelKey, { expect }) {
-  const button = page.locator(`#workbench-rail-${panelKey}`);
-  if ((await button.getAttribute("aria-expanded")) !== "true") {
-    await button.click();
+  if (panelKey === "verify") {
+    await page.locator("#workbench-mode-verify").click();
+    await expect(page.locator("#workbench-mode-verify")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#workbench-verify-certificate")).toBeVisible();
+    return;
   }
-  await expect(button).toHaveAttribute("aria-expanded", "true");
+  if (panelKey === "details") {
+    const card = page.locator("#problem-info-card");
+    if (!(await card.isVisible())) await page.locator("#problem-info-button").click();
+    await expect(card).toBeVisible();
+    return;
+  }
+  const part = page.locator(
+    panelKey === "instance" ? "#workbench-instance-full-instance" : "#workbench-results",
+  );
+  await part.scrollIntoViewIfNeeded();
+  await expect(part).toBeVisible();
 }
 
 /**
@@ -361,4 +376,90 @@ export function drawnCollisions(page, svgSelector) {
     }
     return found;
   });
+}
+
+/**
+ * #303 stage 2: Reduce is a Reduce -> Solve -> Verify stepper. This presses Reduce (the target is
+ * built and the bar moves to the Solve stage), then Solve through <target> (the target is solved
+ * and its answer mapped back; the bar moves to Verify). The two are the one Run of #215's
+ * Reduction View before the stepper: afterwards the view walks Build, Solve and Map back.
+ */
+export async function reduceAndSolve(page, { expect }) {
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-stage-solve")).toHaveAttribute("aria-current", "step");
+  await expect(page.locator("#workbench-run")).toBeEnabled();
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-stage-verify")).toHaveAttribute("aria-current", "step");
+}
+
+/**
+ * #303 stage 2: back to the Reduce stage (from wherever the stepper is) and Reduce again; the bar
+ * moves to the Solve stage again. Before the stepper this was a second click on Run.
+ * #303: a build of the same instance is done ("Reduced", inactive), so this first toggles a
+ * trailing space on the instance, which makes it another build without changing what it says.
+ */
+export async function reduceAgain(page, { expect }) {
+  await touchInstance(page);
+  const reduce = page.locator("#workbench-stage-reduce");
+  if ((await reduce.getAttribute("aria-current")) !== "step") await reduce.click();
+  await expect(reduce).toHaveAttribute("aria-current", "step");
+  await expect(page.locator("#workbench-run")).toBeEnabled();
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-stage-solve")).toHaveAttribute("aria-current", "step");
+}
+
+/**
+ * #303: edits the instance without changing its meaning (a trailing space, added or taken off),
+ * so a done Solve or Reduce is its action again.
+ */
+export async function touchInstance(page) {
+  const input = page.locator("#workbench-instance-full-instance");
+  const text = await input.inputValue();
+  await input.fill(text.endsWith(" ") ? text.slice(0, -1) : `${text} `);
+}
+
+/** reduceAgain, then Solve through the target (reduceAndSolve's second half). */
+export async function rerunReduction(page, { expect }) {
+  await reduceAgain(page, { expect });
+  await expect(page.locator("#workbench-run")).toBeEnabled();
+  await page.locator("#workbench-run").click();
+  await expect(page.locator("#workbench-stage-verify")).toHaveAttribute("aria-current", "step");
+}
+
+/** The answers answerViewCertificates gives unless told otherwise. */
+export const VIEW_TARGET_ANSWER = "(the target's answer)";
+export const VIEW_MAPPED_ANSWER = "(the answer mapped back)";
+
+/**
+ * #303 stage 4: after a Reduction View's Solve, the workbench asks for the certificates behind
+ * it (the view says what its solver found only in captions): ProblemProvider/solve on the target
+ * instance, then ProblemProvider/mapSolutionBack. A spec that answers reductionView with a
+ * capture answers those too, here, so they never reach the real backend with a captured
+ * instance. Call it before the spec's own routes: a route added later wins.
+ */
+export async function answerViewCertificates(
+  page,
+  { target = VIEW_TARGET_ANSWER, mapped = VIEW_MAPPED_ANSWER } = {},
+) {
+  await page.route(/\/api\/redux\/ProblemProvider\/solve\?/, (route) =>
+    route.fulfill({ json: target }),
+  );
+  await page.route(/\/api\/redux\/ProblemProvider\/mapSolutionBack\?/, (route) =>
+    route.fulfill({ json: mapped }),
+  );
+}
+
+/**
+ * #303 (Board G polish): opens one of the collapsible sections at the bottom of the page, under
+ * the results ("gadgets": the Gadgets list with the Reduction View's Plain / Color switch and
+ * its link line). Does nothing when it is open.
+ */
+export async function openBottomSection(page, key) {
+  const toggle = page.locator(`#workbench-result-${key}-toggle`);
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+}
+
+/** Jumps the Reduction View to a phase with its button above the step controls. */
+export async function clickPhase(page, phase) {
+  await page.locator(`#workbench-phases-${phase}`).click();
 }

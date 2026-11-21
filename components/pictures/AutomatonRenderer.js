@@ -34,6 +34,7 @@
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
 import { paletteVars } from "../theme";
+import { CONTROL_HEIGHT } from "../workbench/layout";
 import {
   automatonArrows,
   entryArrow,
@@ -66,6 +67,8 @@ import {
   TRACE_COLOR,
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
+import { StepFact } from "./secondarySlots";
 
 /** An ε-arrow's dash, while it has no state dash of its own. */
 const EPSILON_DASH = "5 4";
@@ -437,7 +440,7 @@ function Tape({ id, input, frame, frameIndex, justRead, stuck, outside }) {
 }
 
 /** The All branches / One path switch and, on One path, the path to follow. */
-function PathPicker({ id, runs }) {
+function PathPicker({ id, runs, truncated = false }) {
   const one = runs.value !== null;
   return (
     <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, minWidth: 0 }}>
@@ -459,7 +462,7 @@ function PathPicker({ id, runs }) {
           value={runs.value}
           onChange={(event) => runs.onChange(event.target.value)}
           sx={{
-            minHeight: 32,
+            minHeight: CONTROL_HEIGHT,
             maxWidth: "100%",
             minWidth: 0,
             px: 1,
@@ -483,6 +486,12 @@ function PathPicker({ id, runs }) {
               {option.label}
             </option>
           ))}
+          {/* #303: that the list is cut short is said in the list, not under the picture. */}
+          {truncated && (
+            <option id={`${id}-paths-truncated`} disabled value="">
+              More runs than these {runs.options.length}, not listed
+            </option>
+          )}
         </Box>
       )}
     </Box>
@@ -550,6 +559,7 @@ export default function AutomatonRenderer({
       : layout.garbage;
   const editor = makeEditor({
     edits,
+    piece: "state",
     nodeAt: (id) =>
       garbageAt && id === garbageAt.id ? { x: garbageAt.x, y: garbageAt.y } : (pos.get(id) ?? null),
     moveNode: (id, point) => edits.setNode(id, point),
@@ -619,7 +629,11 @@ export default function AutomatonRenderer({
         drawing={layout}
         resetOn={[payload]}
         editor={editor}
-        toolbar={runs && runs.options.length > 0 ? <PathPicker id={idPrefix} runs={runs} /> : null}
+        toolbar={
+          runs && runs.options.length > 0 ? (
+            <PathPicker id={idPrefix} runs={runs} truncated={payload?.pathsTruncated === true} />
+          ) : null
+        }
       >
         <g data-layer="edges">
           {arrows.map((arrow) => {
@@ -833,7 +847,7 @@ export default function AutomatonRenderer({
               // and red text. Entered: its state's full style (Rejected: red fill, solid thick red
               // outline), with the same "current state" ring an active state gets.
               const style = pictureStateStyle(stated ? garbageState : "Rejected");
-              const fill = lit ? style.fill : paletteVars.surface.input;
+              const fill = lit ? style.fill : PICTURE_CANVAS;
               const ink = lit ? style.ink : red.text;
               const outline = lit ? style.line : red.line;
               const faint = traced !== null && !tracesGarbage;
@@ -935,20 +949,9 @@ export default function AutomatonRenderer({
         outside={stuckOutside}
       />
       {allDead && (
-        <Box
-          id={`${idPrefix}-dead`}
-          sx={{ fontSize: "0.875rem", fontWeight: 700, color: pictureStateStyle("Rejected").text }}
-        >
+        <StepFact id={`${idPrefix}-dead`}>
           No state is left: every branch of the run died or ended outside an accept state.
-        </Box>
-      )}
-      {runs && runs.value !== null && payload?.pathsTruncated === true && (
-        <Box
-          id={`${idPrefix}-paths-truncated`}
-          sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-        >
-          This machine has more runs than the {runs.options.length} listed.
-        </Box>
+        </StepFact>
       )}
     </Box>
   );
@@ -1016,7 +1019,7 @@ export function automatonAnnotations(payload, frames) {
     entries.push({
       key: "garbage",
       text: `${payload.garbage.label ?? "Garbage"} (where every missing move leads; the input is rejected)`,
-      swatch: { kind: "fill", fill: paletteVars.surface.input, line: red.line },
+      swatch: { kind: "fill", fill: PICTURE_CANVAS, line: red.line },
     });
     const garbageId = payload.garbage.id;
     if (

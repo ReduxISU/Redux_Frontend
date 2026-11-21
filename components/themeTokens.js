@@ -228,6 +228,8 @@ export const THEME_TOKENS = {
       nav: "#181818",
       main: "#1E1E1E",
       input: "#161616",
+      // #303: Board G's "well" behind the step bar (the mockup's --well).
+      well: "#161616",
       raised: "#2A2A2A",
       raised2: "#333333",
       track: "#333333",
@@ -321,6 +323,8 @@ export const THEME_TOKENS = {
       nav: WHITE,
       main: WHITE,
       input: WHITE,
+      // #303: Board G's "well" behind the step bar (the mockup's --well), the page's off-white.
+      well: "#F6F6F4",
       raised: "#ECECE9",
       raised2: "#D9D9D9",
       track: "#D4D4D4",

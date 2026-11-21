@@ -67,6 +67,7 @@ function pairsFor(t) {
     ["surface", s.main],
     ["raised", s.raised],
     ["input", s.input],
+    ["well", s.well],
   ]) {
     add(`text on ${bgName}`, t.text.primary, bg, TEXT);
     add(`secondary text (muted) on ${bgName}`, t.text.muted, bg, TEXT);
@@ -80,6 +81,10 @@ function pairsFor(t) {
   add("input border on input", t.border.main, s.input, UI);
   add("input border on surface", t.border.main, s.main, UI);
   add("strong border on surface", t.border.strong, s.main, UI);
+  // #303: an inactive (done or disabled) button: muted text on the raised grey, inside a dashed
+  // strong line on the card (components/workbench/DoneButton.js inactiveSx).
+  add("inactive button label (muted) on raised", t.text.muted, s.raised, TEXT);
+  add("inactive button dashed line (strong) on raised", t.border.strong, s.raised, UI);
   add("orange button label (black on orange)", t.brand.onFill, t.brand.fill, TEXT);
   add("orange button label, hover", t.brand.onFill, t.brand.fillHover, TEXT);
   add("gold fill label", t.brand.onGold, t.brand.gold, TEXT);
@@ -127,6 +132,11 @@ function pairsFor(t) {
   // on the input, the gold-bordered Map button and Check-against target side on the raised
   // grey, the mapped certificate's green border on the input, and the verdict on the Showing
   // line (on the surface; covered by the success / error text pairs above).
+  // #303: the step bar's well. Its buttons' strong border and the Play button's soft outline
+  // stand on it, and the buttons sit on the surface.
+  add("step button border (strong) on well", t.border.strong, s.well, UI);
+  add("Play button outline (soft line) on well", t.brand.softLine, s.well, UI);
+  add("Play button icon (on soft) on soft", t.brand.onSoft, t.brand.soft, UI);
   add("certificate placeholder (muted2) on input", t.text.muted2, s.input, TEXT);
   add("gold line on raised (Map button, target side)", t.brand.goldLine, s.raised, UI);
   add("success border on input (mapped certificate)", t.status.ok, s.input, UI);
@@ -153,15 +163,20 @@ function pairsFor(t) {
   }
   add("pump tank bar on track", v.pump.tankNormal, s.track, UI);
 
+  // #303: the picture's card is the well (components/workbench/layout.js pictureCardSx, the
+  // renderers' PICTURE_CANVAS); a picture outside a card is still on the input white, so every
+  // canvas pair is measured on both.
   // #229 stage 4: the gadget highlight ring and edge underlay, on the picture's canvas (input)
   // and next to the background node fill it rings. The active gadget row's border in the
   // Result panel sits on the input grey too.
   add("gadget highlight on canvas (input)", v.gadget, s.input, UI);
+  add("gadget highlight on canvas (well)", v.gadget, s.well, UI);
   add("gadget highlight on surface", v.gadget, s.main, UI);
   add("gadget highlight next to background node fill", v.gadget, v.background.fill, UI);
   // #239: Color mode's gadget palette, on the canvas, the pane and next to a background node.
   for (const [key, color] of Object.entries(v.gadgetPalette)) {
     add(`gadget color ${key} on canvas (input)`, color, s.input, UI);
+    add(`gadget color ${key} on canvas (well)`, color, s.well, UI);
     add(`gadget color ${key} on surface`, color, s.main, UI);
     add(`gadget color ${key} next to background node fill`, color, v.background.fill, UI);
   }
@@ -173,6 +188,7 @@ function pairsFor(t) {
   for (const [name, state] of Object.entries(v.state)) {
     for (const [bgName, bg] of [
       ["canvas (input)", s.input],
+      ["canvas (well)", s.well],
       ["surface", s.main],
     ]) {
       add(`state ${name}: line on ${bgName}`, state.line, bg, UI);
@@ -181,17 +197,23 @@ function pairsFor(t) {
     add(`state ${name}: ink on its fill`, state.ink, state.fill, TEXT);
   }
   add("state cell text (primary) on canvas", t.text.primary, s.input, TEXT);
+  add("state cell text (primary) on canvas (well)", t.text.primary, s.well, TEXT);
   // #201: the Graph and Grouped Graph pictures. Plain edges and the hover trace stand on the
   // canvas; an order badge is the canvas color on the primary text color; group colors (cut
   // sides, color classes, clique-cover groups) carry their label on the fill, and their outline
   // stands on the canvas and, as a Legend swatch, on the pane.
   add("graph edge on canvas (input)", v.edge, s.input, UI);
+  add("graph edge on canvas (well)", v.edge, s.well, UI);
   add("graph hover trace on canvas (input)", t.brand.line, s.input, UI);
+  add("graph hover trace on canvas (well)", t.brand.line, s.well, UI);
   add("graph order badge text on badge", s.input, t.text.primary, TEXT);
+  add("graph order badge text on badge (well)", s.well, t.text.primary, TEXT);
   add("graph order badge on canvas", t.text.primary, s.input, UI);
+  add("graph order badge on canvas (well)", t.text.primary, s.well, UI);
   for (const [name, group] of Object.entries(v.group)) {
     add(`group ${name}: label on its fill`, group.ink, group.fill, TEXT);
     add(`group ${name}: line on canvas (input)`, group.line, s.input, UI);
+    add(`group ${name}: line on canvas (well)`, group.line, s.well, UI);
     add(`group ${name}: line on surface`, group.line, s.main, UI);
   }
   add("table header text on raised", t.text.primary, s.raised, TEXT);

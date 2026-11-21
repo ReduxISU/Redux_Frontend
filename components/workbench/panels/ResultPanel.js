@@ -1,358 +1,222 @@
 // components/workbench/panels/ResultPanel.js
 //
-// #229: the Result & Verify panel. Stage 3 fills it in:
-//   - Solve mode: the solver's answer (its certificate), who produced it, how long it took and
-//     how many picture steps it recorded, and Verify This Answer, which puts the answer in the
-//     Verify box and checks it in one click.
-//   - Reduce mode: which reduction ran, the target instance it built (from
-//     ProblemProvider/reduce), and "Map a solution across": pick a solver for the source
-//     problem's answer and map that answer onto the target (ProblemProvider/mapSolution). The
-//     mapped certificate gets its own Verify This Answer, checked against the target.
-//   - A randomized solver's seed (Solve mode, #295, ReduxISU/Redux#932): the run says which
-//     seed it ran with (SeedLine, below), with Run again with this seed to see the same steps
-//     again; it also puts the seed in the command bar's Seed box. A solver without a seed shows
-//     neither. Solve's answer is that same run's whenever ProblemProvider/visualizeRun gave one
-//     (Workbench.js), so the answer and the steps agree.
-//   - Verify at the bottom (./VerifyBox.js), which works before anything has run.
-//   - Gadgets (Reduce mode, stage 4, ./GadgetsSection.js): what the reduction built for each
-//     piece of the source, at the bottom of the reduction's result; hidden when it lists none.
-//
+// #229: the Result & Verify panel. #303 (Board G) listed the results under the task bar, and
+// stage 4 tidies them into Board G's one list of rows, in Solve, Reduce and Verify alike: each
+// row a tone (ok, err, warn or info), an icon, a plain-language sentence and, where it helps, a
+// monospace field with the text worth copying (an answer, the target instance) and an action
+// button at the far right ("Check it in Verify"). Reduce's rows carry the stage they belong to
+// (Reduce, Solve or Verify) as a tag, in the stepper's order. Workbench.js decides the rows;
+// this file only draws them, so each fact is said once:
+//   - Solve: the solver's answer, with the round trip it took and Check it in Verify; a
+//     randomized solver's seed (#295, ReduxISU/Redux#932), as text to paste into the Seed box.
+//   - Reduce: what the build made (with the target instance), the Solve stage's answer and the
+//     answer mapped back, then Verify's two checks and whether they agree.
+//   - Verify: the check's verdict.
 // Time is the round trip this browser measured, network included, and is labelled that way:
 // Redux reports no running time of its own for a solve (#95).
+//
+// Gadgets (Reduce mode, #229 stage 4, ./GadgetsSection.js) follow the rows: what the reduction
+// built for each piece of the source, hidden when it lists none.
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { COMPUTE_FAILED } from "../../../hooks/useComputeRequest";
-import ComputeStatus from "../../detail/ComputeStatus";
-import { MONO_FONT, secondaryButtonSx } from "../layout";
-import TaggedSelect from "../TaggedSelect";
+import { MONO_FONT, PHONE_MEDIA, secondaryButtonSx } from "../layout";
 import GadgetsSection from "./GadgetsSection";
-import VerifyBox from "./VerifyBox";
 
-function formatSeconds(milliseconds) {
-  return `${(milliseconds / 1000).toFixed(2)} s`;
-}
-
-function formatOutput(value) {
-  if (typeof value === "string") return value;
-  if (value === null || value === undefined) return "";
-  return JSON.stringify(value, null, 2);
-}
-
-function Fact({ label, children }) {
+/**
+ * The seed a randomized solver's run reported (#295). The number is plain text a user can select
+ * and paste into the Seed box, which repeats the run exactly.
+ * @param {{id: string, seed: number}} props The number's own id is `${id}-value`.
+ */
+export function SeedText({ id, seed }) {
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <Box component="span" sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
-        {label}
-      </Box>
-      <Box component="strong" sx={{ overflowWrap: "anywhere" }}>
-        {children}
-      </Box>
+    <Box component="span" id={id}>
+      Seed{" "}
+      <Box component="span" id={`${id}-value`} sx={{ fontFamily: MONO_FONT, userSelect: "all" }}>
+        {seed}
+      </Box>{" "}
+      made this run. Type it in the Seed box to repeat the same steps.
     </Box>
   );
 }
 
-const factGridSx = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: "10px",
+const TONES = {
+  ok: { borderColor: "status.ok", backgroundColor: "status.okBg", icon: "status.okText" },
+  err: { borderColor: "status.err", backgroundColor: "status.errBg", icon: "status.errText" },
+  warn: { borderColor: "status.warn", backgroundColor: "status.warnBg", icon: "status.warnText" },
+  info: { borderColor: "border.main", backgroundColor: "surface.raised", icon: "text.primary" },
 };
 
-const codeBoxSx = {
+const codeSx = {
+  display: "block",
   fontFamily: MONO_FONT,
   fontSize: "0.875rem",
-  px: 1.5,
-  py: 1.25,
+  px: 1.25,
+  py: 0.75,
+  mt: 0.75,
   borderRadius: "8px",
   backgroundColor: "surface.input",
+  color: "text.primary",
   border: "1px solid",
   borderColor: "border.soft",
   overflowWrap: "anywhere",
   whiteSpace: "pre-wrap",
-  m: 0,
+  overflowY: "auto",
+  userSelect: "text",
 };
 
-const sectionLabelSx = { fontSize: "0.8125rem", color: "text.secondary" };
-
-function CodeBlock({ id, label, children, maxHeight }) {
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-      <Box component="span" sx={sectionLabelSx}>
-        {label}
-      </Box>
-      <Box id={id} component="pre" sx={{ ...codeBoxSx, maxHeight, overflowY: "auto" }}>
-        {children}
-      </Box>
-    </Box>
-  );
-}
+/**
+ * @typedef {Object} ResultRow
+ * @property {string} key
+ * @property {string} [id] The row's id; `${listId}-${key}` when left out.
+ * @property {string} [tag] Reduce's stage: "Reduce", "Solve" or "Verify".
+ * @property {"ok"|"err"|"warn"|"info"} tone
+ * @property {string} icon One character, drawn in the tone's color and hidden from readers.
+ * @property {import("react").ReactNode} text
+ * @property {{id: string, text: string, maxHeight?: number}} [code] Text worth copying, in a
+ *   monospace field under the sentence.
+ * @property {import("react").ReactNode} [extra] More under the field (#303: the element a
+ *   picture's spelled-out answer renders into).
+ * @property {{id: string, label: string, disabled?: boolean, onClick: () => void}} [action]
+ */
 
 /**
- * The seed a randomized solver's run reported, and Run again with this seed (#295).
- * @param {{id: string, seed: {seed: number, onRerun: () => void, disabled?: boolean}|null}} props
- *   The button's id is `${id}-rerun`.
+ * Board G's results: one row each.
+ * @param {{id: string, rows: ResultRow[]}} props
  */
-export function SeedLine({ id, seed }) {
-  if (!seed) return null;
+export function ResultRows({ id, rows }) {
+  if (rows.length === 0) return null;
   return (
     <Box
-      sx={{
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        gap: "4px 12px",
-        fontSize: "0.875rem",
-        minWidth: 0,
-      }}
+      component="ul"
+      id={id}
+      sx={{ listStyle: "none", m: 0, p: 0, display: "flex", flexDirection: "column", gap: 1 }}
     >
-      <Box component="span" id={id} sx={{ color: "text.primary" }}>
-        Seed:{" "}
-        <Box component="span" id={`${id}-value`} sx={{ fontFamily: MONO_FONT }}>
-          {seed.seed}
-        </Box>
-      </Box>
-      <Box
-        id={`${id}-rerun`}
-        component="button"
-        type="button"
-        onClick={seed.onRerun}
-        disabled={Boolean(seed.disabled)}
-        aria-describedby={id}
-        sx={{ ...secondaryButtonSx, minHeight: 40 }}
-      >
-        Run again with this seed
-      </Box>
+      {rows.map((row) => {
+        const tone = TONES[row.tone] ?? TONES.info;
+        return (
+          <Box
+            component="li"
+            key={row.key}
+            id={row.id ?? `${id}-${row.key}`}
+            data-stage={row.tag ? row.tag.toLowerCase() : undefined}
+            data-tone={row.tone}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px 12px",
+              minWidth: 0,
+              px: 1.5,
+              py: 1,
+              borderRadius: "10px",
+              border: "1px solid",
+              borderColor: tone.borderColor,
+              backgroundColor: tone.backgroundColor,
+              color: "text.primary",
+              fontSize: "0.875rem",
+              [PHONE_MEDIA]: { flexWrap: "wrap" },
+            }}
+          >
+            {row.tag && (
+              <Box
+                component="span"
+                data-tag
+                sx={{
+                  width: 52,
+                  flex: "none",
+                  fontSize: "0.6875rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  color: "text.secondary",
+                }}
+              >
+                {row.tag}
+              </Box>
+            )}
+            <Box
+              component="span"
+              aria-hidden="true"
+              sx={{
+                width: 20,
+                flex: "none",
+                textAlign: "center",
+                fontWeight: 700,
+                color: tone.icon,
+              }}
+            >
+              {row.icon}
+            </Box>
+            <Box
+              component="div"
+              data-row-text
+              sx={{ flex: "1 1 240px", minWidth: 0, overflowWrap: "anywhere" }}
+            >
+              {row.text}
+              {row.code && (
+                <Box
+                  component="code"
+                  id={row.code.id}
+                  sx={{ ...codeSx, maxHeight: row.code.maxHeight ?? "none" }}
+                >
+                  {row.code.text}
+                </Box>
+              )}
+              {row.extra}
+            </Box>
+            {row.action && (
+              <Box
+                id={row.action.id}
+                component="button"
+                type="button"
+                disabled={Boolean(row.action.disabled)}
+                onClick={row.action.onClick}
+                sx={{ ...secondaryButtonSx, ml: "auto", flex: "none", minHeight: 44 }}
+              >
+                {row.action.label}
+              </Box>
+            )}
+          </Box>
+        );
+      })}
     </Box>
   );
 }
 
 /**
  * @param {Object} props
- * @param {string} props.idPrefix Prefixes every id rendered here.
- * @param {Object} props.problem The problem, as hooks/useProblemDetail.js builds it.
- * @param {"solve"|"reduce"} props.mode The command bar's mode.
- * @param {string} props.instance The current instance text.
- * @param {Object|null} props.solveResult The last solve: `{solverName, output, elapsedMs,
- *   instance, stepCount, seed}` (`stepCount` null when the picture did not come back; `seed`
- *   as SeedLine takes it, null when there is none to show).
- * @param {Object|null} props.reduceResult The last reduction: `{targetName, reductionName,
- *   solverName, certificate, elapsedMs, instance, targetInstance, mappedBack}` (`targetInstance`
- *   null when Redux did not send it; `mappedBack`, `{text, ok}`, only for a Reduction View
- *   (#215), whose solver ran on the target, so it has no source certificate).
- * @param {() => void} props.onVerifyAnswer Verify This Answer for the solve.
- * @param {Object|null} props.map "Map a solution across" (Reduce mode): `{select, onMap,
- *   disabled, hint, request, mapped: {certificate, solverName, reused}|null, onVerifyMapped}`.
- * @param {Object} props.verifyProps Everything ./VerifyBox.js takes, except its idPrefix.
+ * @param {string} props.idPrefix Prefixes every id rendered here; the list is
+ *   `${idPrefix}-rows`.
+ * @param {ResultRow[]} props.rows
+ * @param {string} [props.empty] What shows when there are no rows ("No run yet: ...").
  * @param {Object|null} [props.gadgets] The Gadgets section (Reduce mode): `{runId, gadgets,
  *   sourceFrame, targetFrame, namers?, colors?, activeIndex, onHighlight}`, everything
- *   ./GadgetsSection.js takes
- *   except its idPrefix. `runId` remounts the section per run, so a new run starts it closed.
+ *   ./GadgetsSection.js takes except its idPrefix. `runId` remounts the section per run, so a
+ *   new run starts it closed.
  */
-export default function ResultPanel({
-  idPrefix,
-  problem,
-  mode,
-  instance,
-  solveResult,
-  reduceResult,
-  onVerifyAnswer,
-  map,
-  verifyProps,
-  gadgets,
-}) {
-  const result = mode === "solve" ? solveResult : reduceResult;
-  const changed = Boolean(result) && result.instance !== instance;
-  const solveAnswer = solveResult ? formatOutput(solveResult.output) : "";
-
+export default function ResultPanel({ idPrefix, rows, empty = "", gadgets = null }) {
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-      {!result && (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
+      <ResultRows id={`${idPrefix}-rows`} rows={rows} />
+      {rows.length === 0 && empty && (
         <Typography id={`${idPrefix}-empty`} sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
-          No run yet: press Run for {mode === "solve" ? "an answer." : "the target instance."}
+          {empty}
         </Typography>
       )}
-
-      {result && changed && (
-        <Typography
-          id={`${idPrefix}-changed`}
-          sx={{ fontSize: "0.875rem", color: "warning.light" }}
-        >
-          The instance changed since this run. Press Run for a new result.
-        </Typography>
+      {gadgets && (
+        <GadgetsSection
+          key={gadgets.runId}
+          idPrefix={`${idPrefix}-gadgets`}
+          gadgets={gadgets.gadgets}
+          sourceFrame={gadgets.sourceFrame}
+          targetFrame={gadgets.targetFrame}
+          namers={gadgets.namers ?? null}
+          colors={gadgets.colors ?? null}
+          activeIndex={gadgets.activeIndex}
+          onHighlight={gadgets.onHighlight}
+          controlsRef={gadgets.controlsRef}
+        />
       )}
-
-      {solveResult && mode === "solve" && (
-        <Box id={`${idPrefix}-solve`} sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-          <Box sx={factGridSx}>
-            <Fact label="Solver">{solveResult.solverName}</Fact>
-            <Fact label="Time (round trip)">{formatSeconds(solveResult.elapsedMs)}</Fact>
-            <Fact label="Steps recorded">
-              {solveResult.stepCount === null ? "Not available" : solveResult.stepCount}
-            </Fact>
-          </Box>
-          <CodeBlock id={`${idPrefix}-answer`} label="Answer (certificate)">
-            {solveAnswer || "The solver returned an empty answer."}
-          </CodeBlock>
-          <SeedLine id={`${idPrefix}-seed`} seed={solveResult.seed ?? null} />
-          <Box
-            id={`${idPrefix}-verify-answer`}
-            component="button"
-            type="button"
-            disabled={!solveAnswer || changed}
-            onClick={onVerifyAnswer}
-            sx={{ ...secondaryButtonSx, alignSelf: "flex-start" }}
-          >
-            Verify This Answer
-          </Box>
-          {changed && (
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              Verify This Answer checks against the instance the answer is for, so it waits for a
-              new run.
-            </Typography>
-          )}
-        </Box>
-      )}
-
-      {reduceResult && mode === "reduce" && (
-        <Box id={`${idPrefix}-reduce`} sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-          <Box sx={factGridSx}>
-            <Fact label="Reduction">
-              {problem.name} {"→"} {reduceResult.targetName}
-            </Fact>
-            <Fact label="Algorithm">{reduceResult.reductionName}</Fact>
-            <Fact label="Time (round trip)">{formatSeconds(reduceResult.elapsedMs)}</Fact>
-            <Fact label="Answer from">
-              {reduceResult.mappedBack
-                ? `${reduceResult.solverName}, on the ${reduceResult.targetName} target`
-                : reduceResult.solverName}
-            </Fact>
-          </Box>
-          <CodeBlock
-            id={`${idPrefix}-target-instance`}
-            label={`Target instance (${reduceResult.targetName})`}
-            maxHeight={180}
-          >
-            {reduceResult.targetInstance ??
-              "Redux did not send the target instance's text for this run."}
-          </CodeBlock>
-          {reduceResult.mappedBack ? (
-            // #215: a Reduction View solves the target and maps its answer back.
-            <CodeBlock
-              id={`${idPrefix}-mapped-back`}
-              label={`${problem.name} answer, mapped back from ${reduceResult.targetName}`}
-            >
-              {reduceResult.mappedBack.text || "The view came back without a closing step."}
-            </CodeBlock>
-          ) : (
-            <CodeBlock id={`${idPrefix}-carried`} label={`${problem.name} answer carried across`}>
-              {formatOutput(reduceResult.certificate) || "The solver returned an empty answer."}
-            </CodeBlock>
-          )}
-
-          {map && (
-            <Box
-              id={`${idPrefix}-map`}
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 1,
-                borderTop: "1px solid",
-                borderColor: "border.soft",
-                pt: 1.5,
-              }}
-            >
-              <Box sx={{ fontWeight: 600 }}>
-                Map a solution across{" "}
-                <Box component="span" sx={{ fontWeight: 400, color: "text.secondary" }}>
-                  (optional)
-                </Box>
-              </Box>
-              {map.select && (
-                <TaggedSelect
-                  id={`${idPrefix}-map-solver`}
-                  label={`Solver for the ${problem.name} answer`}
-                  hue="blue"
-                  options={map.select.options}
-                  value={map.select.value}
-                  onChange={map.select.onChange}
-                  boxSx={{ width: "100%" }}
-                />
-              )}
-              <Box
-                id={`${idPrefix}-map-button`}
-                component="button"
-                type="button"
-                disabled={map.disabled}
-                aria-describedby={`${idPrefix}-map-hint`}
-                onClick={map.onMap}
-                sx={{
-                  ...secondaryButtonSx,
-                  alignSelf: "flex-start",
-                  borderColor: map.disabled ? "border.main" : "brand.goldLine",
-                }}
-              >
-                Map a solution across
-              </Box>
-              <Box
-                id={`${idPrefix}-map-hint`}
-                sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-              >
-                {map.hint}
-              </Box>
-              <ComputeStatus
-                idPrefix={`${idPrefix}-map`}
-                status={map.request.status}
-                announcement={map.announcement}
-                failure={map.request.status === COMPUTE_FAILED ? map.request.failure : null}
-                onCancel={map.request.cancel}
-                busyLabel="Mapping the answer across"
-              />
-              {map.mapped && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
-                  <Box component="span" sx={sectionLabelSx}>
-                    Mapped certificate on the {reduceResult.targetName} target, from{" "}
-                    {map.mapped.solverName}
-                    {map.mapped.reused ? "'s answer in this run" : "'s answer, solved just now"}
-                  </Box>
-                  <Box
-                    id={`${idPrefix}-mapped`}
-                    component="pre"
-                    sx={{ ...codeBoxSx, borderColor: "status.ok" }}
-                  >
-                    {map.mapped.certificate || "The mapping returned an empty certificate."}
-                  </Box>
-                  <Box
-                    id={`${idPrefix}-verify-mapped`}
-                    component="button"
-                    type="button"
-                    disabled={!map.mapped.certificate || !map.onVerifyMapped}
-                    onClick={map.onVerifyMapped}
-                    sx={{ ...secondaryButtonSx, alignSelf: "flex-start" }}
-                  >
-                    Verify This Answer
-                  </Box>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {gadgets && (
-            <GadgetsSection
-              key={gadgets.runId}
-              idPrefix={`${idPrefix}-gadgets`}
-              gadgets={gadgets.gadgets}
-              sourceFrame={gadgets.sourceFrame}
-              targetFrame={gadgets.targetFrame}
-              namers={gadgets.namers ?? null}
-              colors={gadgets.colors ?? null}
-              activeIndex={gadgets.activeIndex}
-              onHighlight={gadgets.onHighlight}
-            />
-          )}
-        </Box>
-      )}
-
-      <VerifyBox idPrefix={`${idPrefix}-verify`} mode={mode} {...verifyProps} />
     </Box>
   );
 }

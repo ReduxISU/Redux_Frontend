@@ -46,8 +46,8 @@ test("the ISU logo swaps with the theme", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto(PAGE);
 
-  const darkLogo = page.locator("#navbar-isu-logo-dark");
-  const lightLogo = page.locator("#navbar-isu-logo-light");
+  const darkLogo = page.locator("#site-footer-isu-logo-dark");
+  const lightLogo = page.locator("#site-footer-isu-logo-light");
   await expect(darkLogo).toBeVisible();
   await expect(lightLogo).toBeHidden();
   await expect(darkLogo).toHaveAttribute("alt", "Idaho State University, Computer Science");
