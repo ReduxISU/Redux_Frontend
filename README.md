@@ -51,6 +51,7 @@ For local dev and production builds, here's exactly how to set it up:
 Docker doesn't use `.env.local` at all — it's passed in as a `-e` flag on `docker run` instead, shown in the Docker section below.
 
 **Common mistakes to avoid:**
+
 - The file must be named exactly `.env.local` (not `.env.example.local`, not `.env`) — Next.js only auto-loads specific filenames, and `.env.local` is the one meant for your own machine.
 - `.env.local` is intentionally in `.gitignore` — it should never be committed. If `git status` shows it as a new file, something's wrong; stop and ask before committing it.
 - Don't remove the trailing slash (`/`) at the end of the URL.

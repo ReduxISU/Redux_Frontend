@@ -1,4 +1,5 @@
 ---
+
 name: Feature
 about: Suggest a new feature for Redux Frontend
 title: ""
