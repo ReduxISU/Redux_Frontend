@@ -60,6 +60,9 @@
 // data/playlists.js's hand-authored array. Either branch returns the same
 // shape (title/problems/playlistHref/buildProblemHref), so everything below
 // this point treats a custom and a hand-authored playlist identically.
+//
+// #327: a Back control sits above the title (components/BackButton.js): back in history when the
+// visitor came from another page of this site, else to the problem list.
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -67,6 +70,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import BackButton from "../components/BackButton";
 import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
 import PageTitle from "../components/PageTitle";
@@ -285,6 +289,7 @@ export default function ProblemDetail() {
         }}
       >
         <Box component="header" sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+          <BackButton id="problem-back" />
           <Box
             sx={{
               display: "flex",
