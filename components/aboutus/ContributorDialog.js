@@ -1,7 +1,8 @@
 // components/aboutus/ContributorDialog.js
 //
 // The contributor detail dialog: personal info, GitHub activity, and every
-// problem/solver/reduction/verifier/visualization they are credited on. Ported from
+// problem/solver/reduction/verifier/visualization they are credited on, then their other
+// pull requests by area (tests, CI, docs, ...) and any past contributions. Ported from
 // Redux_GUI's pages/aboutus/index.js contributor popup (ProfileField, ContributionList,
 // GithubActivitySection, LegacyContributionsList), rebuilt as its own component here
 // rather than four inline helper functions inside the page, and restyled against this
@@ -17,7 +18,16 @@ import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
+import { useState } from "react";
 import { thinScrollbarSx } from "../theme";
+import {
+  areaHeading,
+  needsToggle,
+  normalizeOtherContributions,
+  pullRequestLabel,
+  toggleLabel,
+  visiblePullRequests,
+} from "./otherContributions";
 
 // Only renders when there is an actual value -- avoids "Not specified" clutter for a
 // field (bio, education, ...) a contributor has not filled in. The backend answers
@@ -91,6 +101,72 @@ function GithubActivitySection({ reduxStats, reduxGuiStats }) {
         <Typography key={label} variant="body2" sx={{ color: "text.secondary" }}>
           {label}: {parts.join(", ")}
         </Typography>
+      ))}
+    </Box>
+  );
+}
+
+// One area of OtherContributions: a sub-heading with its PR count, then its PRs as links,
+// newest first. A long area (one contributor has hundreds of PRs) shows the first few and a
+// "Show all N" / "Show fewer" toggle.
+function OtherContributionArea({ area, pullRequests, idPrefix }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <Box sx={{ mb: 1 }}>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+        {areaHeading(area, pullRequests.length)}
+      </Typography>
+      <Box component="ul" sx={{ m: 0, pl: 3, color: "text.secondary" }}>
+        {visiblePullRequests(pullRequests, expanded).map((pr) => (
+          <Typography component="li" variant="body2" key={pr.url}>
+            <Link
+              href={pr.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              underline="hover"
+              sx={{ color: "brand.text" }}
+            >
+              {pullRequestLabel(pr)}
+            </Link>
+          </Typography>
+        ))}
+      </Box>
+      {needsToggle(pullRequests) && (
+        <Link
+          id={`${idPrefix}-toggle`}
+          component="button"
+          type="button"
+          variant="body2"
+          underline="hover"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+          sx={{ color: "brand.text", fontWeight: 600, pl: 3 }}
+        >
+          {toggleLabel(pullRequests.length, expanded)}
+        </Link>
+      )}
+    </Box>
+  );
+}
+
+// Pull requests outside the code-credited categories above (tests, CI, docs, the
+// interfaces, ...), grouped by area in the backend's order. The backend fills this at release
+// time, so it is often missing or empty; the whole section then renders nothing.
+function OtherContributions({ items }) {
+  const areas = normalizeOtherContributions(items);
+  if (areas.length === 0) return null;
+  return (
+    <Box id="contributor-dialog-other-contributions" sx={{ mt: 1.5 }}>
+      <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+        Other Contributions:
+      </Typography>
+      {areas.map(({ area, pullRequests }, index) => (
+        <OtherContributionArea
+          key={area}
+          area={area}
+          pullRequests={pullRequests}
+          idPrefix={`contributor-dialog-other-contributions-${index}`}
+        />
       ))}
     </Box>
   );
@@ -222,6 +298,9 @@ export default function ContributorDialog({
             <ContributionList label="Verifiers" items={profile.verifiersContributed} />
             <ContributionList label="Visualizations" items={profile.visualizationsCreated} />
 
+            {/* Current work before historical: Other Contributions is live PR history, while
+                Past Contributions is caveated as no longer in the codebase, so it stays last. */}
+            <OtherContributions items={profile.otherContributions} />
             <LegacyContributionsList items={profile.legacyContributions} />
           </Box>
         ) : (
