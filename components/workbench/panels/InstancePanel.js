@@ -8,6 +8,9 @@
 // Board G's "By parts" mode (one box per clause, or Nodes / Edges / K) needs the backend's
 // per-part description (ReduxISU/Redux#851) and lands with the part editor (#228); until then
 // only the whole text is shown, with no placeholder for the other mode.
+//
+// #324 (#174): an instance too long for a link gets a plain note under the box saying that the
+// page's address and the Share button leave it out (lib/permalink.js MAX_PERMALINK_LENGTH).
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -21,6 +24,7 @@ import { MONO_FONT } from "../layout";
  * @param {(next: string) => void} props.onInstanceChange Called on every edit.
  * @param {{headline: string, detail: string, expected?: string}|null} props.instanceError
  *   Why Redux could not read this instance, when it could not.
+ * @param {boolean} [props.linkOmitsInstance] #174: the instance is too long to go in a link.
  */
 export default function InstancePanel({
   idPrefix,
@@ -28,11 +32,17 @@ export default function InstancePanel({
   instance,
   onInstanceChange,
   instanceError,
+  linkOmitsInstance = false,
 }) {
   const inputId = `${idPrefix}-full-instance`;
   const errorId = `${idPrefix}-full-instance-error`;
   const formatId = `${idPrefix}-full-instance-format`;
-  const describedBy = [instanceError ? errorId : null, problem.instanceFormat ? formatId : null]
+  const linkNoteId = `${idPrefix}-link-note`;
+  const describedBy = [
+    instanceError ? errorId : null,
+    linkOmitsInstance ? linkNoteId : null,
+    problem.instanceFormat ? formatId : null,
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -88,6 +98,12 @@ export default function InstancePanel({
               Expected: {instanceError.expected}
             </Box>
           )}
+        </Box>
+      )}
+      {linkOmitsInstance && (
+        <Box id={linkNoteId} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
+          This instance is too long to include in a shareable link, so the page&apos;s address and
+          Share leave it out. A shared link opens on the default instance.
         </Box>
       )}
       {problem.instanceFormat && (

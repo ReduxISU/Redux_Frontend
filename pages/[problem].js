@@ -61,6 +61,10 @@
 // shape (title/problems/playlistHref/buildProblemHref), so everything below
 // this point treats a custom and a hand-authored playlist identically.
 //
+// #324: the title row ends in Share (components/ShareButton.js), which copies a link to what the
+// workbench shows. The workbench builds that link (lib/permalink.js) and hands this page a way to
+// ask for it (`shareRef`), so the link has the instance on screen even while the address is still
+// catching up with typing.
 // #327: a Back control sits above the title (components/BackButton.js): back in history when the
 // visitor came from another page of this site, else to the problem list.
 
@@ -70,11 +74,13 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { useRef } from "react";
 import BackButton from "../components/BackButton";
 import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
 import PageTitle from "../components/PageTitle";
 import PlaylistRail from "../components/PlaylistRail";
+import ShareButton from "../components/ShareButton";
 import { isProblemComplete } from "../components/StatusIcon";
 import { problemCard } from "../components/workbench/infoCards";
 import { COLUMN_MAX_WIDTH, COMPACT_MEDIA, PHONE_MEDIA } from "../components/workbench/layout";
@@ -227,6 +233,8 @@ function NotFound() {
 export default function ProblemDetail() {
   const router = useRouter();
   const { problem: routeProblemName } = router.query;
+  // #324: the workbench fills this in (useImperativeHandle) with `link()`, the link to share.
+  const shareRef = useRef(null);
 
   const { problem, loading, error } = useProblemDetail(
     REDUX_API_BASE_URL,
@@ -320,6 +328,9 @@ export default function ProblemDetail() {
                 )),
               )}
             </Box>
+            <Box sx={{ ml: "auto", flex: "none", maxWidth: "100%" }}>
+              <ShareButton id="problem-share" getLink={() => shareRef.current?.link() ?? null} />
+            </Box>
           </Box>
           {problem.oneLiner && (
             <Typography
@@ -343,7 +354,7 @@ export default function ProblemDetail() {
 
         {/* Keyed by name so moving to another problem (a playlist step, for one) starts a
             fresh workbench rather than carrying one problem's instance into the next. */}
-        <Workbench key={problem.name} problem={problem} />
+        <Workbench key={problem.name} problem={problem} shareRef={shareRef} />
       </Box>
     </PageShell>
   );
