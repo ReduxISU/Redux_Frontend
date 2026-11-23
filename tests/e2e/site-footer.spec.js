@@ -38,8 +38,13 @@ for (const width of [1280, 320]) {
 
       // An ordinary block: neither fixed nor sticky, at the very end of the page.
       expect(await footer.evaluate((element) => getComputedStyle(element).position)).toBe("static");
-      await footer.scrollIntoViewIfNeeded();
-      await expect(footer).toBeInViewport();
+      // A problem page keeps growing while its picture and lists load, which can push the footer
+      // back below the window after one scroll (CI's slower runner, on the merge of #332): scroll
+      // again until it stays in view.
+      await expect(async () => {
+        await footer.scrollIntoViewIfNeeded();
+        await expect(footer).toBeInViewport({ timeout: 1_000 });
+      }).toPass({ timeout: 15_000 });
       const { pageBottom, footerBottom, logoCenter, footerCenter, overflow } = await page.evaluate(
         () => {
           const box = document.getElementById("site-footer").getBoundingClientRect();
