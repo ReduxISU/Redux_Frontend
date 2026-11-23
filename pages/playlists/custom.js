@@ -36,7 +36,7 @@ import { buildPlaylistStepQuerySuffix, parseCustomPlaylist } from "../../lib/pla
 
 function PageShell({ children }) {
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", flex: 1 }}>
       <NavBar />
       {children}
     </Box>

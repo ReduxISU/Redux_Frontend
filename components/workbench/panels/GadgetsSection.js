@@ -14,6 +14,10 @@
 // names the pictures give them ("x1 in C1 becomes x1_0."), or the gadget's own note where the
 // kind needs one (an edge rule's reason, a bound's formula). In the Reduction View's Color mode a
 // row carries its gadget's color as a swatch, the color its pieces wear on both pictures.
+//
+// #303 (Board G polish): the Reduction View's Plain / Color switch and its line saying what is
+// linked open the section's body (`controlsRef`, ../../pictures/secondarySlots.js), since Board
+// G does not show them beside the pictures.
 
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
@@ -112,6 +116,8 @@ function GadgetRow({ idPrefix, gadget, name, color, active, onHighlight }) {
  * @param {(index: number|null, leaving?: number) => void} props.onHighlight Called with a
  *   gadget's index when its row is hovered or focused, and with null (plus the row it is
  *   leaving) when the pointer or focus leaves it.
+ * @param {import("react").Ref} [props.controlsRef] #303: the element the Reduction View's
+ *   Gadgets controls render into, at the top of the body.
  */
 export default function GadgetsSection({
   idPrefix,
@@ -122,6 +128,7 @@ export default function GadgetsSection({
   colors = null,
   activeIndex,
   onHighlight,
+  controlsRef,
 }) {
   const [open, setOpen] = useState(false);
   const name = {
@@ -191,6 +198,11 @@ export default function GadgetsSection({
         hidden={!open}
         sx={{ display: open ? "flex" : "none", flexDirection: "column", gap: 1.75 }}
       >
+        <Box
+          ref={controlsRef}
+          id={`${idPrefix}-controls`}
+          sx={{ display: "flex", flexDirection: "column", gap: 1, "&:empty": { display: "none" } }}
+        />
         <Box id={`${idPrefix}-intro`} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
           {GADGETS_INTRO}
         </Box>

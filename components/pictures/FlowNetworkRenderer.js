@@ -11,8 +11,8 @@
 // its tail. The Residual arcs switch shows such a back arc on every edge that carries flow, so
 // the reader can see where flow could still be sent back. The Done frame colors the two sides of
 // the minimum cut (`groups`: 0 is the S side, 1 the T side), draws the cut edges (`cut`, from S
-// to T) as the answer and the edges from T back to S Untraveled, and the summary under the
-// diagram adds up the cut.
+// to T) as the answer and the edges from T back to S Untraveled, and the summary on the step's
+// line (#303: ./secondarySlots.js StepFact) adds up the cut.
 //
 // The payload holds the network with Redux's own columns; each frame holds the states (`nodes`,
 // `edges`: an id that is absent is Background), `flow` (every edge's units), `value` and `path`.
@@ -53,6 +53,7 @@ import {
   TRACE_COLOR,
 } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { StepFact } from "./secondarySlots";
 
 /** A backward arc's dash. */
 const BACK_DASH = "5 4";
@@ -194,7 +195,7 @@ export default function FlowNetworkRenderer({
   const sinkLabel = labels.get(payload?.sink) ?? payload?.sink;
   const label = `${name}: a network of ${plural(layout.nodes.length, "node")} and ${plural(layout.edges.length, "edge")} from source ${sourceLabel} on the left to sink ${sinkLabel} on the right.`;
 
-  // The summary under the diagram: the flow so far, and on the answer the cut and its capacity.
+  // The summary on the step's line: the flow so far, and on the answer the cut and its capacity.
   let summary = null;
   if (running && flow) {
     const value = Number.isFinite(frame.value) ? frame.value : 0;
@@ -471,13 +472,9 @@ export default function FlowNetworkRenderer({
         </g>
       </DiagramZoom>
       {summary && (
-        <Box
-          id={`${idPrefix}-summary`}
-          data-value={frame.value}
-          sx={{ fontSize: "0.875rem", color: "text.primary", fontFamily: MONO }}
-        >
+        <StepFact id={`${idPrefix}-summary`} data={{ "data-value": frame.value }}>
           {summary}
-        </Box>
+        </StepFact>
       )}
     </Box>
   );

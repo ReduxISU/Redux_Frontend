@@ -22,20 +22,31 @@
 // linked from here rather than left undiscoverable, since it's a core-data
 // feature (the whole catalog's reduction graph), not a demo page.
 //
+// #303: the links say "Problems" (Home, the catalog) and "Reductions" (the reduction graph),
+// as Board G's banner does. Their URLs, ids and the pages' own headings are unchanged.
+//
 // Below `md` (the project's one responsive breakpoint) the links collapse into
 // a menu button, by project-owner request: five links plus the wordmark
 // wrapped onto two or three lines at phone width. The desktop links keep their
 // ids; the menu items get a `-menu` suffix so ids stay unique.
 //
-// #156: the right end of the bar holds the theme toggle and, at the far right, the ISU
-// Computer Science logo. Both have a dark and a light version rendered together, with the
-// inactive one hidden by the color-scheme CSS selector (theme.applyStyles), so the server
+// #156: the right end of the bar holds the theme toggle. It and the ISU Computer Science logo
+// (exported here as IsuLogo; #303 moved it from the banner to every page's footer,
+// SiteFooter.js) each have a dark and a light version rendered together, with the inactive one
+// hidden by the color-scheme CSS selector (theme.applyStyles), so the server
 // render and the first paint already match the theme the visitor sees: no hydration
 // mismatch and no flash of the wrong logo or label. The toggle shows what it switches TO
 // (sun + "Light" while dark, moon + "Dark" while light) and its accessible name says the
 // same; the hidden half is display:none, so it is out of the accessibility tree too. Below
 // `sm` the toggle drops its text label and stays a 44px icon button beside the menu button.
+//
+// #325: left of the theme toggle, "Report a bug" is always on screen (at phone width an icon
+// button with that accessible name, as the toggle drops its label). It opens a new
+// Redux_Frontend issue on GitHub in a new tab, filled in with the page's address and the
+// browser (lib/bugReport.js); the address is filled in when the link is pointed at, focused or
+// pressed, so it is the page the visitor is on now.
 
+import BugReportIcon from "@mui/icons-material/BugReportOutlined";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -48,6 +59,7 @@ import { useColorScheme } from "@mui/material/styles";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
+import { bugReportUrl, NEW_ISSUE_URL } from "../lib/bugReport";
 import { THEME_ATTRIBUTE } from "./theme";
 
 const LOGO_ALT = "Idaho State University, Computer Science";
@@ -135,12 +147,59 @@ function ThemeToggle() {
   );
 }
 
-function IsuLogo() {
+/** #325: points the link at a new issue about the page on screen, just before it is used. */
+function fillBugReport(event) {
+  event.currentTarget.href = bugReportUrl({
+    pageUrl: window.location.href,
+    userAgent: navigator.userAgent,
+  });
+}
+
+function ReportBugLink() {
   return (
-    <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+    <Button
+      id="navbar-report-bug"
+      component="a"
+      href={NEW_ISSUE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      variant="outlined"
+      color="inherit"
+      aria-label="Report a bug (opens GitHub in a new tab)"
+      onPointerEnter={fillBugReport}
+      onFocus={fillBugReport}
+      onClick={fillBugReport}
+      onAuxClick={fillBugReport}
+      onContextMenu={fillBugReport}
+      sx={{
+        minHeight: 44,
+        minWidth: 44,
+        px: { xs: 1, sm: 1.75 },
+        flexShrink: 0,
+        gap: 0.75,
+        color: "text.primary",
+        borderColor: "border.main",
+        "&:hover": { borderColor: "border.strong", backgroundColor: "action.hover" },
+      }}
+    >
+      <BugReportIcon aria-hidden="true" fontSize="small" />
+      <Box component="span" aria-hidden="true" sx={{ display: { xs: "none", sm: "inline" } }}>
+        Report a bug
+      </Box>
+    </Button>
+  );
+}
+
+/**
+ * The ISU logo, one image per theme. `idPrefix` names its images (`-isu-logo-dark`, ...);
+ * `sx` is for its wrapper. #303: it lives in the page footer (SiteFooter.js), not the banner.
+ */
+export function IsuLogo({ idPrefix = "site-footer", sx }) {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0, ...sx }}>
       {[
-        { scheme: "dark", src: "/ISULogo-Dark.png", id: "navbar-isu-logo-dark" },
-        { scheme: "light", src: "/ISULogo-Light.png", id: "navbar-isu-logo-light" },
+        { scheme: "dark", src: "/ISULogo-Dark.png", id: `${idPrefix}-isu-logo-dark` },
+        { scheme: "light", src: "/ISULogo-Light.png", id: `${idPrefix}-isu-logo-light` },
       ].map(({ scheme, src, id }) => (
         <Box key={scheme} component="span" sx={onlyInSx(scheme, "block")}>
           <Box
@@ -159,14 +218,20 @@ function IsuLogo() {
 }
 
 const NAV_LINKS = [
-  { id: "navbar-home-link", href: "/", label: "Home" },
-  { id: "navbar-reduction-graph-link", href: "/reduction-graph", label: "Reduction Graph" },
+  { id: "navbar-home-link", href: "/", label: "Problems" },
+  { id: "navbar-reduction-graph-link", href: "/reduction-graph", label: "Reductions" },
   { id: "navbar-aboutus-link", href: "/aboutus", label: "About Us" },
   { id: "navbar-help-link", href: "/help", label: "Help" },
   { id: "navbar-contribute-link", href: "/contribute", label: "Contribute" },
 ];
 
-export default function NavBar() {
+/**
+ * @param {Object} props
+ * @param {boolean} [props.sticky] #303: the banner stays at the top of the window while the
+ *   page scrolls (the problem page). Cards that open upwards drop below it rather than under
+ *   it (TaggedSelect.js reads `data-site-banner`).
+ */
+export default function NavBar({ sticky = false }) {
   const router = useRouter();
   const [menuAnchor, setMenuAnchor] = useState(null);
   const menuOpen = Boolean(menuAnchor);
@@ -175,7 +240,9 @@ export default function NavBar() {
   return (
     <Box
       component="header"
+      data-site-banner=""
       sx={{
+        ...(sticky ? { position: "sticky", top: 0, zIndex: "appBar" } : {}),
         display: "flex",
         alignItems: "center",
         gap: { xs: 1.5, sm: 3 },
@@ -283,8 +350,8 @@ export default function NavBar() {
           );
         })}
       </Menu>
+      <ReportBugLink />
       <ThemeToggle />
-      <IsuLogo />
     </Box>
   );
 }

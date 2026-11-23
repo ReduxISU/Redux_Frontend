@@ -38,6 +38,7 @@ import DiagramZoom from "./DiagramZoom";
 import { GadgetCircle, GadgetRect, GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, nodeLook, TRACE_COLOR } from "./graphPieces";
 import { pictureStateStyle, stateOf } from "./pictureStates";
+import { PICTURE_CANVAS } from "./pictureSx";
 import {
   BOX_OVER,
   BOX_SIZE,
@@ -54,6 +55,7 @@ import {
   SMALL_SIZE,
   TITLE_SIZE,
 } from "./quantumLayout";
+import { StepFact } from "./secondarySlots";
 import { useBoxWidth } from "./useBoxWidth";
 
 /** The scale (CSS px per drawing unit) the circuit's text reads at: its design size. */
@@ -94,7 +96,7 @@ function gateLook(state, { oracle, future }) {
   }
   if (state === "Background") {
     return {
-      fill: paletteVars.surface.input,
+      fill: PICTURE_CANVAS,
       line: oracle ? paletteVars.viz.violet : nodeLook("Background").line,
       ink: paletteVars.text.primary,
       dash: undefined,
@@ -265,15 +267,6 @@ export default function QuantumRenderer({
         resetOn={[payload, frames, layout.width]}
         follow={follow}
         readableScale={READABLE_SCALE}
-        toolbar={
-          <Box
-            id={`${idPrefix}-summary`}
-            data-applied={plain ? undefined : applied}
-            sx={{ fontSize: "0.8125rem", color: "text.secondary" }}
-          >
-            {summary}
-          </Box>
-        }
       >
         {layout.note.length > 0 && (
           <text
@@ -689,6 +682,11 @@ export default function QuantumRenderer({
           </g>
         )}
       </DiagramZoom>
+      {!plain && (
+        <StepFact id={`${idPrefix}-summary`} data={{ "data-applied": applied }}>
+          {summary}
+        </StepFact>
+      )}
     </Box>
   );
 }
@@ -943,7 +941,7 @@ export function quantumAnnotations(payload, frames, { plain = false } = {}) {
     entries.push({
       key: "oracle",
       text: "Oracle (the black box holding the function f)",
-      swatch: { fill: paletteVars.surface.input, line: paletteVars.viz.violet },
+      swatch: { fill: PICTURE_CANVAS, line: paletteVars.viz.violet },
     });
   }
   const signs = new Set(

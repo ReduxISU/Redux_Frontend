@@ -14,7 +14,7 @@
 import { GADGET_KINDS, GADGETS_INTRO } from "../../data/gadgetKinds";
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { openPanel } from "./helpers";
+import { openPanel, reduceAgain } from "./helpers";
 
 const VISUALIZE_REQUEST = /\/api\/redux\/ProblemProvider\/visualize\?/;
 const VISUALIZE_REDUCTION_REQUEST = /\/api\/redux\/ProblemProvider\/visualizeReduction/;
@@ -107,13 +107,13 @@ test("the Gadgets section is hidden when the reduction sends no gadgets", async 
   ];
   for (const body of withoutGadgets) {
     reduceBody = body;
-    await page.locator("#workbench-run").click();
+    await reduceAgain(page, { expect });
     await expect(section(page)).toHaveCount(0);
-    await expect(page.locator("#workbench-result-reduce")).toBeVisible();
+    await expect(page.locator("#workbench-result-rows-reduce-done")).toBeVisible();
     await expect(page.locator("#workbench-run")).toBeEnabled();
 
     reduceBody = SAT3.reduce;
-    await page.locator("#workbench-run").click();
+    await reduceAgain(page, { expect });
     await expect(section(page)).toBeVisible();
     await expect(page.locator("#workbench-run")).toBeEnabled();
   }
@@ -281,6 +281,9 @@ test("an edge rule highlights its node on the source and its edges on the target
 
   const index = gadgetIndex(CLIQUE, "edgeRule", "1");
   const rule = CLIQUE.reduce.gadgets[index];
+  // The pointer stays where the toggle was; once the list opens beneath it, it would hover
+  // (and highlight) another row. Park it off the list so only the focused row counts.
+  await page.mouse.move(0, 0);
   await row(page, index).focus();
   await expect(sourcePicture(page)).toHaveAttribute("data-gadget-highlight-count", "1");
   await expect(sourcePicture(page).locator('[data-node-id="1"]')).toHaveAttribute(

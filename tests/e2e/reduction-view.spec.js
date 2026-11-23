@@ -13,7 +13,17 @@
 
 import { expect, test } from "./fixtures";
 import { GADGET_PAYLOADS } from "./gadget-payloads";
-import { drawnCollisions, openPanel } from "./helpers";
+import {
+  answerViewCertificates,
+  clickPhase,
+  drawnCollisions,
+  openBottomSection,
+  openPanel,
+  reduceAgain,
+  reduceAndSolve,
+  VIEW_MAPPED_ANSWER,
+  VIEW_TARGET_ANSWER,
+} from "./helpers";
 import {
   COLORING_TO_CLIQUE_COVER_VIEW,
   SAT_TO_3SAT_VIEW,
@@ -53,6 +63,8 @@ const CASES = {
 
 const VIEW = "#workbench-reduction";
 const pane = (page, side) => page.locator(`${VIEW}-${side}`);
+// The pane's header, picture and note (#303 stage 2): its zoom buttons sit in the header.
+const paneSection = (page, side) => page.locator(`${VIEW}-${side}-pane`);
 const zoomOf = (page, side) => pane(page, side).locator("[data-zoom]");
 const svgOf = (page, side) => pane(page, side).locator('svg[id$="-svg"]');
 const readout = (page) => page.locator(`${VIEW}-link`);
@@ -81,10 +93,12 @@ async function openReduce(page, problem, instance, target) {
 }
 
 /**
- * Answers reductionView with the capture, opens its page and runs it. Returns the list of
+ * Answers reductionView with the capture, opens its page and runs it (Reduce, then Solve: #303
+ * stage 2), so the view walks every phase. Returns the list of
  * reductionView requests the page made, so a test can count them.
  */
 async function openView(page, key) {
+  await answerViewCertificates(page);
   const { view, problem, target, instance } = CASES[key];
   const asked = [];
   await page.route(REDUCTION_VIEW_REQUEST, (route) => {
@@ -92,9 +106,22 @@ async function openView(page, key) {
     return route.fulfill({ json: view });
   });
   await openReduce(page, problem, instance ?? view.source.instance, target);
-  await page.locator("#workbench-run").click();
+  await reduceAndSolve(page, { expect });
   await expect(page.locator(VIEW)).toBeVisible();
   return asked;
+}
+
+/**
+ * The same pieces at the same centres, to within a pixel: a centre on a half pixel can round
+ * either way by float noise alone, so whole-pixel rounding isn't compared.
+ */
+function expectSameCentres(actual, expected, label) {
+  expect(Object.keys(actual).sort(), label).toEqual(Object.keys(expected).sort());
+  for (const [name, [x, y]] of Object.entries(expected)) {
+    const [ax, ay] = actual[name];
+    expect(Math.abs(ax - x), `${label}: ${name} x`).toBeLessThan(1);
+    expect(Math.abs(ay - y), `${label}: ${name} y`).toBeLessThan(1);
+  }
 }
 
 /** The step controls to `index` (0-based), by the slider's keyboard. */
@@ -122,10 +149,7 @@ function pieceCentres(page, side) {
         .filter((attribute) => attribute.name.endsWith("-id"))
         .map((attribute) => `${attribute.name}=${attribute.value}`)
         .join(" ");
-      centres[name] = [
-        Math.round(box.x + box.width / 2 - origin.x),
-        Math.round(box.y + box.height / 2 - origin.y),
-      ];
+      centres[name] = [box.x + box.width / 2 - origin.x, box.y + box.height / 2 - origin.y];
     }
     return centres;
   });
@@ -150,7 +174,6 @@ for (const key of Object.keys(CASES)) {
     const { view } = CASES[key];
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, key);
-    await page.locator("#workbench-panel-close").click();
 
     await expect(pane(page, "source")).toHaveAttribute(
       "data-picture-type",
@@ -160,11 +183,13 @@ for (const key of Object.keys(CASES)) {
       "data-picture-type",
       view.target.picture.type,
     );
+    // Each pane's label row (#303 stage 2): the problem, then the answer mapped back onto the
+    // source and the Algorithm that solved the target.
     await expect(page.locator(`${VIEW}-source-title`)).toHaveText(
-      `${view.source.problem} · the instance you gave`,
+      `Problem ${view.source.problem} Answer mapped back from ${view.target.problem}`,
     );
     await expect(page.locator(`${VIEW}-target-title`)).toHaveText(
-      `${view.target.problem} · built by the reduction`,
+      new RegExp(`^Problem ${view.target.problem} Algorithm \\S`),
     );
     for (const side of ["source", "target"]) {
       await expect(zoomOf(page, side)).toHaveAttribute("data-zoom", "1.00");
@@ -172,7 +197,12 @@ for (const key of Object.keys(CASES)) {
     const source = await pane(page, "source").boundingBox();
     const target = await pane(page, "target").boundingBox();
     expect(target.x).toBeGreaterThan(source.x + source.width);
-    expect(Math.abs(target.y - source.y)).toBeLessThan(2);
+    // #303: the two picture areas line up and share a height; a shorter picture is centered in
+    // its area, so the pictures' own tops may differ.
+    const sourceArea = await page.locator(`${VIEW}-source-picture-area`).boundingBox();
+    const targetArea = await page.locator(`${VIEW}-target-picture-area`).boundingBox();
+    expect(Math.abs(targetArea.y - sourceArea.y)).toBeLessThan(2);
+    expect(Math.abs(targetArea.height - sourceArea.height)).toBeLessThan(2);
 
     // #274: a finished reduction opens on its last step, the end of Map back, as a solve opens on
     // its result.
@@ -181,13 +211,16 @@ for (const key of Object.keys(CASES)) {
     await expect(position(page)).toHaveText(`Step ${view.frames.length} of ${view.frames.length}`);
     await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
 
-    // Build's first step, with the phase named in three places: the bar, the caption, the view.
+    // Build's first step, with the phase named in two places, the bar (with the step's place in
+    // the phase) and the view.
     await toStep(page, 0);
     await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "build");
     await expect(phaseButton(page, "build")).toHaveAttribute("aria-current", "step");
     await expect(phaseButton(page, "solve")).not.toHaveAttribute("aria-current", "step");
     const builds = view.frames.filter((frame) => frame.phase === "build").length;
-    await expect(page.locator(`${VIEW}-caption-phase`)).toHaveText(`Build 1 of ${builds}`);
+    await expect(page.locator("#workbench-phases-build #workbench-phases-place")).toHaveText(
+      ` · 1 of ${builds}`,
+    );
     await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames[0].caption);
     await expect(position(page)).toHaveText(`Step 1 of ${view.frames.length}`);
     await expect(page.locator("#workbench-showing")).toContainText(`solved by ${view.solver}`);
@@ -206,11 +239,13 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await openView(page, "satTo3sat");
   const firstOf = (phase) => view.frames.findIndex((frame) => frame.phase === phase);
 
-  await phaseButton(page, "solve").click();
+  await clickPhase(page, "solve");
   await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(firstOf("solve")));
   await expect(phaseButton(page, "solve")).toHaveAttribute("aria-current", "step");
   await expect(phaseButton(page, "build")).not.toHaveAttribute("aria-current", "step");
-  await expect(page.locator(`${VIEW}-caption-phase`)).toHaveText(/^Solve 1 of \d+$/);
+  await expect(page.locator("#workbench-phases-solve #workbench-phases-place")).toHaveText(
+    /^ · 1 of \d+$/,
+  );
   await expect(position(page)).toHaveText(`Step ${firstOf("solve") + 1} of ${view.frames.length}`);
 
   // One step back is Build's last step.
@@ -218,7 +253,7 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(phaseButton(page, "build")).toHaveAttribute("aria-current", "step");
   await expect(page.locator(`${VIEW}-caption-event`)).toHaveText("Built");
 
-  await phaseButton(page, "map").click();
+  await clickPhase(page, "map");
   await expect(page.locator(VIEW)).toHaveAttribute("data-phase", "map");
   await expect(page.locator(`${VIEW}-caption-event`)).toHaveText("Mapped");
 
@@ -228,14 +263,14 @@ test("the phase bar jumps to each phase, and stepping across a phase's end moves
   await expect(page.locator(`${VIEW}-caption-verdict`)).toHaveText("Verdict: yes");
   await expect(page.locator(`${VIEW}-caption-text`)).toHaveText(view.frames.at(-1).caption);
 
-  // The Result panel says the answer was mapped back, and by which solver.
+  // The results say the answer was mapped back (the certificate Redux mapped back), and which
+  // solver solved the target.
   await openPanel(page, "result", { expect });
-  await expect(page.locator("#workbench-result-mapped-back")).toContainText(
-    view.frames.at(-1).caption,
+  await expect(page.locator("#workbench-result-mapped-back")).toHaveText(VIEW_MAPPED_ANSWER);
+  await expect(page.locator("#workbench-result-rows-solve-answer")).toContainText(
+    `${view.solver} on the 3SAT instance`,
   );
-  await expect(page.locator("#workbench-result-reduce")).toContainText(
-    `${view.solver}, on the 3SAT target`,
-  );
+  await expect(page.locator("#workbench-result-target-answer")).toHaveText(VIEW_TARGET_ANSWER);
 });
 
 test("Build shows only what the target has built so far, and the finished target after it", async ({
@@ -270,10 +305,10 @@ test("Build shows only what the target has built so far, and the finished target
 
   // Solve and Map back draw the whole target; a dashed line there is the solver's own (a pair
   // its candidate needs and the graph lacks), never a rule's.
-  await phaseButton(page, "solve").click();
+  await clickPhase(page, "solve");
   await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
   await expect(ruleSaysNo).toHaveCount(0);
-  await phaseButton(page, "map").click();
+  await clickPhase(page, "map");
   await expect(pane(page, "target")).toHaveAttribute("data-hidden-count", "0");
 });
 
@@ -283,7 +318,6 @@ for (const key of ["satTo3sat", "sat3ToClique", "subsetSumToPartition"]) {
     const { view } = CASES[key];
     await page.setViewportSize({ width: 1280, height: 1000 });
     await openView(page, key);
-    await page.locator("#workbench-panel-close").click();
     await toStep(page, 0);
     // #274: the run now opens on its last step, and the pointer left over a piece would ring it
     // (a hover link), so it is moved off the pictures before anything is measured.
@@ -307,11 +341,15 @@ for (const key of ["satTo3sat", "sat3ToClique", "subsetSumToPartition"]) {
     for (let index = 1; index < view.frames.length; index += 1) {
       await nextStep(page).click();
       await expect(page.locator(VIEW)).toHaveAttribute("data-frame-index", String(index));
-      expect(await pieceCentres(page, "source"), `source at step ${index + 1}`).toEqual(
+      expectSameCentres(
+        await pieceCentres(page, "source"),
         start.source,
+        `source at step ${index + 1}`,
       );
-      expect(await pieceCentres(page, "target"), `target at step ${index + 1}`).toEqual(
+      expectSameCentres(
+        await pieceCentres(page, "target"),
         start.target,
+        `target at step ${index + 1}`,
       );
       expect(await panes()).toEqual(start.panes);
       for (const side of ["source", "target"]) {
@@ -326,9 +364,8 @@ test("the Packing panes' texts never meet a line or a marker, at each phase's fi
 }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "subsetSumToPartition");
-  await page.locator("#workbench-panel-close").click();
   for (const phase of ["build", "solve", "map"]) {
-    await phaseButton(page, phase).click();
+    await clickPhase(page, phase);
     for (const side of ["source", "target"]) {
       const selector = `${VIEW}-${side} svg[id$="-svg"]`;
       expect(await drawnCollisions(page, selector), `${side}, ${phase}`).toEqual([]);
@@ -359,8 +396,7 @@ test("pointing at a source piece marks what it became on the target, and the oth
   const { view } = CASES.sat3ToClique;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "sat3ToClique");
-  await page.locator("#workbench-panel-close").click();
-  await phaseButton(page, "solve").click();
+  await clickPhase(page, "solve");
   await expect(readout(page)).toHaveAttribute("data-linked", "false");
 
   // A literal of the formula: its element gadget names one clique node.
@@ -403,8 +439,7 @@ test("a tap pins a link, keyboard focus links too, and Escape clears it", async 
   const { view } = CASES.coloringToCliqueCover;
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openView(page, "coloringToCliqueCover");
-  await page.locator("#workbench-panel-close").click();
-  await phaseButton(page, "map").click();
+  await clickPhase(page, "map");
 
   // Tap (click) a node of the source graph: the link stays once the pointer leaves.
   await pane(page, "source").locator('[data-node-id="a"]').click();
@@ -459,8 +494,6 @@ for (const scheme of ["light", "dark"]) {
       await page.setViewportSize({ width, height: 900 });
       for (const key of ["satTo3sat", "coloringToCliqueCover"]) {
         await openView(page, key);
-        const close = page.locator("#workbench-panel-close");
-        if (await close.isVisible()) await close.click();
         const source = await pane(page, "source").boundingBox();
         const target = await pane(page, "target").boundingBox();
         expect(target.y).toBeGreaterThan(source.y + source.height);
@@ -470,7 +503,7 @@ for (const scheme of ["light", "dark"]) {
         expect(scroll).toBeLessThanOrEqual(0);
         for (const side of ["source", "target"]) {
           await expect(zoomOf(page, side)).toHaveAttribute("data-zoom", "1.00");
-          const zoomIn = pane(page, side).locator('[id$="-zoom-in"]');
+          const zoomIn = paneSection(page, side).locator('[id$="-zoom-in"]');
           for (let press = 0; press < 4; press += 1) {
             if ((await smallestText(page, side)) >= PHONE_TEXT_PX) break;
             await zoomIn.click();
@@ -479,7 +512,9 @@ for (const scheme of ["light", "dark"]) {
             PHONE_TEXT_PX,
           );
         }
-        // The view's own words: the phase bar, the caption and the link line read in the theme.
+        // The view's own words: the phase bar, the caption and the link line read in the theme
+        // (the link line in the Gadgets section at the bottom of the page).
+        await openBottomSection(page, "gadgets");
         for (const selector of [
           `#workbench-phases-build`,
           `${VIEW}-caption-text`,
@@ -530,7 +565,7 @@ for (const [status, body] of [
     await openReduce(page, "3SAT", SAT3.instance, /^Clique(?!\s*Cover)/);
     await expect(page.locator("#workbench-mode-note")).toContainText("step by step");
     for (let run = 0; run < 2; run += 1) {
-      await page.locator("#workbench-run").click();
+      await reduceAgain(page, { expect });
       await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
         "data-picture-kind",
         "frame",
@@ -540,9 +575,11 @@ for (const [status, body] of [
       await expect(page.locator("#workbench-run")).toBeEnabled();
     }
     expect(asked).toBe(1);
+    // The Reduce stage's note says what its button now does (the bar moved on to Solve).
+    await page.locator("#workbench-stage-reduce").click();
     await expect(page.locator("#workbench-mode-note")).toContainText("carries the answer across");
     await openPanel(page, "result", { expect });
-    await expect(page.locator("#workbench-result-carried")).toBeVisible();
+    await expect(page.locator("#workbench-result-rows-reduce-done")).toContainText("answer across");
   });
 }
 
@@ -556,12 +593,12 @@ test("an instance reductionView can't read falls back for that Run only", async 
       : route.fulfill({ json: SAT3_TO_CLIQUE_VIEW });
   });
   await openReduce(page, "3SAT", SAT3.instance, /^Clique(?!\s*Cover)/);
-  await page.locator("#workbench-run").click();
+  await reduceAgain(page, { expect });
   await expect(page.locator("#workbench-target-picture")).toHaveAttribute(
     "data-picture-kind",
     "frame",
   );
-  await page.locator("#workbench-run").click();
+  await reduceAgain(page, { expect });
   await expect(page.locator(VIEW)).toBeVisible();
   expect(asked).toBe(2);
 });

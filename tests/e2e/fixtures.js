@@ -39,6 +39,10 @@ const API_PATH_PATTERN = /\/api\//;
 const VISUALIZE_RUN_REQUEST = /\/api\/redux\/ProblemProvider\/visualizeRun\?/;
 // #215: ProblemProvider/reductionView (ReduxISU/Redux#660), a reduction's whole Reduction View.
 const REDUCTION_VIEW_REQUEST = /\/api\/redux\/ProblemProvider\/reductionView\?/;
+// ProblemProvider/reductionChainView, a chain of reductions' Reduction View.
+const REDUCTION_CHAIN_REQUEST = /\/api\/redux\/ProblemProvider\/reductionChainView\?/;
+// ProblemProvider/reductionChainPictures, the pictures a chain can draw each problem with.
+const CHAIN_PICTURES_REQUEST = /\/api\/redux\/ProblemProvider\/reductionChainPictures\?/;
 // #299: Navigation/ProblemVariants (ReduxISU/Redux#946), the Problem Variant facet's options.
 const PROBLEM_VARIANTS_REQUEST = /\/api\/redux\/Navigation\/ProblemVariants$/;
 
@@ -62,6 +66,20 @@ function isRunRouteMissing(response) {
  */
 function isReductionViewDeclined(response) {
   return REDUCTION_VIEW_REQUEST.test(response.url()) && [400, 404, 405].includes(response.status());
+}
+
+/**
+ * A chain that does not run (400 naming the step, 404 or 405 on a backend without chains, 429
+ * when the backend is busy, 500 for an answer it can't map back) is said on the page in plain
+ * words (lib/reductionChain.js chainFailure): the answer is shown, not a quiet failure.
+ */
+function isReductionChainDeclined(response) {
+  return (
+    (REDUCTION_CHAIN_REQUEST.test(response.url()) &&
+      [400, 404, 405, 429, 500].includes(response.status())) ||
+    // A backend without the pictures list (404) offers no picture choice; the chain still runs.
+    (CHAIN_PICTURES_REQUEST.test(response.url()) && [404, 405].includes(response.status()))
+  );
 }
 
 /**
@@ -106,6 +124,7 @@ export const test = base.extend({
         !response.ok() &&
         !isRunRouteMissing(response) &&
         !isReductionViewDeclined(response) &&
+        !isReductionChainDeclined(response) &&
         !isProblemVariantsMissing(response)
       ) {
         failures.push(
@@ -137,6 +156,15 @@ export const test = base.extend({
     // runs its older requests (the ones those specs answer); tests/e2e/reduction-view.spec.js
     // answers it with captures.
     await page.route(REDUCTION_VIEW_REQUEST, (route) =>
+      route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
+    );
+
+    // Likewise for chains: a spec about them answers reductionChainView itself
+    // (tests/e2e/reduction-chain.spec.js).
+    await page.route(REDUCTION_CHAIN_REQUEST, (route) =>
+      route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
+    );
+    await page.route(CHAIN_PICTURES_REQUEST, (route) =>
       route.fulfill({ status: 404, json: { error: "Unknown Redux endpoint" } }),
     );
 

@@ -1,10 +1,11 @@
 // tests/e2e/workbench.spec.js
 //
-// #229 stage 1: the problem page's workbench layout. Rail panel switching (one panel at a
-// time, pressing the open one closes it, Details open first), the Result dot after Run, an
-// instance edit resetting the picture, the Instance error dot, Reduce mode's To / Using /
-// target picture, the no-visualization fallback, and the phone layout (bottom tabs and a
-// bottom sheet).
+// #229 stage 1: the problem page's workbench layout. #303 (Board G) replaced the rail and its
+// panels with one column (tests/e2e/board-g.spec.js covers its order): the problem's details in
+// the title's (i) card, the instance editor always on screen, the result listed under the task
+// bar after Run, an instance edit resetting the picture, the instance error under the editor,
+// Reduce's Reduce to / Reduction / target picture, the no-visualization fallback, and the phone
+// layout.
 //
 // The catalog comes from the real backend, like the rest of the suite. Every compute
 // request (solve, visualize, visualizeReduction, reduce) is answered here instead, for two reasons:
@@ -59,94 +60,54 @@ async function answerCompute(page) {
   );
 }
 
-const railButton = (page, key) => page.locator(`#workbench-rail-${key}`);
-
-test("Details is open first, one panel opens at a time, and pressing the open one closes it", async ({
+test("the problem's details are in the title's (i) card, and the instance editor is always on screen", async ({
   page,
 }) => {
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
 
-  const panel = page.locator("#workbench-panel");
-  const heading = page.locator("#workbench-panel-heading");
-
-  await expect(railButton(page, "details")).toHaveAttribute("aria-expanded", "true");
-  await expect(railButton(page, "instance")).toHaveAttribute("aria-expanded", "false");
-  await expect(railButton(page, "result")).toHaveAttribute("aria-expanded", "false");
-  await expect(heading).toHaveText("Details");
-  await expect(page.locator("#workbench-panel-details")).toBeVisible();
-
-  await railButton(page, "instance").click();
-  await expect(railButton(page, "instance")).toHaveAttribute("aria-expanded", "true");
-  await expect(railButton(page, "details")).toHaveAttribute("aria-expanded", "false");
-  await expect(heading).toHaveText("Instance");
-  await expect(page.locator("#workbench-panel-details")).toBeHidden();
+  await expect(page.locator("#workbench-rail")).toHaveCount(0);
+  await expect(page.locator("#workbench-panel")).toHaveCount(0);
   await expect(page.locator("#workbench-instance-full-instance")).toBeVisible();
+  await expect(page.locator("#workbench-instance-full-instance")).not.toHaveValue("");
 
-  await railButton(page, "result").click();
-  await expect(railButton(page, "result")).toHaveAttribute("aria-expanded", "true");
-  await expect(railButton(page, "instance")).toHaveAttribute("aria-expanded", "false");
-  await expect(heading).toHaveText("Result & Verify");
-
-  // Pressing the open panel's own button again closes it, leaving no panel at all.
-  await railButton(page, "result").click();
-  for (const key of ["details", "instance", "result"]) {
-    await expect(railButton(page, key)).toHaveAttribute("aria-expanded", "false");
-  }
-  await expect(panel).toBeHidden();
-
-  // The panel's Close button does the same, and Escape inside the panel too.
-  await railButton(page, "details").click();
-  await expect(panel).toBeVisible();
-  await page.locator("#workbench-panel-close").click();
-  await expect(panel).toBeHidden();
-  await railButton(page, "details").click();
-  await page.locator("#workbench-panel-close").press("Escape");
-  await expect(panel).toBeHidden();
-  await expect(railButton(page, "details")).toBeFocused();
+  const card = page.locator("#problem-info-card");
+  await expect(card).toBeHidden();
+  await page.locator("#problem-info-button").click();
+  await expect(card).toBeVisible();
+  await expect(card).toContainText(PROBLEM);
+  await expect(card).toContainText("Input");
+  await expect(card).toContainText("Output");
+  // Escape closes it.
+  await page.locator("#problem-info-button").press("Escape");
+  await expect(card).toBeHidden();
 });
 
-test("Edit opens the Instance panel with the instance ready to edit", async ({ page }) => {
-  await answerCompute(page);
-  await gotoProblemDetail(page, PROBLEM, { expect });
-
-  const barText = ((await page.locator("#workbench-instance-text").textContent()) ?? "").trim();
-  await page.locator("#workbench-edit-instance").click();
-  await expect(railButton(page, "instance")).toHaveAttribute("aria-expanded", "true");
-  const box = page.locator("#workbench-instance-full-instance");
-  await expect(box).toBeFocused();
-  await expect(box).toHaveValue(barText);
-});
-
-test("after Run, Result gets a dot instead of opening, and opening Result clears it", async ({
-  page,
-}) => {
+test("after Run, the result is listed under the task bar", async ({ page }) => {
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
 
   const solverName = ((await page.locator("#workbench-solver-value").textContent()) ?? "").trim();
   const showing = page.locator("#workbench-showing");
   await expect(showing).toHaveText(NOT_RUN);
-  await expect(page.locator("#workbench-rail-result-dot")).toHaveCount(0);
+  await expect(page.locator("#workbench-result-empty")).toHaveText(
+    "No run yet: press Solve for an answer.",
+  );
+  await expect(page.locator("#workbench-run")).toHaveText("Solve");
+  // #303: a randomized solver (3SAT's first, PPZ) repeats a run only with a seed typed in.
+  const seed = page.locator("#workbench-seed");
+  if ((await seed.count()) > 0) await seed.fill("5");
 
   await page.locator("#workbench-run").click();
 
   await expect(showing).toHaveText(solverName);
-  const dot = page.locator("#workbench-rail-result-dot");
-  await expect(dot).toBeVisible();
-  await expect(dot).toHaveAttribute("aria-label", "New result");
-  // The Details panel stays open: the result does not take over the page.
-  await expect(page.locator("#workbench-panel-heading")).toHaveText("Details");
-  await expect(railButton(page, "result")).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator("#workbench-run")).toHaveText("Run solve again");
-
-  await railButton(page, "result").click();
-  await expect(dot).toHaveCount(0);
+  // #303: done, Solve can't change the answer, so it says so and is inactive.
+  await expect(page.locator("#workbench-run")).toHaveText("Solved");
+  await expect(page.locator("#workbench-run")).toHaveAttribute("aria-disabled", "true");
   await expect(page.locator("#workbench-result-answer")).toHaveText(ANSWER);
-
-  // Closing Result again does not bring the dot back: it was seen.
-  await railButton(page, "result").click();
-  await expect(dot).toHaveCount(0);
+  const bar = await page.locator("#workbench-command-bar").boundingBox();
+  const results = await page.locator("#workbench-results").boundingBox();
+  expect(results.y).toBeGreaterThanOrEqual(bar.y + bar.height - 1);
 });
 
 test("editing the instance after a run resets the picture to the base instance", async ({
@@ -169,7 +130,6 @@ test("editing the instance after a run resets the picture to the base instance",
 
   await expect(showing).toHaveText(NOT_RUN);
   await expect(page.locator("#workbench-steps-position")).toHaveCount(0);
-  await expect(page.locator("#workbench-instance-text")).toHaveText(edited);
   await expect(page.locator("#workbench-note")).toContainText(
     "The instance changed, so the picture is back to the base instance.",
   );
@@ -179,16 +139,14 @@ test("editing the instance after a run resets the picture to the base instance",
     "frame",
   );
 
-  // The Result panel says its answer is for the old instance.
+  // The results say their answer is for the old instance.
   await openPanel(page, "result", { expect });
-  await expect(page.locator("#workbench-panel-result")).toContainText(
+  await expect(page.locator("#workbench-results")).toContainText(
     "The instance changed since this run.",
   );
 });
 
-test("an instance Redux cannot read gets a red dot on Instance and an error under the bar", async ({
-  page,
-}) => {
+test("an instance Redux cannot read gets its error under the instance editor", async ({ page }) => {
   // The 400 below is the behaviour under test, not a silent failure.
   page.allowNetworkFailures();
   await page.route(VISUALIZE_REQUEST, (route) =>
@@ -204,21 +162,6 @@ test("an instance Redux cannot read gets a red dot on Instance and an error unde
   );
   await gotoProblemDetail(page, PROBLEM, { expect });
 
-  const dot = page.locator("#workbench-rail-instance-dot");
-  await expect(dot).toBeVisible();
-  await expect(dot).toHaveAttribute("aria-label", "The instance has errors");
-  await expect(page.locator("#workbench-instance-error")).toContainText(
-    "Clause 2 has no literals.",
-  );
-  await expect(page.locator("#workbench-run")).toBeDisabled();
-  await expect(page.locator("#workbench-showing")).toContainText("The instance has errors.");
-  await expect(page.locator("#workbench-source-picture")).toContainText(
-    "The instance has a problem, so it can't be drawn.",
-  );
-
-  // In the Instance panel the error sits under the text box instead.
-  await openPanel(page, "instance", { expect });
-  await expect(page.locator("#workbench-instance-error")).toHaveCount(0);
   await expect(page.locator("#workbench-instance-full-instance")).toHaveAttribute(
     "aria-invalid",
     "true",
@@ -226,11 +169,23 @@ test("an instance Redux cannot read gets a red dot on Instance and an error unde
   await expect(page.locator("#workbench-instance-full-instance-error")).toContainText(
     "Clause 2 has no literals.",
   );
+  await expect(page.locator("#workbench-run")).toBeDisabled();
+  await expect(page.locator("#workbench-showing")).toContainText("The instance has errors.");
+  await expect(page.locator("#workbench-source-picture")).toContainText(
+    "The instance has a problem, so it can't be drawn.",
+  );
+  // The editor is always on screen, so the error is said there once, not again by the bar.
+  await expect(page.locator("#workbench-instance-error")).toHaveCount(0);
 });
 
-test("Reduce mode shows To and Using, and Run builds the target picture", async ({ page }) => {
+test("Reduce shows Reduce to and Reduction, and Reduce builds the target picture", async ({
+  page,
+}) => {
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
+  // These older requests carry the Solve tab's Algorithm's answer across; a randomized one
+  // (PPZ, 3SAT's first) could carry another, so then Reduce stays an action (#303).
+  const randomized = (await page.locator("#workbench-seed").count()) > 0;
 
   await page.locator("#workbench-mode-reduce").click();
   await expect(page.locator("#workbench-mode-reduce")).toHaveAttribute("aria-pressed", "true");
@@ -240,16 +195,21 @@ test("Reduce mode shows To and Using, and Run builds the target picture", async 
   expect(target).not.toBe("");
   expect(reduction).not.toBe("");
 
-  // The two closed dropdowns line up at one width.
+  // The two closed dropdowns sit on one row after the tabs; Reduce is on the stepper's row
+  // under them (#303 stage 2).
   const toBox = await page.locator("#workbench-target-button").boundingBox();
   const usingBox = await page.locator("#workbench-reduction-button").boundingBox();
-  expect(Math.abs(toBox.x - usingBox.x)).toBeLessThan(2);
-  expect(Math.abs(toBox.width - usingBox.width)).toBeLessThan(2);
+  const runBox = await page.locator("#workbench-run").boundingBox();
+  const stagesBox = await page.locator("#workbench-stages").boundingBox();
+  expect(Math.abs(toBox.y - usingBox.y)).toBeLessThan(2);
+  expect(usingBox.x).toBeGreaterThan(toBox.x + toBox.width);
+  expect(runBox.y).toBeGreaterThan(usingBox.y + usingBox.height - 1);
+  expect(runBox.x).toBeGreaterThan(stagesBox.x + stagesBox.width);
 
   await expect(page.locator("#workbench-target-picture")).toContainText(
-    `Press Run to build the ${target} instance from this one.`,
+    `Press Reduce to build the ${target} instance from this one.`,
   );
-  await expect(page.locator("#workbench-run")).toHaveText("Run reduction");
+  await expect(page.locator("#workbench-run")).toHaveText("Reduce");
 
   await page.locator("#workbench-run").click();
   await expect(page.locator("#workbench-showing")).toHaveText(
@@ -259,10 +219,20 @@ test("Reduce mode shows To and Using, and Run builds the target picture", async 
     "data-picture-kind",
     "frame",
   );
-  await expect(page.locator("#workbench-rail-result-dot")).toBeVisible();
+  // The stepper moves on to Solve; back on Reduce, the build is done (#303: a rebuild of the
+  // same instance can't change it), unless a randomized answer is carried across.
+  await expect(page.locator("#workbench-run")).toHaveText(`Solve through ${target}`);
+  await page.locator("#workbench-stage-reduce").click();
+  if (randomized) {
+    await expect(page.locator("#workbench-run")).toHaveText("Reduce");
+    await expect(page.locator("#workbench-run")).toBeEnabled();
+  } else {
+    await expect(page.locator("#workbench-run")).toHaveText("Reduced");
+    await expect(page.locator("#workbench-run")).toHaveAttribute("aria-disabled", "true");
+  }
 
   await openPanel(page, "result", { expect });
-  await expect(page.locator("#workbench-result-reduce")).toContainText(reduction);
+  await expect(page.locator("#workbench-result-rows-reduce-done")).toContainText(reduction);
 });
 
 test("a problem with nothing this site can draw falls back cleanly", async ({ page }) => {
@@ -306,47 +276,44 @@ test("a problem with nothing this site can draw falls back cleanly", async ({ pa
 
   // Run still solves; there is just no picture to draw.
   await page.locator("#workbench-run").click();
-  await expect(page.locator("#workbench-rail-result-dot")).toBeVisible();
   await openPanel(page, "result", { expect });
   await expect(page.locator("#workbench-result-answer")).toHaveText(ANSWER);
   expect(visualizeCalls).toBe(0);
 });
 
-test("at phone width the rail is a row of bottom tabs and a panel opens as a bottom sheet", async ({
+test("at phone width the column stacks: tabs on their own row, then each menu, then Solve", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await answerCompute(page);
   await gotoProblemDetail(page, PROBLEM, { expect });
 
-  const rail = page.locator("#workbench-rail");
-  expect(await rail.evaluate((element) => getComputedStyle(element).position)).toBe("fixed");
-  const railBox = await rail.boundingBox();
-  expect(railBox.y + railBox.height).toBeGreaterThan(840);
-  expect(railBox.width).toBeGreaterThan(380);
-
-  // The three buttons sit side by side.
-  const detailsBox = await railButton(page, "details").boundingBox();
-  const resultBox = await railButton(page, "result").boundingBox();
-  expect(Math.abs(detailsBox.y - resultBox.y)).toBeLessThan(2);
-  expect(resultBox.x).toBeGreaterThan(detailsBox.x);
-
-  // Details is open as a sheet resting on the tabs, no wider than 720px.
-  const panelBox = await page.locator("#workbench-panel").boundingBox();
-  expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(railBox.y + 1);
-  expect(panelBox.width).toBeLessThanOrEqual(720);
-
-  // The command bar is not sticky, and Edit and Run sit on their own lines at the left.
+  // Nothing is fixed over the page any more: no bottom tabs, no sheet.
+  await expect(page.locator("#workbench-rail")).toHaveCount(0);
   expect(
     await page
       .locator("#workbench-command-bar")
       .evaluate((element) => getComputedStyle(element).position),
   ).toBe("static");
-  await railButton(page, "details").click();
-  const editBox = await page.locator("#workbench-edit-instance").boundingBox();
-  const runBox = await page.locator("#workbench-run").boundingBox();
-  const instanceBox = await page.locator("#workbench-instance-text").boundingBox();
-  expect(editBox.y).toBeGreaterThan(instanceBox.y + instanceBox.height - 1);
-  expect(Math.abs(editBox.x - runBox.x)).toBeLessThan(2);
-  expect(runBox.y).toBeGreaterThan(editBox.y);
+
+  // The default picture grows the page above the bar once it draws, so wait for it, then read
+  // every box at once.
+  await expect(page.locator('figure [role="img"]').first()).toBeVisible();
+  const settled = await page.evaluate(() =>
+    Object.fromEntries(
+      ["tasks", "solver-button", "run", "mode-solve", "mode-verify"].map((key) => {
+        const rect = document.getElementById(`workbench-${key}`).getBoundingClientRect();
+        return [key, { x: rect.x, y: rect.y, width: rect.width, height: rect.height }];
+      }),
+    ),
+  );
+  const { tasks, "solver-button": solver, run } = settled;
+  // The tabs take the row's width, three side by side.
+  const { "mode-solve": solve, "mode-verify": verify } = settled;
+  expect(Math.abs(solve.y - verify.y)).toBeLessThan(2);
+  expect(solver.y).toBeGreaterThan(tasks.y + tasks.height - 1);
+  expect(run.y).toBeGreaterThan(solver.y + solver.height - 1);
+  // Solve fills its row, a 44px target.
+  expect(Math.abs(run.width - tasks.width)).toBeLessThan(2);
+  expect(run.height).toBeGreaterThanOrEqual(44);
 });

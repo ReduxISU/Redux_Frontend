@@ -8,8 +8,10 @@
 import { expect, test } from "./fixtures";
 
 const NAME = "Test Contributor";
-const DIRECTORY = /\/api\/redux\/Navigation\/ContributorProfile\/directory$/;
-const PROFILE = /\/api\/redux\/Navigation\/ContributorProfile\/Test%20Contributor$/;
+// Both may be followed by a query: every Redux request carries includePictures=true
+// (withPictures in lib/redux/index.js).
+const DIRECTORY = /\/api\/redux\/Navigation\/ContributorProfile\/directory(\?|$)/;
+const PROFILE = /\/api\/redux\/Navigation\/ContributorProfile\/Test%20Contributor(\?|$)/;
 
 const pr = (repo, number, title) => ({
   repo,
