@@ -121,6 +121,7 @@ import useGadgetColorMode from "../../hooks/useGadgetColorMode";
 import { gadgetColorMap, highlightIdsOn, normalizeGadgets } from "../../lib/gadgets";
 import { drawsFromRun, requestPicture, requestRunPictures } from "../../lib/pictureRequest";
 import {
+  chainBuiltHops,
   chainDrawnPictures,
   chainEnding,
   chainRouteLabel,
@@ -556,9 +557,12 @@ export default function Workbench({ problem }) {
   // --- A chain of reductions --------------------------------------------------------------
   // Its result counts while it is of this instance and the chained target chosen now. One step
   // control walks the whole chain in play order (lib/reductionChain.js chainTimeline), and the
-  // Reduction View draws the hop that step is on. A new chain opens on its last stop, Start and
-  // end (this problem with the answer carried back, beside the last problem solved), as a run
-  // opens on its finished result.
+  // Reduction View draws the hop that step is on. #326: two buttons. Run the reductions asks
+  // for the chain and shows each hop's Build only, opening on the last Build frame; Solve then
+  // shows the rest and opens on the last stop, Start and end (this problem with the answer
+  // carried back, beside the last problem solved). Redux's reductionChainView has no build-only
+  // mode, so the one request does both and Solve asks for nothing (handleSolveChain). Another
+  // instance or target clears the chain; another picture draws it again, unsolved.
   const chainRunResult = chainRun.status === COMPUTE_DONE ? chainRun.result : null;
   const chainResult =
     chainRunResult && chainSwitched?.runId === chainRunResult.runId
@@ -573,13 +577,34 @@ export default function Workbench({ problem }) {
     chainResult.target === selectedChain.target;
   const chainView =
     mode === "reduce" && chainCurrent && chainResult.chain?.drawable ? chainResult.chain : null;
-  const chainSteps = useMemo(() => (chainView ? chainTimeline(chainView.hops) : []), [chainView]);
+  // #326: Run the reductions shows every hop's Build only (lib/reductionChain.js
+  // chainBuiltHops); Solve then shows the rest: the last hop's Solve and Map back, each earlier
+  // hop's handoff and Map back, and Start and end. Which chain on screen is solved, by its run
+  // and its pictures' version, so drawing the chain again with another picture unsolves it.
+  const [chainSolvedFor, setChainSolvedFor] = useState(null);
+  const chainSolved =
+    chainCurrent &&
+    chainSolvedFor?.runId === chainRunResult?.runId &&
+    chainSolvedFor?.version === chainVersion;
+  const chainShownHops = useMemo(
+    () => (chainView ? (chainSolved ? chainView.hops : chainBuiltHops(chainView.hops)) : null),
+    [chainView, chainSolved],
+  );
+  const chainSteps = useMemo(
+    () => (chainShownHops ? chainTimeline(chainShownHops, { summary: chainSolved }) : []),
+    [chainShownHops, chainSolved],
+  );
   const [chainStep, setChainStep] = useState(0);
   const [chainStepsFor, setChainStepsFor] = useState(chainRun.result);
   if (chainStepsFor !== chainRun.result) {
     setChainStepsFor(chainRun.result);
     const landed = chainRun.result?.chain;
-    setChainStep(landed?.drawable ? Math.max(chainTimeline(landed.hops).length - 1, 0) : 0);
+    // A new chain opens on its last Build frame: every problem built, nothing solved yet.
+    setChainStep(
+      landed?.drawable
+        ? Math.max(chainTimeline(chainBuiltHops(landed.hops), { summary: false }).length - 1, 0)
+        : 0,
+    );
   }
   const chainIndex = Math.min(chainStep, Math.max(chainSteps.length - 1, 0));
   const chainAt = chainSteps[chainIndex] ?? null;
@@ -594,10 +619,18 @@ export default function Workbench({ problem }) {
       const tree = (hops) => hops.at(-1)?.target?.type === "SearchTree";
       setChainSwitched({ runId: landed.runId, chain: landed.chain, version: landed.version });
       setChainPicks((picks) => ({ ...picks, [landed.key]: landed.picks }));
+      // #326: the chain drawn again is not solved yet (another picture of the last problem
+      // may run another solver), so it lands in Build: the same place when the viewer was in
+      // Build, else the hop's first Build frame, or the last Build frame from Start and end.
+      const built = chainBuiltHops(landed.chain.hops);
+      const builtEnd = Math.max(chainTimeline(built, { summary: false }).length - 1, 0);
       setChainStep(
-        keepChainPlace(chainView.hops, chainAt, landed.chain.hops, {
-          restartSolve: tree(chainView.hops) !== tree(landed.chain.hops),
-        }),
+        Math.min(
+          keepChainPlace(chainShownHops, chainAt, built, {
+            restartSolve: tree(chainView.hops) !== tree(landed.chain.hops),
+          }),
+          builtEnd,
+        ),
       );
     }
   }
@@ -609,7 +642,7 @@ export default function Workbench({ problem }) {
   );
   let chainHopView = null;
   if (chainView && chainAt)
-    chainHopView = chainAt.summary ? chainSummary : chainView.hops[chainAt.hop];
+    chainHopView = chainAt.summary ? chainSummary : chainShownHops[chainAt.hop];
   // The Reduction View on screen: one reduction's, or the chain's hop on this step.
   const shownView = reduceView ?? chainHopView;
 
@@ -1312,6 +1345,17 @@ export default function Workbench({ problem }) {
   }
 
   /**
+   * #326: a chain's Solve. reductionChainView has no build-only mode, so the one request Run the
+   * reductions made already solved the last problem and carried its answer back; Solve shows
+   * that part (and the answer in the results), opening on Start and end as a whole chain did.
+   */
+  function handleSolveChain() {
+    if (!chainCurrent || chainSolved || isRunning || chainSwitch.isRunning) return;
+    setChainSolvedFor({ runId: chainRunResult.runId, version: chainVersion });
+    if (chainView) setChainStep(Math.max(chainTimeline(chainView.hops).length - 1, 0));
+  }
+
+  /**
    * #303 stage 2: Reduce's Solve step. Runs the target Algorithm on the target the build made and
    * maps its answer back to this instance. With a Reduction View, that is the view again with the
    * Algorithm (and a randomized one's seed), on the same pictures: its Solve and Map back phases.
@@ -1595,7 +1639,7 @@ export default function Workbench({ problem }) {
   const targetLabel = selectedReduction?.target ?? targetName ?? "the target";
   let runLabel;
   if (mode === "solve") runLabel = "Solve";
-  else if (selectedChain) runLabel = "Run the chain";
+  else if (selectedChain) runLabel = "Run the reductions";
   else if (reduceStage === "solve") runLabel = `Solve through ${targetLabel}`;
   else if (reduceStage === "verify") runLabel = "Check both";
   else runLabel = "Reduce";
@@ -1676,7 +1720,7 @@ export default function Workbench({ problem }) {
     } else if (mode === "reduce" && selectedChain && chainCurrent && !pendingEdit) {
       mainButton.done = {
         label: "Reduced",
-        hint: "Change the instance or Reduce to to run the chain again.",
+        hint: "Change the instance or Reduce to to run the reductions again.",
       };
     } else if (mode === "reduce" && reduceStage === "reduce" && reduceDone) {
       mainButton.done = {
@@ -1704,9 +1748,9 @@ export default function Workbench({ problem }) {
       modeNote = `A seed is a whole number up to ${MAX_SEED}. Leave it blank for a random run.`;
   } else if (selectedChain) {
     modeNote = chainsServed()
-      ? `Runs ${selectedChain.hops.length} reductions one after another (${chainTitle(
+      ? `Run the reductions builds ${selectedChain.hops.length} reductions one after another (${chainTitle(
           selectedChain,
-        )}), solves the ${selectedChain.target} instance at the end, and carries its answer back to ${problem.name} one step at a time.`
+        )}). Solve then solves the ${selectedChain.target} instance at the end and carries its answer back to ${problem.name} one step at a time.`
       : "Chains of reductions need a newer Redux backend. The reductions straight from this problem still work.";
   } else if (reductions.length === 0) {
     modeNote = `No reductions from ${problem.name} are declared yet.`;
@@ -1734,6 +1778,8 @@ export default function Workbench({ problem }) {
   let showing;
   if (mode === "reduce" && selectedChain && chainRun.isRunning) {
     showing = `Running the chain ${chainTitle(selectedChain)}.`;
+  } else if (mode === "reduce" && chainCurrent && !chainSolved) {
+    showing = `${chainTitle(selectedChain)}, built`;
   } else if (mode === "reduce" && chainCurrent) {
     const solverName = chainResult.chain?.solverName;
     showing = `${chainTitle(selectedChain)}${solverName ? `, solved by ${solverName}` : ""}`;
@@ -1883,12 +1929,12 @@ export default function Workbench({ problem }) {
         content = {
           kind: "message",
           tone: "error",
-          text: "The chain did not run. The reason is shown under the Run the chain button.",
+          text: "The reductions did not run. The reason is shown under the Run the reductions button.",
         };
       } else {
         content = {
           kind: "message",
-          text: `Press Run the chain to build the ${selectedChain.target} instance from this one, one step at a time.`,
+          text: `Press Run the reductions to build the ${selectedChain.target} instance from this one, one step at a time.`,
         };
       }
     } else if (!selectedReduction) {
@@ -1949,7 +1995,13 @@ export default function Workbench({ problem }) {
     if (selectedChain)
       targetState = {
         k: "Status",
-        v: chainRun.isRunning ? "being built" : chainCurrent ? "built" : "not built yet",
+        v: chainRun.isRunning
+          ? "being built"
+          : chainSolved
+            ? "solved"
+            : chainCurrent
+              ? "built"
+              : "not built yet",
       };
     else if (!reduceCurrent)
       targetState = { k: "Status", v: reduceRun.isRunning ? "being built" : "not built yet" };
@@ -2218,8 +2270,10 @@ export default function Workbench({ problem }) {
   let chainAnnouncement = "";
   if (chainRun.status === COMPUTE_RUNNING) {
     chainAnnouncement = `Running the chain to ${selectedChain?.target ?? "the last problem"}. This can take up to a minute.`;
+  } else if (chainRun.status === COMPUTE_DONE && chainSolved) {
+    chainAnnouncement = `${chainResult.chain?.solverName || "The solver"} solved the ${chainResult.target} instance, and the answer is carried back to ${problem.name}.`;
   } else if (chainRun.status === COMPUTE_DONE) {
-    chainAnnouncement = `The chain to ${chainResult.target} finished in ${formatSeconds(chainRun.elapsedMs)}.`;
+    chainAnnouncement = `The reductions to ${chainResult.target} ran in ${formatSeconds(chainRun.elapsedMs)}. Press Solve to solve the ${chainResult.target} instance.`;
   } else if (chainRun.status === COMPUTE_FAILED) {
     chainAnnouncement = `The chain did not run. ${chainRun.failure?.headline ?? ""}`;
   } else if (chainRun.status === COMPUTE_CANCELLED) {
@@ -2467,7 +2521,22 @@ export default function Workbench({ problem }) {
         tag: "Chain",
         tone: "info",
         icon: "1",
-        text: `Run the chain builds each instance in turn (${title}), solves the ${selectedChain.target} instance, then carries the answer back to ${problem.name} one step at a time.`,
+        text: `Run the reductions builds each instance in turn (${title}). Solve then solves the ${selectedChain.target} instance and carries the answer back to ${problem.name} one step at a time.`,
+      });
+    } else if (!chainSolved) {
+      resultRows.push({
+        key: "chain-built",
+        tag: "Chain",
+        tone: "ok",
+        icon: "✓",
+        text: `Built every step of ${title}, ${formatSeconds(chainRun.elapsedMs)}.`,
+      });
+      resultRows.push({
+        key: "chain-solve-next",
+        tag: "Chain",
+        tone: "info",
+        icon: "2",
+        text: `Next: Solve solves the ${selectedChain.target} instance and carries its answer back to ${problem.name} one step at a time.`,
       });
     } else {
       const ran = chainResult.chain;
@@ -2815,6 +2884,8 @@ export default function Workbench({ problem }) {
           if (start !== -1) setChainStep(start);
         },
         frameIndex: chainAt.frame,
+        // #326: Start and end waits for Solve.
+        summaryReady: chainSolved,
         // Start and end is one picture with no phases: the route above already names it.
         phases: chainAt.summary ? null : chainHopPhases(last, hops[hop + 1]?.to ?? ""),
         onLocalStep: (frame) => {
@@ -3286,6 +3357,22 @@ export default function Workbench({ problem }) {
           runDone={mainButton.done}
           onRun={mainButton.onRun}
           verify={verifyRow}
+          chainSolve={
+            selectedChain
+              ? {
+                  label: "Solve",
+                  disabled:
+                    !chainCurrent || isRunning || chainSwitch.isRunning || Boolean(instanceError),
+                  done: chainSolved
+                    ? {
+                        label: "Solved",
+                        hint: "Change the instance, Reduce to or a picture to run the reductions and solve again.",
+                      }
+                    : null,
+                  onRun: handleSolveChain,
+                }
+              : null
+          }
           status={status}
         />
 
