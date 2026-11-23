@@ -2,9 +2,12 @@ import Box from "@mui/material/Box";
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
 import Head from "next/head";
+import { useRouter } from "next/router";
+import { useEffect } from "react";
 import "../styles/globals.css";
 import SiteFooter from "../components/SiteFooter";
 import theme, { THEME_COLOR_SCHEME_STORAGE_KEY, THEME_MODE_STORAGE_KEY } from "../components/theme";
+import { noteRoute } from "../lib/siteHistory";
 
 // T28 (#37): the Pages Router doesn't inject a viewport meta tag on its own
 // (unlike the App Router's automatic metadata handling), and doesn't want
@@ -23,7 +26,21 @@ import theme, { THEME_COLOR_SCHEME_STORAGE_KEY, THEME_MODE_STORAGE_KEY } from ".
 // #303: every page ends in the same footer, the ISU logo centered under the page. The column
 // is at least the window's height and the page fills what the footer leaves, so on a short
 // page the footer sits at the bottom of the window rather than right under the content.
+//
+// #327: every page change is noted (lib/siteHistory.js), so the problem page's Back control
+// knows whether going back in history stays on this site.
 export default function App({ Component, pageProps }) {
+  const router = useRouter();
+  const { asPath, events, isReady } = router;
+  // The first page, once its real address is known (before that a dynamic route's asPath can
+  // be its pattern, /[problem]).
+  useEffect(() => {
+    if (isReady) noteRoute(asPath);
+  }, [isReady, asPath]);
+  useEffect(() => {
+    events.on("routeChangeComplete", noteRoute);
+    return () => events.off("routeChangeComplete", noteRoute);
+  }, [events]);
   return (
     <ThemeProvider
       theme={theme}

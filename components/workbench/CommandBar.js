@@ -33,6 +33,10 @@
 // what is done ("Solved", "Reduced", "Checked") and is inactive (aria-disabled, ./DoneButton.js)
 // until the instance or another input of that run changes. Workbench.js decides when (runDone).
 //
+// #326: a chained target has no stepper; its two buttons sit side by side: Run the reductions
+// (the main button, which builds every hop) and Solve (`chainSolve`, which then shows the last
+// problem solved and the answer carried back). Solve is disabled until the reductions have run.
+//
 // #295: the Seed box takes digits only: blank lets Redux pick a new seed each Run, a number
 // repeats that run exactly. Workbench.js decides when it shows and what Run sends.
 
@@ -328,6 +332,9 @@ function RunButton({ id, label, disabled, done, onRun }) {
  *   aria-disabled, described by `hint`, until an input changes (./DoneButton.js).
  * @param {() => void} props.onRun
  * @param {import("react").ReactNode} props.verify The Verify tab's row under the menus.
+ * @param {{label: string, disabled: boolean, done: {label: string, hint: string}|null,
+ *   onRun: () => void}|null} [props.chainSolve] #326: a chain's Solve button, beside the main
+ *   button (Run the reductions), or null when no chained target is chosen.
  * @param {import("react").ReactNode} props.status Rendered under the row: a note on what the
  *   button will do (or why it can't) and the run's ComputeStatus.
  */
@@ -346,6 +353,7 @@ export default function CommandBar({
   runDone = null,
   onRun,
   verify,
+  chainSolve = null,
   status,
 }) {
   const reducing = task === "reduce" && stepper;
@@ -506,7 +514,22 @@ export default function CommandBar({
           {runButton}
         </Box>
       )}
-      {task === "reduce" && !reducing && runButton}
+      {task === "reduce" && !reducing && !chainSolve && runButton}
+      {task === "reduce" && !reducing && chainSolve && (
+        <Box
+          id={`${idPrefix}-chain-buttons`}
+          sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 16px" }}
+        >
+          {runButton}
+          <RunButton
+            id={`${idPrefix}-chain-solve`}
+            label={chainSolve.label}
+            disabled={chainSolve.disabled}
+            done={chainSolve.done}
+            onRun={chainSolve.onRun}
+          />
+        </Box>
+      )}
 
       {task === "verify" && verify}
       {status}
