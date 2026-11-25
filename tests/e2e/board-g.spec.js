@@ -513,7 +513,10 @@ test("each (i) card ends with Source, Code and Authors, and the links can be rea
   });
   const button = page.locator("#problem-info-button");
   const card = page.locator("#problem-info-card");
-  await button.click();
+  // The hover opens the card; wait for it, so the click below closes an open card rather than
+  // racing the hover's render (as tagged-dropdowns.spec.js says).
+  await button.hover();
+  await expect(card).toBeVisible();
   await expect(card.getByRole("link", { name: "Karp, 1972." })).toHaveAttribute(
     "href",
     "https://example.org/karp.pdf",
