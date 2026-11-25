@@ -73,9 +73,7 @@ test("the problem's details are in the title's (i) card, and the instance editor
 
   const card = page.locator("#problem-info-card");
   await expect(card).toBeHidden();
-  // A mouse hover opens the card on its own, and a click on an open card closes it, so a bare
-  // click races the hover's render (as tagged-dropdowns.spec.js says). Hover, then wait.
-  await page.locator("#problem-info-button").hover();
+  await page.locator("#problem-info-button").click();
   await expect(card).toBeVisible();
   await expect(card).toContainText(PROBLEM);
   await expect(card).toContainText("Input");
