@@ -159,3 +159,47 @@ export function outlineDistance(dx, dy, width, radius = NODE_RADIUS) {
   const b = c * ux;
   return b + Math.sqrt(Math.max(0, b * b - c * c + radius * radius));
 }
+
+// #339 (ReduxISU/Redux#1058): a vertex-weighted graph (Weighted Max Clique) gives each node a
+// `weight` and each frame `selectedWeight`, the chosen nodes' total. A graph with no node weights
+// has neither, and draws exactly as before.
+
+/** How far below a node's centre its weight tag sits: under the body, inside cropBox's margin. */
+export const NODE_WEIGHT_OFFSET = NODE_RADIUS + 12;
+
+/** A node's weight: a finite number, or null when it has none. */
+export function nodeWeightOf(node) {
+  return typeof node?.weight === "number" && Number.isFinite(node.weight) ? node.weight : null;
+}
+
+/** The text on a node's weight tag ("w 4"; a minus sign for a negative weight), or null. */
+export function nodeWeightText(weight) {
+  if (typeof weight !== "number" || !Number.isFinite(weight)) return null;
+  return `w ${weight < 0 ? `−${-weight}` : String(weight)}`;
+}
+
+/** Where a node's weight tag goes: centred under the node at (x, y), so it moves with it. */
+export function nodeWeightPosition({ x, y }) {
+  return { x, y: y + NODE_WEIGHT_OFFSET };
+}
+
+/** Whether a payload's graph is vertex-weighted: some node has a weight. */
+export function hasNodeWeights(payload) {
+  return Array.isArray(payload?.nodes) && payload.nodes.some((node) => nodeWeightOf(node) !== null);
+}
+
+/**
+ * The line under the picture of a vertex-weighted graph for a frame: "Selected weight: 12", the
+ * total of the nodes the frame's set picks, or "Selected weight: –" when the frame carries none
+ * (a stopped run's blank Done), so the line never comes and goes between frames.
+ */
+export function selectedWeightText(frame) {
+  const total = frame?.selectedWeight;
+  const shown =
+    typeof total === "number" && Number.isFinite(total)
+      ? total < 0
+        ? `−${-total}`
+        : String(total)
+      : "–";
+  return `Selected weight: ${shown}`;
+}
