@@ -22,6 +22,11 @@ describe("permalinkQuery", () => {
     assert.deepEqual(query, { playlist: "intro", instance: "(x1)", viz: "Graph" });
   });
 
+  test("drops a short link's share id (#844)", () => {
+    const query = permalinkQuery({ share: "abc123XYZ0", playlist: "intro" }, { solver: "S" });
+    assert.deepEqual(query, { playlist: "intro", solver: "S" });
+  });
+
   test("adds the reduction (#176) in a fixed order", () => {
     const query = permalinkQuery(
       {},
