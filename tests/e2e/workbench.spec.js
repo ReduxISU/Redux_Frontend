@@ -17,7 +17,7 @@
 // (booleanSatisfiability: clauses of literals) and it has reductions for Reduce mode.
 
 import { expect, test } from "./fixtures";
-import { gotoProblemDetail, openPanel } from "./helpers";
+import { gotoProblemDetail, openInfoCard, openPanel } from "./helpers";
 
 const PROBLEM = "3SAT";
 const NOT_RUN = "Not run yet. Showing the default picture of the instance.";
@@ -73,8 +73,7 @@ test("the problem's details are in the title's (i) card, and the instance editor
 
   const card = page.locator("#problem-info-card");
   await expect(card).toBeHidden();
-  await page.locator("#problem-info-button").click();
-  await expect(card).toBeVisible();
+  await openInfoCard(page, "problem-info", { expect });
   await expect(card).toContainText(PROBLEM);
   await expect(card).toContainText("Input");
   await expect(card).toContainText("Output");

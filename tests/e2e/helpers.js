@@ -205,7 +205,7 @@ export async function openPanel(page, panelKey, { expect }) {
   }
   if (panelKey === "details") {
     const card = page.locator("#problem-info-card");
-    if (!(await card.isVisible())) await page.locator("#problem-info-button").click();
+    if (!(await card.isVisible())) await openInfoCard(page, "problem-info", { expect });
     await expect(card).toBeVisible();
     return;
   }
@@ -214,6 +214,22 @@ export async function openPanel(page, panelKey, { expect }) {
   );
   await part.scrollIntoViewIfNeeded();
   await expect(part).toBeVisible();
+}
+
+/**
+ * Opens an (i) info card (`#{id}-button` and `#{id}-card`) with the mouse, and waits for it.
+ *
+ * A mouse hover opens the card on its own, and a click on an open card closes it, so a bare
+ * click races the hover's render and can land on either a closed or an open card. This moves
+ * the mouse off first (leaving the button clears a card closed by an earlier click), then
+ * hovers and waits. A click after this reliably closes the card.
+ */
+export async function openInfoCard(page, id, { expect }) {
+  const card = page.locator(`#${id}-card`);
+  await page.mouse.move(0, 0);
+  await page.locator(`#${id}-button`).hover();
+  await expect(card).toBeVisible();
+  return card;
 }
 
 /**
