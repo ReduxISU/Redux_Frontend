@@ -41,6 +41,11 @@
 // ExpressionFormula below, laid out by formulaExpression.js; a flat CNF / DNF payload is drawn by
 // FlatFormula exactly as before. The strip shows each variable's value by its type: T / F, or
 // "= n" for a number (an `int` variable), headed VALUES when any variable holds a number.
+//
+// #340 (ReduxISU/Redux#1057): a weighted clause's name reads "C1 · w 3" (the weight is part of the
+// clause's name, so it moves with the clause), and the strip's head says the frame's satisfied
+// weight, `satisfiedWeight`, out of the formula's total ("SATISFIED WEIGHT 3 OF 5"). Both are
+// drawn in the name's own grey, never green: green stays for the confirmed answer's pieces.
 
 import Box from "@mui/material/Box";
 import { useMemo, useRef, useState } from "react";
@@ -65,9 +70,13 @@ import {
   PILL_HEIGHT,
   SUB_SCALE,
   SUB_SHIFT,
+  satisfiedText,
   splitName,
   strikeWidth,
   VARIABLE_SIZE,
+  weightOf,
+  weightText,
+  wholeNumberOf,
 } from "./formulaLayout";
 import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
@@ -298,6 +307,17 @@ function VariableStrip({ idPrefix, layout, frame, chipState, traceOf, traceProps
           {head}
         </text>
       )}
+      {layout.weightTotal && (
+        <text
+          x={layout.weightTotal.x}
+          y={layout.weightTotal.y}
+          data-satisfied-weight={wholeNumberOf(frame?.satisfiedWeight) ?? "unknown"}
+          data-total-weight={layout.totalWeight}
+          {...HEAD_STYLE}
+        >
+          {satisfiedText(frame?.satisfiedWeight, layout.totalWeight)}
+        </text>
+      )}
       {layout.variables.map((variable, index) => {
         const state = chipState(variable);
         const look = pillLook(state);
@@ -462,8 +482,9 @@ function FlatFormula({ idPrefix, name, payload, frame, highlightIds, gadgetColor
             const traced = hover === clause.id || pinned === clause.id;
             const mark = CLAUSE_MARKS[state] ?? "";
             const literalTexts = clause.members.map((id) => shownLiteral(layout.literals.get(id)));
+            const weighed = clause.weight === null ? "" : ` (weight ${clause.weight})`;
             const parts = [
-              `${words.box} ${clause.label}: ${literalTexts.join(words.inner) || "empty"}`,
+              `${words.box} ${clause.label}${weighed}: ${literalTexts.join(words.inner) || "empty"}`,
             ];
             if (state !== "Background") parts.push(pictureStateStyle(state).legend);
             let line = look.line;
@@ -522,6 +543,9 @@ function FlatFormula({ idPrefix, name, payload, frame, highlightIds, gadgetColor
                   data-clause-name=""
                 >
                   {clause.label}
+                  {clause.weight !== null && (
+                    <tspan data-clause-weight={clause.weight}>{weightText(clause.weight)}</tspan>
+                  )}
                   {mark && (
                     <tspan
                       data-clause-mark={mark}
@@ -1117,6 +1141,13 @@ export function formulaAnnotations(payload, frames) {
         swatch: { kind: "text", text: line.swatch },
       });
     }
+  }
+  if (!expression && (payload?.groups ?? []).some((group) => weightOf(group) !== null)) {
+    entries.push({
+      key: "weight",
+      text: "w n by a clause's name is its weight; SATISFIED WEIGHT totals the clauses the assignment satisfies",
+      swatch: { kind: "text", text: "w" },
+    });
   }
   const anyState = (map, wanted) =>
     list.some(
