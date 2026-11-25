@@ -65,6 +65,10 @@
 // workbench shows. The workbench builds that link (lib/permalink.js) and hands this page a way to
 // ask for it (`shareRef`), so the link has the instance on screen even while the address is still
 // catching up with typing.
+// ReduxISU/Redux#844: a short link (`?share={id}`, lib/shortLinks.js) is read back from the Redux
+// server before the workbench mounts, and its view replaces the address, so the workbench restores
+// it the way it restores any link, running nothing by itself (#177). Any other key in a short
+// link is ignored. If it can't be read, a notice says why and the page opens on its defaults.
 // #327: a Back control sits above the title (components/BackButton.js): back in history when the
 // visitor came from another page of this site, else to the problem list.
 
@@ -74,7 +78,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import BackButton from "../components/BackButton";
 import ErrorBanner from "../components/ErrorBanner";
 import NavBar from "../components/NavBar";
@@ -91,6 +95,7 @@ import { TAXONOMY } from "../data/taxonomy";
 import { useProblemDetail } from "../hooks/useProblemDetail";
 import { buildPlaylistStepQuerySuffix, parseCustomPlaylist } from "../lib/playlistQuery";
 import { REDUX_API_BASE_URL } from "../lib/redux";
+import { openFailureText, openShareLink, shareIdFrom } from "../lib/shortLinks";
 
 // #165's reserved slug -- see data/playlists.js's own note.
 const CUSTOM_PLAYLIST_SLUG = "custom";
@@ -236,6 +241,40 @@ export default function ProblemDetail() {
   // #324: the workbench fills this in (useImperativeHandle) with `link()`, the link to share.
   const shareRef = useRef(null);
 
+  // #844: a short link's id, while the address still has one. The workbench waits for it to be
+  // read: it takes its selections from the address when it mounts.
+  const shareId = router.isReady ? shareIdFrom(router.query) : null;
+  // Why the short link didn't open, with the problem it opened on instead: shown while that
+  // problem is on screen. Null when it opened (or there was none).
+  const [shareNotice, setShareNotice] = useState(null);
+  const openedShareRef = useRef(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    // Once per id: React's dev double run, or a new router object, must not read it twice.
+    if (!shareId || openedShareRef.current === shareId) return;
+    openedShareRef.current = shareId;
+    const pathname = router.pathname;
+    const fallback = { problem: router.query.problem };
+    (async () => {
+      let query = fallback;
+      let notice = null;
+      try {
+        query = await openShareLink(REDUX_API_BASE_URL, shareId);
+      } catch (error) {
+        notice = openFailureText(error);
+      }
+      if (!mountedRef.current) return;
+      setShareNotice(notice ? { problem: query.problem, text: notice } : null);
+      await router.replace({ pathname, query }, undefined, { shallow: true });
+    })();
+  }, [shareId, router]);
+
   const { problem, loading, error } = useProblemDetail(
     REDUX_API_BASE_URL,
     typeof routeProblemName === "string" ? routeProblemName : null,
@@ -246,7 +285,8 @@ export default function ProblemDetail() {
   // rather than guessing in either case, so a fast unknown-name flash never
   // briefly shows the not-found state for a name that's actually valid, and
   // the page never briefly shows a wrong/empty detail view either.
-  if (!router.isReady || loading) {
+  // #844: so does a short link, until its view is read and in the address.
+  if (!router.isReady || loading || shareId) {
     // `loading={router.isReady}`: this branch is only reached when the
     // router isn't ready yet OR the fetch is in flight -- passing
     // router.isReady through means the progress bar shows in exactly the
@@ -341,6 +381,25 @@ export default function ProblemDetail() {
             </Typography>
           )}
         </Box>
+
+        {shareNotice && shareNotice.problem === routeProblemName && (
+          <Box
+            id="problem-share-notice"
+            role="status"
+            sx={{
+              px: 2,
+              py: 1.5,
+              border: "1px solid",
+              borderColor: "border.main",
+              borderRadius: "8px",
+              backgroundColor: "surface.input",
+              color: "text.primary",
+              fontSize: "0.9375rem",
+            }}
+          >
+            {shareNotice.text}
+          </Box>
+        )}
 
         {playlist && playlistIndex !== -1 && (
           <PlaylistRail
