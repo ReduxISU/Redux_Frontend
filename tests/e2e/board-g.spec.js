@@ -20,6 +20,7 @@ import { expect, test } from "./fixtures";
 import {
   answerViewCertificates,
   gotoProblemDetail,
+  openInfoCard,
   selectSolverByName,
   touchInstance,
   VIEW_MAPPED_ANSWER,
@@ -482,8 +483,8 @@ for (const width of [320, 1280]) {
       expect(box.y).toBeGreaterThanOrEqual(banner.y + banner.height);
     };
 
-    // A tap pins it open (a hover would too, with a mouse).
-    await button.click();
+    // A hover opens it; a click then closes it.
+    await openInfoCard(page, "problem-info", { expect });
     await check();
     await button.click();
     await expect(card).toBeHidden();
@@ -494,7 +495,7 @@ for (const width of [320, 1280]) {
       const title = document.querySelector("h1").getBoundingClientRect();
       window.scrollBy(0, title.top - banner.bottom - 4);
     });
-    await button.click();
+    await openInfoCard(page, "problem-info", { expect });
     await check();
     await expect(card).toHaveAttribute("data-placement", "below");
   });
@@ -512,8 +513,7 @@ test("each (i) card ends with Source, Code and Authors, and the links can be rea
     },
   });
   const button = page.locator("#problem-info-button");
-  const card = page.locator("#problem-info-card");
-  await button.click();
+  const card = await openInfoCard(page, "problem-info", { expect });
   await expect(card.getByRole("link", { name: "Karp, 1972." })).toHaveAttribute(
     "href",
     "https://example.org/karp.pdf",
