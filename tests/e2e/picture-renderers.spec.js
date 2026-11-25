@@ -8042,7 +8042,8 @@ test("Drag: on a touch screen a swipe scrolls the page, and press and hold then 
   await expect(page.locator(`${GRAPH}-graph [data-drag-armed]`)).toHaveCount(0);
   const moved = await drawnCentre(node);
   expect(distance(moved, before["2"])).toBeGreaterThan(15);
-  expect(await page.evaluate(() => window.scrollY)).toBe(scrollHeld);
+  // The page did not scroll: a swipe moves it far more than the pixel scrollY can round by.
+  expect(Math.abs((await page.evaluate(() => window.scrollY)) - scrollHeld)).toBeLessThanOrEqual(1);
   await expect(node).toHaveAttribute("aria-pressed", "false");
 });
 

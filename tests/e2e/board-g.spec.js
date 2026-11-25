@@ -1713,10 +1713,16 @@ test("on a phone the step's description sits on its own line under Step N of M:,
   await expect(page.locator("#workbench-steps-line")).toHaveAttribute("aria-live", "polite");
   await expect(page.locator("#workbench-steps-position")).toHaveText(/^Step 2 of /);
 
-  // On a desktop the description stays on the label's line.
+  // On a desktop the description stays on the label's line. The layout follows the new width a
+  // render later, so measure until it has (a single measurement raced it and saw the phone's).
   await page.setViewportSize({ width: 1280, height: 1000 });
-  const wideLabel = await boxOf(page, "#workbench-steps-line strong");
-  const wideText = await boxOf(page, "#workbench-step-text");
-  expect(wideText.y).toBeLessThan(wideLabel.y + wideLabel.height);
-  expect(wideText.x).toBeGreaterThan(wideLabel.x + wideLabel.width);
+  await expect
+    .poll(async () => {
+      const wideLabel = await boxOf(page, "#workbench-steps-line strong");
+      const wideText = await boxOf(page, "#workbench-step-text");
+      return (
+        wideText.y < wideLabel.y + wideLabel.height && wideText.x > wideLabel.x + wideLabel.width
+      );
+    })
+    .toBe(true);
 });
