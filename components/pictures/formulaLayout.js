@@ -346,9 +346,7 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
   // A weighted formula's total, and where the strip's head puts the satisfied weight: beside the
   // head when its widest text fits the line, else on a line of its own under it.
   const weighted = clauses.some((clause) => clause.weight !== null);
-  const totalWeight = weighted
-    ? sumWeights(clauses.map((clause) => clause.weight ?? "0"))
-    : null;
+  const totalWeight = weighted ? sumWeights(clauses.map((clause) => clause.weight ?? "0")) : null;
   const stripY = y + rowHeight + 22;
   let weightTotal = null;
   let totalLine = 0;

@@ -544,9 +544,7 @@ function FlatFormula({ idPrefix, name, payload, frame, highlightIds, gadgetColor
                 >
                   {clause.label}
                   {clause.weight !== null && (
-                    <tspan data-clause-weight={clause.weight}>
-                      {weightText(clause.weight)}
-                    </tspan>
+                    <tspan data-clause-weight={clause.weight}>{weightText(clause.weight)}</tspan>
                   )}
                   {mark && (
                     <tspan
