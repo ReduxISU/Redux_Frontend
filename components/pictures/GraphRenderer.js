@@ -58,6 +58,7 @@ import {
   nodeWeightText,
   nodeWidth,
   selectedWeightText,
+  wholeNumberOf,
 } from "./graphLayout";
 import {
   autoBow,
@@ -491,9 +492,7 @@ export default function GraphRenderer({
       {weighted && (
         <Box
           id={`${idPrefix}-selected-weight`}
-          data-selected-weight={
-            typeof frame?.selectedWeight === "number" ? String(frame.selectedWeight) : "unknown"
-          }
+          data-selected-weight={wholeNumberOf(frame?.selectedWeight) ?? "unknown"}
           sx={{ fontFamily: MONO, fontSize: "0.8125rem", color: "text.primary" }}
         >
           {selectedWeightText(frame)}

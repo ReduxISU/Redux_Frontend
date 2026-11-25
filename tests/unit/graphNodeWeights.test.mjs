@@ -24,10 +24,10 @@ const weighted = {
   subtype: "undirected",
   layout: "force",
   nodes: [
-    { id: "a", label: "a", weight: 4 },
-    { id: "b", label: "b", weight: 3 },
-    { id: "c", label: "c", weight: 5 },
-    { id: "d", label: "d", weight: 7 },
+    { id: "a", label: "a", weight: "4" },
+    { id: "b", label: "b", weight: "3" },
+    { id: "c", label: "c", weight: "5" },
+    { id: "d", label: "d", weight: "7" },
   ],
   edges: [
     { id: "a-b", a: "a", b: "b" },
@@ -44,19 +44,32 @@ const plain = {
 };
 
 describe("node weights", () => {
-  test("a node's weight is a finite number, or null when it has none", () => {
-    assert.equal(nodeWeightOf({ id: "a", weight: 4 }), 4);
-    assert.equal(nodeWeightOf({ id: "a", weight: 0 }), 0);
+  test("a node's weight is its whole number string, or null when it has none", () => {
+    assert.equal(nodeWeightOf({ id: "a", weight: "4" }), "4");
+    assert.equal(nodeWeightOf({ id: "a", weight: "0" }), "0");
+    assert.equal(nodeWeightOf({ id: "a", weight: "-2" }), "-2");
     assert.equal(nodeWeightOf({ id: "a" }), null);
-    assert.equal(nodeWeightOf({ id: "a", weight: "4" }), null);
-    assert.equal(nodeWeightOf({ id: "a", weight: Number.NaN }), null);
+    // Redux sends strings (Redux#1034); a bare number or anything not whole is not a weight.
+    assert.equal(nodeWeightOf({ id: "a", weight: 4 }), null);
+    assert.equal(nodeWeightOf({ id: "a", weight: "4.5" }), null);
+    assert.equal(nodeWeightOf({ id: "a", weight: "" }), null);
     assert.equal(nodeWeightOf(null), null);
   });
 
+  test("a weight above 2^53 is shown exactly, not rounded", () => {
+    // 2^53 + 1, the first whole number a JavaScript number cannot hold.
+    assert.equal(nodeWeightOf({ id: "a", weight: "9007199254740993" }), "9007199254740993");
+    assert.equal(nodeWeightText("9007199254740993"), "w 9007199254740993");
+    assert.equal(
+      selectedWeightText({ selectedWeight: "9007199254740994" }),
+      "Selected weight: 9007199254740994",
+    );
+  });
+
   test("the tag reads w n, with a real minus sign", () => {
-    assert.equal(nodeWeightText(4), "w 4");
-    assert.equal(nodeWeightText(0), "w 0");
-    assert.equal(nodeWeightText(-2), "w −2");
+    assert.equal(nodeWeightText("4"), "w 4");
+    assert.equal(nodeWeightText("0"), "w 0");
+    assert.equal(nodeWeightText("-2"), "w −2");
     assert.equal(nodeWeightText(null), null);
     assert.equal(nodeWeightText(undefined), null);
   });
@@ -108,13 +121,14 @@ describe("node weights", () => {
 
 describe("selected weight", () => {
   test("says the frame's total", () => {
-    assert.equal(selectedWeightText({ selectedWeight: 12 }), "Selected weight: 12");
-    assert.equal(selectedWeightText({ selectedWeight: 0 }), "Selected weight: 0");
-    assert.equal(selectedWeightText({ selectedWeight: -3 }), "Selected weight: −3");
+    assert.equal(selectedWeightText({ selectedWeight: "12" }), "Selected weight: 12");
+    assert.equal(selectedWeightText({ selectedWeight: "0" }), "Selected weight: 0");
+    assert.equal(selectedWeightText({ selectedWeight: "-3" }), "Selected weight: −3");
   });
 
   test("a frame without a total, such as a stopped run's Done, shows a dash", () => {
     assert.equal(selectedWeightText({ event: "Done", ok: false }), "Selected weight: –");
     assert.equal(selectedWeightText(null), "Selected weight: –");
+    assert.equal(selectedWeightText({ selectedWeight: 12 }), "Selected weight: –");
   });
 });

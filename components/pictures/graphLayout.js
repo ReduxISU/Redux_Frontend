@@ -161,21 +161,35 @@ export function outlineDistance(dx, dy, width, radius = NODE_RADIUS) {
 }
 
 // #339 (ReduxISU/Redux#1058): a vertex-weighted graph (Weighted Max Clique) gives each node a
-// `weight` and each frame `selectedWeight`, the chosen nodes' total. A graph with no node weights
-// has neither, and draws exactly as before.
+// `weight` and each frame `selectedWeight`, the chosen nodes' total. Redux writes both as whole
+// numbers in strings ("4", "-2") so no weight above 2^53 is rounded (Redux#1034); they stay text
+// here and are never turned into numbers. A graph with no node weights has neither, and draws
+// exactly as before.
 
 /** How far below a node's centre its weight tag sits: under the body, inside cropBox's margin. */
 export const NODE_WEIGHT_OFFSET = NODE_RADIUS + 12;
 
-/** A node's weight: a finite number, or null when it has none. */
+const WHOLE_NUMBER = /^-?\d+$/;
+
+/** A whole number Redux sent as a string ("12", "-3"), or null for anything else. */
+export function wholeNumberOf(value) {
+  return typeof value === "string" && WHOLE_NUMBER.test(value) ? value : null;
+}
+
+/** A whole number string for people to read: a real minus sign for a negative one. */
+function shownNumber(value) {
+  return value.startsWith("-") ? `−${value.slice(1)}` : value;
+}
+
+/** A node's weight: its whole number string, or null when it has none. */
 export function nodeWeightOf(node) {
-  return typeof node?.weight === "number" && Number.isFinite(node.weight) ? node.weight : null;
+  return wholeNumberOf(node?.weight);
 }
 
 /** The text on a node's weight tag ("w 4"; a minus sign for a negative weight), or null. */
 export function nodeWeightText(weight) {
-  if (typeof weight !== "number" || !Number.isFinite(weight)) return null;
-  return `w ${weight < 0 ? `−${-weight}` : String(weight)}`;
+  const value = wholeNumberOf(weight);
+  return value === null ? null : `w ${shownNumber(value)}`;
 }
 
 /** Where a node's weight tag goes: centred under the node at (x, y), so it moves with it. */
@@ -194,12 +208,6 @@ export function hasNodeWeights(payload) {
  * (a stopped run's blank Done), so the line never comes and goes between frames.
  */
 export function selectedWeightText(frame) {
-  const total = frame?.selectedWeight;
-  const shown =
-    typeof total === "number" && Number.isFinite(total)
-      ? total < 0
-        ? `−${-total}`
-        : String(total)
-      : "–";
-  return `Selected weight: ${shown}`;
+  const total = wholeNumberOf(frame?.selectedWeight);
+  return `Selected weight: ${total === null ? "–" : shownNumber(total)}`;
 }
