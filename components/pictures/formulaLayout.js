@@ -18,6 +18,12 @@
 // subscript at SUB_SCALE of the label size; any other name (a, foo_2) is drawn plain. The labels
 // are monospace, so a label's width is its characters times CHAR_WIDTH (at the 15 px literal
 // size), with a subscript's digits counted at SUB_SCALE.
+//
+// #340 (ReduxISU/Redux#1057): a weighted formula (Weighted Max-SAT) gives each group a `weight`.
+// Its name then reads "C1 · w 3", and its box is at least as wide as that name (with room for the
+// ✓ / ✗ beside it), so a narrow clause's name never runs into the next one's. The strip's head
+// gains the run's satisfied weight ("SATISFIED WEIGHT 3 OF 5"), beside ASSIGNMENT when it fits and
+// on its own line under it when not. A formula with no weights is laid out exactly as before.
 
 /** A monospace character's width at the literal size, in drawing units. */
 export const CHAR_WIDTH = 9;
@@ -44,6 +50,16 @@ export const ROW_GAP = 16;
 export const CHIP_WIDTH = 66;
 export const CHIP_HEIGHT = 30;
 export const MARGIN = 12;
+// A group's name above its box: 11 px monospace, CHAR_WIDTH scaled to it, and the room its ✓ / ✗
+// takes after it (a 5 px gap and one 12 px character), kept for every weighted name so the layout
+// never moves between frames.
+export const NAME_SIZE = 11;
+export const NAME_CHAR = (CHAR_WIDTH * NAME_SIZE) / LITERAL_SIZE;
+export const MARK_ROOM = 5 + (CHAR_WIDTH * 12) / LITERAL_SIZE;
+// The strip head's characters: 11 px monospace with 0.08em letter spacing.
+export const HEAD_CHAR = NAME_CHAR + 0.08 * NAME_SIZE;
+// The line the satisfied weight takes when it doesn't fit beside ASSIGNMENT.
+export const TOTAL_LINE = 18;
 // The room above the first row: kept from when a heading sat there (#278 took it out of the
 // drawing), so a formula draws exactly where it did.
 const TOP = 34;
@@ -102,6 +118,28 @@ export function formatNumber(value) {
   return typeof value === "number" && value < 0 ? `−${-value}` : String(value);
 }
 
+/** A group's weight (ReduxISU/Redux#1057): a finite number, or null when it has none. */
+export function weightOf(group) {
+  return typeof group?.weight === "number" && Number.isFinite(group.weight) ? group.weight : null;
+}
+
+/** The weight as written after a group's name: " · w 3", or "" when it has none. */
+export function weightText(weight) {
+  return weight === null || weight === undefined ? "" : ` · w ${formatNumber(weight)}`;
+}
+
+/** The drawn width of a group's name ("C1 · w 3") with the room for its ✓ / ✗, from its box's left edge. */
+export function nameWidth(name) {
+  return 2 + String(name).length * NAME_CHAR + MARK_ROOM;
+}
+
+/** The satisfied-weight text of the strip's head: "SATISFIED WEIGHT 3 OF 5" ("–" when unknown). */
+export function satisfiedText(satisfied, total) {
+  const shown =
+    typeof satisfied === "number" && Number.isFinite(satisfied) ? formatNumber(satisfied) : "–";
+  return `SATISFIED WEIGHT ${shown} OF ${formatNumber(total)}`;
+}
+
 /** A variable's type (ReduxISU/Redux#929): "int" when the payload says so, else "bool". */
 export function variableType(variable) {
   return variable?.type === "int" ? "int" : "bool";
@@ -158,8 +196,9 @@ export function stripLabelOf(chips) {
  *   MIN_WIDTH..MAX_WIDTH.
  * @returns {{minX: number, minY: number, width: number, height: number, stripY: number,
  *   form: "cnf"|"dnf"|null, innerOp: "and"|"or", outerOp: "and"|"or",
- *   clauses: Array<{id: string, label: string, x: number, y: number, w: number, h: number,
- *     members: string[]}>,
+ *   clauses: Array<{id: string, label: string, weight: number|null, x: number, y: number,
+ *     w: number, h: number, members: string[]}>,
+ *   totalWeight: number|null, weightTotal: {x: number, y: number}|null,
  *   literals: Map<string, {id: string, label: string, variable: string, group: string,
  *     negated: boolean, name: string, x: number, y: number, w: number, h: number}>,
  *   outers: Array<{x: number, y: number, after: string}>,
@@ -228,7 +267,15 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
     const rowWidths = rows.map((row, k) =>
       row.reduce((sum, member, q) => sum + member.pillWidth + (q || k ? INNER_WIDTH : 0), 0),
     );
-    const boxWidth = 2 * PAD + Math.max(0, ...rowWidths);
+    const weight = weightOf(group);
+    const label = String(group.label ?? group.id);
+    // A weighted name is wider than a short clause: the box grows to hold it, never past the line.
+    const boxWidth = Math.max(
+      2 * PAD + Math.max(0, ...rowWidths),
+      weight === null
+        ? 0
+        : Math.min(nameWidth(label + weightText(weight)), right - left - OUTER_WIDTH),
+    );
     const boxHeight = BOX_HEIGHT + (rows.length - 1) * (PILL_HEIGHT + 8);
     const need = (index ? OUTER_WIDTH : 0) + boxWidth;
     if (!rowStart && x + need > right) {
@@ -247,7 +294,8 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
     }
     const box = {
       id: group.id,
-      label: String(group.label ?? group.id),
+      label,
+      weight,
       x,
       y: y + LABEL_HEIGHT,
       w: boxWidth,
@@ -274,8 +322,34 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
     rowStart = false;
   });
 
+  // A weighted formula's total, and where the strip's head puts the satisfied weight: beside the
+  // head when its widest text fits the line, else on a line of its own under it.
+  const weighted = clauses.some((clause) => clause.weight !== null);
+  const totalWeight = weighted
+    ? clauses.reduce((sum, clause) => sum + (clause.weight ?? 0), 0)
+    : null;
+  const stripY = y + rowHeight + 22;
+  let weightTotal = null;
+  let totalLine = 0;
+  if (weighted) {
+    const heads = ["ASSIGNMENT", "VALUES"];
+    const head = Math.max(...heads.map((text) => text.length)) * HEAD_CHAR;
+    const beside = left + head + 14;
+    const wide = satisfiedText(totalWeight, totalWeight).length * HEAD_CHAR;
+    if (beside + wide <= right) weightTotal = { x: beside, y: stripY };
+    else {
+      weightTotal = { x: left, y: stripY + TOTAL_LINE };
+      totalLine = TOTAL_LINE;
+    }
+  }
+
   // The assignment strip, under the formula, wrapping the same way.
-  const { chips: variables, bottom } = stripChips(payload, left, right, y + rowHeight + 40);
+  const { chips: variables, bottom } = stripChips(
+    payload,
+    left,
+    right,
+    y + rowHeight + 40 + totalLine,
+  );
 
   // A literal no clause lists stays out of the drawing (it has no place).
   for (const [id, literal] of literals) if (literal.w === 0) literals.delete(id);
@@ -285,8 +359,10 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
     minY: 0,
     width: drawingWidth,
     height: bottom + 14,
-    stripY: y + rowHeight + 22,
+    stripY,
     stripLabel: stripLabelOf(variables),
+    totalWeight,
+    weightTotal,
     form,
     innerOp,
     outerOp,
