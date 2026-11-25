@@ -10,7 +10,8 @@
 // only the whole text is shown, with no placeholder for the other mode.
 //
 // #324 (#174): an instance too long for a link gets a plain note under the box saying that the
-// page's address and the Share button leave it out (lib/permalink.js MAX_PERMALINK_LENGTH).
+// page's address leaves it out (lib/permalink.js MAX_PERMALINK_LENGTH). Share keeps it, in a short
+// link saved on the server (ReduxISU/Redux#844); components/ShareButton.js says when it can't.
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -102,8 +103,8 @@ export default function InstancePanel({
       )}
       {linkOmitsInstance && (
         <Box id={linkNoteId} sx={{ fontSize: "0.8125rem", color: "text.secondary" }}>
-          This instance is too long to include in a shareable link, so the page&apos;s address and
-          Share leave it out. A shared link opens on the default instance.
+          This instance is too long to include in the page&apos;s address, so the address leaves it
+          out. Share saves it in a short link instead.
         </Box>
       )}
       {problem.instanceFormat && (

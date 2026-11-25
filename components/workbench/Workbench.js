@@ -102,9 +102,11 @@
 //     #324 (#176): in Reduce, `?reduceTo=` names the target (a chained one too) and `?reduction=`
 //     the reduction when it is not the target's first; a link with them opens Reduce on them.
 //     #174: when the whole link would be longer than lib/permalink.js MAX_PERMALINK_LENGTH, the
-//     instance is left out of it and a note under the instance box says so. The page's Share
-//     button (pages/[problem].js) asks this component for the link (`shareRef`). Opening a link
-//     never runs anything: only the main button starts a compute request (#177).
+//     instance is left out of the address and a note under the instance box says so. The page's
+//     Share button (pages/[problem].js) asks this component for the link (`shareRef`); with it
+//     comes the whole view, which Share saves as a short link when the plain one is too long
+//     (ReduxISU/Redux#844, lib/shortLinks.js). Opening a link, a short one too, never runs
+//     anything: only the main button starts a compute request (#177).
 
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
@@ -164,6 +166,7 @@ import {
 } from "../../lib/redux";
 import { isRandomizedSolver, MAX_SEED, parseSeed } from "../../lib/runSeed";
 import { frameAtPosition, framePosition, RUN_END } from "../../lib/runSteps";
+import { viewFromLink } from "../../lib/shortLinks";
 import ComputeStatus from "../detail/ComputeStatus";
 import { GADGET_PALETTE } from "../pictures/gadgetRings";
 import { pictureStateStyle, statesInFrames } from "../pictures/pictureStates";
@@ -925,19 +928,25 @@ export default function Workbench({ problem, shareRef = null }) {
     reduceToParam && selectedReduction && selectedReduction !== reductionsForTarget[0]
       ? selectedReduction.name
       : null;
-  /** The link to this view for `instanceText`, the instance left out when too long (#174). */
+  /**
+   * The link to this view for `instanceText`, the instance left out when too long (#174), with
+   * the whole view (instance kept) and the page's address without a query, for Share to save as
+   * a short link (#844).
+   */
   function permalinkFor(instanceText) {
-    return fitPermalink({
-      origin: typeof window === "undefined" ? "" : window.location.origin,
-      path: problemPath(problem.name),
-      query: permalinkQuery(router.query, {
-        instance: instanceText !== defaultInstance ? instanceText : null,
-        solver: solverParam,
-        viz: vizParam,
-        reduceTo: reduceToParam,
-        reduction: reductionParam,
-      }),
+    const base = `${typeof window === "undefined" ? "" : window.location.origin}${problemPath(problem.name)}`;
+    const query = permalinkQuery(router.query, {
+      instance: instanceText !== defaultInstance ? instanceText : null,
+      solver: solverParam,
+      viz: vizParam,
+      reduceTo: reduceToParam,
+      reduction: reductionParam,
     });
+    return {
+      ...fitPermalink({ path: base, query }),
+      base,
+      view: viewFromLink(problem.name, query),
+    };
   }
   useEffect(() => {
     const serialized = JSON.stringify([
@@ -970,7 +979,7 @@ export default function Workbench({ problem, shareRef = null }) {
     );
   }, [instanceParam, solverParam, vizParam, reduceToParam, reductionParam, router, problem.name]);
   // #174: whether the instance on screen is too long for a link; the note under the instance
-  // box says so, and the address and the Share button leave it out.
+  // box says so, and the address leaves it out (Share saves a short link instead, #844).
   const linkOmitsInstance = permalinkFor(instance).instanceOmitted;
   // #324: the Share button (pages/[problem].js) asks for the link when pressed, so it gets the
   // instance on screen even inside the address's debounce.
