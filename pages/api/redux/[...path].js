@@ -100,6 +100,10 @@ const rateLimitBuckets = new Map();
  * (`requestMappedSolutionBack`), for Reduce's Solve step. It builds the reduction on the
  * backend, so it is a compute endpoint like `mapSolution`.
  *
+ * `ShareLinks` (ReduxISU/Redux#844) keeps a view too long for a plain link and answers its id;
+ * `ShareLinks/{id}` (a prefix entry below) gives it back. Saving is a POST, so it is rate-limited
+ * and body-capped like the rest, but it runs no algorithm, so it keeps the read timeout.
+ *
  * `Navigation/Reductions/path` (#148) is its own exact entry rather than folded into
  * `Navigation/Reductions` above: it is a genuinely different endpoint (a weighted
  * shortest-path lookup taking `source`/`target` query parameters) that happens to share
@@ -136,6 +140,8 @@ const ALLOWED_ENDPOINTS = new Map([
   ["ProblemProvider/reductionView", ["POST"]],
   ["ProblemProvider/reductionChainView", ["POST"]],
   ["ProblemProvider/reductionChainPictures", ["GET", "HEAD"]],
+  // ReduxISU/Redux#844: Share saves a view too long for a plain link (lib/shortLinks.js).
+  ["ShareLinks", ["POST"]],
 ]);
 
 /**
@@ -151,7 +157,11 @@ const ALLOWED_ENDPOINTS = new Map([
  * named "directory" (unlikely, but not this proxy's business to assume) can never shadow
  * the real directory endpoint.
  */
-const ALLOWED_PREFIX_ENDPOINTS = new Map([["Navigation/ContributorProfile/", ["GET", "HEAD"]]]);
+const ALLOWED_PREFIX_ENDPOINTS = new Map([
+  ["Navigation/ContributorProfile/", ["GET", "HEAD"]],
+  // ReduxISU/Redux#844: `ShareLinks/{id}` reads a saved view back for a `?share=` link.
+  ["ShareLinks/", ["GET", "HEAD"]],
+]);
 
 /**
  * Looks up the allowed methods for `endpoint`, checking the exact-match map first and
