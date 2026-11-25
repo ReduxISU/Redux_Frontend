@@ -31,6 +31,11 @@
 // their node and a band under their edge. A "missing" line (a phantom) with an `id` (the
 // Reduction View's "Rule says no" pairs) carries it as `data-phantom-id`, can be focused, and
 // is marked like an edge.
+//
+// #339 (ReduxISU/Redux#1058): a vertex-weighted graph (Weighted Max Clique) gives each node a
+// `weight`, drawn as a tag under the node in the edge weight tags' look; the tag is part of the
+// node, so it moves, fades and traces with it. A line under the picture says the frame's
+// `selectedWeight`, the chosen nodes' total. Neither is drawn for a graph without node weights.
 
 import Box from "@mui/material/Box";
 import { useMemo, useState } from "react";
@@ -44,7 +49,17 @@ import {
   useDiagramEdits,
 } from "./diagramEdits";
 import { GadgetUnderlay, useGadgetMarks } from "./gadgetRings";
-import { layoutGraph, NODE_RADIUS, nodeWidth } from "./graphLayout";
+import {
+  hasNodeWeights,
+  layoutGraph,
+  NODE_RADIUS,
+  nodeWeightOf,
+  nodeWeightPosition,
+  nodeWeightText,
+  nodeWidth,
+  selectedWeightText,
+  wholeNumberOf,
+} from "./graphLayout";
 import {
   autoBow,
   Badge,
@@ -54,6 +69,7 @@ import {
   FAINT_FILTER,
   GadgetNodeRing,
   groupColors,
+  MONO,
   NodeBody,
   NodeLabel,
   nodeLook,
@@ -180,6 +196,7 @@ export default function GraphRenderer({
   const { first: positionOf, extra: repeatsOf } = tourPositions(frame?.order);
   const phantoms = Array.isArray(frame?.phantoms) ? frame.phantoms : [];
   const shape = payload?.shape ?? "";
+  const weighted = hasNodeWeights(payload);
   const edits = useDiagramEdits([layoutKey ?? payload, layoutMode]);
   const pos = editedPositions(layout.positions, edits.nodes);
   const editor = makeEditor({
@@ -374,8 +391,11 @@ export default function GraphRenderer({
             const faint = near !== null && !near.has(node.id);
             const isTraced = traced === node.id;
             const terminal = node.terminal === true;
+            const weightTag = nodeWeightText(nodeWeightOf(node));
+            const tagAt = nodeWeightPosition(p);
 
             const parts = [`Node ${text}`];
+            if (weightTag) parts.push(`weight ${nodeWeightOf(node)}`);
             if (state !== "Background") parts.push(pictureStateStyle(state).legend);
             if (group !== undefined) parts.push(groupName(payload, group));
             if (terminal) parts.push("terminal");
@@ -452,6 +472,12 @@ export default function GraphRenderer({
                   />
                 )}
                 <NodeLabel x={p.x} y={p.y} text={text} color={look.ink} bold={look.bold} />
+                {weightTag && (
+                  // The node's own group fades it when the trace leaves the node out.
+                  <g data-node-weight={nodeWeightOf(node)}>
+                    <WeightTag x={tagAt.x} y={tagAt.y} text={weightTag} state={state} />
+                  </g>
+                )}
                 {position !== undefined && (
                   <Badge x={badgeX} y={badgeY} text={position} testId="order" />
                 )}
@@ -463,6 +489,15 @@ export default function GraphRenderer({
           })}
         </g>
       </DiagramZoom>
+      {weighted && (
+        <Box
+          id={`${idPrefix}-selected-weight`}
+          data-selected-weight={wholeNumberOf(frame?.selectedWeight) ?? "unknown"}
+          sx={{ fontFamily: MONO, fontSize: "0.8125rem", color: "text.primary" }}
+        >
+          {selectedWeightText(frame)}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -506,6 +541,13 @@ export function graphAnnotations(payload, frames) {
       key: "terminal",
       text: "Terminal (double outline: a node the tree must reach)",
       swatch: { kind: "ring" },
+    });
+  }
+  if (hasNodeWeights(payload)) {
+    entries.push({
+      key: "node-weight",
+      text: "w n under a node is its weight; Selected weight totals the chosen nodes",
+      swatch: { kind: "text", text: "w" },
     });
   }
   if (payload?.subtype === "directed") {
