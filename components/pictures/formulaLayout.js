@@ -118,14 +118,35 @@ export function formatNumber(value) {
   return typeof value === "number" && value < 0 ? `−${-value}` : String(value);
 }
 
-/** A group's weight (ReduxISU/Redux#1057): a finite number, or null when it has none. */
+// Redux writes clause weights and the satisfied total as whole numbers in strings ("3", "-2") so
+// no weight above 2^53 is rounded (ReduxISU/Redux#1034). They stay text here; only the formula's
+// total is added up, with BigInt, so it is exact too.
+const WHOLE_NUMBER = /^-?\d+$/;
+
+/** A whole number Redux sent as a string ("3", "-2"), or null for anything else. */
+export function wholeNumberOf(value) {
+  return typeof value === "string" && WHOLE_NUMBER.test(value) ? value : null;
+}
+
+/** A whole number string for people to read: a real minus sign for a negative one. */
+function shownWhole(value) {
+  return value.startsWith("-") ? `−${value.slice(1)}` : value;
+}
+
+/** A group's weight (ReduxISU/Redux#1057): its whole number string, or null when it has none. */
 export function weightOf(group) {
-  return typeof group?.weight === "number" && Number.isFinite(group.weight) ? group.weight : null;
+  return wholeNumberOf(group?.weight);
+}
+
+/** The sum of whole number strings, exactly, as a string ("4"). */
+export function sumWeights(weights) {
+  return weights.reduce((sum, weight) => sum + BigInt(weight), 0n).toString();
 }
 
 /** The weight as written after a group's name: " · w 3", or "" when it has none. */
 export function weightText(weight) {
-  return weight === null || weight === undefined ? "" : ` · w ${formatNumber(weight)}`;
+  const value = wholeNumberOf(weight);
+  return value === null ? "" : ` · w ${shownWhole(value)}`;
 }
 
 /** The drawn width of a group's name ("C1 · w 3") with the room for its ✓ / ✗, from its box's left edge. */
@@ -135,9 +156,9 @@ export function nameWidth(name) {
 
 /** The satisfied-weight text of the strip's head: "SATISFIED WEIGHT 3 OF 5" ("–" when unknown). */
 export function satisfiedText(satisfied, total) {
-  const shown =
-    typeof satisfied === "number" && Number.isFinite(satisfied) ? formatNumber(satisfied) : "–";
-  return `SATISFIED WEIGHT ${shown} OF ${formatNumber(total)}`;
+  const shown = wholeNumberOf(satisfied);
+  const of = wholeNumberOf(total);
+  return `SATISFIED WEIGHT ${shown === null ? "–" : shownWhole(shown)} OF ${of === null ? "–" : shownWhole(of)}`;
 }
 
 /** A variable's type (ReduxISU/Redux#929): "int" when the payload says so, else "bool". */
@@ -196,9 +217,9 @@ export function stripLabelOf(chips) {
  *   MIN_WIDTH..MAX_WIDTH.
  * @returns {{minX: number, minY: number, width: number, height: number, stripY: number,
  *   form: "cnf"|"dnf"|null, innerOp: "and"|"or", outerOp: "and"|"or",
- *   clauses: Array<{id: string, label: string, weight: number|null, x: number, y: number,
+ *   clauses: Array<{id: string, label: string, weight: string|null, x: number, y: number,
  *     w: number, h: number, members: string[]}>,
- *   totalWeight: number|null, weightTotal: {x: number, y: number}|null,
+ *   totalWeight: string|null, weightTotal: {x: number, y: number}|null,
  *   literals: Map<string, {id: string, label: string, variable: string, group: string,
  *     negated: boolean, name: string, x: number, y: number, w: number, h: number}>,
  *   outers: Array<{x: number, y: number, after: string}>,
@@ -326,7 +347,7 @@ export function layoutFormula(payload, width = MAX_WIDTH) {
   // head when its widest text fits the line, else on a line of its own under it.
   const weighted = clauses.some((clause) => clause.weight !== null);
   const totalWeight = weighted
-    ? clauses.reduce((sum, clause) => sum + (clause.weight ?? 0), 0)
+    ? sumWeights(clauses.map((clause) => clause.weight ?? "0"))
     : null;
   const stripY = y + rowHeight + 22;
   let weightTotal = null;

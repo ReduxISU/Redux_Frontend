@@ -82,19 +82,19 @@ describe("layoutFormula without weights", () => {
 
 describe("layoutFormula with weights", () => {
   test("keeps each clause's weight and totals them", () => {
-    const layout = layoutFormula(payload([3, 1]));
+    const layout = layoutFormula(payload(["3", "1"]));
     assert.deepEqual(
       layout.clauses.map((c) => [c.label, c.weight]),
       [
-        ["C1", 3],
-        ["C2", 1],
+        ["C1", "3"],
+        ["C2", "1"],
       ],
     );
-    assert.equal(layout.totalWeight, 4);
+    assert.equal(layout.totalWeight, "4");
   });
 
   test("widens a box too narrow for its weighted name, and only that one", () => {
-    const layout = layoutFormula(payload([3, 1]));
+    const layout = layoutFormula(payload(["3", "1"]));
     // C1's box (two pills) is already wider than "C1 · w 3"; C2's single pill is not.
     assert.equal(round(layout.clauses[0].w), 119.04);
     assert.ok(nameWidth("C2 · w 1") > 52.02);
@@ -105,7 +105,7 @@ describe("layoutFormula with weights", () => {
 
   test("every name fits its box at the widest clause and the narrowest width", () => {
     for (const width of [800, 320]) {
-      const layout = layoutFormula(payload([123456, 7]), width);
+      const layout = layoutFormula(payload(["123456", "7"]), width);
       for (const clause of layout.clauses) {
         assert.ok(nameWidth(clause.label + weightText(clause.weight)) <= clause.w + 1e-9);
         assert.ok(clause.x + clause.w <= layout.width - 12 + 1e-9);
@@ -114,21 +114,21 @@ describe("layoutFormula with weights", () => {
   });
 
   test("a name longer than the line is capped at the line", () => {
-    const long = payload([3, 1]);
+    const long = payload(["3", "1"]);
     long.groups[0].label = "A clause with a very long name indeed";
     const layout = layoutFormula(long, 320);
     assert.equal(layout.clauses[0].w, 320 - 24 - OUTER_WIDTH);
   });
 
   test("puts the satisfied weight beside the strip head when it fits", () => {
-    const layout = layoutFormula(payload([3, 1]), 800);
+    const layout = layoutFormula(payload(["3", "1"]), 800);
     assert.deepEqual(layout.weightTotal, { x: 12 + 10 * HEAD_CHAR + 14, y: layout.stripY });
     // The chips do not move.
     assert.deepEqual(chips(layout), chips(layoutFormula(payload(), 800)));
   });
 
   test("puts it on its own line under the head when it doesn't, and the chips move down", () => {
-    const layout = layoutFormula(payload([10 ** 12, 10 ** 12]), 320);
+    const layout = layoutFormula(payload(["1000000000000", "1000000000000"]), 320);
     assert.deepEqual(layout.weightTotal, { x: 12, y: layout.stripY + TOTAL_LINE });
     // Without the extra line the chips start 18 under the head (as in the unweighted layout).
     const before = layoutFormula(payload(), 320);
@@ -138,18 +138,36 @@ describe("layoutFormula with weights", () => {
 });
 
 describe("weight helpers", () => {
-  test("weightOf reads only finite numbers", () => {
-    assert.equal(weightOf({ weight: 0 }), 0);
-    assert.equal(weightOf({ weight: 5 }), 5);
+  test("weightOf reads only whole number strings", () => {
+    assert.equal(weightOf({ weight: "0" }), "0");
+    assert.equal(weightOf({ weight: "5" }), "5");
+    assert.equal(weightOf({ weight: "-2" }), "-2");
     assert.equal(weightOf({}), null);
-    assert.equal(weightOf({ weight: "5" }), null);
-    assert.equal(weightOf({ weight: Number.NaN }), null);
+    // Redux sends strings (ReduxISU/Redux#1034); a bare number or anything not whole is not a weight.
+    assert.equal(weightOf({ weight: 5 }), null);
+    assert.equal(weightOf({ weight: "5.5" }), null);
+    assert.equal(weightOf({ weight: "" }), null);
   });
 
   test("the texts", () => {
-    assert.equal(weightText(3), " · w 3");
+    assert.equal(weightText("3"), " · w 3");
+    assert.equal(weightText("-2"), " · w −2");
     assert.equal(weightText(null), "");
-    assert.equal(satisfiedText(3, 4), "SATISFIED WEIGHT 3 OF 4");
-    assert.equal(satisfiedText(undefined, 4), "SATISFIED WEIGHT – OF 4");
+    assert.equal(satisfiedText("3", "4"), "SATISFIED WEIGHT 3 OF 4");
+    assert.equal(satisfiedText(undefined, "4"), "SATISFIED WEIGHT – OF 4");
+    assert.equal(satisfiedText(3, "4"), "SATISFIED WEIGHT – OF 4");
+  });
+
+  test("weights above 2^53 are shown and totalled exactly, not rounded", () => {
+    // 2^53 + 1, the first whole number a JavaScript number cannot hold.
+    const big = "9007199254740993";
+    const layout = layoutFormula(payload([big, "1"]), 800);
+    assert.equal(layout.clauses[0].weight, big);
+    assert.equal(layout.totalWeight, "9007199254740994");
+    assert.equal(weightText(big), ` · w ${big}`);
+    assert.equal(
+      satisfiedText(big, layout.totalWeight),
+      "SATISFIED WEIGHT 9007199254740993 OF 9007199254740994",
+    );
   });
 });

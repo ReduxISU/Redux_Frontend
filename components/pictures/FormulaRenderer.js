@@ -74,7 +74,9 @@ import {
   splitName,
   strikeWidth,
   VARIABLE_SIZE,
+  weightOf,
   weightText,
+  wholeNumberOf,
 } from "./formulaLayout";
 import { GadgetRect, useGadgetMarks } from "./gadgetRings";
 import { FAINT_FILTER, MONO, TRACE_COLOR } from "./graphPieces";
@@ -309,10 +311,8 @@ function VariableStrip({ idPrefix, layout, frame, chipState, traceOf, traceProps
         <text
           x={layout.weightTotal.x}
           y={layout.weightTotal.y}
-          data-satisfied-weight={
-            typeof frame?.satisfiedWeight === "number" ? String(frame.satisfiedWeight) : "unknown"
-          }
-          data-total-weight={String(layout.totalWeight)}
+          data-satisfied-weight={wholeNumberOf(frame?.satisfiedWeight) ?? "unknown"}
+          data-total-weight={layout.totalWeight}
           {...HEAD_STYLE}
         >
           {satisfiedText(frame?.satisfiedWeight, layout.totalWeight)}
@@ -544,7 +544,7 @@ function FlatFormula({ idPrefix, name, payload, frame, highlightIds, gadgetColor
                 >
                   {clause.label}
                   {clause.weight !== null && (
-                    <tspan data-clause-weight={String(clause.weight)}>
+                    <tspan data-clause-weight={clause.weight}>
                       {weightText(clause.weight)}
                     </tspan>
                   )}
@@ -1144,7 +1144,7 @@ export function formulaAnnotations(payload, frames) {
       });
     }
   }
-  if (!expression && (payload?.groups ?? []).some((group) => typeof group?.weight === "number")) {
+  if (!expression && (payload?.groups ?? []).some((group) => weightOf(group) !== null)) {
     entries.push({
       key: "weight",
       text: "w n by a clause's name is its weight; SATISFIED WEIGHT totals the clauses the assignment satisfies",
